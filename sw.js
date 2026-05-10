@@ -1,7 +1,9 @@
-// MaxHealth Service Worker v1.2
+// MaxHealth Service Worker
+// Network-first for HTML — always loads latest version
+// Cache-first for static assets (icons, manifest)
+
 const CACHE = 'maxhealth-v1.2';
-const ASSETS = [
-  '/maxhealth/maxhealth.html',
+const STATIC = [
   '/maxhealth/manifest.json',
   '/maxhealth/docs/icon-192.png',
   '/maxhealth/docs/icon-512.png',
@@ -9,7 +11,7 @@ const ASSETS = [
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(ASSETS))
+    caches.open(CACHE).then(cache => cache.addAll(STATIC))
   );
   self.skipWaiting();
 });
@@ -24,14 +26,34 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Network first for API calls, cache first for app assets
-  if (e.request.url.includes('api.anthropic.com') || 
-      e.request.url.includes('api.openai.com') ||
-      e.request.url.includes('fonts.googleapis.com') ||
-      e.request.url.includes('cdnjs.cloudflare.com')) {
-    return; // Don't intercept external requests
+  const url = e.request.url;
+
+  // Never intercept external API calls
+  if (url.includes('api.anthropic.com') ||
+      url.includes('api.openai.com') ||
+      url.includes('workers.dev') ||
+      url.includes('fonts.googleapis.com') ||
+      url.includes('cdnjs.cloudflare.com')) {
+    return;
   }
-  
+
+  // Network-first for HTML — always get latest version
+  if (url.includes('.html')) {
+    e.respondWith(
+      fetch(e.request)
+        .then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE).then(cache => cache.put(e.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(e.request)) // fallback to cache if offline
+    );
+    return;
+  }
+
+  // Cache-first for static assets
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
@@ -41,7 +63,7 @@ self.addEventListener('fetch', e => {
           caches.open(CACHE).then(cache => cache.put(e.request, clone));
         }
         return response;
-      }).catch(() => cached);
+      });
     })
   );
 });
