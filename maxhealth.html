@@ -956,15 +956,17 @@
   <!-- Step 5: AI provider -->
   <div class="onboard-step" id="step5" style="display:none;">
     <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px;">AI Meal Logging</div>
+    <div style="background:rgba(45,235,143,0.06);border:1px solid rgba(45,235,143,0.15);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--green);line-height:1.6;">
+      ✓ Claude AI is built in — no API key needed. Just tap Start Tracking.
+    </div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:20px;line-height:1.6;">
-      MaxHealth can use AI to identify meals from text or photos. This needs an API key from Anthropic (Claude) or OpenAI.<br><br>
-      You can skip this and use the built-in food library instead — it works great for common foods.
+      Optionally use OpenAI instead — requires your own API key from platform.openai.com.
     </div>
     <div style="margin-bottom:14px;">
       <div class="provider-btns" style="justify-content:center;gap:10px;margin-bottom:16px;">
-        <div class="provider-btn active" id="ob-provBtn-none" onclick="obSetProvider('none')">No AI</div>
-        <div class="provider-btn" id="ob-provBtn-claude" onclick="obSetProvider('claude')">Claude</div>
+        <div class="provider-btn active" id="ob-provBtn-claude" onclick="obSetProvider('claude')">Claude ✓</div>
         <div class="provider-btn" id="ob-provBtn-openai" onclick="obSetProvider('openai')">OpenAI</div>
+        <div class="provider-btn" id="ob-provBtn-none" onclick="obSetProvider('none')">Off</div>
       </div>
       <div id="obApiKeyRow" style="display:none;">
         <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:'Space Mono',monospace;" id="obApiKeyLabel">API Key</div>
@@ -973,7 +975,6 @@
       </div>
     </div>
     <button class="run-btn" onclick="onboardFinish()">Start Tracking →</button>
-    <div style="text-align:center;margin-top:12px;"><span style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="onboardFinish()">Skip — I'll add this later in Settings</span></div>
   </div>
 
 </div>
@@ -1179,12 +1180,15 @@
 
     <div class="section-title" style="margin-top:8px">AI Provider</div>
     <div class="settings-card">
+      <div style="background:rgba(45,235,143,0.06);border:1px solid rgba(45,235,143,0.15);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--green);line-height:1.6;">
+        ✓ Claude AI is built in — no API key needed. Meal logging and photo analysis work automatically.
+      </div>
       <div class="settings-row">
         <div class="settings-label">Provider</div>
         <div class="provider-btns">
-          <div class="provider-btn active" id="provBtn-none"    onclick="setProvider('none')">Local only</div>
-          <div class="provider-btn"        id="provBtn-claude"  onclick="setProvider('claude')">Claude</div>
+          <div class="provider-btn active" id="provBtn-claude"  onclick="setProvider('claude')">Claude ✓</div>
           <div class="provider-btn"        id="provBtn-openai"  onclick="setProvider('openai')">OpenAI</div>
+          <div class="provider-btn"        id="provBtn-none"    onclick="setProvider('none')">Off</div>
         </div>
       </div>
       <div id="apiKeyRow" class="settings-row" style="display:none; flex-direction:column; gap:8px">
@@ -1786,14 +1790,12 @@ function obSetProvider(p) {
   document.querySelectorAll('[id^="ob-provBtn-"]').forEach(b => b.classList.remove('active'));
   document.getElementById(`ob-provBtn-${p}`).classList.add('active');
   const keyRow = document.getElementById('obApiKeyRow');
-  if (p === 'none') {
+  if (p === 'none' || p === 'claude') {
     keyRow.style.display = 'none';
   } else {
     keyRow.style.display = 'block';
-    document.getElementById('obApiKeyLabel').textContent = p === 'claude' ? 'Anthropic API Key' : 'OpenAI API Key';
-    document.getElementById('obApiKeyHint').textContent = p === 'claude'
-      ? 'Get your key at console.anthropic.com — free tier available'
-      : 'Get your key at platform.openai.com — free tier available';
+    document.getElementById('obApiKeyLabel').textContent = 'OpenAI API Key';
+    document.getElementById('obApiKeyHint').textContent = 'Get your key at platform.openai.com';
   }
 }
 
@@ -2377,10 +2379,10 @@ Keep the tone warm, direct and forward-looking. Evidence-based only. No medical 
   try {
     let result;
     if (provider === 'claude') {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      const r = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system: '', messages: [{ role: 'user', content: prompt }] })
       });
       const d = await r.json();
       if (d.error) throw new Error(d.error.message);
@@ -2506,6 +2508,7 @@ function saveTDEERecalc() {
 }
 
 // ─── AI PROVIDER CONFIG ──────────────────────────────────
+const CLAUDE_PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
 const AI_PROVIDERS = {
   claude: {
     label: 'Claude (Anthropic)',
@@ -2523,22 +2526,28 @@ const AI_PROVIDERS = {
 
 function getAIConfig() {
   return {
-    provider: localStorage.getItem('mh_provider') || 'none',
+    provider: localStorage.getItem('mh_provider') || 'claude',
     apiKey:   localStorage.getItem('mh_apikey')   || ''
   };
 }
 
 function setProvider(p) {
   localStorage.setItem('mh_provider', p);
-  document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`provBtn-${p}`).classList.add('active');
+  document.querySelectorAll('[id^="provBtn-"]').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`provBtn-${p}`);
+  if (btn) btn.classList.add('active');
   const keyRow = document.getElementById('apiKeyRow');
   const hint   = document.getElementById('providerStatus');
   const keyHint = document.getElementById('apiKeyHint');
   if (p === 'none') {
     keyRow.style.display = 'none';
-    hint.textContent = 'Using local food database only. Set a provider to enable free-text meal logging.';
+    hint.textContent = 'AI logging is off. Using local food database only.';
     hint.style.color = 'var(--text3)';
+  } else if (p === 'claude') {
+    // Claude uses the built-in proxy — no key needed
+    keyRow.style.display = 'none';
+    hint.textContent = '✓ Claude AI active — no API key needed';
+    hint.style.color = 'var(--green)';
   } else {
     keyRow.style.display = 'flex';
     document.getElementById('apiKeyLabel').textContent = AI_PROVIDERS[p].label + ' API Key';
@@ -2801,16 +2810,11 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
             { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
           ]
         : userText;
-      response = await fetch('https://api.anthropic.com/v1/messages', {
+      // Use proxy — no API key needed from user
+      response = await fetch(CLAUDE_PROXY, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
           system: systemPrompt,
           messages: [{ role: 'user', content: userContent }]
         })
@@ -4057,10 +4061,10 @@ Only include mappings where you are confident. Do not guess. If a column is ambi
     try {
       let result;
       if (provider === 'claude') {
-        const r = await fetch('https://api.anthropic.com/v1/messages', {
+        const r = await fetch(CLAUDE_PROXY, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system: '', messages: [{ role: 'user', content: prompt }] })
         });
         const d = await r.json();
         if (d.error) throw new Error(d.error.message);
