@@ -155,6 +155,6 @@ MIT — do what you want with it. Attribution appreciated but not required.
 
 ---
 
-*Built by Pete. Software architect, Oracle DBA, RPA developer — and GBM patient in remission.*
+*Built by Pete. retired Software architect, Oracle DBA, RPA developer — and GBM patient in remission.*
 
 *YOUR DATA. YOUR HEALTH. YOUR RULES.*
