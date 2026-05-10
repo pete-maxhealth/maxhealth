@@ -29,7 +29,7 @@ MaxHealth was originally built for therapeutic ketosis management in **Glioblast
 - **Body recomposition** — weight, lean mass, activity, and nutrition all connected
 - **General health tracking** — for anyone who wants their data to work for them
 
-[Read the full story →](https://YOUR_USERNAME.github.io/maxhealth/docs/story.html)
+[Read the full story →](https://pete-maxhealth.github.io/maxhealth/docs/story.html)
 
 ---
 
@@ -61,7 +61,7 @@ MaxHealth was originally built for therapeutic ketosis management in **Glioblast
 
 ### The tracker (everyone)
 
-1. Download `maxhealth.html` from the [latest release](https://github.com/YOUR_USERNAME/maxhealth/releases/latest)
+1. Download `maxhealth.html` from the [latest release](https://github.com/pete-maxhealth/maxhealth/releases/latest)
 2. Copy it to your Android device
 3. Open it in Chrome
 4. Follow the setup wizard — takes about 60 seconds
