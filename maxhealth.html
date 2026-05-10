@@ -1478,13 +1478,22 @@
 <div class="save-modal-overlay" id="saveLibraryModal">
   <div class="save-modal">
     <div class="save-modal-title">SAVE TO LIBRARY</div>
-    <div class="save-modal-sub" id="saveModalSub">Save this food with locked values for instant future logging.</div>
-    <div class="save-modal-macros" id="saveModalMacros">
-      <span class="c" id="saveModalKcal">—</span>
-      <span class="p" id="saveModalProt">—</span>
-      <span class="k" id="saveModalCarbs">—</span>
+    <div class="save-modal-sub" id="saveModalSub">Check the values are correct before saving. You can edit them here.</div>
+    <input class="save-modal-name-input" id="saveModalName" placeholder="Food name (e.g. ASDA Mixed Nuts 30g)" maxlength="80" style="margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">KCAL</div>
+        <input class="modal-input" type="number" id="saveModalKcalInput" style="font-size:16px;padding:10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--green);margin-bottom:4px;font-family:'Space Mono',monospace;">PROT g</div>
+        <input class="modal-input" type="number" id="saveModalProtInput" step="0.1" style="font-size:16px;padding:10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;font-family:'Space Mono',monospace;">CARBS g</div>
+        <input class="modal-input" type="number" id="saveModalCarbsInput" step="0.1" style="font-size:16px;padding:10px;">
+      </div>
     </div>
-    <input class="save-modal-name-input" id="saveModalName" placeholder="Food name (e.g. ASDA Mixed Nuts 30g)" maxlength="80">
     <div class="modal-row">
       <button class="modal-btn cancel" onclick="closeSaveLibraryModal()">Skip</button>
       <button class="modal-btn confirm" onclick="confirmSaveToLibrary()">Save & Lock ✓</button>
@@ -2070,7 +2079,7 @@ function renderLibrary() {
   const el = document.getElementById('libraryList');
   if (!el) return;
   if (lib.length === 0) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No foods saved yet.<br>Log a meal via AI and tap Save to Library.</div>';
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No foods saved yet.<br>Log a meal and tap Save to Library when prompted.</div>';
     return;
   }
   el.innerHTML = lib.map((f, i) => `
@@ -2079,9 +2088,9 @@ function renderLibrary() {
         <div class="library-item-name">${f.name}</div>
         <div class="library-item-macros">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
       </div>
-      <span class="${f.locked ? 'library-item-locked' : 'library-item-ai'}">${f.locked ? '🔒 LOCKED' : f.source === 'ai_confirmed' ? 'AI ✓' : 'PENDING'}</span>
+      <span class="${f.locked && f.source === 'pete' ? 'library-item-locked' : 'library-item-ai'}">${f.locked && f.source === 'pete' ? '🔒 LOCKED' : f.source === 'ai_confirmed' ? 'AI ✓' : 'SAVED'}</span>
       <div class="library-add-btn" onclick="quickLogFromLibrary(${i})">LOG</div>
-      ${f.locked && f.source === 'pete' ? '' : `<div class="library-del" onclick="deleteFromLibrary(${i})">×</div>`}
+      <div class="library-del" onclick="deleteFromLibrary(${i})" title="Remove">×</div>
     </div>
   `).join('');
 }
@@ -2098,7 +2107,7 @@ function quickLogFromLibrary(index) {
 function deleteFromLibrary(index) {
   const lib = loadLibrary();
   const f = lib[index];
-  if (f && f.locked && f.source === 'pete') { showToast('Cannot delete locked items'); return; }
+  if (!f) return;
   lib.splice(index, 1);
   saveLibrary(lib);
   renderLibrary();
@@ -2109,12 +2118,14 @@ function deleteFromLibrary(index) {
 let _pendingSaveItem = null;
 
 function promptSaveToLibrary(item) {
+  // Don't prompt if already in library
+  const existing = findInLibrary(item.name);
+  if (existing) return;
   _pendingSaveItem = item;
-  document.getElementById('saveModalSub').textContent = `Save "${item.name}" with confirmed macros?`;
-  document.getElementById('saveModalKcal').textContent = item.kcal + ' kcal';
-  document.getElementById('saveModalProt').textContent = item.protein + 'g P';
-  document.getElementById('saveModalCarbs').textContent = item.carbs + 'g C';
   document.getElementById('saveModalName').value = item.name;
+  document.getElementById('saveModalKcalInput').value = item.kcal;
+  document.getElementById('saveModalProtInput').value = item.protein;
+  document.getElementById('saveModalCarbsInput').value = item.carbs;
   document.getElementById('saveLibraryModal').classList.add('open');
 }
 
@@ -2126,17 +2137,15 @@ function closeSaveLibraryModal() {
 function confirmSaveToLibrary() {
   if (!_pendingSaveItem) { closeSaveLibraryModal(); return; }
   const lib = loadLibrary();
-  const name = document.getElementById('saveModalName').value.trim() || _pendingSaveItem.name;
+  const name  = document.getElementById('saveModalName').value.trim() || _pendingSaveItem.name;
+  const kcal  = parseFloat(document.getElementById('saveModalKcalInput').value)  || _pendingSaveItem.kcal;
+  const prot  = parseFloat(document.getElementById('saveModalProtInput').value)  || _pendingSaveItem.protein;
+  const carbs = parseFloat(document.getElementById('saveModalCarbsInput').value) || _pendingSaveItem.carbs;
   const newEntry = {
     id: 'ai_' + Date.now(),
-    name: name,
-    per_amount: null, per_unit: null,
-    kcal: _pendingSaveItem.kcal,
-    protein: _pendingSaveItem.protein,
-    carbs: _pendingSaveItem.carbs,
-    fat: null,
-    locked: true,
-    source: 'ai_confirmed'
+    name, per_amount: null, per_unit: null,
+    kcal, protein: prot, carbs, fat: null,
+    locked: true, source: 'ai_confirmed'
   };
   lib.push(newEntry);
   saveLibrary(lib);
@@ -2940,12 +2949,8 @@ async function processMessage(text, imageBase64, imageMime) {
   const foods = parseFood(text);
   if (foods.length > 0) {
     logFoods(foods, text);
-    // Offer to save to library if not already there
-    setTimeout(() => {
-      foods.forEach(item => {
-        if (!findInLibrary(item.name)) promptSaveToLibrary(item);
-      });
-    }, 600);
+    // Only prompt to save if it's not already in the local DB with a generic name
+    // Local DB items are built-in — no need to save them to the personal library
     return;
   }
 
