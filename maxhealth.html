@@ -999,6 +999,7 @@
   <div class="tab" onclick="switchTab('trends',this)" style="min-width:60px">Trends</div>
   <div class="tab" onclick="switchTab('library',this)" style="min-width:60px">Library</div>
   <div class="tab" onclick="switchTab('import',this)" style="min-width:60px">Import</div>
+  <div class="tab" onclick="switchTab('reports',this)" style="min-width:60px">Reports</div>
   <div class="tab" onclick="switchTab('settings',this)" style="min-width:70px">Settings</div>
 </div>
 
@@ -1061,14 +1062,15 @@
 
     <div class="csv-card" id="csvCard">
       <div class="csv-title">
-        <span>master.csv rows</span>
-        <span style="color:var(--text3);font-size:10px">ready to copy</span>
+        <span>End of Day</span>
+        <span style="color:var(--text3);font-size:10px" id="eodStatus">not saved yet</span>
       </div>
       <div class="csv-row" id="csvRow">DD/MM/YY|0|0|0|</div>
-      <textarea id="extraRows" placeholder="Paste missed day rows here…&#10;e.g. 08/05/26|2840|173|40|stir fry"
-        style="width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--green);font-family:'Space Mono',monospace;font-size:11px;resize:none;outline:none;min-height:44px;max-height:160px;line-height:1.7;scrollbar-width:thin;"
-        oninput="autoResizeExtra(this)"></textarea>
-      <button class="copy-btn" onclick="copyCSV()" style="margin-top:8px">📋 COPY ALL ROWS</button>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="copy-btn" style="flex:1;background:var(--green-dim);color:var(--green);border-color:rgba(45,235,143,0.3);font-size:12px;" onclick="saveEOD()">✓ SAVE TODAY</button>
+        <button class="copy-btn" style="flex:0 0 auto;font-size:12px;" onclick="copyCSVRow()">📋</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;">Tap Save Today to archive this day's totals permanently. The clipboard button copies the row if you need it externally.</div>
     </div>
 
     <div class="remaining-card">
@@ -1154,6 +1156,32 @@
   </div>
 </div>
 
+<!-- REPORTS -->
+<div class="view" id="view-reports">
+  <div class="dash-scroll">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:4px;">
+      <div class="section-title" style="margin:0">Monthly Reports</div>
+      <button class="settings-save-btn" onclick="generateMonthlyBrief()" id="generateBriefBtn">Generate Brief</button>
+    </div>
+
+    <div class="settings-card" style="padding:12px 16px;margin-bottom:14px;">
+      <div style="font-size:12px;color:var(--text3);line-height:1.6;">
+        AI-generated monthly health brief covering ketosis consistency, weight trend, HRV, sleep quality and notable deviations. Requires an AI provider and at least 14 days of data.
+      </div>
+    </div>
+
+    <div id="briefGenerating" style="display:none;text-align:center;padding:30px 0;">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;color:var(--green);">Analysing your data…</div>
+    </div>
+
+    <div id="briefsList">
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No reports yet. Tap Generate Brief to create your first monthly summary.</div>
+    </div>
+
+  </div>
+</div>
+
 <!-- SETTINGS -->
 <div class="view" id="view-settings">
   <div class="dash-scroll">
@@ -1192,12 +1220,73 @@
         <div class="settings-value" id="settingsWeightTarget">—</div>
       </div>
       <div class="settings-row">
-        <div class="settings-label">TDEE</div>
-        <div class="settings-value">3,420 kcal</div>
+        <div class="settings-label">Daily calories</div>
+        <div class="settings-value" id="settingsKcal">—</div>
       </div>
       <div class="settings-row">
-        <div class="settings-label">Gain phase target</div>
-        <div class="settings-value">3,670 kcal (+250)</div>
+        <div class="settings-label">Protein target</div>
+        <div class="settings-value" id="settingsProtein">—</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Carb ceiling</div>
+        <div class="settings-value" id="settingsCarbs">—</div>
+      </div>
+      <button class="copy-btn" onclick="openTDEERecalc()" style="margin-top:10px;width:100%;">🔄 RECALCULATE TARGETS</button>
+    </div>
+
+    <!-- TDEE Recalculator Modal -->
+    <div id="tdeeRecalcModal" style="display:none;background:var(--surface);border:1px solid rgba(45,235,143,0.2);border-radius:var(--radius);padding:20px;margin-top:12px;">
+      <div style="font-size:11px;color:var(--green);font-family:'Space Mono',monospace;margin-bottom:14px;letter-spacing:0.06em;">RECALCULATE YOUR TARGETS</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div class="provider-btn active" id="re-sexBtn-male" onclick="reSetSex('male')" style="flex:1;text-align:center;">Male</div>
+        <div class="provider-btn" id="re-sexBtn-female" onclick="reSetSex('female')" style="flex:1;text-align:center;">Female</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">AGE</div>
+          <input class="modal-input" type="number" id="reAge" placeholder="40" style="font-size:16px;padding:10px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">HEIGHT cm</div>
+          <input class="modal-input" type="number" id="reHeight" placeholder="175" style="font-size:16px;padding:10px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">WEIGHT kg</div>
+          <input class="modal-input" type="number" id="reWeight" placeholder="80" step="0.1" style="font-size:16px;padding:10px;">
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+        <div class="provider-btn" id="re-actBtn-sedentary" onclick="reSetActivity('sedentary')" style="text-align:left;padding:8px 12px;font-size:13px;"><strong>Sedentary</strong> <span style="color:var(--text3);">— desk job, little exercise</span></div>
+        <div class="provider-btn" id="re-actBtn-light" onclick="reSetActivity('light')" style="text-align:left;padding:8px 12px;font-size:13px;"><strong>Lightly active</strong> <span style="color:var(--text3);">— 1–3 days/week</span></div>
+        <div class="provider-btn" id="re-actBtn-moderate" onclick="reSetActivity('moderate')" style="text-align:left;padding:8px 12px;font-size:13px;"><strong>Moderately active</strong> <span style="color:var(--text3);">— 3–5 days/week</span></div>
+        <div class="provider-btn" id="re-actBtn-active" onclick="reSetActivity('active')" style="text-align:left;padding:8px 12px;font-size:13px;"><strong>Very active</strong> <span style="color:var(--text3);">— 6–7 days/week</span></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div class="provider-btn" id="re-goalBtn-lose" onclick="reSetGoal('lose')" style="flex:1;text-align:center;">Lose</div>
+        <div class="provider-btn active" id="re-goalBtn-maintain" onclick="reSetGoal('maintain')" style="flex:1;text-align:center;">Maintain</div>
+        <div class="provider-btn" id="re-goalBtn-gain" onclick="reSetGoal('gain')" style="flex:1;text-align:center;">Gain</div>
+      </div>
+      <div id="reTDEEResult" style="display:none;background:var(--bg);border:1px solid rgba(45,235,143,0.15);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;">
+        <div style="font-size:22px;font-weight:700;color:var(--text);" id="reTDEEKcal">—</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="reTDEEBreakdown"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">KCAL</div>
+          <input class="modal-input" type="number" id="reKcal" style="font-size:16px;padding:10px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--green);margin-bottom:4px;font-family:'Space Mono',monospace;">PROTEIN g</div>
+          <input class="modal-input" type="number" id="reProtein" style="font-size:16px;padding:10px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;font-family:'Space Mono',monospace;">CARBS g</div>
+          <input class="modal-input" type="number" id="reCarbs" style="font-size:16px;padding:10px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="modal-btn cancel" style="flex:1;" onclick="closeTDEERecalc()">Cancel</button>
+        <button class="modal-btn confirm" style="flex:1;" onclick="saveTDEERecalc()">Save Targets ✓</button>
       </div>
     </div>
 
@@ -1227,7 +1316,15 @@
         <div class="settings-label">Today's entries</div>
         <div class="settings-value" id="todayCount">—</div>
       </div>
-      <button class="copy-btn" onclick="exportData()" style="margin-top:10px">📤 EXPORT ALL DATA (JSON)</button>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        <button class="copy-btn" onclick="exportData()" style="flex:1;">📤 EXPORT DATA (JSON)</button>
+        <button class="copy-btn" onclick="document.getElementById('importJsonInput').click()" style="flex:1;background:var(--green-dim);color:var(--green);border-color:rgba(45,235,143,0.3);">📥 IMPORT DATA (JSON)</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="copy-btn" onclick="exportNutritionCSV()" style="flex:1;background:var(--blue-dim);color:var(--blue);border-color:rgba(77,159,255,0.3);">📊 EXPORT NUTRITION.CSV</button>
+      </div>
+      <input type="file" id="importJsonInput" accept=".json" style="display:none" onchange="importData(this)">
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;">JSON — full backup including history, library and settings. Nutrition CSV — pipe-delimited format for the wearable pipeline.</div>
     </div>
 
     <div class="section-title">About</div>
@@ -1358,6 +1455,12 @@
         <div class="trend-stat"><div class="trend-stat-val" id="statSpO2Min">—</div><div class="trend-stat-lbl">Min</div></div>
         <div class="trend-stat"><div class="trend-stat-val" id="statSpO2Max">—</div><div class="trend-stat-lbl">Max</div></div>
       </div>
+    </div>
+
+    <!-- Nutrition ↔ Wearable Correlation -->
+    <div class="trend-card" id="correlationCard" style="display:none;">
+      <div class="trend-title">Nutrition ↔ Body Correlation</div>
+      <div id="correlationInsights" style="font-size:13px;color:var(--text2);line-height:1.8;"></div>
     </div>
 
   </div>
@@ -2153,6 +2256,218 @@ function processNutritionCSV(text, outEl) {
   }
 }
 
+// ─── REPORTS & GBM MONTHLY BRIEF ─────────────────────────
+const REPORTS_KEY = 'maxhealth_reports';
+
+function loadReports() {
+  try { return JSON.parse(localStorage.getItem(REPORTS_KEY) || '[]'); } catch(e) { return []; }
+}
+function saveReports(reports) { localStorage.setItem(REPORTS_KEY, JSON.stringify(reports)); }
+
+function renderReports() {
+  const reports = loadReports();
+  const el = document.getElementById('briefsList');
+  if (!el) return;
+  if (reports.length === 0) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No reports yet. Tap Generate Brief to create your first monthly summary.</div>';
+    return;
+  }
+  el.innerHTML = reports.slice().reverse().map((r, i) => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div style="font-family:'Space Mono',monospace;font-size:11px;color:var(--green);">${r.period || 'Monthly Brief'}</div>
+        <div style="font-size:10px;color:var(--text3);">${r.generatedAt ? r.generatedAt.slice(0,10) : ''}</div>
+      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap;">${r.content}</div>
+    </div>
+  `).join('');
+}
+
+async function generateMonthlyBrief() {
+  const { provider, apiKey } = getAIConfig();
+  if (provider === 'none' || !apiKey) {
+    showToast('Add an AI provider in Settings to generate reports', null, null, 4000);
+    return;
+  }
+
+  // Get last 30 days of data
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const recentHistory = state.history.filter(d => {
+    const p = d.date.split('/');
+    if (p.length !== 3) return false;
+    return new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff;
+  });
+
+  if (recentHistory.length < 7) {
+    showToast('Need at least 7 days of data for a report', null, null, 4000);
+    return;
+  }
+
+  document.getElementById('briefGenerating').style.display = 'block';
+  document.getElementById('generateBriefBtn').disabled = true;
+
+  const targets = getTargets();
+  const wtLow = parseFloat(localStorage.getItem('mh_weight_target_low')) || 0;
+
+  // Summarise the data
+  const days = recentHistory.length;
+  const avgKcal    = Math.round(recentHistory.reduce((s,d) => s + (d.totals?.kcal || 0), 0) / days);
+  const avgProtein = Math.round(recentHistory.reduce((s,d) => s + (d.totals?.protein || 0), 0) / days);
+  const avgCarbs   = Math.round(recentHistory.reduce((s,d) => s + (d.totals?.carbs || 0), 0) / days);
+  const ketoDays   = recentHistory.filter(d => (d.totals?.carbs || 0) < 50).length;
+  const weights    = recentHistory.filter(d => d.weight).map(d => d.weight);
+  const avgWeight  = weights.length ? (weights.reduce((a,b) => a+b,0) / weights.length).toFixed(1) : null;
+  const latestWeight = state.weight;
+  const hrvVals    = recentHistory.filter(d => d.hrv_rmssd).map(d => d.hrv_rmssd);
+  const avgHRV     = hrvVals.length ? Math.round(hrvVals.reduce((a,b) => a+b,0) / hrvVals.length) : null;
+  const sleepVals  = recentHistory.filter(d => d.sleep_min).map(d => d.sleep_min);
+  const avgSleep   = sleepVals.length ? Math.round(sleepVals.reduce((a,b) => a+b,0) / sleepVals.length) : null;
+
+  const now = new Date();
+  const period = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;
+
+  const prompt = `You are a health data analyst reviewing ${days} days of health data for someone managing their health with a specific focus on metabolic health (therapeutic ketosis protocol, MGMT-methylated GBM context).
+
+Data summary for the period:
+- Days analysed: ${days}
+- Average daily calories: ${avgKcal} kcal (target: ${targets.standard.kcal} kcal)
+- Average protein: ${avgProtein}g (target: ${targets.standard.protein}g)
+- Average carbs: ${avgCarbs}g (ceiling: 50g for ketosis)
+- Days in ketosis (< 50g carbs): ${ketoDays} of ${days} (${Math.round(ketoDays/days*100)}%)
+${avgWeight ? `- Average weight: ${avgWeight}kg (current: ${latestWeight}kg${wtLow ? `, target: ${wtLow}kg` : ''})` : ''}
+${avgHRV ? `- Average HRV (RMSSD): ${avgHRV}ms` : ''}
+${avgSleep ? `- Average sleep: ${Math.round(avgSleep/60)}h ${avgSleep%60}m` : ''}
+
+Write a concise monthly health brief in exactly this format:
+
+PERIOD: ${period}
+
+STATUS: [one of: Nothing to worry about / One to know / One to watch]
+
+SUMMARY:
+[2-3 sentences covering the key picture — ketosis consistency, calorie adherence, weight trend]
+
+${ketoDays < days * 0.7 ? 'ONE TO KNOW:\n[Flag the ketosis consistency issue with context — not alarming, just informative]\n\n' : ''}${avgHRV && avgHRV < 35 ? 'ONE TO WATCH:\n[Note the HRV trend and what it might indicate]\n\n' : ''}HIGHLIGHTS:
+[3-4 brief bullet points — positive observations, things to maintain]
+
+RECOMMENDATIONS:
+[2-3 specific, actionable suggestions based on the data]
+
+Keep the tone warm, direct and forward-looking. Evidence-based only. No medical advice. No alarmism.`;
+
+  try {
+    let result;
+    if (provider === 'claude') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      result = d.content[0].text;
+    } else {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+      });
+      const d = await r.json();
+      if (d.error) throw new Error(d.error.message);
+      result = d.choices[0].message.content;
+    }
+
+    const reports = loadReports();
+    reports.push({ period, content: result, generatedAt: new Date().toISOString(), days });
+    saveReports(reports);
+    renderReports();
+    showToast('Monthly brief generated ✓');
+
+  } catch(err) {
+    showToast(`Error: ${err.message}`, null, null, 4000);
+  } finally {
+    document.getElementById('briefGenerating').style.display = 'none';
+    document.getElementById('generateBriefBtn').disabled = false;
+  }
+}
+
+// ─── TDEE RECALCULATOR (SETTINGS) ────────────────────────
+let _reSex = 'male', _reActivity = null, _reGoal = 'maintain';
+
+function openTDEERecalc() {
+  // Pre-fill with current weight
+  const w = state.weight || '';
+  document.getElementById('reWeight').value = w;
+  document.getElementById('tdeeRecalcModal').style.display = 'block';
+  // Pre-fill existing targets
+  document.getElementById('reKcal').value    = localStorage.getItem('mh_target_kcal')    || '';
+  document.getElementById('reProtein').value = localStorage.getItem('mh_target_protein') || '';
+  document.getElementById('reCarbs').value   = localStorage.getItem('mh_target_carbs')   || '';
+}
+
+function closeTDEERecalc() {
+  document.getElementById('tdeeRecalcModal').style.display = 'none';
+}
+
+function reSetSex(sex) {
+  _reSex = sex;
+  document.querySelectorAll('[id^="re-sexBtn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById(`re-sexBtn-${sex}`).classList.add('active');
+  reCalcTDEE();
+}
+
+function reSetActivity(level) {
+  _reActivity = level;
+  document.querySelectorAll('[id^="re-actBtn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById(`re-actBtn-${level}`).classList.add('active');
+  reCalcTDEE();
+}
+
+function reSetGoal(goal) {
+  _reGoal = goal;
+  document.querySelectorAll('[id^="re-goalBtn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById(`re-goalBtn-${goal}`).classList.add('active');
+  reCalcTDEE();
+}
+
+function reCalcTDEE() {
+  const weight = parseFloat(document.getElementById('reWeight').value);
+  const height = parseFloat(document.getElementById('reHeight').value);
+  const age    = parseFloat(document.getElementById('reAge').value);
+  if (!weight || !height || !age || !_reActivity) return;
+
+  let bmr = _reSex === 'male'
+    ? (10 * weight) + (6.25 * height) - (5 * age) + 5
+    : (10 * weight) + (6.25 * height) - (5 * age) - 161;
+
+  const factors = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 };
+  const tdee = Math.round(bmr * factors[_reActivity]);
+  const adjust = { lose: -500, maintain: 0, gain: 250 };
+  const target = tdee + adjust[_reGoal];
+  const labels = { lose: '−500 deficit', maintain: 'maintenance', gain: '+250 surplus' };
+
+  document.getElementById('reTDEEResult').style.display = 'block';
+  document.getElementById('reTDEEKcal').textContent = `${target} kcal`;
+  document.getElementById('reTDEEBreakdown').textContent = `BMR ${Math.round(bmr)} · TDEE ${tdee} · ${labels[_reGoal]}`;
+  document.getElementById('reKcal').value    = target;
+  document.getElementById('reProtein').value = Math.round(weight * 1.8);
+}
+
+function saveTDEERecalc() {
+  const kcal    = parseInt(document.getElementById('reKcal').value);
+  const protein = parseInt(document.getElementById('reProtein').value);
+  const carbs   = parseInt(document.getElementById('reCarbs').value);
+  if (!kcal || !protein) { showToast('Fill in calories and protein first'); return; }
+  localStorage.setItem('mh_target_kcal',    kcal);
+  localStorage.setItem('mh_target_protein', protein);
+  if (carbs) localStorage.setItem('mh_target_carbs', carbs);
+  closeTDEERecalc();
+  initSettings();
+  updateDashboard();
+  showToast('Targets updated ✓');
+}
+
 // ─── AI PROVIDER CONFIG ──────────────────────────────────
 const AI_PROVIDERS = {
   claude: {
@@ -2226,10 +2541,36 @@ function initSettings() {
   const wtHigh = parseFloat(localStorage.getItem('mh_weight_target_high')) || 0;
   const wtEl = document.getElementById('settingsWeightTarget');
   if (wtEl) wtEl.textContent = wtLow > 0 ? `${wtLow}–${wtHigh} kg` : 'Not set';
+  const kcal    = localStorage.getItem('mh_target_kcal')    || '—';
+  const protein = localStorage.getItem('mh_target_protein') || '—';
+  const carbs   = localStorage.getItem('mh_target_carbs')   || '—';
+  const kcalEl    = document.getElementById('settingsKcal');
+  const proteinEl = document.getElementById('settingsProtein');
+  const carbsEl   = document.getElementById('settingsCarbs');
+  if (kcalEl)    kcalEl.textContent    = kcal    !== '—' ? `${parseInt(kcal).toLocaleString()} kcal` : '—';
+  if (proteinEl) proteinEl.textContent = protein !== '—' ? `${protein}g` : '—';
+  if (carbsEl)   carbsEl.textContent   = carbs   !== '—' ? `< ${carbs}g` : '—';
 }
 
 function exportData() {
-  const data = JSON.stringify({ state, exportedAt: new Date().toISOString() }, null, 2);
+  // Include localStorage settings in export
+  const exportPayload = {
+    state,
+    settings: {
+      mh_name:               localStorage.getItem('mh_name'),
+      mh_provider:           localStorage.getItem('mh_provider'),
+      mh_target_kcal:        localStorage.getItem('mh_target_kcal'),
+      mh_target_protein:     localStorage.getItem('mh_target_protein'),
+      mh_target_carbs:       localStorage.getItem('mh_target_carbs'),
+      mh_weight_target_low:  localStorage.getItem('mh_weight_target_low'),
+      mh_weight_target_high: localStorage.getItem('mh_weight_target_high'),
+    },
+    foodLibrary: JSON.parse(localStorage.getItem('maxhealth_foods') || '[]'),
+    deviceConfigs: JSON.parse(localStorage.getItem('maxhealth_devices') || '[]'),
+    exportedAt: new Date().toISOString(),
+    version: '1.2'
+  };
+  const data = JSON.stringify(exportPayload, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -2237,7 +2578,110 @@ function exportData() {
   a.download = `maxhealth_export_${todayStr().replace(/\//g,'-')}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Data exported');
+  showToast('Data exported ✓');
+}
+
+function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const payload = JSON.parse(e.target.result);
+
+      // Support both old format (just state) and new format (with settings)
+      const importedState = payload.state || payload;
+      let merged = 0, added = 0, skipped = 0;
+
+      // Merge history — existing days win
+      if (importedState.history && Array.isArray(importedState.history)) {
+        const existingDates = new Set(state.history.map(d => d.date));
+        importedState.history.forEach(day => {
+          if (existingDates.has(day.date)) {
+            skipped++;
+          } else {
+            state.history.push(day);
+            added++;
+          }
+        });
+        // Sort by date descending
+        state.history.sort((a, b) => {
+          const parse = d => {
+            const p = d.date.split('/');
+            return p.length === 3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0);
+          };
+          return parse(b) - parse(a);
+        });
+      }
+
+      // Restore settings if present (only if not already set)
+      if (payload.settings) {
+        Object.entries(payload.settings).forEach(([k, v]) => {
+          if (v && !localStorage.getItem(k)) localStorage.setItem(k, v);
+        });
+      }
+
+      // Restore weight from state if current weight is null
+      if (!state.weight && importedState.weight) {
+        state.weight = importedState.weight;
+      }
+
+      // Merge food library
+      if (payload.foodLibrary && Array.isArray(payload.foodLibrary)) {
+        const existing = JSON.parse(localStorage.getItem('maxhealth_foods') || '[]');
+        const existingIds = new Set(existing.map(f => f.id));
+        payload.foodLibrary.forEach(f => {
+          if (!existingIds.has(f.id)) existing.push(f);
+        });
+        localStorage.setItem('maxhealth_foods', JSON.stringify(existing));
+        merged++;
+      }
+
+      // Merge device configs
+      if (payload.deviceConfigs && Array.isArray(payload.deviceConfigs)) {
+        const existing = JSON.parse(localStorage.getItem('maxhealth_devices') || '[]');
+        const existingNames = new Set(existing.map(d => d.device_name));
+        payload.deviceConfigs.forEach(d => {
+          if (!existingNames.has(d.device_name)) existing.push(d);
+        });
+        localStorage.setItem('maxhealth_devices', JSON.stringify(existing));
+      }
+
+      saveState();
+      updateDashboard();
+      initSettings();
+
+      showToast(`Import complete ✓ — ${added} days added, ${skipped} skipped`, null, null, 4000);
+
+    } catch(err) {
+      showToast(`Import failed: ${err.message}`, null, null, 4000);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportNutritionCSV() {
+  const rows = state.history
+    .filter(d => d.totals && d.totals.kcal > 0)
+    .sort((a, b) => {
+      const parse = d => {
+        const p = d.date.split('/');
+        return p.length === 3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0);
+      };
+      return parse(a) - parse(b);
+    })
+    .map(d => `${d.date}|${d.totals.kcal}|${Math.round(d.totals.protein)}|${d.totals.carbs}|${d.notes || d.mode || ''}`)
+    .join('\n');
+
+  const blob = new Blob([rows], { type: 'text/plain' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `nutrition_${todayStr().replace(/\//g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast(`Exported ${state.history.length} days ✓`);
 }
 
 // ─── PHOTO HANDLING ──────────────────────────────────────
@@ -2538,7 +2982,7 @@ function showEODSummary(message, csvLine) {
   const scroll = document.getElementById('chatScroll');
   const div = document.createElement('div');
   div.className = 'chat-bubble bubble-system success';
-  div.innerHTML = `<div class="bubble-label">MAXHEALTH — END OF DAY</div>${message.replace(/\n/g,'<br>')}<div style="margin-top:12px;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--green);word-break:break-all;">${csvLine}</div><button onclick="copyEODRow(this)" data-csv="${csvLine.replace(/"/g,'&quot;')}" style="margin-top:8px;width:100%;background:var(--green-dim);border:1px solid rgba(45,235,143,0.3);color:var(--green);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;">📋 COPY ROW</button>`;
+  div.innerHTML = `<div class="bubble-label">MAXHEALTH — END OF DAY</div>${message.replace(/\n/g,'<br>')}<div style="margin-top:12px;background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;font-family:'Space Mono',monospace;font-size:11px;color:var(--green);word-break:break-all;">${csvLine}</div><div style="display:flex;gap:8px;margin-top:8px;"><button onclick="saveEOD();this.textContent='✓ Saved';this.style.opacity='0.6';" style="flex:1;background:var(--green-dim);border:1px solid rgba(45,235,143,0.3);color:var(--green);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;">✓ SAVE TODAY</button><button onclick="copyEODRow(this)" data-csv="${csvLine.replace(/"/g,'&quot;')}" style="background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;font-family:'Space Mono',monospace;cursor:pointer;">📋</button></div>`;
   scroll.appendChild(div);
   scroll.scrollTop = scroll.scrollHeight;
 }
@@ -2665,10 +3109,12 @@ function updateDashboard() {
     `).join('');
   }
 
-  // CSV row
+  // EOD card
   const csvDate = todayStr();
   const notes = state.notes || state.dayMode;
   document.getElementById('csvRow').textContent = `${csvDate}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${notes}`;
+  const alreadySaved = state.history.some(d => d.date === csvDate && d.source === 'eod');
+  updateEODStatus(alreadySaved);
 
   // Weight
   document.getElementById('displayWeight').innerHTML = `${state.weight || '—'}<span>kg</span>`;
@@ -2838,23 +3284,57 @@ function switchTab(tab, el) {
   if (tab === 'trends') renderTrends();
   if (tab === 'library') renderLibrary();
   if (tab === 'import') renderSavedDevices();
+  if (tab === 'reports') renderReports();
 }
 
 // ─── CSV COPY ────────────────────────────────────────────
-function copyCSV() {
-  const today = document.getElementById('csvRow').textContent.trim();
-  const extra = (document.getElementById('extraRows').value || '').trim();
-  const lines = [today];
-  if (extra) {
-    extra.split('\n').map(l => l.trim()).filter(Boolean).forEach(l => lines.push(l));
+function saveEOD() {
+  const totals = calcTotals(state.todayLog);
+  const dateStr = todayStr();
+
+  // Check if already in history for today
+  const existing = state.history.findIndex(d => d.date === dateStr);
+  const entry = {
+    date: dateStr,
+    log: state.todayLog.slice(),
+    totals: { kcal: totals.kcal, protein: totals.protein, carbs: totals.carbs },
+    mode: state.dayMode,
+    notes: state.notes || '',
+    weight: state.weight,
+    source: 'eod'
+  };
+
+  if (existing >= 0) {
+    state.history[existing] = entry;
+  } else {
+    state.history.unshift(entry);
   }
-  const text = lines.join('\n');
-  navigator.clipboard.writeText(text).then(() => showToast(`${lines.length} row${lines.length > 1 ? 's' : ''} copied!`)).catch(() => {
+
+  saveState();
+  updateEODStatus(true);
+  showToast('Day saved to history ✓', null, null, 3000);
+}
+
+function updateEODStatus(saved) {
+  const el = document.getElementById('eodStatus');
+  if (!el) return;
+  if (saved) {
+    el.textContent = '✓ saved';
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = 'not saved yet';
+    el.style.color = 'var(--text3)';
+  }
+}
+
+function copyCSVRow() {
+  const text = document.getElementById('csvRow').textContent;
+  navigator.clipboard.writeText(text).then(() => showToast('Row copied!')).catch(() => {
     const ta = document.createElement('textarea');
     ta.value = text; document.body.appendChild(ta);
     ta.select(); document.execCommand('copy');
     document.body.removeChild(ta);
-    showToast(`${lines.length} row${lines.length > 1 ? 's' : ''} copied!`);
+    showToast('Row copied!');
   });
 }
 
@@ -3053,66 +3533,98 @@ function renderTrends() {
   const carbs  = data.map(d => d.totals.carbs);
   const modes  = data.map(d => d.mode || 'standard');
 
-  // ── Weight chart ──
+  // ── Weight chart with body comp overlays ──
   const weightVals = data.map(d => d.weight || null);
+  const fatPctVals = data.map(d => d.fat_pct || null);
   const weightFiltered = weightVals.filter(v => v && v > 0);
+  const hasFat = fatPctVals.some(v => v && v > 0);
+  const wtLow2  = parseFloat(localStorage.getItem('mh_weight_target_low'))  || 92;
+  const wtHigh2 = parseFloat(localStorage.getItem('mh_weight_target_high')) || 93;
+
   if (weightFiltered.length > 0) {
     destroyChart('chartWeight');
-    // 7-day rolling average
     const rolling = weightVals.map((v, i) => {
       const window = weightVals.slice(Math.max(0, i-3), i+4).filter(x => x && x > 0);
       return window.length > 0 ? Math.round(window.reduce((a,b)=>a+b,0)/window.length * 10) / 10 : null;
     });
+
+    const datasets = [
+      {
+        label: 'Weight',
+        data: weightVals,
+        borderColor: '#f5c542',
+        backgroundColor: 'rgba(245,197,66,0.07)',
+        borderWidth: 2, fill: true, tension: 0.3,
+        pointRadius: weightVals.map(v => v ? 3 : 0),
+        pointBackgroundColor: '#f5c542',
+        yAxisID: 'y',
+      },
+      {
+        label: '7-day avg',
+        data: rolling,
+        borderColor: 'rgba(245,197,66,0.5)',
+        borderWidth: 1.5, borderDash: [4,3],
+        pointRadius: 0, fill: false, yAxisID: 'y',
+      },
+      {
+        label: `Target ${wtLow2}–${wtHigh2}kg`,
+        data: Array(weightVals.length).fill(wtLow2),
+        borderColor: 'rgba(45,235,143,0.35)',
+        borderWidth: 1, borderDash: [3,3],
+        pointRadius: 0, fill: false, yAxisID: 'y',
+      },
+      {
+        label: '',
+        data: Array(weightVals.length).fill(wtHigh2),
+        borderColor: 'rgba(45,235,143,0.35)',
+        borderWidth: 1, borderDash: [3,3],
+        pointRadius: 0, fill: '-1',
+        backgroundColor: 'rgba(45,235,143,0.05)',
+        yAxisID: 'y',
+      }
+    ];
+
+    if (hasFat) {
+      datasets.push({
+        label: 'Body fat %',
+        data: fatPctVals,
+        borderColor: '#e05cc8',
+        backgroundColor: 'rgba(224,92,200,0.05)',
+        borderWidth: 1.5, tension: 0.3,
+        pointRadius: fatPctVals.map(v => v ? 2 : 0),
+        fill: false, yAxisID: 'y2',
+      });
+    }
+
     chartInstances['chartWeight'] = new Chart(document.getElementById('chartWeight'), {
       type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Weight',
-            data: weightVals,
-            borderColor: '#f5c542',
-            backgroundColor: 'rgba(245,197,66,0.07)',
-            borderWidth: 2, fill: true, tension: 0.3,
-            pointRadius: weightVals.map(v => v ? 3 : 0),
-            pointBackgroundColor: '#f5c542',
-          },
-          {
-            label: '7-day avg',
-            data: rolling,
-            borderColor: 'rgba(245,197,66,0.5)',
-            borderWidth: 1.5, borderDash: [4,3],
-            pointRadius: 0, fill: false,
-          },
-          {
-            label: 'Target low',
-            data: Array(weightVals.length).fill(92),
-            borderColor: 'rgba(45,235,143,0.35)',
-            borderWidth: 1, borderDash: [3,3],
-            pointRadius: 0, fill: false,
-          },
-          {
-            label: 'Target high',
-            data: Array(weightVals.length).fill(93),
-            borderColor: 'rgba(45,235,143,0.35)',
-            borderWidth: 1, borderDash: [3,3],
-            pointRadius: 0, fill: '-1',
-            backgroundColor: 'rgba(45,235,143,0.05)',
-          }
-        ]
-      },
+      data: { labels, datasets },
       options: {
         ...CHART_DEFAULTS,
         scales: {
           ...CHART_DEFAULTS.scales,
           y: { ...CHART_DEFAULTS.scales.y,
-            min: Math.max(80, Math.min(...weightFiltered) - 1),
+            min: Math.max(50, Math.min(...weightFiltered) - 1),
             max: Math.max(...weightFiltered) + 1,
-          }
+          },
+          ...(hasFat ? {
+            y2: {
+              type: 'linear', position: 'right', display: true,
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#e05cc8', font: { family: 'Space Mono', size: 9 }, callback: v => v + '%' },
+              min: Math.max(0, Math.min(...fatPctVals.filter(Boolean)) - 2),
+              max: Math.max(...fatPctVals.filter(Boolean)) + 2,
+            }
+          } : {})
         },
         plugins: { ...CHART_DEFAULTS.plugins,
-          legend: { display: true, position: 'bottom', labels: { color: '#8b90a0', font: { family: 'Space Mono', size: 9 }, padding: 8, boxWidth: 8 } },
-          tooltip: { ...CHART_DEFAULTS.plugins.tooltip, callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}kg` } }
+          legend: { display: true, position: 'bottom', labels: { color: '#8b90a0', font: { family: 'Space Mono', size: 9 }, padding: 8, boxWidth: 8,
+            filter: item => item.text !== '' } },
+          tooltip: { ...CHART_DEFAULTS.plugins.tooltip, callbacks: {
+            label: ctx => ctx.dataset.yAxisID === 'y2'
+              ? ` ${ctx.dataset.label}: ${ctx.raw}%`
+              : ` ${ctx.dataset.label}: ${ctx.raw}kg`
+          }}
         }
       }
     });
@@ -3335,6 +3847,73 @@ function renderTrends() {
     document.getElementById('statSpO2Avg').textContent = Math.round(spo2Vals.reduce((a,b)=>a+b,0)/spo2Vals.length*10)/10 + '%';
     document.getElementById('statSpO2Min').textContent = Math.min(...spo2Vals) + '%';
     document.getElementById('statSpO2Max').textContent = Math.max(...spo2Vals) + '%';
+  }
+
+  // ── Nutrition ↔ Wearable Correlation ──
+  const corrCard = document.getElementById('correlationCard');
+  const corrEl = document.getElementById('correlationInsights');
+  const insights = [];
+
+  // Was yesterday's weight change fat or water?
+  const weightDays = data.filter(d => d.weight && d.totals?.kcal > 0);
+  if (weightDays.length >= 3) {
+    for (let i = 1; i < weightDays.length; i++) {
+      const prev = weightDays[i-1];
+      const curr = weightDays[i];
+      const wChange = curr.weight - prev.weight;
+      const kcal = prev.totals?.kcal || 0;
+      const targets = getTargets();
+      const kcalDiff = kcal - targets.standard.kcal;
+      const carbs = prev.totals?.carbs || 0;
+
+      if (Math.abs(wChange) > 0.3) {
+        if (wChange > 0 && kcalDiff < -200 && carbs < 50) {
+          insights.push(`📊 ${curr.date}: +${wChange.toFixed(1)}kg after ${kcal}kcal day — likely water retention (low carbs, calories under target)`);
+        } else if (wChange > 0 && kcalDiff > 200) {
+          insights.push(`📊 ${curr.date}: +${wChange.toFixed(1)}kg after ${kcal}kcal day — possible fat or glycogen (calories over target)`);
+        } else if (wChange > 0 && prev.totals?.protein > 150) {
+          insights.push(`📊 ${curr.date}: +${wChange.toFixed(1)}kg after high protein day (${Math.round(prev.totals.protein)}g) — possible lean mass gain`);
+        }
+      }
+    }
+  }
+
+  // HRV vs carbs correlation
+  const hrvCarbDays = data.filter(d => d.hrv_rmssd && d.totals?.carbs >= 0);
+  if (hrvCarbDays.length >= 7) {
+    const highCarbDays = hrvCarbDays.filter(d => d.totals.carbs > 60);
+    const lowCarbDays  = hrvCarbDays.filter(d => d.totals.carbs <= 60);
+    if (highCarbDays.length >= 2 && lowCarbDays.length >= 2) {
+      const avgHrvHigh = highCarbDays.reduce((a,d) => a + d.hrv_rmssd, 0) / highCarbDays.length;
+      const avgHrvLow  = lowCarbDays.reduce((a,d)  => a + d.hrv_rmssd, 0) / lowCarbDays.length;
+      const diff = avgHrvHigh - avgHrvLow;
+      if (Math.abs(diff) > 3) {
+        insights.push(`💡 HRV averages ${Math.round(avgHrvLow)}ms on low-carb days vs ${Math.round(avgHrvHigh)}ms on higher-carb days — ${diff < 0 ? 'better recovery on low carb' : 'higher carb days correlating with better HRV'}`);
+      }
+    }
+  }
+
+  // Sleep vs calorie deficit
+  const sleepKcalDays = data.filter(d => d.sleep_min && d.totals?.kcal > 0);
+  if (sleepKcalDays.length >= 7) {
+    const targets2 = getTargets();
+    const deficitDays  = sleepKcalDays.filter(d => d.totals.kcal < targets2.standard.kcal - 300);
+    const surplusDays  = sleepKcalDays.filter(d => d.totals.kcal >= targets2.standard.kcal - 300);
+    if (deficitDays.length >= 2 && surplusDays.length >= 2) {
+      const avgSleepDef = deficitDays.reduce((a,d)  => a + d.sleep_min, 0) / deficitDays.length;
+      const avgSleepSur = surplusDays.reduce((a,d)  => a + d.sleep_min, 0) / surplusDays.length;
+      const diff = avgSleepDef - avgSleepSur;
+      if (Math.abs(diff) > 20) {
+        insights.push(`💤 Sleep averages ${Math.round(avgSleepDef/60)}h ${Math.round(avgSleepDef%60)}m on low-calorie days vs ${Math.round(avgSleepSur/60)}h ${Math.round(avgSleepSur%60)}m on adequate-calorie days`);
+      }
+    }
+  }
+
+  if (insights.length > 0) {
+    corrCard.style.display = 'block';
+    corrEl.innerHTML = insights.map(i => `<div style="padding:8px 0;border-bottom:1px solid var(--border);">${i}</div>`).join('');
+  } else {
+    corrCard.style.display = 'none';
   }
 }
 
@@ -3579,6 +4158,26 @@ updateHeader();
 updateDashboard();
 // Show onboarding wizard on first run
 checkOnboarding();
+
+// ── Service Worker ────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── Add to Home Screen prompt ─────────────────────────────
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstall = e;
+  setTimeout(() => {
+    if (_deferredInstall) {
+      showToast('Add MaxHealth to your home screen', 'ADD', () => {
+        _deferredInstall.prompt();
+        _deferredInstall.userChoice.then(() => { _deferredInstall = null; });
+      }, 8000);
+    }
+  }, 30000);
+});
 </script>
 </body>
 </html>
