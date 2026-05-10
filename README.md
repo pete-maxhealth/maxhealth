@@ -61,7 +61,7 @@ MaxHealth was originally built for therapeutic ketosis management in **Glioblast
 
 ### The tracker (everyone)
 
-1. Download `maxhealth.html` from the [latest release](https://github.com/pete-maxhealth/maxhealth/releases/latest)
+1. Download `maxhealth.html` from the [latest release](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 2. Copy it to your Android device
 3. Open it in Chrome
 4. Follow the setup wizard — takes about 60 seconds
