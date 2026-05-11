@@ -2,7 +2,7 @@
 // Network-first for HTML — always loads latest version
 // Cache-first for static assets (icons, manifest)
 
-const CACHE = 'maxhealth-v1.2';
+const CACHE = 'maxhealth-v1.3';
 const STATIC = [
   '/maxhealth/manifest.json',
   '/maxhealth/docs/icon-192.png',
@@ -28,7 +28,6 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = e.request.url;
 
-  // Never intercept external API calls
   if (url.includes('api.anthropic.com') ||
       url.includes('api.openai.com') ||
       url.includes('workers.dev') ||
@@ -37,7 +36,6 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network-first for HTML — always get latest version
   if (url.includes('.html')) {
     e.respondWith(
       fetch(e.request)
@@ -48,12 +46,11 @@ self.addEventListener('fetch', e => {
           }
           return response;
         })
-        .catch(() => caches.match(e.request)) // fallback to cache if offline
+        .catch(() => caches.match(e.request))
     );
     return;
   }
 
-  // Cache-first for static assets
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
