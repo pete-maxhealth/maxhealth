@@ -1,157 +1,121 @@
-# MaxHealth
+# MaxedHealth
 
 **Personal health intelligence — nutrition tracking, wearable data, AI meal logging.**
 
 > Built by a GBM patient who needed it. Given freely to everyone who does.
 
+[Read the full story →](https://pete-maxhealth.github.io/maxhealth/docs/story.html) &nbsp;·&nbsp; [Why free? →](https://pete-maxhealth.github.io/maxhealth/why-free.html)
+
 ---
 
-## What it is
+## Open the app
 
-MaxHealth is a personal health tracking system that runs entirely on your Android device. No account. No subscription. No cloud. Your data never leaves your phone.
+MaxedHealth runs in your browser. No installation required. **No API key needed.**
 
-It has two parts:
+**Open Chrome on your Android phone and go to:**
 
-- **maxhealth.html** — A mobile-first web app for daily nutrition tracking. Log meals by text, description, or photo. The AI identifies macros instantly. Tracks calories, protein, carbs, ketosis status, and body weight against your personal targets.
+```
+pete-maxhealth.github.io/maxhealth/maxhealth.html
+```
 
-- **Python pipeline** — Processes wearable exports (Withings, RingConn, Garmin, Oura, Apple Health, or any CSV export) into a unified daily health record. Runs locally via [Termux](https://termux.dev) on Android.
+Bookmark it, or tap Chrome's menu → **Add to Home Screen** to install it like an app. A setup wizard walks you through everything in about 2 minutes.
 
-Together they answer the question: **what is my eating actually doing to my body?**
+---
+
+## What it does
+
+- **AI meal logging** — log meals by text or photo. AI identifies macros instantly. No API key required
+- **Personal food library** — locked macro values for your regular foods
+- **Daily targets** — calories, protein, carbs, ketosis zone indicator
+- **Trends** — weight, sleep, HRV, SpO2, steps, activity — all connected to nutrition
+- **Wearable data** — import from Withings, RingConn, Garmin, Oura, Amazfit/Zepp, or any CSV export
+- **Reports** — GBM monthly brief, correlation analysis, date-range queries
+- **End of day logging** — one tap generates your daily nutrition row
+- **No account, no cloud, no subscription** — everything stays on your device
 
 ---
 
 ## Who it's for
 
-MaxHealth was originally built for therapeutic ketosis management in **Glioblastoma (GBM)** — keeping carbohydrates below 50g/day is a meaningful protocol alongside standard treatment. It has since been designed to be useful for anyone managing their health through diet and data:
-
-- **GBM patients** — ketosis zone monitoring, carb ceiling enforcement, therapeutic protocol tracking
-- **Type 2 Diabetes** — precise carbohydrate tracking, blood sugar-relevant macro targets
-- **Body recomposition** — weight, lean mass, activity, and nutrition all connected
-- **General health tracking** — for anyone who wants their data to work for them
-
-[Read the full story →](https://YOUR_USERNAME.github.io/maxhealth/docs/story.html)
+- **GBM patients** — therapeutic ketosis tracking, carb ceiling enforcement, ketosis zone monitoring
+- **Type 2 Diabetes** — precise carbohydrate tracking, trend analysis
+- **Body recomposition** — nutrition connected to weight, lean mass, activity
+- **General health** — for anyone who wants their data to work for them
 
 ---
 
-## Features
+## Architecture
 
-### Nutrition Tracker (maxhealth.html)
-- AI meal logging via text or photo (Claude or OpenAI — uses your own API key)
-- Personal food library with locked macro values
-- Day mode selector — Standard / Occasion / Holiday carb ceilings
-- Real-time remaining targets — calories, protein, carbs
-- Ketosis zone indicator
-- End-of-day CSV row generator — one tap to copy to your nutrition log
-- History tab with expandable daily entries
-- Trends charts — calories, protein, carbs, weight, sleep, HRV, SpO2, steps
-- Import historical nutrition data from pipe-delimited CSV
-- Import combined wearable data from combined.csv
-- Add new devices — AI-powered column mapping for any CSV export
+MaxedHealth is a static web app hosted on GitHub Pages. There is no server, no backend, and no localhost dependency.
 
-### Data Pipeline (Python — no external dependencies)
-- Processes Withings and RingConn exports out of the box
-- Universal extractor (`auto.py`) for any device via saved mapping configs
-- Outputs a unified `combined.csv` joined on date
-- Gap detection and duplicate priority enforcement
-- Runs on Android via Termux — no PC required
+- **App:** `pete-maxhealth.github.io/maxhealth/maxhealth.html` — single HTML file, runs entirely in the browser
+- **AI:** routed through a Cloudflare Workers proxy (`maxhealth-ai.bogginsuk.workers.dev`) — no API key required from users
+- **Data:** stored locally on the device using localStorage and file import/export
+- **Pipeline:** optional local Python pipeline (runs in Termux on Android) for wearable data processing
+
+See [TECHNICAL.md](TECHNICAL.md) for full architecture documentation.
 
 ---
 
-## Getting started
+## Wearable data (optional)
 
-### The tracker (everyone)
+To connect wearable devices, you need the local data pipeline. This runs on Android via Termux and is a one-time setup.
 
-1. Download `maxhealth.html` from the [latest release](https://github.com/YOUR_USERNAME/maxhealth/releases/latest)
-2. Copy it to your Android device
-3. Open it in Chrome
-4. Follow the setup wizard — takes about 60 seconds
+> Samsung Galaxy users: go to **Settings → Security and Privacy → Auto Blocker** and turn it off before installing.
 
-That's it. The app runs from a single file. Nothing to install.
+**Step 1** — Install F-Droid from f-droid.org, then install Termux and Termux:Boot from F-Droid.
 
-**Optional:** Add an API key for AI meal logging (Claude or OpenAI) in Settings. Without one, the built-in food library and manual entry work fine.
-
-### The pipeline (wearable data)
-
-The pipeline requires [Termux](https://termux.dev) on Android and Python 3.
-
+**Step 2** — Open Termux and run:
 ```bash
-# First time setup
-pkg install python
-cd /storage/emulated/0/MaxHealth
-python pipeline/setup.py
-
-# Run the pipeline
-python pipeline/update_health.py --device withings
-python pipeline/update_health.py --device ringconn
-python pipeline/update_health.py  # all devices
-
-# Add a new device
-# Go to Import > Add New Device in the app, upload a sample CSV,
-# confirm the AI mapping, download the JSON config,
-# save it to MaxHealth/mappings/
-python pipeline/auto.py --config mappings/mydevice.json --input data/inbox/export.csv
+curl -sSL https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/setup.sh | bash
 ```
+
+**Step 3** — Export data from your wearable, run the pipeline, then import combined.csv in the app's Import tab.
+
+Supported devices: Withings, RingConn, Amazfit/Zepp. Any device that exports CSV can be added via Import → Add New Device.
+
+Full pipeline documentation: [Pipeline Setup Guide](https://pete-maxhealth.github.io/maxhealth/docs/pipeline-setup.html)
 
 ---
 
-## File structure
+## Repository structure
 
 ```
-MaxHealth/
-├── maxhealth.html          ← The app — open this in Chrome
-├── pipeline/
-│   ├── update_health.py    ← Main pipeline entry point
-│   ├── auto.py             ← Universal device extractor
-│   ├── merge.py            ← Builds combined.csv
-│   ├── utils.py            ← Shared utilities
-│   ├── setup.py            ← First-run setup wizard
-│   └── extractors/
-│       ├── withings.py
-│       ├── ringconn.py
-│       └── amazfit.py      ← Stub — needs sample export
-├── mappings/               ← Device mapping configs (JSON)
-│   └── README.md
-├── data/
-│   ├── inbox/              ← Drop wearable export zips here
-│   └── tables/             ← Generated data tables (CSV)
-└── docs/
-    └── story.html          ← Why this was built
+# Web app (served via GitHub Pages)
+maxhealth.html          # The app — single file
+sw.js                   # Service worker (PWA/offline)
+manifest.json           # PWA manifest
+why-free.html           # Why free / how it differs
+carer.html              # Read-only carer view
+setup.sh                # One-command Termux setup
+distribute.sh           # Post-pull file distribution + inbox automation
+pipeline/
+  auto.py               # Thin trigger → app/update_health.py
+docs/
+  story.html            # Why it exists
+  pipeline-setup.html   # Wearable setup guide
+  gbm_patient_guide.html
+README.md
+TECHNICAL.md
+
+# Pipeline (on-device only, outside repo)
+# /storage/emulated/0/MaxHealth/app/
+#   update_health.py    # Pipeline entry point
+#   extractors/         # Device extractors
+#   server.py
 ```
 
 ---
 
 ## Privacy
 
-Everything runs locally on your device.
-
-- No data is ever sent to MaxHealth or any third party
-- AI meal logging uses your own API key — requests go directly to Anthropic or OpenAI
-- No analytics, no tracking, no advertising
-- localStorage only — your history never leaves your browser
-
----
-
-## Technical notes
-
-- Single HTML file — no build tools, no npm, no framework
-- Vanilla JavaScript, Chart.js for charts (loaded from cdnjs)
-- Python stdlib only — no pip dependencies
-- Tested on Android (Chrome) and desktop browsers
-- localStorage key: `maxhealth_v1`
-
----
-
-## Contributing
-
-MaxHealth is free and open source. If you improve it, please share it back.
-
-If you're a GBM patient, carer, clinician, or researcher and want to suggest features relevant to the therapeutic use case — please open an issue. This is the use case that matters most.
+Everything runs locally on your device. No data sent anywhere except AI meal logging requests (text/photo descriptions only — no personal health data). No analytics. No tracking.
 
 ---
 
 ## Licence
 
-MIT — do what you want with it. Attribution appreciated but not required.
+MIT — do what you want with it.
 
 ---
 
