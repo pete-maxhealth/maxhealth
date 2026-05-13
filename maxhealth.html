@@ -4546,12 +4546,14 @@ function renderTrends() {
     // Use last 7-day averages for stable scores, not just latest single value
     const last7 = n => arr => { const c = arr.filter(v=>v!=null&&!isNaN(v)&&v>0); return c.length ? avg(c.slice(-Math.min(7,c.length))) : null; };
 
-    // Sleep score — based on 7-day avg hours vs 8hr target
-    const avgSleep7 = last7()(sleepVals);
+    // Sleep score — use last 7 days that actually have sleep data
+    const lastSleepVals = [...sleepVals].filter(v => v != null && v > 0).slice(-7);
+    const avgSleep7 = lastSleepVals.length ? Math.round(lastSleepVals.reduce((a,b)=>a+b,0)/lastSleepVals.length * 10) / 10 : null;
     const sleepScore = avgSleep7 ? Math.min(100, Math.round(avgSleep7/8*100)) : null;
 
-    // Activity score — based on 7-day avg steps vs 10k target
-    const avgSteps7 = last7()(stepsVals);
+    // Activity score — use last 7 days that actually have steps data
+    const lastStepsVals = [...stepsVals].filter(v => v != null && v > 0).slice(-7);
+    const avgSteps7 = lastStepsVals.length ? Math.round(lastStepsVals.reduce((a,b)=>a+b,0)/lastStepsVals.length) : null;
     const actScore = avgSteps7 ? Math.min(100, Math.round(avgSteps7/10000*100)) : null;
 
     // Vitals score — SpO2 + HRV, use last row that actually has these values
@@ -4564,16 +4566,18 @@ function renderTrends() {
       vitScore = Math.min(100, spo2part + hrvpart);
     }
 
-    // Nutrition score — 7-day carb adherence + protein adherence
+    // Nutrition score — last 7 days with actual carb/protein data
     const carbTgt = targets.carbs || 50;
     const protTgt = targets.protein || 145;
-    const recentCarbs = carbVals.slice(-7).filter(v=>v!=null&&!isNaN(v));
-    const recentProts = protVals.slice(-7).filter(v=>v!=null&&!isNaN(v));
+    const recentCarbs = [...carbVals].filter(v=>v!=null&&!isNaN(v)&&v>0).slice(-7);
+    const recentProts = [...protVals].filter(v=>v!=null&&!isNaN(v)&&v>0).slice(-7);
     let nutScore = null;
-    if (recentCarbs.length > 0 && recentProts.length > 0) {
-      const carbAdh = recentCarbs.filter(v=>v<=carbTgt).length / recentCarbs.length; // 0-1
-      const protAdh = Math.min(1, recentProts.reduce((a,b)=>a+b,0)/recentProts.length / protTgt);
-      nutScore = Math.round((carbAdh * 60) + (protAdh * 40)); // carb adherence weighted 60%, protein 40%
+    if (recentCarbs.length > 0) {
+      const carbAdh = recentCarbs.filter(v=>v<=carbTgt).length / recentCarbs.length;
+      const protAdh = recentProts.length > 0
+        ? Math.min(1, recentProts.reduce((a,b)=>a+b,0)/recentProts.length / protTgt)
+        : 0.5; // neutral if no protein data
+      nutScore = Math.round((carbAdh * 60) + (protAdh * 40));
     }
 
     const statusText = s => s == null ? '—' : s >= 80 ? 'Good' : s >= 60 ? 'Fair' : 'Low';
