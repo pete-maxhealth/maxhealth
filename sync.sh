@@ -44,8 +44,8 @@ move_to_inbox() {
   if [ -f "$INBOX/$name" ]; then
     echo -e "  ${DIM}skipped — $name already in inbox${NC}"
   else
-    cp "$file" "$INBOX/$name"
-    echo -e "  ${GREEN}✓${NC} $name"
+    mv "$file" "$INBOX/$name"
+    echo -e "  ${GREEN}✓${NC} $name → inbox"
     moved=$((moved+1))
   fi
 }

@@ -108,7 +108,7 @@ move_to_inbox() {
     log "skipped (already exists): $name"
     ((skipped++)) || true
   else
-    cp "$file" "$INBOX/$name"
+    mv "$file" "$INBOX/$name"
     echo -e "  ${GREEN}moved${NC}  $name → inbox"
     log "moved to inbox: $name"
     ((moved++)) || true
