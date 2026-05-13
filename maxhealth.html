@@ -3940,14 +3940,47 @@ function renderTrends() {
       const prevD = new Date(`20${prev[2]}-${prev[1]}-${prev[0]}`);
       const currD = new Date(`20${curr[2]}-${curr[1]}-${curr[0]}`);
       const diffDays = Math.round((currD - prevD) / 86400000);
-      if (diffDays > 1) gaps.push({ from: data[i-1].date, to: data[i].date, days: diffDays - 1 });
+      if (diffDays > 1) {
+        // Work out which missing dates they are
+        const missing = [];
+        for (let d = 1; d < diffDays; d++) {
+          const md = new Date(prevD);
+          md.setDate(md.getDate() + d);
+          const dd = String(md.getDate()).padStart(2,'0');
+          const mm = String(md.getMonth()+1).padStart(2,'0');
+          const yy = String(md.getFullYear()).slice(2);
+          missing.push(`${dd}/${mm}/${yy}`);
+        }
+        gaps.push({ from: data[i-1].date, to: data[i].date, days: diffDays - 1, missing });
+      }
     }
   }
+
+  // Also detect rows that exist but are missing specific data sources
+  const sourcesWithGaps = new Set();
+  data.forEach(row => {
+    if (!row.weight || row.weight <= 0)              sourcesWithGaps.add('weight');
+    if (!row.wearable?.steps && !row.steps)          sourcesWithGaps.add('steps');
+    if (!row.wearable?.hrv   && !row.hrv)            sourcesWithGaps.add('HRV');
+    if (!row.wearable?.sleep && !row.sleepScore)     sourcesWithGaps.add('sleep');
+  });
+
   if (gaps.length > 0) {
     const total = gaps.reduce((a, g) => a + g.days, 0);
     const worst = gaps.reduce((a, g) => g.days > a.days ? g : a, gaps[0]);
+    const missingDates = worst.missing.join(', ');
+    const sourceHint = sourcesWithGaps.size > 0
+      ? ` Missing sources: ${[...sourcesWithGaps].join(', ')}.`
+      : '';
     gapEl.style.display = 'block';
-    gapEl.textContent = `⚠ ${total} missing day${total > 1 ? 's' : ''} in this period. Longest gap: ${worst.days} day${worst.days > 1 ? 's' : ''} (${worst.from} → ${worst.to}). Charts may show discontinuities.`;
+    gapEl.textContent = `⚠ ${total} missing day${total > 1 ? 's' : ''}: ${missingDates}. Check wearable sync or re-run pipeline.${sourceHint}`;
+  } else if (sourcesWithGaps.size > 0) {
+    // No date gaps but some fields missing across rows
+    gapEl.style.display = 'block';
+    gapEl.style.background = 'rgba(77,159,255,0.08)';
+    gapEl.style.borderColor = 'rgba(77,159,255,0.2)';
+    gapEl.style.color = 'var(--blue)';
+    gapEl.textContent = `ℹ Some rows are missing data for: ${[...sourcesWithGaps].join(', ')}. Charts will show gaps.`;
   } else {
     gapEl.style.display = 'none';
   }
