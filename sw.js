@@ -1,5 +1,5 @@
-// MaxedHealth Service Worker v1.4
-const CACHE = 'maxhealth-v1.4';
+// MaxedHealth Service Worker v1.6
+const CACHE = 'maxhealth-v1.6';
 
 self.addEventListener('install', e => {
   e.waitUntil(
