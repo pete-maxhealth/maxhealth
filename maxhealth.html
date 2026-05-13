@@ -4156,6 +4156,14 @@ function renderTrends() {
     return;
   }
   if (noData) noData.style.display = 'none';
+  // Hide the "import wearable data" tip if we have wearable data
+  const hasWearable = data.some(d => d.steps || d.hr_avg || d.hrv || d.spo2 || d.sleep_duration);
+  if (hasWearable) {
+    // Dismiss the trends tip permanently
+    const tipEl = document.querySelector('.tip-banner[data-tab="trends"]');
+    if (tipEl) tipEl.style.display = 'none';
+    markTipSeen('trends');
+  }
 
   const labels = data.map(d => d.date.slice(0,5));
   const targets = getTargets();
@@ -4186,7 +4194,14 @@ function renderTrends() {
   if (gaps.length > 0) {
     const worst = gaps.reduce((a,g) => g.days > a.days ? g : a, gaps[0]);
     gapEl.style.display = 'block';
-    gapEl.textContent = `⚠ Missing: ${worst.missing.join(', ')}. Check wearable sync.`;
+    // Show a concise message — not a list of every missing date
+    if (worst.days >= 7) {
+      // Large gap — likely export cutoff, not just missing day
+      gapEl.textContent = `⚠ No wearable data after ${worst.from} — ${worst.days} days missing. Export a fresh sync from your device.`;
+    } else {
+      // Small gap — list the specific dates
+      gapEl.textContent = `⚠ Missing: ${worst.missing.slice(0,5).join(', ')}${worst.missing.length > 5 ? ` + ${worst.missing.length-5} more` : ''}. Check wearable sync.`;
+    }
   } else {
     gapEl.style.display = 'none';
   }
@@ -4492,23 +4507,39 @@ function renderTrends() {
   // ── Wellness summary arcs ──
   if (wellnessCard) {
     wellnessCard.style.display = 'block';
-    // Sleep score 0-100
-    const latestSleep = sleepClean.length ? sleepClean[sleepClean.length-1] : null;
-    const sleepScore  = latestSleep ? Math.min(100, Math.round(latestSleep/8*100)) : null;
-    // Activity score
-    const latestSteps = stepsClean.length ? stepsClean[stepsClean.length-1] : null;
-    const actScore    = latestSteps ? Math.min(100, Math.round(latestSteps/10000*100)) : null;
-    // Vitals score (SpO2 + HRV)
-    const latestSpO2  = spo2Clean.length ? spo2Clean[spo2Clean.length-1] : null;
-    const latestHRV   = hrvClean.length  ? hrvClean[hrvClean.length-1]   : null;
-    const vitScore    = latestSpO2 ? Math.round((latestSpO2-88)/12*70 + (latestHRV?Math.min(30,latestHRV/60*30):15)) : null;
-    // Nutrition score (carb adherence + protein)
-    const todayCarb   = carbClean.length ? carbClean[carbClean.length-1] : null;
-    const todayProt   = protClean.length ? protClean[protClean.length-1] : null;
-    const nutScore    = todayCarb != null ? Math.round(
-      (todayCarb <= (targets.carbs||50) ? 50 : Math.max(0, 50 - (todayCarb-(targets.carbs||50))*2)) +
-      (todayProt >= (targets.protein||145) ? 50 : Math.max(0, todayProt/(targets.protein||145)*50))
-    ) : null;
+
+    // Use last 7-day averages for stable scores, not just latest single value
+    const last7 = n => arr => { const c = arr.filter(v=>v!=null&&!isNaN(v)&&v>0); return c.length ? avg(c.slice(-Math.min(7,c.length))) : null; };
+
+    // Sleep score — based on 7-day avg hours vs 8hr target
+    const avgSleep7 = last7()(sleepVals);
+    const sleepScore = avgSleep7 ? Math.min(100, Math.round(avgSleep7/8*100)) : null;
+
+    // Activity score — based on 7-day avg steps vs 10k target
+    const avgSteps7 = last7()(stepsVals);
+    const actScore = avgSteps7 ? Math.min(100, Math.round(avgSteps7/10000*100)) : null;
+
+    // Vitals score — SpO2 + HRV, use last row that actually has these values
+    const lastSpO2 = [...spo2Vals].reverse().find(v => v != null && v > 0) || null;
+    const lastHRV  = [...hrvVals].reverse().find(v => v != null && v > 0) || null;
+    let vitScore = null;
+    if (lastSpO2) {
+      const spo2part = Math.round((lastSpO2 - 88) / 12 * 60); // 88%=0, 100%=60
+      const hrvpart  = lastHRV ? Math.min(40, Math.round(lastHRV / 80 * 40)) : 20; // 0ms=0, 80ms+=40
+      vitScore = Math.min(100, spo2part + hrvpart);
+    }
+
+    // Nutrition score — 7-day carb adherence + protein adherence
+    const carbTgt = targets.carbs || 50;
+    const protTgt = targets.protein || 145;
+    const recentCarbs = carbVals.slice(-7).filter(v=>v!=null&&!isNaN(v));
+    const recentProts = protVals.slice(-7).filter(v=>v!=null&&!isNaN(v));
+    let nutScore = null;
+    if (recentCarbs.length > 0 && recentProts.length > 0) {
+      const carbAdh = recentCarbs.filter(v=>v<=carbTgt).length / recentCarbs.length; // 0-1
+      const protAdh = Math.min(1, recentProts.reduce((a,b)=>a+b,0)/recentProts.length / protTgt);
+      nutScore = Math.round((carbAdh * 60) + (protAdh * 40)); // carb adherence weighted 60%, protein 40%
+    }
 
     const statusText = s => s == null ? '—' : s >= 80 ? 'Good' : s >= 60 ? 'Fair' : 'Low';
     const statusCls  = s => s == null ? 'neutral' : s >= 80 ? 'good' : s >= 60 ? 'warn' : 'bad';
