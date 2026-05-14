@@ -1979,6 +1979,10 @@
           style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;text-decoration:none;">
           Why free? →
         </a>
+        <a href="docs/setup-guide.html" target="_blank"
+          style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;text-decoration:none;">
+          Setup guide →
+        </a>
         <a href="https://github.com/pete-maxhealth/maxhealth" target="_blank"
           style="font-size:11px;color:var(--text2);font-family:'Space Mono',monospace;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:6px 12px;text-decoration:none;">
           GitHub →
@@ -1998,12 +2002,27 @@
 <div class="view" id="view-trends">
   <div class="trends-scroll">
 
-    <!-- Filter -->
-    <div class="trends-filter">
-      <div class="trends-filter-btn active" onclick="setTrendsFilter(30,this)">30 Days</div>
-      <div class="trends-filter-btn" onclick="setTrendsFilter(60,this)">60 Days</div>
-      <div class="trends-filter-btn" onclick="setTrendsFilter(0,this)">All</div>
+    <!-- Filter + Daily nav -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      <div class="trends-filter">
+        <div class="trends-filter-btn" id="trendsBtnToday" onclick="setTrendsFilter('today',this)">Today</div>
+        <div class="trends-filter-btn active" id="trendsBtn30" onclick="setTrendsFilter(30,this)">30 Days</div>
+        <div class="trends-filter-btn" id="trendsBtn60" onclick="setTrendsFilter(60,this)">60 Days</div>
+        <div class="trends-filter-btn" id="trendsBtnAll" onclick="setTrendsFilter(0,this)">All</div>
+      </div>
+      <!-- Daily navigation — only visible in Today mode -->
+      <div id="trendsDayNav" style="display:none;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;">
+        <button onclick="shiftTrendsDay(-1)" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:0 8px;">←</button>
+        <div style="text-align:center;">
+          <div id="trendsDayLabel" style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);"></div>
+          <div id="trendsDayRelative" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
+        </div>
+        <button onclick="shiftTrendsDay(1)" id="trendsDayNext" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:0 8px;">→</button>
+      </div>
     </div>
+
+    <!-- Daily view — single day summary -->
+    <div id="trendsDailyView" style="display:none;"></div>
 
     <!-- Gap warning -->
     <div id="trendsGapWarning" style="display:none;background:var(--yellow-dim);border:1px solid rgba(245,197,66,0.25);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--yellow);font-family:'Syne',sans-serif;font-weight:600;"></div>
@@ -4396,6 +4415,14 @@ function getTrendsData() {
     spo2:           d.spo2           || d.spo2_avg   || null,
   });
 
+  // Handle daily view mode
+  if (trendsWindow === 'today') {
+    const d = new Date();
+    d.setDate(d.getDate() + _trendsDayOffset);
+    const target = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear().toString().slice(2)}`;
+    return histData.filter(d => d.date === target).map(norm);
+  }
+
   if (trendsWindow > 0) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - trendsWindow);
@@ -4415,6 +4442,20 @@ function renderTrends() {
   const data = getTrendsData();
   const noData = document.getElementById('trendsNoData');
   const wellnessCard = document.getElementById('wellnessCard');
+
+  // Daily view mode — show single day summary
+  if (trendsWindow === 'today') {
+    if (noData) noData.style.display = 'none';
+    if (wellnessCard) wellnessCard.style.display = 'none';
+    ['mcWeight','mcHR','mcSpO2','mcHRV','mcSteps','mcSleep','mcCal','mcProt','mcCarb'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    renderDailyView(data);
+    return;
+  }
+  // Hide daily view if switching away
+  const dv = document.getElementById('trendsDailyView');
+  if (dv) dv.style.display = 'none';
 
   if (data.length === 0) {
     if (noData) noData.style.display = 'block';
@@ -5332,11 +5373,97 @@ function toggleTrendCharts() {
   if (!open) renderTrends(); // re-render charts when panel opens
 }
 
+let _trendsDayOffset = 0; // 0 = today, -1 = yesterday etc
+
+function renderDailyView(data) {
+  const el = document.getElementById('trendsDailyView');
+  if (!el) return;
+  el.style.display = 'block';
+  const d = data[0];
+  const targets = getTargets();
+  if (!d) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text3);"><div style="font-size:36px;margin-bottom:12px;">📭</div><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--text2);margin-bottom:8px;">No data for this day</div><div style="font-size:12px;">Try a different date or check your wearable sync.</div></div>`;
+    return;
+  }
+  const fmt = (v, unit) => v ? `${v}${unit}` : '—';
+  const fmtTime = mins => mins ? `${Math.floor(mins/60)}h${mins%60>0?mins%60+'m':''}` : '—';
+  const row = (icon, label, val, color) => `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><div style="display:flex;align-items:center;gap:10px;"><span style="font-size:16px;">${icon}</span><span style="font-size:14px;color:var(--text2);">${label}</span></div><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:${color||'var(--text)'};">${val}</span></div>`;
+  const sec = (title, rows) => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;"><div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">${title}</div>${rows}</div>`;
+  const kcal = d.totals?.kcal||0, prot = d.totals?.protein||0, carbs = d.totals?.carbs||0;
+  const carbColor = carbs === 0 ? 'var(--text3)' : carbs <= targets.carbs ? 'var(--accent)' : 'var(--red)';
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:16px;">
+    ${sec('Activity & Vitals', `
+      ${row('🚶','Steps', d.steps?d.steps.toLocaleString():'—', d.steps>=10000?'var(--accent)':d.steps>=7500?'var(--yellow)':'var(--text)')}
+      ${row('❤️','Heart Rate', fmt(d.hr_avg,' bpm'), 'var(--text)')}
+      ${row('💜','HRV', fmt(d.hrv,' ms'), 'var(--text)')}
+      ${row('🫁','SpO2', fmt(d.spo2,'%'), d.spo2&&d.spo2>=97?'var(--accent)':d.spo2&&d.spo2>=95?'var(--yellow)':'var(--red)')}
+      ${row('🔥','Active Calories', fmt(d.calories_active,' kcal'), 'var(--text)')}
+    `)}
+    ${sec('Sleep', `
+      ${row('🌙','Total sleep', fmtTime(d.sleep_duration), d.sleep_duration>=420?'var(--accent)':d.sleep_duration>=360?'var(--yellow)':'var(--red)')}
+      ${row('🟣','Deep', fmtTime(d.sleep_deep), '#6366f1')}
+      ${row('🔵','Light', fmtTime(d.sleep_light), 'var(--blue)')}
+      ${row('🟢','REM', fmtTime(d.sleep_rem), 'var(--accent)')}
+      ${row('⬜','Awake', fmtTime(d.sleep_wake), 'var(--text3)')}
+      ${d.sleep_duration?`<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;margin-top:8px;">
+        <div style="width:${d.sleep_deep?Math.round(d.sleep_deep/d.sleep_duration*100):0}%;background:#6366f1;"></div>
+        <div style="width:${d.sleep_light?Math.round(d.sleep_light/d.sleep_duration*100):0}%;background:var(--blue);"></div>
+        <div style="width:${d.sleep_rem?Math.round(d.sleep_rem/d.sleep_duration*100):0}%;background:var(--accent);"></div>
+        <div style="flex:1;background:rgba(255,255,255,0.08);"></div>
+      </div>`:''}
+    `)}
+    ${sec('Nutrition', `
+      ${row('🔥','Calories', kcal?`${kcal.toLocaleString()} / ${targets.kcal.toLocaleString()} kcal`:'—', kcal>=targets.kcal*0.9?'var(--accent)':'var(--yellow)')}
+      ${row('💪','Protein', prot?`${prot}g / ${targets.protein}g`:'—', prot>=targets.protein?'var(--accent)':'var(--yellow)')}
+      ${row('🌾','Carbs', carbs?`${carbs}g / ${targets.carbs}g ceiling`:'—', carbColor)}
+      ${carbs>0&&carbs<=targets.carbs?'<div style="margin-top:8px;padding:8px 12px;background:var(--accent-dim);border-radius:6px;font-size:12px;color:var(--accent);font-family:\'Syne\',sans-serif;font-weight:600;">✓ Within ketosis ceiling</div>':''}
+      ${carbs>targets.carbs?`<div style="margin-top:8px;padding:8px 12px;background:rgba(255,94,94,0.08);border-radius:6px;font-size:12px;color:var(--red);font-family:'Syne',sans-serif;font-weight:600;">✗ Over ceiling by ${carbs-targets.carbs}g</div>`:''}
+    `)}
+    ${d.weight?sec('Weight', row('⚖️','Weight',`${d.weight} kg`, d.weight>=WEIGHT_TARGET_LOW()&&d.weight<=WEIGHT_TARGET_HIGH()?'var(--accent)':'var(--yellow)')):''}
+  </div>`;
+}
+
 function setTrendsFilter(days, btn) {
-  trendsWindow = days;
   document.querySelectorAll('.trends-filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  const dayNav = document.getElementById('trendsDayNav');
+
+  if (days === 'today') {
+    trendsWindow = 'today';
+    _trendsDayOffset = 0;
+    if (dayNav) dayNav.style.display = 'flex';
+    updateTrendsDayLabel();
+  } else {
+    trendsWindow = days;
+    if (dayNav) dayNav.style.display = 'none';
+  }
   renderTrends();
+}
+
+function shiftTrendsDay(dir) {
+  const data = getTrendsData();
+  // Find all dates with any data
+  const dates = [...new Set(data.map(d => d.date))].sort();
+  const maxOffset = -(dates.length - 1);
+  _trendsDayOffset = Math.max(maxOffset, Math.min(0, _trendsDayOffset + dir));
+  updateTrendsDayLabel();
+  // Disable next button if at today
+  const nextBtn = document.getElementById('trendsDayNext');
+  if (nextBtn) nextBtn.style.opacity = _trendsDayOffset >= 0 ? '0.3' : '1';
+  renderTrends();
+}
+
+function updateTrendsDayLabel() {
+  const label = document.getElementById('trendsDayLabel');
+  const relative = document.getElementById('trendsDayRelative');
+  if (!label) return;
+  const d = new Date();
+  d.setDate(d.getDate() + _trendsDayOffset);
+  const day = d.getDate().toString().padStart(2,'0');
+  const mon = (d.getMonth()+1).toString().padStart(2,'0');
+  const yr  = d.getFullYear().toString().slice(2);
+  label.textContent = `${day}/${mon}/${yr}`;
+  relative.textContent = _trendsDayOffset === 0 ? 'Today' : _trendsDayOffset === -1 ? 'Yesterday' : `${Math.abs(_trendsDayOffset)} days ago`;
 }
 
 // ─── COMBINED.CSV IMPORT ─────────────────────────────────
