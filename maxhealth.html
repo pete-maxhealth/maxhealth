@@ -2286,6 +2286,7 @@
       <button class="run-btn" style="margin-bottom:10px" onclick="document.getElementById('csvFileInput').click()">
         📂 SELECT COMBINED.CSV
       </button>
+      <div id="combinedImportStatus" style="font-size:12px;color:var(--text3);margin-bottom:8px;font-family:'Syne',sans-serif;font-weight:600;"></div>
       <div class="output-box idle" id="csvImportOutput">No file loaded yet.</div>
     </div>
 
@@ -2964,6 +2965,8 @@ function importNutritionCSV(input) {
 
 function processNutritionCSV(text, outEl) {
   const out = outEl || document.getElementById('nutritionImportOutput');
+  // Cache for auto-reload on next session
+  try { localStorage.setItem('mh_nutrition_csv_cache', text.slice(0, 2000000)); } catch(e) {}
   try {
     const lines = text.trim().split('\n').filter(Boolean);
     if (lines.length === 0) { out.className = 'output-box error'; out.textContent = 'File is empty.'; return; }
@@ -3800,7 +3803,7 @@ function switchTab(tab, el) {
   if (tab === 'settings') initSettings();
   if (tab === 'trends') renderTrends();
   if (tab === 'library') renderLibrary();
-  if (tab === 'import') renderSavedDevices();
+  if (tab === 'import') { renderSavedDevices(); updateImportStatus(); }
   if (tab === 'reports') renderReports();
   // Show contextual tip on first visit
   setTimeout(() => showTabTip(tab), 150);
@@ -4805,6 +4808,7 @@ function processCombinedText(text, silent, outEl) {
       saveState();
       // Cache the raw CSV text so we can auto-reload on next startup
       try { localStorage.setItem('mh_combined_csv_cache', text.slice(0, 4900000)); } catch(e) {}
+      try { localStorage.setItem('mh_combined_csv_meta', JSON.stringify({date: new Date().toLocaleDateString('en-GB'), rows: added + merged})); } catch(e) {}
 
       out.className = 'output-box success';
       if (!silent) showToast(`Imported ${added} days ✓`);
@@ -5018,6 +5022,19 @@ function confirmDeviceMapping() {
   _pendingMapping = null;
   renderSavedDevices();
   showToast(`${_pendingDeviceName} config saved ✓`);
+}
+
+function updateImportStatus() {
+  // Show last import status in Import tab
+  const combinedMeta = localStorage.getItem('mh_combined_csv_meta');
+  const statusEl = document.getElementById('combinedImportStatus');
+  if (statusEl && combinedMeta) {
+    try {
+      const meta = JSON.parse(combinedMeta);
+      statusEl.textContent = `✓ Last imported ${meta.date} · ${meta.rows} rows`;
+      statusEl.style.color = 'var(--accent)';
+    } catch(e) {}
+  }
 }
 
 function renderSavedDevices() {
@@ -5650,13 +5667,23 @@ try {
   </div>`;
 }
 
-// Auto-reload disabled — import combined.csv manually via Import tab
-// setTimeout(() => {
-//   const cached = localStorage.getItem('mh_combined_csv_cache');
-//   if (cached && state.history.length < 5) {
-//     processCombinedText(cached, true, null);
-//   }
-// }, 500);
+// Auto-reload cached CSV files on startup
+setTimeout(() => {
+  try {
+    // Reload combined.csv (wearable data)
+    const combinedCache = localStorage.getItem('mh_combined_csv_cache');
+    if (combinedCache && state.history.filter(h => h.steps || h.hr_avg || h.sleep_duration).length < 5) {
+      processCombinedText(combinedCache, true, null);
+    }
+    // Reload nutrition history
+    const nutritionCache = localStorage.getItem('mh_nutrition_csv_cache');
+    if (nutritionCache && state.history.filter(h => h.totals?.kcal > 0).length < 5) {
+      processNutritionCSV(nutritionCache, null);
+    }
+    // Update import tab status
+    updateImportStatus();
+  } catch(e) {}
+}, 800);
 </script>
 </body>
 </html>
