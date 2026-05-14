@@ -73,6 +73,17 @@ def run(inbox, password=None, dry_run=False):
                 spo2 = sp or spo2
 
         if any([activity, sleep, heartrate, weight, spo2]):
+            # Also extract weight/body comp from any zip in inbox
+            for zpath in glob.glob(os.path.join(inbox, '*.zip')):
+                if any(x in os.path.basename(zpath).lower() for x in ['data_pet_','withings','export_']):
+                    try:
+                        with zipfile.ZipFile(zpath) as _zf:
+                            wt = _extract_weight_csv(_zf)
+                            if wt: weight = wt
+                            pv = _extract_pwv_csv(_zf)
+                            if pv: pwv = pv
+                        break
+                    except Exception: pass
             rows = _merge_daily(activity, sleep, heartrate, weight, spo2)
             print(f"  [withings] {len(rows)} daily records from loose files", file=sys.stderr)
             return rows
@@ -122,6 +133,11 @@ def run(inbox, password=None, dry_run=False):
         print(f"  [withings] Could not open zip: {e}", file=sys.stderr)
         return []
 
+    # Pre-check format before entering context manager
+    with zipfile.ZipFile(zip_path, 'r') as _zf:
+        _names = [n.lower() for n in _zf.namelist()]
+    has_aggregates = any('aggregates_steps' in n for n in _names)
+
     with zf:
         names_lower = [n.lower() for n in zf.namelist()]
 
@@ -135,7 +151,14 @@ def run(inbox, password=None, dry_run=False):
         )
         has_legacy = any('raw_tracker' in n for n in names_lower)
 
-        if has_new_format:
+        if has_aggregates:
+            print(f"  [withings] Detected aggregates format (data_PET_)", file=sys.stderr)
+            activity  = _extract_aggregates(zf) or activity
+            sleep     = _extract_sleep_csv(zf) or sleep
+            heartrate = _extract_hr_csv(zf) or heartrate
+            weight    = _extract_weight_csv(zf) or weight
+            spo2      = _extract_spo2_csv(zf) or spo2
+        elif has_new_format:
             print(f"  [withings] Detected new Health Mate export format (.csv)", file=sys.stderr)
             for name in zf.namelist():
                 nl = name.lower()
@@ -367,20 +390,28 @@ def _extract_hr_csv(zf):
 
 
 def _extract_weight_csv(zf):
-    """Extract weight from weight.csv"""
+    """Extract weight from weight.csv — full body composition"""
     rows = _read_csv(zf, 'weight')
     result = {}
     for row in rows:
-        date = _date(row.get('date') or row.get('Date'))
+        date = _date(row.get('Date') or row.get('date'))
         if not date: continue
+        wkg = _float(row.get('Weight (kg)') or row.get('weight') or row.get('Weight'))
+        fkg = _float(row.get('Fat mass (kg)') or row.get('fat_mass_weight') or row.get('fat_ratio'))
+        bkg = _float(row.get('Bone mass (kg)') or row.get('bone_mass'))
+        mkg = _float(row.get('Muscle mass (kg)') or row.get('muscle_mass'))
+        hkg = _float(row.get('Hydration (kg)') or row.get('hydration'))
         result[date] = {
-            'weight':     _float(row.get('weight') or row.get('Weight')),
-            'bmi':        _float(row.get('bmi') or row.get('BMI')),
-            'fat_pct':    _float(row.get('fat_ratio') or row.get('fat_mass_weight')),
-            'muscle_pct': _float(row.get('muscle_mass') or row.get('muscle_mass_weight')),
+            'weight':         wkg,
+            'fat_mass_kg':    fkg,
+            'fat_pct':        round(fkg/wkg*100,1) if fkg and wkg else None,
+            'muscle_mass_kg': mkg,
+            'muscle_pct':     round(mkg/wkg*100,1) if mkg and wkg else None,
+            'bone_mass_kg':   bkg,
+            'hydration_kg':   hkg,
         }
     if result:
-        print(f"  [withings] Weight (csv): {len(result)} days", file=sys.stderr)
+        print(f"  [withings] Weight (csv): {len(result)} days — muscle/fat/bone/hydration included", file=sys.stderr)
     return result
 
 
@@ -496,45 +527,40 @@ def _extract_spo2(zf):
     return result
 
 
-def _merge_daily(activity, sleep, heartrate, weight, spo2):
+def _merge_daily(activity, sleep, heartrate, weight, spo2, pwv={}):
     all_dates = sorted(set(
-        list(activity) + list(sleep) + list(heartrate) + list(weight) + list(spo2)
+        list(activity)+list(sleep)+list(heartrate)+list(weight)+list(spo2)+list(pwv)
     ))
     rows = []
     for date in all_dates:
-        act = activity.get(date, {})
-        slp = sleep.get(date, {})
-        hr  = heartrate.get(date, {})
-        wt  = weight.get(date, {})
-        sp  = spo2.get(date, {})
-
-        sources = []
-        if act: sources.append('withings_activity')
-        if slp: sources.append('withings_sleep')
-        if hr:  sources.append('withings_hr')
-        if wt:  sources.append('withings_weight')
-        if sp:  sources.append('withings_spo2')
-
+        act=activity.get(date,{}); slp=sleep.get(date,{}); hr=heartrate.get(date,{})
+        wt=weight.get(date,{}); sp=spo2.get(date,{}); pv=pwv.get(date,{})
         rows.append({
-            'date':            date,
-            'steps':           act.get('steps'),
-            'distance_m':      act.get('distance_m'),
+            'date': date,
+            'steps': act.get('steps'), 'distance_m': act.get('distance_m'),
             'calories_active': act.get('calories_active'),
-            'sleep_duration':  slp.get('sleep_duration'),
-            'sleep_deep':      slp.get('sleep_deep'),
-            'sleep_light':     slp.get('sleep_light'),
-            'sleep_rem':       slp.get('sleep_rem'),
-            'sleep_wake':      slp.get('sleep_wake'),
-            'hr_avg':          hr.get('hr_avg'),
-            'hr_min':          hr.get('hr_min'),
-            'hr_max':          hr.get('hr_max'),
-            'hrv':             hr.get('hrv'),
-            'weight':          wt.get('weight'),
-            'bmi':             wt.get('bmi'),
-            'fat_pct':         wt.get('fat_pct'),
-            'muscle_pct':      wt.get('muscle_pct'),
-            'spo2':            sp.get('spo2'),
-            'source':          'withings',
+            'calories_passive': act.get('calories_passive'),
+            'elevation_m': act.get('elevation_m'),
+            'sleep_duration': slp.get('sleep_duration'),
+            'sleep_deep': slp.get('sleep_deep'), 'sleep_light': slp.get('sleep_light'),
+            'sleep_rem': slp.get('sleep_rem'), 'sleep_wake': slp.get('sleep_wake'),
+            'sleep_onset': slp.get('sleep_onset'),
+            'sleep_efficiency': slp.get('sleep_efficiency'),
+            'sleep_hr_avg': slp.get('sleep_hr_avg'),
+            'sleep_hr_min': slp.get('sleep_hr_min'),
+            'sleep_hr_max': slp.get('sleep_hr_max'),
+            'snoring_min': slp.get('snoring_min'),
+            'bedtime': slp.get('bedtime'), 'wake_time': slp.get('wake_time'),
+            'hr_avg': hr.get('hr_avg'), 'hr_min': hr.get('hr_min'), 'hr_max': hr.get('hr_max'),
+            'hrv': hr.get('hrv'), 'hrv_min': hr.get('hrv_min'), 'hrv_max': hr.get('hrv_max'),
+            'spo2': sp.get('spo2') or hr.get('spo2'),
+            'spo2_min': hr.get('spo2_min'), 'spo2_max': hr.get('spo2_max'),
+            'weight': wt.get('weight'),
+            'fat_mass_kg': wt.get('fat_mass_kg'), 'fat_pct': wt.get('fat_pct'),
+            'muscle_mass_kg': wt.get('muscle_mass_kg'), 'muscle_pct': wt.get('muscle_pct'),
+            'bone_mass_kg': wt.get('bone_mass_kg'), 'hydration_kg': wt.get('hydration_kg'),
+            'pwv': pv.get('pwv'),
+            'source': 'withings',
         })
     return rows
 
