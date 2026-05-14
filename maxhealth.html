@@ -2317,10 +2317,25 @@
         Example: 09/05/26|2840|173|40|stir fry
       </div>
       <input type="file" id="nutritionCsvInput" accept=".csv,.txt" style="display:none" onchange="importNutritionCSV(this)">
-      <button class="run-btn" style="margin-bottom:10px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);" onclick="document.getElementById('nutritionCsvInput').click()">
+      <button class="run-btn" style="margin-bottom:8px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);" onclick="document.getElementById('nutritionCsvInput').click()">
         📂 SELECT MASTER.CSV
       </button>
+      <div id="nutritionImportStatus" style="font-size:12px;color:var(--text3);margin-bottom:8px;font-family:'Syne',sans-serif;font-weight:600;"></div>
       <div class="output-box idle" id="nutritionImportOutput">No file loaded yet.</div>
+    </div>
+
+    <!-- Data Preview & Validator -->
+    <div class="import-card">
+      <div class="import-label" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleDataPreview()">
+        Data Preview & Validator
+        <span id="dataPreviewToggle" style="font-size:16px;color:var(--accent);">+</span>
+      </div>
+      <div id="dataPreviewPanel" style="display:none;margin-top:14px;">
+        <div id="dataPreviewContent">
+          <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Import files above to see preview</div>
+        </div>
+        <button class="copy-btn" style="margin-top:12px;width:100%;" onclick="renderDataPreview()">🔄 Refresh Preview</button>
+      </div>
     </div>
 
     <div class="import-card" style="border-color:rgba(77,159,255,0.2);">
@@ -5025,7 +5040,7 @@ function confirmDeviceMapping() {
 }
 
 function updateImportStatus() {
-  // Show last import status in Import tab
+  // Combined CSV status
   const combinedMeta = localStorage.getItem('mh_combined_csv_meta');
   const statusEl = document.getElementById('combinedImportStatus');
   if (statusEl && combinedMeta) {
@@ -5035,6 +5050,125 @@ function updateImportStatus() {
       statusEl.style.color = 'var(--accent)';
     } catch(e) {}
   }
+  // Nutrition CSV status
+  const nutEl = document.getElementById('nutritionImportStatus');
+  if (nutEl && state.history.length > 0) {
+    const nutDays = state.history.filter(h => h.totals?.kcal > 0).length;
+    if (nutDays > 0) {
+      nutEl.textContent = `✓ ${nutDays} nutrition days in history`;
+      nutEl.style.color = 'var(--accent)';
+    }
+  }
+}
+
+function toggleDataPreview() {
+  const panel  = document.getElementById('dataPreviewPanel');
+  const toggle = document.getElementById('dataPreviewToggle');
+  if (!panel) return;
+  const open = panel.style.display === 'block';
+  panel.style.display = open ? 'none' : 'block';
+  toggle.textContent = open ? '+' : '−';
+  if (!open) renderDataPreview();
+}
+
+function renderDataPreview() {
+  const el = document.getElementById('dataPreviewContent');
+  if (!el) return;
+
+  const h = state.history || [];
+  if (h.length === 0) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No data imported yet</div>';
+    return;
+  }
+
+  // Sort history ascending
+  const sorted = [...h].sort((a,b) => {
+    const parse = d => { const p = d.split('/'); return p.length===3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0); };
+    return parse(a.date) - parse(b.date);
+  });
+
+  const total = sorted.length;
+  const withNutrition = sorted.filter(r => r.totals?.kcal > 0).length;
+  const withSteps     = sorted.filter(r => r.steps > 0).length;
+  const withSleep     = sorted.filter(r => r.sleep_duration > 0).length;
+  const withHR        = sorted.filter(r => r.hr_avg > 0).length;
+  const withHRV       = sorted.filter(r => r.hrv > 0).length;
+  const withSpO2      = sorted.filter(r => r.spo2 > 0).length;
+  const withWeight    = sorted.filter(r => r.weight > 0).length;
+
+  const first = sorted[0].date;
+  const last  = sorted[sorted.length-1].date;
+
+  // Find gaps
+  const gaps = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i-1].date.split('/');
+    const curr = sorted[i].date.split('/');
+    if (prev.length===3 && curr.length===3) {
+      const prevD = new Date(`20${prev[2]}-${prev[1]}-${prev[0]}`);
+      const currD = new Date(`20${curr[2]}-${curr[1]}-${curr[0]}`);
+      const diff = Math.round((currD-prevD)/86400000);
+      if (diff > 1) gaps.push({ from: sorted[i-1].date, to: sorted[i].date, days: diff-1 });
+    }
+  }
+
+  const pct = (n) => `${Math.round(n/total*100)}%`;
+  const bar = (n) => {
+    const p = Math.round(n/total*100);
+    const col = p >= 80 ? 'var(--accent)' : p >= 50 ? 'var(--yellow)' : 'var(--red)';
+    return `<div style="display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;height:6px;background:var(--border);border-radius:3px;">
+        <div style="width:${p}%;height:100%;background:${col};border-radius:3px;"></div>
+      </div>
+      <span style="font-size:11px;color:${col};font-family:'Syne',sans-serif;font-weight:700;min-width:36px;">${pct(n)}</span>
+      <span style="font-size:11px;color:var(--text3);">${n}/${total}</span>
+    </div>`;
+  };
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;">
+        <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:var(--text);">${total}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">Total rows</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text);">${first}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">First date</div>
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text);margin-top:6px;">${last}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">Last date</div>
+      </div>
+    </div>
+
+    <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Data Coverage</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      ${[
+        ['Nutrition', withNutrition],
+        ['Weight',    withWeight],
+        ['Steps',     withSteps],
+        ['Sleep',     withSleep],
+        ['Heart Rate',withHR],
+        ['HRV',       withHRV],
+        ['SpO2',      withSpO2],
+      ].map(([label, n]) => `
+        <div>
+          <div style="font-size:11px;color:var(--text2);margin-bottom:3px;">${label}</div>
+          ${bar(n)}
+        </div>
+      `).join('')}
+    </div>
+
+    ${gaps.length > 0 ? `
+      <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">⚠ Gaps Found (${gaps.length})</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${gaps.slice(0,5).map(g => `
+          <div style="font-size:12px;color:var(--yellow);background:rgba(245,197,66,0.06);border-radius:6px;padding:6px 10px;">
+            ${g.from} → ${g.to} &nbsp;·&nbsp; ${g.days} missing day${g.days>1?'s':''}
+          </div>
+        `).join('')}
+        ${gaps.length > 5 ? `<div style="font-size:11px;color:var(--text3);padding:4px 10px;">+ ${gaps.length-5} more gaps</div>` : ''}
+      </div>
+    ` : `<div style="font-size:12px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:600;">✓ No date gaps found</div>`}
+  `;
 }
 
 function renderSavedDevices() {
