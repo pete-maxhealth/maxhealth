@@ -1,21 +1,11 @@
-// MaxedHealth Service Worker - CACHE BUSTER
-// This version immediately clears all caches and unregisters itself
-
-self.addEventListener('install', e => {
-  self.skipWaiting();
-});
-
+// MaxedHealth Service Worker v2.0 - minimal, no caching
+self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.map(k => caches.delete(k))))
-      .then(() => self.registration.unregister())
-      .then(() => self.clients.matchAll())
-      .then(clients => clients.forEach(c => c.navigate(c.url)))
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
-
 self.addEventListener('fetch', e => {
-  e.respondWith(fetch(e.request));
+  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
