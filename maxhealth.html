@@ -5016,6 +5016,26 @@ function renderDrill() {
     }
   });
 
+  // Touch/mouse scrubber — update hero number on hover/drag
+  const drillCanvas = document.getElementById('drillChart');
+  const updateScrubber = (e) => {
+    if (!_drillChart) return;
+    const pts = _drillChart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
+    if (pts.length > 0) {
+      const idx = pts[0].index;
+      if (vals[idx] !== undefined) {
+        document.getElementById('drillHeroNum').textContent = vals[idx];
+        document.getElementById('drillSubtitle').textContent = labels[idx];
+      }
+    }
+  };
+  drillCanvas.addEventListener('mousemove', updateScrubber);
+  drillCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); updateScrubber(e); }, {passive:false});
+  drillCanvas.addEventListener('mouseleave', () => {
+    document.getElementById('drillHeroNum').textContent = last !== null ? last : (avg !== null ? avg : '—');
+    document.getElementById('drillSubtitle').textContent = `${data.length} data points · ${_drillPeriod > 0 ? 'Last ' + _drillPeriod + ' days' : 'All time'}`;
+  });
+
   // Context sections
   renderDrillContext(metric, data, vals, avg, min, max, cfg);
 }
@@ -5188,6 +5208,34 @@ function renderDrillContext(metric, data, vals, avg, min, max, cfg) {
           ['Best day', max ? max + 'g' : '—'],
         ].map(([l,v]) => `<div class="drill-row"><span class="drill-row-label">${l}</span><span class="drill-row-val">${v}</span></div>`).join('')}
         <div class="drill-insight">Adequate protein (≥${target}g/day) is essential for lean mass preservation during therapeutic ketosis. Muscle mass is a key metabolic asset and correlates with outcomes in GBM patients. [Proven]</div>
+      </div>`;
+  }
+
+  else if (metric === 'calories') {
+    const targets = getTargets();
+    const target = targets.kcal || 3000;
+    const daysOn = vals.filter(v => v >= target*0.9 && v <= target*1.15).length;
+    const daysUnder = vals.filter(v => v < target*0.9).length;
+    const protData = getDrillData('protein', _drillPeriod);
+    const carbData = getDrillData('carbs', _drillPeriod);
+    const avgProt = protData.length ? Math.round(protData.reduce((a,d)=>a+d.val,0)/protData.length) : null;
+    const avgCarb = carbData.length ? Math.round(carbData.reduce((a,d)=>a+d.val,0)/carbData.length) : null;
+    el.innerHTML += `
+      <div class="drill-section">
+        <div class="drill-section-title">Calorie adherence</div>
+        <div class="drill-row"><span class="drill-row-label">Daily target</span><span class="drill-row-val">${target.toLocaleString()} kcal</span></div>
+        <div class="drill-row"><span class="drill-row-label">Days on target (±10%)</span><span class="drill-row-val">${daysOn}/${vals.length}</span></div>
+        <div class="drill-row"><span class="drill-row-label">Days under target</span><span class="drill-row-val">${daysUnder}</span></div>
+        <div class="drill-row"><span class="drill-row-label">Your average</span><span class="drill-row-val">${avg ? avg.toLocaleString() + ' kcal' : '—'}</span></div>
+      </div>
+      <div class="drill-section">
+        <div class="drill-section-title">Macronutrient averages</div>
+        <div class="drill-row"><span class="drill-row-label">Calories</span><span class="drill-row-val">${avg ? avg.toLocaleString() + ' kcal' : '—'}</span></div>
+        <div class="drill-row"><span class="drill-row-label">Protein</span><span class="drill-row-val">${avgProt ? avgProt + 'g' : '—'}</span></div>
+        <div class="drill-row"><span class="drill-row-label">Carbohydrates</span><span class="drill-row-val">${avgCarb ? avgCarb + 'g' : '—'}</span></div>
+        <div class="drill-row"><span class="drill-row-label">Est. fat</span><span class="drill-row-val">${(avg && avgProt && avgCarb) ? Math.round((avg - avgProt*4 - avgCarb*4)/9) + 'g' : '—'}</span></div>
+        ${avg && avg < target*0.85 ? '<div class=\"drill-insight\">⚠ Average calories below target. Check the cream shake is being logged daily — it adds ~660 kcal to your gaining protocol.</div>' : ''}
+        ${avg && avg >= target*0.9 ? '<div class=\"drill-insight\">✓ Calorie intake on target for your gaining phase. Monitor weight trend weekly to confirm mass gain.</div>' : ''}
       </div>`;
   }
 
