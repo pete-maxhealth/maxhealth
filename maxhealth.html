@@ -1934,6 +1934,13 @@
       </div>
     </div>
 
+    <div class="section-title">Device Precedence</div>
+    <div class="settings-card">
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px;">When two devices provide data for the same metric on the same day, the pipeline uses this priority. Save to download a config file — copy it to /storage/emulated/0/maxhealth/data/ for the pipeline to use.</div>
+      <div id="precedenceEditor"></div>
+      <button class="copy-btn" onclick="savePrecedence()" style="margin-top:12px;width:100%;">💾 SAVE PRECEDENCE</button>
+      <div class="settings-hint" style="margin-top:8px;">Changes take effect on next sync. Re-import combined.csv after syncing.</div>
+    </div>
     <div class="section-title">Data &amp; Backup</div>
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div style="font-size:11px;color:var(--yellow);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage</div>
@@ -4036,7 +4043,7 @@ function switchTab(tab, el) {
   if (el) el.classList.add('active');
   if (tab === 'hist') renderHistory();
   if (tab === 'dash') updateDashboard();
-  if (tab === 'settings') initSettings();
+  if (tab === 'settings') { initSettings(); renderPrecedenceEditor(); }
   if (tab === 'trends') renderTrends();
   if (tab === 'library') renderLibrary();
   if (tab === 'import') { renderSavedDevices(); updateImportStatus(); }
@@ -5400,6 +5407,33 @@ function renderDrillContext(metric, data, vals, avg, min, max, cfg) {
         ].map(([l,v]) => `<div class="drill-row"><span class="drill-row-label">${l}</span><span class="drill-row-val">${v}</span></div>`).join('')}
       </div>`;
   }
+}
+
+const PRECEDENCE_KEY = 'mh_device_precedence';
+const PRECEDENCE_METRICS = [
+  { key: 'steps', label: 'Steps' },
+  { key: 'hr_avg', label: 'Heart Rate' },
+  { key: 'hrv', label: 'HRV' },
+  { key: 'spo2', label: 'SpO2' },
+  { key: 'sleep_duration', label: 'Sleep' },
+  { key: 'weight', label: 'Weight' },
+];
+const KNOWN_DEVICES = ['RingConn', 'Withings', 'Zepp/Amazfit', 'Garmin', 'Auto (pipeline default)'];
+function getStoredPrecedence() { try { return JSON.parse(localStorage.getItem(PRECEDENCE_KEY) || '{}'); } catch(e) { return {}; } }
+function renderPrecedenceEditor() {
+  const el = document.getElementById('precedenceEditor');
+  if (!el) return;
+  const stored = getStoredPrecedence();
+  const defaults = { steps: 'RingConn', hr_avg: 'RingConn', hrv: 'RingConn', spo2: 'RingConn', sleep_duration: 'Zepp/Amazfit', weight: 'Withings' };
+  el.innerHTML = PRECEDENCE_METRICS.map(m => `<div class="drill-row"><span class="drill-row-label">${m.label}</span><select id="prec_${m.key}" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);font-family:'Syne',sans-serif;">${KNOWN_DEVICES.map(d => `<option value="${d}" ${(stored[m.key]||defaults[m.key])===d?'selected':''}>${d}</option>`).join('')}</select></div>`).join('');
+}
+function savePrecedence() {
+  const prec = {};
+  PRECEDENCE_METRICS.forEach(m => { const el = document.getElementById('prec_' + m.key); if (el) prec[m.key] = el.value; });
+  localStorage.setItem(PRECEDENCE_KEY, JSON.stringify(prec));
+  const blob = new Blob([JSON.stringify({ precedence: prec, updated: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'maxhealth_precedence.json'; a.click(); URL.revokeObjectURL(url);
+  showToast('Precedence saved — copy file to /storage/emulated/0/maxhealth/data/');
 }
 
 function toggleKetosisTooltip() {
