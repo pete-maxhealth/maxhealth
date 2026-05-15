@@ -3464,7 +3464,7 @@ function clearPhoto() {
 // ─── AI MEAL PARSING ─────────────────────────────────────
 async function parseWithAI(userText, imageBase64, imageMime) {
   const { provider, apiKey } = getAIConfig();
-  if (provider === 'none' || !apiKey) return null;
+  if (provider === 'none' && !apiKey) return null; // proxy always available
 
   const totals  = calcTotals(state.todayLog);
   const targets = TARGETS[state.dayMode];
@@ -3556,6 +3556,22 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
       const data = await response.json();
       if (data.error) throw new Error(data.error.message);
       return JSON.parse(data.choices[0].message.content);
+    } else {
+      // Cloudflare proxy — no key needed
+      const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+      response = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userText }]
+        })
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message || 'Proxy error');
+      return JSON.parse(data.content[0].text);
     }
   } catch (e) {
     console.error('AI parse error:', e);
@@ -3690,7 +3706,7 @@ async function processMessage(text, imageBase64, imageMime) {
 
   // ── AI fallback ───────────────────────────────────────────
   const { provider, apiKey } = getAIConfig();
-  if (provider !== 'none' && apiKey) {
+  if (provider !== 'none' || true) { // proxy always available
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
     const result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
