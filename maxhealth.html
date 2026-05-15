@@ -2551,7 +2551,7 @@
 </div>
 
 <!-- Metric Drill-Down Overlay -->
-<div id="metricDrillOverlay" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;"><div id="metricDrillScroll" style="min-height:100%;">
+<div id="metricDrillOverlay" style="display:none;position:fixed;inset:0;z-index:400;background:var(--bg);overflow:hidden;"><div id="metricDrillScroll" style="height:100vh;overflow-y:scroll;-webkit-overflow-scrolling:touch;">
   <div style="position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;">
     <button onclick="closeMetricDrill()" style="background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;">←</button>
     <div>
@@ -3506,7 +3506,7 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
   try {
     let response;
 
-    if (provider === 'claude') {
+    if (provider === 'claude' && apiKey) {
       const userContent = hasImage
         ? [
             { type: 'image', source: { type: 'base64', media_type: imageMime, data: imageBase64 } },
@@ -3559,16 +3559,20 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
     } else {
       // Cloudflare proxy — no key needed
       const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+      const proxyMessages = hasImage
+        ? [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: imageMime, data: imageBase64 } },
+            { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
+          ]}]
+        : [{ role: 'user', content: userText || 'this meal' }];
       response = await fetch(PROXY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 500,
-          messages: [{
-            role: 'user',
-            content: 'You are a nutrition assistant. Respond ONLY with JSON in this format: {"type":"food","items":[{"name":"food name","kcal":123,"protein":12.0,"carbs":3.0}],"message":"brief summary"}\n\nEstimate macros for: ' + (userText || 'this meal')
-          }]
+          system: systemPrompt,
+          messages: proxyMessages
         })
       });
       const data = await response.json();
@@ -5625,14 +5629,11 @@ function renderDailyView(data) {
 
   function makeRow(icon, label, val, color, drillMetric) {
     const div = document.createElement('div');
-    const cursor = drillMetric ? 'cursor:pointer;touch-action:manipulation;' : '';
-    div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 0;min-height:44px;border-bottom:1px solid var(--border);' + cursor;
+    const cursor = drillMetric ? 'cursor:pointer;' : '';
+    div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);' + cursor;
     const arrow = drillMetric ? ' <span style="color:var(--accent);font-size:11px;">→</span>' : '';
     div.innerHTML = '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:16px;">' + icon + '</span><span style="font-size:14px;color:var(--text2);">' + label + '</span></div><span style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:16px;color:' + (color||'var(--text)') + ';">' + val + arrow + '</span>';
-    if (drillMetric) {
-      div.onclick = () => openMetricDrill(drillMetric);
-      div.addEventListener('touchend', (e) => { e.preventDefault(); openMetricDrill(drillMetric); }, { passive: false });
-    }
+    if (drillMetric) div.onclick = () => openMetricDrill(drillMetric);
     return div;
   }
 
