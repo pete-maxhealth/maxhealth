@@ -1,40 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<script>
-// ── Local server redirect — runs before anything renders ──────────────────────
-// If we're on GitHub Pages and the local server is reachable, redirect silently.
-// This means the home screen shortcut always points to the right place.
-(function() {
-  const isGitHub = window.location.hostname.includes('github.io');
-  const isLocal  = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (isGitHub) {
-    // Try to reach local server — 800ms timeout so page loads fast if offline
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 800);
-    fetch('http://localhost:5757/ping', { signal: ctrl.signal })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        clearTimeout(timer);
-        if (data && data.status === 'ok') {
-          // Server online — redirect silently, preserving hash if any
-          window.location.replace('http://localhost:5757' + window.location.hash);
-        } else {
-          // Server responded but not OK — stay on GitHub, show cloud banner
-          window._cloudMode = true;
-        }
-      })
-      .catch(() => {
-        clearTimeout(timer);
-        // Server offline — stay on GitHub Pages in cloud mode
-        window._cloudMode = true;
-      });
-  }
-  window._isLocal  = isLocal;
-  window._isGitHub = isGitHub;
-})();
-</script><!-- v1.8 -->
+<meta charset="UTF-8"><!-- v1.8 -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -1322,18 +1289,6 @@
 </head>
 <body>
 
-<!-- Cloud mode banner — shown when on GitHub Pages without local server -->
-<div id="cloudModeBanner" style="display:none;background:#1a1d23;border-bottom:1px solid rgba(77,159,255,0.2);padding:10px 16px;font-size:12px;color:#8b90a0;line-height:1.6;text-align:center;">
-  ☁️ Running in <strong style="color:#e8eaf0;">cloud mode</strong> — AI logging works, but one-tap wearable sync needs the local server. <a href="https://pete-maxhealth.github.io/maxhealth/docs/pipeline-setup.html" style="color:#4d9fff;text-decoration:underline;margin-left:4px;">Setup guide →</a>
-  <span style="color:#555a6a;cursor:pointer;margin-left:8px;white-space:nowrap;" onclick="document.getElementById('cloudModeBanner').style.display='none'">✕</span>
-</div>
-<!-- Install nudge — shown on localhost to prompt home screen shortcut -->
-<div id="installNudge" style="display:none;background:rgba(45,235,143,0.08);border-bottom:1px solid rgba(45,235,143,0.2);padding:10px 16px;font-size:12px;color:#8b90a0;line-height:1.6;">
-  <span>📲 <strong style="color:#e8eaf0;">Add to Home Screen</strong> for the best experience — opens MaxedHealth directly, always local, no browser bar.</span>
-  <span style="margin-left:10px;color:#2deb8f;cursor:pointer;font-weight:600;" id="installBtn" onclick="triggerInstall()">Install →</span>
-  <span style="margin-left:8px;color:#555a6a;cursor:pointer;" onclick="dismissInstallNudge()">Not now</span>
-</div>
-
 <!-- ONBOARDING WIZARD -->
 <div id="onboardingOverlay" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto;padding:32px 24px 48px;max-width:480px;margin:0 auto;">
   <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent);margin-bottom:4px;letter-spacing:0.1em;text-shadow:0 0 20px var(--accent-glow);">MAXEDHEALTH</div>
@@ -1413,10 +1368,21 @@
 
     <div style="margin-bottom:16px;">
       <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Goal</div>
-      <div style="display:flex;gap:8px;">
-        <div class="provider-btn" id="ob-goalBtn-lose" onclick="obSetGoal('lose')" style="flex:1;text-align:center;">Lose</div>
-        <div class="provider-btn active" id="ob-goalBtn-maintain" onclick="obSetGoal('maintain')" style="flex:1;text-align:center;">Maintain</div>
-        <div class="provider-btn" id="ob-goalBtn-gain" onclick="obSetGoal('gain')" style="flex:1;text-align:center;">Gain</div>
+      <div id="goalSummary" style="background:var(--surface);border:1px solid rgba(45,235,143,0.2);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <span id="goalSummaryIcon" style="font-size:16px;margin-right:8px;"></span>
+          <span id="goalSummaryText" style="font-size:14px;color:var(--text);font-weight:600;"></span>
+          <div id="goalSummaryDetail" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;white-space:nowrap;margin-left:12px;" onclick="toggleGoalOverride()">Change →</span>
+      </div>
+      <div id="goalOverride" style="display:none;margin-top:8px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Override inferred goal:</div>
+        <div style="display:flex;gap:8px;">
+          <div class="provider-btn" id="ob-goalBtn-lose" onclick="obSetGoal('lose')" style="flex:1;text-align:center;">Lose</div>
+          <div class="provider-btn" id="ob-goalBtn-maintain" onclick="obSetGoal('maintain')" style="flex:1;text-align:center;">Maintain</div>
+          <div class="provider-btn active" id="ob-goalBtn-gain" onclick="obSetGoal('gain')" style="flex:1;text-align:center;">Gain</div>
+        </div>
       </div>
     </div>
 
@@ -1547,7 +1513,7 @@
     <div id="newUserBanner" style="display:none;background:linear-gradient(135deg,rgba(45,235,143,0.08),rgba(45,235,143,0.04));border:1px solid var(--accent-glow);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;position:relative;">
       <div style="font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">👋 Welcome to MaxedHealth</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px;">
-        Start by logging a meal — tap <strong style="color:var(--text);">Log Meal</strong> and describe what you ate. Everything else follows from there.
+        Start by logging a meal — tap <strong style="color:var(--text);">Assistant</strong> and describe what you ate. Everything else follows from there.
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
         <a href="docs/user-guide.html" target="_blank" style="font-size:11px;font-family:'Space Mono',monospace;color:var(--bg);background:var(--accent);border:1px solid var(--accent-glow);border-radius:6px;padding:6px 12px;text-decoration:none;box-shadow:0 0 10px var(--accent-glow);">📖 How it works →</a>
@@ -2725,8 +2691,41 @@ function obSetActivity(level) {
 function obSetGoal(goal) {
   _obGoal = goal;
   document.querySelectorAll('[id^="ob-goalBtn-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById(`ob-goalBtn-${goal}`).classList.add('active');
+  const btn = document.getElementById(`ob-goalBtn-${goal}`);
+  if (btn) btn.classList.add('active');
+  updateGoalSummary();
   calcTDEE();
+}
+
+function updateGoalSummary() {
+  const icon   = document.getElementById('goalSummaryIcon');
+  const text   = document.getElementById('goalSummaryText');
+  const detail = document.getElementById('goalSummaryDetail');
+  if (!icon) return;
+  const weight = parseFloat(document.getElementById('onboardWeight').value);
+  const target = parseFloat(document.getElementById('onboardTarget').value);
+  const configs = {
+    gain:     { icon: '📈', label: 'Gain weight',     color: 'var(--accent)', adj: '+250 kcal/day above maintenance' },
+    lose:     { icon: '📉', label: 'Lose weight',     color: 'var(--yellow)', adj: '-500 kcal/day below maintenance' },
+    maintain: { icon: '⚖️',  label: 'Maintain weight', color: 'var(--text)',   adj: 'Maintenance calories' },
+  };
+  const cfg = configs[_obGoal] || configs.maintain;
+  icon.textContent = cfg.icon;
+  text.textContent = cfg.label;
+  text.style.color = cfg.color;
+  if (!isNaN(weight) && !isNaN(target)) {
+    const diff = Math.abs(target - weight).toFixed(1);
+    detail.textContent = _obGoal === 'maintain'
+      ? 'Target: ' + target + 'kg — inferred from your weight entries'
+      : diff + 'kg to go · ' + cfg.adj;
+  } else {
+    detail.textContent = cfg.adj;
+  }
+}
+
+function toggleGoalOverride() {
+  const override = document.getElementById('goalOverride');
+  if (override) override.style.display = override.style.display === 'none' ? 'block' : 'none';
 }
 
 function obSetCondition(cond) {
@@ -2794,7 +2793,13 @@ function onboardNext(step) {
       localStorage.setItem('mh_weight_target_low', target);
       localStorage.setItem('mh_weight_target_high', (target + 1).toFixed(1));
     }
-    // Trigger TDEE if activity already selected
+    if (!isNaN(weight) && !isNaN(target)) {
+      const diff = target - weight;
+      if (diff > 0.5)       obSetGoal('gain');
+      else if (diff < -0.5) obSetGoal('lose');
+      else                  obSetGoal('maintain');
+    }
+    updateGoalSummary();
     calcTDEE();
   }
 
@@ -7259,63 +7264,10 @@ function initSyncUI() {
   checkServer();
 }
 
-
-// ─── CLOUD MODE + INSTALL PROMPT (P15) ───────────────────────────────────────
-
-let _installPromptEvent = null;
-
-// Capture install prompt for later use
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  _installPromptEvent = e;
-  // Only show nudge on localhost and if not already installed and not dismissed
-  if ((window._isLocal || window.location.hostname === 'localhost') &&
-      !localStorage.getItem('mh_install_dismissed')) {
-    const nudge = document.getElementById('installNudge');
-    if (nudge) nudge.style.display = 'block';
-  }
-});
-
-function triggerInstall() {
-  if (!_installPromptEvent) {
-    // Fallback — manual instructions
-    showToast('Tap browser menu → Add to Home Screen');
-    return;
-  }
-  _installPromptEvent.prompt();
-  _installPromptEvent.userChoice.then(choice => {
-    if (choice.outcome === 'accepted') {
-      dismissInstallNudge();
-      showToast('MaxedHealth added to Home Screen ✓');
-    }
-    _installPromptEvent = null;
-  });
-}
-
-function dismissInstallNudge() {
-  localStorage.setItem('mh_install_dismissed', '1');
-  const nudge = document.getElementById('installNudge');
-  if (nudge) nudge.style.display = 'none';
-}
-
-function initCloudMode() {
-  // Show cloud mode banner if on GitHub Pages and server check timed out
-  if (window._isGitHub) {
-    // Give the redirect script 900ms to fire — if we're still here, server is offline
-    setTimeout(() => {
-      if (window._cloudMode !== false) {
-        const banner = document.getElementById('cloudModeBanner');
-        if (banner) banner.style.display = 'block';
-      }
-    }, 900);
-  }
-}
-
 // ─── INIT ─────────────────────────────────────────────────
 try {
   loadTheme();
   loadLibrary();
-  initCloudMode();
   renderSavedDevices();
   updateHeader();
   updateDashboard();
