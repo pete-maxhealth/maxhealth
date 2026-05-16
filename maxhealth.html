@@ -3497,8 +3497,6 @@ If the user describes food or a meal (or you can see food in an image), respond 
   "message": "one line summary including any portion assumptions"
 }
 
-CRITICAL: Always identify EVERY separate food component as its own item. "Fried egg and chips" = two items: "fried egg" AND "chips". "Chicken with rice and broccoli" = three items. Never combine multiple foods into a single item. If quantity is not stated, assume a typical serving.
-
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
 {
   "type": "eod",
@@ -3578,7 +3576,7 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
           max_tokens: 500,
           messages: [{
             role: 'user',
-            content: 'You are a nutrition assistant. Respond ONLY with valid JSON, no markdown, no preamble. Format: {"type":"food","items":[{"name":"food name","kcal":123,"protein":12.0,"carbs":3.0}],"message":"brief summary"}. CRITICAL: identify EVERY separate food component as its own item — \"egg and chips\" = two items. Never combine multiple foods. Assume typical serving if quantity not stated.\n\nEstimate macros for: ' + (userText || 'this meal')
+            content: 'You are a nutrition assistant. Respond ONLY with JSON in this format: {"type":"food","items":[{"name":"food name","kcal":123,"protein":12.0,"carbs":3.0}],"message":"brief summary"}\n\nEstimate macros for: ' + (userText || 'this meal')
           }]
         })
       });
@@ -3701,8 +3699,10 @@ async function processMessage(text, imageBase64, imageMime) {
     return;
   }
 
-  // ── Try food library first ────────────────────────────────
-  const libMatch = findInLibrary(text);
+  // ── Try food library first (only for simple single-item inputs) ─────────────
+  // Multi-component descriptions (containing "and", "with", commas) go to AI
+  const isMultiComponent = /\band\b|\bwith\b|,/.test(text.toLowerCase());
+  const libMatch = !isMultiComponent ? findInLibrary(text) : null;
   if (libMatch) {
     logFoods([{ name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, carbs: libMatch.carbs }], text);
     addBubble(`📚 Logged from library — values locked`, 'system', 'success');
@@ -3744,28 +3744,9 @@ async function processMessage(text, imageBase64, imageMime) {
         protein: Math.round(result.items.reduce((a,i)=>a+i.protein,0)*10)/10,
         carbs: Math.round(result.items.reduce((a,i)=>a+i.carbs,0)*10)/10,
       };
-      // Offer to save individual items not already in library
       const lib = loadLibrary();
-      const itemsToOffer = result.items.filter(item =>
-        !lib.some(l => l.name.toLowerCase() === item.name.toLowerCase())
-      );
-      if (itemsToOffer.length > 0) {
-        // Queue save prompts for each new item, staggered
-        itemsToOffer.forEach((item, idx) => {
-          setTimeout(() => promptSaveToLibrary({
-            name: item.name,
-            kcal: Math.round(item.kcal),
-            protein: Math.round(item.protein * 10) / 10,
-            carbs: Math.round(item.carbs * 10) / 10,
-          }), 600 + idx * 200);
-        });
-      } else {
-        // All items already in library — offer combined meal if multi-item
-        const alreadySaved = lib.some(l => l.name.toLowerCase() === mealItem.name.toLowerCase());
-        if (!alreadySaved && result.items.length > 1) {
-          setTimeout(() => promptSaveToLibrary(mealItem), 600);
-        }
-      }
+      const alreadySaved = lib.some(l => l.name.toLowerCase() === mealItem.name.toLowerCase());
+      if (!alreadySaved) setTimeout(() => promptSaveToLibrary(mealItem), 600);
       return;
     }
     if (result.type === 'query') { addBubble(result.message, 'system'); return; }
