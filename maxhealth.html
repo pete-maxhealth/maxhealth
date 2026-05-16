@@ -1368,10 +1368,23 @@
 
     <div style="margin-bottom:16px;">
       <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Goal</div>
-      <div style="display:flex;gap:8px;">
-        <div class="provider-btn" id="ob-goalBtn-lose" onclick="obSetGoal('lose')" style="flex:1;text-align:center;">Lose</div>
-        <div class="provider-btn active" id="ob-goalBtn-maintain" onclick="obSetGoal('maintain')" style="flex:1;text-align:center;">Maintain</div>
-        <div class="provider-btn" id="ob-goalBtn-gain" onclick="obSetGoal('gain')" style="flex:1;text-align:center;">Gain</div>
+      <!-- Inferred goal summary — shown by default -->
+      <div id="goalSummary" style="background:var(--surface);border:1px solid rgba(45,235,143,0.2);border-radius:var(--radius-sm);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <span id="goalSummaryIcon" style="font-size:16px;margin-right:8px;"></span>
+          <span id="goalSummaryText" style="font-size:14px;color:var(--text);font-weight:600;"></span>
+          <div id="goalSummaryDetail" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;white-space:nowrap;margin-left:12px;" onclick="toggleGoalOverride()">Change →</span>
+      </div>
+      <!-- Override buttons — hidden unless user taps Change -->
+      <div id="goalOverride" style="display:none;margin-top:8px;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Override inferred goal:</div>
+        <div style="display:flex;gap:8px;">
+          <div class="provider-btn" id="ob-goalBtn-lose" onclick="obSetGoal('lose')" style="flex:1;text-align:center;">Lose</div>
+          <div class="provider-btn" id="ob-goalBtn-maintain" onclick="obSetGoal('maintain')" style="flex:1;text-align:center;">Maintain</div>
+          <div class="provider-btn active" id="ob-goalBtn-gain" onclick="obSetGoal('gain')" style="flex:1;text-align:center;">Gain</div>
+        </div>
       </div>
     </div>
 
@@ -2680,8 +2693,42 @@ function obSetActivity(level) {
 function obSetGoal(goal) {
   _obGoal = goal;
   document.querySelectorAll('[id^="ob-goalBtn-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById(`ob-goalBtn-${goal}`).classList.add('active');
+  const btn = document.getElementById(`ob-goalBtn-${goal}`);
+  if (btn) btn.classList.add('active');
+  updateGoalSummary();
   calcTDEE();
+}
+
+function updateGoalSummary() {
+  const summary = document.getElementById('goalSummary');
+  const icon    = document.getElementById('goalSummaryIcon');
+  const text    = document.getElementById('goalSummaryText');
+  const detail  = document.getElementById('goalSummaryDetail');
+  if (!summary) return;
+  const weight = parseFloat(document.getElementById('onboardWeight').value);
+  const target = parseFloat(document.getElementById('onboardTarget').value);
+  const configs = {
+    gain:     { icon: '📈', label: 'Gain weight',     color: 'var(--accent)', adj: '+250 kcal/day above maintenance' },
+    lose:     { icon: '📉', label: 'Lose weight',     color: 'var(--yellow)', adj: '-500 kcal/day below maintenance' },
+    maintain: { icon: '⚖️',  label: 'Maintain weight', color: 'var(--text)',   adj: 'Maintenance calories' },
+  };
+  const cfg = configs[_obGoal] || configs.maintain;
+  icon.textContent = cfg.icon;
+  text.textContent = cfg.label;
+  text.style.color = cfg.color;
+  if (!isNaN(weight) && !isNaN(target)) {
+    const diff = Math.abs(target - weight).toFixed(1);
+    detail.textContent = _obGoal === 'maintain'
+      ? 'Target: ' + target + 'kg — inferred from your weight entries'
+      : diff + 'kg to go · ' + cfg.adj;
+  } else {
+    detail.textContent = cfg.adj;
+  }
+}
+
+function toggleGoalOverride() {
+  const override = document.getElementById('goalOverride');
+  override.style.display = override.style.display === 'none' ? 'block' : 'none';
 }
 
 function obSetCondition(cond) {
@@ -2749,6 +2796,15 @@ function onboardNext(step) {
       localStorage.setItem('mh_weight_target_low', target);
       localStorage.setItem('mh_weight_target_high', (target + 1).toFixed(1));
     }
+    // Infer goal from weight vs target
+    if (!isNaN(weight) && !isNaN(target)) {
+      const diff = target - weight;
+      if (diff > 0.5)       obSetGoal('gain');
+      else if (diff < -0.5) obSetGoal('lose');
+      else                  obSetGoal('maintain');
+    }
+    // Update the inferred goal summary UI
+    updateGoalSummary();
     // Trigger TDEE if activity already selected
     calcTDEE();
   }
@@ -3356,25 +3412,8 @@ function setProvider(p) {
   const keyHint = document.getElementById('apiKeyHint');
   if (p === 'none') {
     keyRow.style.display = 'none';
-    hint.innerHTML = 'Using local food database only. Set a provider to enable free-text meal logging.';
+    hint.textContent = 'Using local food database only. Set a provider to enable free-text meal logging.';
     hint.style.color = 'var(--text3)';
-  } else if (p === 'claude') {
-    // Claude works via built-in proxy — no API key needed
-    const existing = localStorage.getItem('mh_apikey') || '';
-    if (existing) {
-      // User has their own key — show the key row
-      keyRow.style.display = 'flex';
-      document.getElementById('apiKeyLabel').textContent = 'Claude API Key (own)';
-      keyHint.textContent = 'Using your own Anthropic API key.';
-      document.getElementById('apiKeyInput').value = '••••••••••••••••';
-      hint.innerHTML = '✓ Using your own Claude API key. <span style="color:var(--text3);cursor:pointer;text-decoration:underline;" onclick="clearApiKey()">Switch to built-in →</span>';
-      hint.style.color = 'var(--green)';
-    } else {
-      // No key — use built-in proxy
-      keyRow.style.display = 'none';
-      hint.innerHTML = '✓ <strong style="color:var(--accent);">No API key needed.</strong> Claude is built in via a secure proxy — AI meal logging works out of the box. <span style="color:var(--text3);font-size:11px;cursor:pointer;text-decoration:underline;display:block;margin-top:4px;" onclick="showOwnKeyRow()">Use your own Anthropic API key instead →</span>';
-      hint.style.color = 'var(--text2)';
-    }
   } else {
     keyRow.style.display = 'flex';
     document.getElementById('apiKeyLabel').textContent = AI_PROVIDERS[p].label + ' API Key';
@@ -3396,24 +3435,6 @@ function saveApiKey() {
   hint.textContent = '✓ API key saved — AI parsing active';
   hint.style.color = 'var(--green)';
   showToast('API key saved ✓');
-}
-
-function showOwnKeyRow() {
-  // Reveal API key input for users who want to use their own Claude key
-  const keyRow = document.getElementById('apiKeyRow');
-  const keyHint = document.getElementById('apiKeyHint');
-  keyRow.style.display = 'flex';
-  document.getElementById('apiKeyLabel').textContent = 'Claude API Key (own)';
-  keyHint.textContent = 'Optional — leave blank to use the built-in proxy.';
-  document.getElementById('apiKeyInput').value = '';
-  document.getElementById('apiKeyInput').focus();
-}
-
-function clearApiKey() {
-  // Remove own key and revert to built-in proxy
-  localStorage.removeItem('mh_apikey');
-  setProvider('claude');
-  showToast('Switched to built-in proxy ✓');
 }
 
 function saveProfile() {
