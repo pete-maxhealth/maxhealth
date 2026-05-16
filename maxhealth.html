@@ -1779,17 +1779,18 @@
       <div id="rpt-seasonal-result" style="display:none;"></div>
     </div>
 
-    <div class="section-title">Ask AI &#8212; Complex Queries</div>
+    <div class="section-title">Ask AI</div>
     <div class="settings-card" style="padding:14px 16px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Tap a question to open the AI Assistant with your health context and query pre-loaded.</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
-        <button class="copy-btn" style="text-align:left;font-size:12px;padding:10px 12px;" onclick="sendToAssistant(&quot;Was my weight change this week likely fat, muscle or water retention? Cross-reference my sleep quality, carb intake and activity levels.&quot;)">&#128167; Was weight change fat, muscle or water retention?</button>
-        <button class="copy-btn" style="text-align:left;font-size:12px;padding:10px 12px;" onclick="sendToAssistant(&quot;Analyse my HRV trend over the last 30 days and correlate it with my carbohydrate intake, sleep duration and activity levels.&quot;)">&#128156; HRV vs carbs, sleep and activity correlation</button>
-        <button class="copy-btn" style="text-align:left;font-size:12px;padding:10px 12px;" onclick="sendToAssistant(&quot;I sometimes get headaches. Looking at my data, can you identify any correlations with sleep quality, HRV dips, carb spikes or low activity days?&quot;)">&#129320; Headache pattern analysis</button>
-        <button class="copy-btn" style="text-align:left;font-size:12px;padding:10px 12px;" onclick="sendToAssistant(&quot;Compare my last 30 days of data with the 30 days before that. What has improved, what has declined, and what should I focus on?&quot;)">&#128202; Last 30 days vs previous 30 days</button>
-        <button class="copy-btn" style="text-align:left;font-size:12px;padding:10px 12px;" onclick="sendToAssistant(&quot;Analyse my sleep patterns. Are there recurring patterns in poor sleep nights correlating with higher carb days, lower activity or other factors?&quot;)">&#127769; Sleep pattern deep dive</button>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.7;">
+        Ask any question about your data for the selected period. The AI has access to all columns — nutrition, sleep, HRV, steps, weight and more — and can find patterns and correlations across them.<br>
+        <span style="font-size:11px;margin-top:4px;display:block;">Examples: <em>"Were my low HRV days linked to poor sleep or high carbs?"</em> · <em>"Which days did I hit all three targets?"</em> · <em>"How does my sleep duration affect my step count the next day?"</em></span>
       </div>
-      <div style="font-size:11px;color:var(--text3);line-height:1.6;">Opens the AI Assistant tab with your health context and query pre-loaded.</div>
+      <textarea id="rptAskInput" class="modal-input" rows="2" placeholder="Ask anything about your data for this period…" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;margin-bottom:10px;font-family:'DM Sans',sans-serif;"></textarea>
+      <button class="run-btn" onclick="askReportsAI()" id="rptAskBtn" style="width:100%;">Ask AI →</button>
+      <div id="rpt-ask-output" style="display:none;margin-top:14px;">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;">AI Response</div>
+        <div id="rpt-ask-text" style="font-size:14px;color:var(--text2);line-height:1.9;white-space:pre-wrap;"></div>
+      </div>
     </div>
 
     <div class="section-title">Query Builder</div>
@@ -6827,6 +6828,105 @@ ${isGBM?'Emphasise metabolic adherence, protein sufficiency for lean mass, and f
     txt.textContent='Error generating brief — check your connection and try again.'; out.style.display='block';
   } finally {
     btn.textContent='Generate Brief →'; btn.disabled=false;
+  }
+}
+
+async function askReportsAI() {
+  const question = document.getElementById('rptAskInput')?.value.trim();
+  if (!question) { showToast('Enter a question first'); return; }
+
+  const h = getMergedHistory();
+  if (h.length < 2) { showToast('Need at least 2 days of data'); return; }
+
+  const btn = document.getElementById('rptAskBtn');
+  const out = document.getElementById('rpt-ask-output');
+  const txt = document.getElementById('rpt-ask-text');
+  btn.textContent = 'Thinking…'; btn.disabled = true;
+  out.style.display = 'none';
+
+  const t    = getTargets();
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const name = localStorage.getItem('mh_name') || 'the user';
+
+  // Build data table — one row per day, key columns
+  // Cap at 90 rows to stay within context limits; summarise if more
+  const rows = h.slice(0, 90);
+  const dataRows = rows.map(r => {
+    const cols = [
+      r.date,
+      r.totals?.kcal    != null ? r.totals.kcal    : '',
+      r.totals?.protein != null ? r.totals.protein : '',
+      r.totals?.carbs   != null ? r.totals.carbs   : '',
+      r.steps           != null ? r.steps           : '',
+      r.sleep_duration  != null ? r.sleep_duration  : '',
+      r.sleep_deep      != null ? r.sleep_deep      : '',
+      r.sleep_rem       != null ? r.sleep_rem       : '',
+      r.hrv             != null ? r.hrv             : '',
+      r.spo2            != null ? r.spo2            : '',
+      r.hr_avg          != null ? r.hr_avg          : '',
+      r.weight          != null ? r.weight          : '',
+      r.fat_pct         != null ? r.fat_pct         : '',
+      r.muscle_mass_kg  != null ? r.muscle_mass_kg  : '',
+      r.calories_active != null ? r.calories_active : '',
+      r.elevation_m     != null ? r.elevation_m     : '',
+    ];
+    return cols.join(',');
+  }).join('\n');
+
+  const schema = `date,kcal,protein_g,carbs_g,steps,sleep_min,deep_min,rem_min,hrv_ms,spo2_pct,hr_avg,weight_kg,fat_pct,muscle_kg,active_kcal,elevation_m`;
+
+  const prompt = `You are a health data analyst. The user is ${name} (condition: ${cond}).
+Targets: ${t.kcal} kcal/day, ${t.protein}g protein, ${t.carbs}g carb ceiling.
+Period: ${rows.length} days of data.
+
+Data (CSV format, empty = no reading that day):
+${schema}
+${dataRows}
+
+User question: ${question}
+
+Instructions:
+- Answer the question directly using the actual data provided
+- Reference specific dates or values where relevant
+- If correlations exist, describe them with supporting numbers
+- If the data is insufficient to answer, say so honestly
+- Plain English prose, 2-4 paragraphs, no bullet points
+- No medical disclaimers`;
+
+  try {
+    const { provider, apiKey } = getAIConfig();
+    const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+    let res, text;
+    if (provider === 'claude' && apiKey) {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).content?.[0]?.text || 'Could not generate response.';
+    } else if (provider === 'openai' && apiKey) {
+      res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).choices?.[0]?.message?.content || 'Could not generate response.';
+    } else {
+      res = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, system: 'You are a health data analyst. Answer questions about the provided data accurately and concisely.', messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).content?.[0]?.text || 'Could not generate response.';
+    }
+    txt.textContent = text;
+    out.style.display = 'block';
+  } catch(e) {
+    txt.textContent = 'Error — check your connection and try again.';
+    out.style.display = 'block';
+  } finally {
+    btn.textContent = 'Ask AI →';
+    btn.disabled = false;
   }
 }
 
