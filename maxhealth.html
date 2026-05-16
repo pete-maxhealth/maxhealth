@@ -1169,6 +1169,37 @@
   }
   .library-del { color: var(--text3); cursor: pointer; padding: 4px; font-size: 14px; line-height: 1; }
   .library-del:hover { color: var(--red); }
+  .library-edit-btn {
+    color: var(--text2); cursor: pointer; padding: 4px 8px; font-size: 11px;
+    background: var(--surface2); border-radius: 6px; font-family: 'Space Mono', monospace;
+    border: 1px solid var(--border); white-space: nowrap;
+  }
+  .library-edit-btn:hover { color: var(--accent); border-color: rgba(45,235,143,0.3); }
+  .library-edit-form {
+    display: none; flex-direction: column; gap: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px; margin-bottom: 6px;
+  }
+  .library-edit-form.open { display: flex; }
+  .library-edit-row { display: flex; gap: 8px; align-items: center; }
+  .library-edit-label { font-size: 10px; color: var(--text3); font-family: 'Space Mono', monospace; width: 52px; flex-shrink: 0; }
+  .library-edit-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; color: var(--text); font-size: 13px; font-family: 'DM Sans', sans-serif;
+    outline: none;
+  }
+  .library-edit-input:focus { border-color: var(--accent); }
+  .library-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+  .library-edit-save {
+    font-size: 11px; font-family: 'Space Mono', monospace; color: var(--bg);
+    background: var(--accent); border: none; border-radius: 6px; padding: 6px 14px;
+    cursor: pointer; font-weight: 700;
+  }
+  .library-edit-cancel {
+    font-size: 11px; font-family: 'Space Mono', monospace; color: var(--text2);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 14px; cursor: pointer;
+  }
   .library-add-btn {
     color: var(--green); cursor: pointer; padding: 4px 8px; font-size: 11px;
     background: var(--green-dim); border-radius: 6px; font-family: 'Space Mono', monospace;
@@ -3094,13 +3125,32 @@ function renderLibrary() {
     return;
   }
   el.innerHTML = lib.map((f, i) => `
-    <div class="library-item">
+    <div class="library-edit-form" id="lib-edit-form-${i}">
+      <div class="library-edit-row">
+        <span class="library-edit-label">Name</span>
+        <input class="library-edit-input" id="lib-edit-name-${i}" value="${f.name.replace(/"/g,'&quot;')}">
+      </div>
+      <div class="library-edit-row">
+        <span class="library-edit-label">kcal</span>
+        <input class="library-edit-input" id="lib-edit-kcal-${i}" type="number" value="${f.kcal}" style="max-width:80px;">
+        <span class="library-edit-label" style="width:auto;margin-left:8px;">Protein</span>
+        <input class="library-edit-input" id="lib-edit-prot-${i}" type="number" step="0.1" value="${f.protein}" style="max-width:70px;">
+        <span class="library-edit-label" style="width:auto;margin-left:8px;">Carbs</span>
+        <input class="library-edit-input" id="lib-edit-carb-${i}" type="number" step="0.1" value="${f.carbs}" style="max-width:70px;">
+      </div>
+      <div class="library-edit-actions">
+        <button class="library-edit-cancel" onclick="cancelLibraryEdit(${i})">Cancel</button>
+        <button class="library-edit-save" onclick="saveLibraryEdit(${i})">Save</button>
+      </div>
+    </div>
+    <div class="library-item" id="lib-item-${i}">
       <div class="library-item-info">
         <div class="library-item-name">${f.name}</div>
         <div class="library-item-macros">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
       </div>
       <span class="${f.locked ? 'library-item-locked' : 'library-item-ai'}">${f.locked ? '🔒 LOCKED' : f.source === 'ai_confirmed' ? 'AI ✓' : 'PENDING'}</span>
       <div class="library-add-btn" onclick="quickLogFromLibrary(${i})">LOG</div>
+      <div class="library-edit-btn" onclick="openLibraryEdit(${i})">EDIT</div>
       ${f.locked && f.source === 'pete' ? '' : `<div class="library-del" onclick="deleteFromLibrary(${i})">×</div>`}
     </div>
   `).join('');
@@ -3123,6 +3173,49 @@ function deleteFromLibrary(index) {
   saveLibrary(lib);
   renderLibrary();
   showToast('Removed from library');
+}
+
+function openLibraryEdit(index) {
+  // Hide any other open edit forms first
+  document.querySelectorAll('.library-edit-form.open').forEach(el => {
+    el.classList.remove('open');
+    const i = el.id.replace('lib-edit-form-', '');
+    const item = document.getElementById('lib-item-' + i);
+    if (item) item.style.display = 'flex';
+  });
+  const form = document.getElementById('lib-edit-form-' + index);
+  const item = document.getElementById('lib-item-' + index);
+  if (!form || !item) return;
+  form.classList.add('open');
+  item.style.display = 'none';
+  document.getElementById('lib-edit-name-' + index).focus();
+}
+
+function cancelLibraryEdit(index) {
+  const form = document.getElementById('lib-edit-form-' + index);
+  const item = document.getElementById('lib-item-' + index);
+  if (form) form.classList.remove('open');
+  if (item) item.style.display = 'flex';
+}
+
+function saveLibraryEdit(index) {
+  const lib = loadLibrary();
+  if (!lib[index]) return;
+  const name  = document.getElementById('lib-edit-name-' + index).value.trim();
+  const kcal  = parseFloat(document.getElementById('lib-edit-kcal-' + index).value);
+  const prot  = parseFloat(document.getElementById('lib-edit-prot-' + index).value);
+  const carbs = parseFloat(document.getElementById('lib-edit-carb-' + index).value);
+  if (!name || isNaN(kcal) || isNaN(prot) || isNaN(carbs)) {
+    showToast('Please fill in all fields');
+    return;
+  }
+  lib[index].name    = name;
+  lib[index].kcal    = Math.round(kcal);
+  lib[index].protein = Math.round(prot * 10) / 10;
+  lib[index].carbs   = Math.round(carbs * 10) / 10;
+  saveLibrary(lib);
+  renderLibrary();
+  showToast(name + ' updated ✓');
 }
 
 // Save-to-library modal — triggered after AI parse
@@ -3703,8 +3796,7 @@ async function processMessage(text, imageBase64, imageMime) {
   }
 
   // ── Try food library first ────────────────────────────────
-  const isMultiComponent = /\bwith\b|\band\b|,/.test(text.toLowerCase());
-  const libMatch = !isMultiComponent ? findInLibrary(text) : null;
+  const libMatch = findInLibrary(text);
   if (libMatch) {
     logFoods([{ name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, carbs: libMatch.carbs }], text);
     addBubble(`📚 Logged from library — values locked`, 'system', 'success');
