@@ -3663,6 +3663,8 @@ If the user describes food or a meal (or you can see food in an image), respond 
 
 CRITICAL: Always identify EVERY separate food component as its own item. "Fried egg and chips" = two items: "fried egg" AND "chips". "Chicken with rice and broccoli" = three items. Never combine multiple foods into a single item. If quantity is not stated, assume a typical serving.
 
+CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. "1 pepperami fire stick" → name must be "pepperami fire stick (x1)", NOT "pepper" or "pepperami" alone. "200g ASDA double cream" → name must be "ASDA double cream (200g)". Preserve brand names and product descriptions exactly as given.
+
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
 {
   "type": "eod",
@@ -3873,8 +3875,7 @@ async function processMessage(text, imageBase64, imageMime) {
   }
 
   // ── Try food library first ────────────────────────────────
-  const isMultiComponent = /\bwith\b|\band\b|,/.test(text.toLowerCase());
-  const libMatch = !isMultiComponent ? findInLibrary(text) : null;
+  const libMatch = findInLibrary(text);
   if (libMatch) {
     logFoods([{ name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, carbs: libMatch.carbs }], text);
     addBubble(`📚 Logged from library — values locked`, 'system', 'success');
@@ -3900,7 +3901,11 @@ async function processMessage(text, imageBase64, imageMime) {
     const result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
     if (!result) {
-      addBubble("Couldn't reach the AI — proxy may be unavailable. Try again in a moment.", 'system', 'warn');
+      addBubble("Couldn't reach the AI. Check your connection and try again.", 'system', 'warn');
+      return;
+    }
+    if (result && result.type === 'unknown') {
+      addBubble(result.message || "I didn't understand that as a food entry. Try being more specific.", 'system');
       return;
     }
     if (result.type === 'error') { addBubble(`⚠ ${result.message}`, 'system', 'warn'); return; }
@@ -4323,7 +4328,7 @@ function confirmWeight() {
   }
   state.weight = val;
   // Also store on today's history entry so Trends weight chart shows daily weights
-  const today = todayStr();
+  const today = getTodayDate();
   const existing = state.history.find(h => h.date === today);
   if (existing) {
     existing.weight = val;
