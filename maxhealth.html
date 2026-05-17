@@ -1739,6 +1739,10 @@
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
+      <div style="margin-top:6px;display:flex;gap:8px;">
+        <div id="photoModeMeal" onclick="setPhotoMode('meal')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);font-family:'Space Mono',monospace;">🍽 Meal</div>
+        <div id="photoModeLabel" onclick="setPhotoMode('label')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-family:'Space Mono',monospace;">🏷 Label</div>
+      </div>
     </div>
     <div class="input-row">
       <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
@@ -2572,12 +2576,24 @@
   <div class="save-modal">
     <div class="save-modal-title">SAVE TO LIBRARY</div>
     <div class="save-modal-sub" id="saveModalSub">Save this food to your library for instant one-tap logging.</div>
-    <div class="save-modal-macros" id="saveModalMacros">
-      <span class="c" id="saveModalKcal">—</span>
-      <span class="p" id="saveModalProt">—</span>
-      <span class="k" id="saveModalCarbs">—</span>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.6;">
+      The name should include the amount — e.g. <em>"sausage roll (x1)"</em> or <em>"chicken breast 150g"</em> — so you know exactly what one tap logs.
     </div>
-    <input class="save-modal-name-input" id="saveModalName" placeholder="Food name (e.g. ASDA Mixed Nuts 30g)" maxlength="80">
+    <input class="save-modal-name-input" id="saveModalName" placeholder="Food name + amount (e.g. Sausage roll x1)" maxlength="80">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">KCAL</div>
+        <input class="modal-input" type="number" id="saveModalKcalEdit" placeholder="0" style="font-size:15px;padding:8px 10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--green);margin-bottom:4px;font-family:'Space Mono',monospace;">PROT g</div>
+        <input class="modal-input" type="number" id="saveModalProtEdit" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;font-family:'Space Mono',monospace;">CARBS g</div>
+        <input class="modal-input" type="number" id="saveModalCarbsEdit" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;">
+      </div>
+    </div>
     <div class="modal-row">
       <button class="modal-btn cancel" onclick="closeSaveLibraryModal()">Skip</button>
       <button class="modal-btn confirm" onclick="confirmSaveToLibrary()">Save ✓</button>
@@ -3416,11 +3432,14 @@ let _pendingSaveItem = null;
 
 function promptSaveToLibrary(item) {
   _pendingSaveItem = item;
-  document.getElementById('saveModalSub').textContent = `Save "${item.name}" with confirmed macros?`;
-  document.getElementById('saveModalKcal').textContent = item.kcal + ' kcal';
-  document.getElementById('saveModalProt').textContent = item.protein + 'g P';
-  document.getElementById('saveModalCarbs').textContent = item.carbs + 'g C';
+  document.getElementById('saveModalSub').textContent = `Save "${item.name}" to your library?`;
   document.getElementById('saveModalName').value = item.name;
+  const kcalEl = document.getElementById('saveModalKcalEdit');
+  const protEl = document.getElementById('saveModalProtEdit');
+  const carbEl = document.getElementById('saveModalCarbsEdit');
+  if (kcalEl) kcalEl.value = item.kcal || 0;
+  if (protEl) protEl.value = item.protein || 0;
+  if (carbEl) carbEl.value = item.carbs || 0;
   document.getElementById('saveLibraryModal').classList.add('open');
 }
 
@@ -3433,13 +3452,16 @@ function confirmSaveToLibrary() {
   if (!_pendingSaveItem) { closeSaveLibraryModal(); return; }
   const lib = loadLibrary();
   const name = document.getElementById('saveModalName').value.trim() || _pendingSaveItem.name;
+  const kcal = parseFloat(document.getElementById('saveModalKcalEdit')?.value) || _pendingSaveItem.kcal;
+  const prot = parseFloat(document.getElementById('saveModalProtEdit')?.value) || _pendingSaveItem.protein;
+  const carb = parseFloat(document.getElementById('saveModalCarbsEdit')?.value) || _pendingSaveItem.carbs;
   const newEntry = {
     id: 'ai_' + Date.now(),
     name: name,
     per_amount: null, per_unit: null,
-    kcal: _pendingSaveItem.kcal,
-    protein: _pendingSaveItem.protein,
-    carbs: _pendingSaveItem.carbs,
+    kcal: Math.round(kcal),
+    protein: Math.round(prot * 10) / 10,
+    carbs: Math.round(carb * 10) / 10,
     fat: null,
     locked: true,
     source: 'ai_confirmed'
@@ -3728,6 +3750,7 @@ function exportAll() {
 // ─── PHOTO HANDLING ──────────────────────────────────────
 let _pendingPhotoBase64 = null;
 let _pendingPhotoMime = null;
+let _photoMode = 'meal'; // 'meal' or 'label'
 
 function handlePhotoSelect(input) {
   const file = input.files[0];
@@ -3766,9 +3789,20 @@ function handlePhotoSelect(input) {
   reader.readAsDataURL(file);
 }
 
+function setPhotoMode(mode) {
+  _photoMode = mode;
+  document.getElementById('photoModeMeal').style.background = mode === 'meal' ? 'var(--accent)' : 'var(--surface2)';
+  document.getElementById('photoModeMeal').style.color = mode === 'meal' ? 'var(--bg)' : 'var(--text2)';
+  document.getElementById('photoModeMeal').style.border = mode === 'meal' ? 'none' : '1px solid var(--border)';
+  document.getElementById('photoModeLabel').style.background = mode === 'label' ? 'var(--accent)' : 'var(--surface2)';
+  document.getElementById('photoModeLabel').style.color = mode === 'label' ? 'var(--bg)' : 'var(--text2)';
+  document.getElementById('photoModeLabel').style.border = mode === 'label' ? 'none' : '1px solid var(--border)';
+}
+
 function clearPhoto() {
   _pendingPhotoBase64 = null;
   _pendingPhotoMime = null;
+  _photoMode = 'meal';
   document.getElementById('photoPreviewWrap').style.display = 'none';
   document.getElementById('photoPreview').src = '';
   document.getElementById('photoBtn').style.borderColor = '';
@@ -3786,7 +3820,22 @@ async function parseWithAI(userText, imageBase64, imageMime) {
 
   const csvRow = `${todayStr()}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${state.notes || state.dayMode}`;
 
-  const systemPrompt = `You are a precise nutrition assistant for a health tracking app.
+  // Detect label mode
+  const isLabelPhoto = !!(imageBase64 && text && text.startsWith('[LABEL]'));
+  const cleanText = isLabelPhoto ? text.replace('[LABEL]', '').trim() : text;
+
+  const systemPrompt = isLabelPhoto
+    ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label.
+Read the EXACT values from the label — do not estimate or guess. Use the per-100g column.
+Respond ONLY with a JSON object (no markdown, no preamble):
+{
+  "type": "food",
+  "items": [
+    { "name": "product name per 100g", "kcal": 123, "protein": 12.0, "carbs": 3.0 }
+  ],
+  "message": "Read from label: [product name] — values per 100g. Enter the amount you had to scale."
+}`
+    : `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
 Today's targets: ${targets.kcal} kcal | ${targets.protein}g protein | ${targets.carbs}g carbs (${state.dayMode} day).
 So far today: ${totals.kcal} kcal | ${totals.protein}g protein | ${totals.carbs}g carbs.
@@ -4058,11 +4107,16 @@ function sendChat() {
 
   const photoB64 = _pendingPhotoBase64;
   const photoMime = _pendingPhotoMime;
+  const photoMode = _photoMode;
   if (hasPhoto) clearPhoto();
 
-  const displayText = text || '📷 Photo';
+  const displayText = text || (photoMode === 'label' ? '🏷 Label photo' : '📷 Photo');
   addBubble(displayText, 'user');
-  processMessage(text, photoB64, photoMime);
+  // Prepend label instruction if label mode
+  const messageText = (hasPhoto && photoMode === 'label')
+    ? '[LABEL] ' + (text || '')
+    : text;
+  processMessage(messageText, photoB64, photoMime);
 }
 
 function quickPrompt(text) {
@@ -4183,7 +4237,7 @@ async function processMessage(text, imageBase64, imageMime) {
   const { provider, apiKey } = getAIConfig();
   if (provider !== 'none' || true) { // proxy always available
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
-    const result = await parseWithAI(text, imageBase64, imageMime);
+    const result = await parseWithAI(isLabelPhoto ? cleanText : text, imageBase64, imageMime);
     thinkingBubble.remove();
     if (!result) {
       addBubble("Couldn't reach the AI. Check your connection and try again.", 'system', 'warn');
@@ -4254,6 +4308,43 @@ function logFoods(foods, originalText, aiMessage = null) {
   macrosDiv.className = 'bubble-macros';
   macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span><span class="k">${newTotals.carbs}/${targets.carbs}g C</span>`;
   bubbleDiv.appendChild(macrosDiv);
+  // Add correction option for AI-logged items
+  if (aiMessage !== undefined && bubbleDiv) {
+    const editBtn = document.createElement('div');
+    editBtn.style.cssText = 'margin-top:8px;font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;display:inline-block;';
+    editBtn.textContent = '✏ Correct this';
+    editBtn.onclick = () => {
+      editBtn.style.display = 'none';
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:8px;display:flex;gap:6px;align-items:center;';
+      const inp = document.createElement('input');
+      inp.className = 'modal-input';
+      inp.style.cssText = 'flex:1;font-size:12px;padding:6px 10px;';
+      inp.placeholder = 'Describe what it actually was…';
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.style.cssText = 'font-size:11px;padding:6px 10px;white-space:nowrap;';
+      btn.textContent = 'Re-log';
+      btn.onclick = () => {
+        const correction = inp.value.trim();
+        if (!correction) return;
+        // Remove the items just logged
+        foods.forEach(food => {
+          const idx = state.todayLog.findIndex(l => l.description === food.name || l.items?.some(i => i.name === food.name));
+          if (idx > -1) state.todayLog.splice(idx, 1);
+        });
+        saveState();
+        renderDash();
+        addBubble(correction, 'user');
+        processMessage(correction, null, null);
+      };
+      wrap.appendChild(inp);
+      wrap.appendChild(btn);
+      bubbleDiv.appendChild(wrap);
+      inp.focus();
+    };
+    bubbleDiv.appendChild(editBtn);
+  }
   if (carbWarn) {
     addBubble(`⚠️ Carb ceiling hit (${Math.round(newTotals.carbs * 10) / 10}g / ${targets.carbs}g). Protein and fat only for remaining meals.`, 'system', 'warn');
     // One-time explanation on first ceiling hit
