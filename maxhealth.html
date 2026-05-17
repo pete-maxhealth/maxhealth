@@ -3432,8 +3432,8 @@ let _pendingSaveItem = null;
 
 function promptSaveToLibrary(item) {
   _pendingSaveItem = item;
-  document.getElementById('saveModalSub').textContent = `Save "${item.name}" to your library?`;
-  document.getElementById('saveModalName').value = item.name;
+  document.getElementById('saveModalSub').textContent = `Save to your library?`;
+  document.getElementById('saveModalName').value = item.name || '';
   const kcalEl = document.getElementById('saveModalKcalEdit');
   const protEl = document.getElementById('saveModalProtEdit');
   const carbEl = document.getElementById('saveModalCarbsEdit');
@@ -3814,7 +3814,7 @@ async function parseWithAI(userText, imageBase64, imageMime) {
   if (provider === 'none' && !apiKey) return null; // proxy always available
 
   const totals  = calcTotals(state.todayLog);
-  const targets = (TARGETS[state.dayMode] || TARGETS['standard'] || {kcal:3000, protein:145, carbs:50});
+  const targets = TARGETS[state.dayMode];
   const name    = localStorage.getItem('mh_name') || 'the user';
   const hasImage = !!(imageBase64 && imageMime);
 
@@ -3826,14 +3826,17 @@ async function parseWithAI(userText, imageBase64, imageMime) {
 
   const systemPrompt = isLabelPhoto
     ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label.
-Read the EXACT values from the label — do not estimate or guess. Use the per-100g column.
+CRITICAL: Read ONLY the per-100g column values. Ignore per-serving, per-portion, per-pack columns entirely.
+The per-100g column is usually the LEFT or FIRST data column on UK labels.
+Do not estimate — read the exact printed numbers.
+Identify the product name from any text visible on the label.
 Respond ONLY with a JSON object (no markdown, no preamble):
 {
   "type": "food",
   "items": [
-    { "name": "product name per 100g", "kcal": 123, "protein": 12.0, "carbs": 3.0 }
+    { "name": "exact product name per 100g", "kcal": 123, "protein": 12.0, "carbs": 3.0 }
   ],
-  "message": "Read from label: [product name] — values per 100g. Enter the amount you had to scale."
+  "message": "Read from label per 100g: kcal, protein, carbs. User should enter the amount they had."
 }`
     : `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
@@ -3868,6 +3871,7 @@ If the user asks a question (remaining intake, ketosis, weight, suggestions), re
 }
 
 Use evidence-based nutritional values. Be precise with portions. If quantity is unclear from an image, state your assumption in the message field.`;
+
   try {
     let response;
 
@@ -3930,10 +3934,10 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
             { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
           ]}]
         : [{ role: 'user', content: userText || 'this meal' }];
-      addBubble('DEBUG: about to fetch proxy | targets: ' + (targets ? targets.kcal : 'UNDEFINED'), 'system');
-      const fetchPromise = fetch(PROXY, {
+      response = await fetch(PROXY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 500,
@@ -3941,10 +3945,6 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
           messages: proxyMessages
         })
       });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out after 10s')), 10000)
-      );
-      response = await Promise.race([fetchPromise, timeoutPromise]);
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'Proxy error');
       const rawText = data.content[0].text.trim();
@@ -4241,7 +4241,6 @@ async function processMessage(text, imageBase64, imageMime) {
   const { provider, apiKey } = getAIConfig();
   if (provider !== 'none' || true) { // proxy always available
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
-    addBubble('DEBUG: calling AI with: ' + text + ' | provider: ' + provider + ' | apiKey: ' + (apiKey ? 'YES' : 'NO'), 'system');
     const result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
     if (!result) {
