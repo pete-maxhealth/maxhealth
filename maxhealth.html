@@ -1739,9 +1739,10 @@
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
-      <div style="margin-top:6px;display:flex;gap:8px;">
-        <div id="photoModeMeal" onclick="setPhotoMode('meal')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);font-family:'Space Mono',monospace;">🍽 Meal</div>
-        <div id="photoModeLabel" onclick="setPhotoMode('label')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-family:'Space Mono',monospace;">🏷 Label</div>
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div id="photoModeMeal" onclick="setPhotoMode('meal')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-family:'Space Mono',monospace;">🍽 Meal</div>
+        <div id="photoModeLabel" onclick="setPhotoMode('label')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);font-family:'Space Mono',monospace;">🏷 Label</div>
+        <div style="font-size:10px;color:var(--text3);">Type name + amount below</div>
       </div>
     </div>
     <div class="input-row">
@@ -3785,6 +3786,12 @@ function handlePhotoSelect(input) {
       document.getElementById('photoBtn').style.borderColor = 'var(--green)';
       // Auto-switch to Label mode — user can switch to Meal if needed
       setPhotoMode('label');
+      // Update placeholder to guide user
+      const inp = document.getElementById('chatInput');
+      if (inp) {
+        inp.placeholder = 'Name and amount — e.g. "ASDA Cottage Cheese 150g"';
+        inp.focus();
+      }
     };
     img.src = e.target.result;
     input.value = '';
@@ -3809,6 +3816,8 @@ function clearPhoto() {
   document.getElementById('photoPreviewWrap').style.display = 'none';
   document.getElementById('photoPreview').src = '';
   document.getElementById('photoBtn').style.borderColor = '';
+  const inp = document.getElementById('chatInput');
+  if (inp) inp.placeholder = 'Log a meal, ingredient or ask a question...';
 }
 
 // ─── AI MEAL PARSING ─────────────────────────────────────
@@ -3828,18 +3837,22 @@ async function parseWithAI(userText, imageBase64, imageMime) {
   const cleanText = isLabelPhoto ? userText.replace('[LABEL]', '').trim() : userText;
 
   const systemPrompt = isLabelPhoto
-    ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label.
-CRITICAL: Read ONLY the per-100g column values. Ignore per-serving, per-portion, per-pack columns.
-On UK labels the per-100g column is the LEFT or FIRST data column.
-Do not estimate — read the exact printed numbers only.
-Identify the product name from the label. Use a clean product name only — no column references.
+    ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label with a description: "${cleanText || 'unknown product'}".
+The description contains the product name and the amount they had (e.g. "ASDA Cottage Cheese 150g").
+
+Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate.
+Step 2: Extract the amount in grams from the user's description. If no amount is given, use 100g.
+Step 3: Scale the per-100g values to the stated amount.
+
+Use the product name from the user's description if provided, otherwise identify it from the label.
+
 Respond ONLY with a JSON object (no markdown, no preamble):
 {
   "type": "food",
   "items": [
-    { "name": "Product name (e.g. ASDA Cottage Cheese)", "kcal": 107, "protein": 9.1, "carbs": 4.1 }
+    { "name": "Product name Xg (e.g. ASDA Cottage Cheese 150g)", "kcal": 161, "protein": 13.7, "carbs": 6.2 }
   ],
-  "message": "Values read per 100g from label."
+  "message": "Read from label per 100g, scaled to Xg."
 }`
     : `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
@@ -3953,7 +3966,16 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
       const rawText = data.content[0].text.trim();
       // Strip markdown fences if present
       const cleaned = rawText.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-      return JSON.parse(cleaned);
+      // Try to extract JSON if response contains prose + JSON
+      try {
+        return JSON.parse(cleaned);
+      } catch(e) {
+        // Try to find JSON object in the response
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (jsonMatch) return JSON.parse(jsonMatch[0]);
+        // If it's a natural language response, convert to query type
+        return { type: 'query', message: cleaned.replace(/```/g, '').trim() };
+      }
     }
   } catch (e) {
     console.error('AI parse error:', e);
@@ -4158,9 +4180,9 @@ async function processMessage(text, imageBase64, imageMime) {
 
   // ── Keyword queries — always handled locally ─────────────
   if (lower.includes('remain') || lower.includes('still need') || lower.includes('what do i need') || lower.includes('outstanding')) {
-    const remCal = targets.kcal - totals.kcal;
-    const remProt = targets.protein - totals.protein;
-    const remCarb = targets.carbs - totals.carbs;
+    const remCal = Math.round(targets.kcal - totals.kcal);
+    const remProt = Math.round((targets.protein - totals.protein) * 10) / 10;
+    const remCarb = Math.round((targets.carbs - totals.carbs) * 10) / 10;
     const reply = `Here's what you still need today:\n\n` +
       `Calories: ${remCal > 0 ? remCal + ' kcal remaining' : Math.abs(remCal) + ' kcal over'}\n` +
       `Protein: ${remProt > 0 ? remProt + 'g remaining' : Math.abs(remProt) + 'g over'}\n` +
@@ -4260,30 +4282,6 @@ async function processMessage(text, imageBase64, imageMime) {
       return;
     }
     if (result.type === 'food' && result.items && result.items.length > 0) {
-      // Label mode — show amount entry panel instead of logging directly
-      if (imageBase64 && text && text.startsWith('[LABEL]') && result.items.length === 1) {
-        const item = result.items[0];
-        // Populate food amount panel with label values
-        _selectedFoodItem = {
-          name: item.name,
-          brand: '',
-          kcal: item.kcal,
-          prot: item.protein,
-          carb: item.carbs,
-          fat: item.fat || 0,
-        };
-        document.getElementById('foodSearchView').style.display = 'none';
-        document.getElementById('foodAmountView').classList.add('open');
-        document.getElementById('foodSearchOverlay').classList.add('open');
-        const displayName = item.name;
-        document.getElementById('foodAmountName').textContent = displayName;
-        document.getElementById('foodAmountPer100').textContent =
-          `per 100g (from label): ${item.kcal}kcal · ${item.protein}g P · ${item.carbs}g C`;
-        document.getElementById('foodAmountGrams').value = '';
-        document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
-        setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 300);
-        return;
-      }
       logFoods(result.items, text, result.message);
       // Offer to save as combined meal entry
       const mealItem = {
@@ -4533,11 +4531,11 @@ function updateDashboard() {
   remCalEl.className = 'rem-val ' + (remCal < 0 ? 'over' : remCal < 300 ? 'warn' : 'good');
 
   const remProtEl = document.getElementById('remProt');
-  remProtEl.textContent = remProt >= 0 ? `${remProt}g` : `${Math.abs(remProt)}g OVER`;
+  remProtEl.textContent = remProt >= 0 ? `${Math.round(remProt * 10)/10}g` : `${Math.round(Math.abs(remProt)*10)/10}g OVER`;
   remProtEl.className = 'rem-val ' + (remProt < 0 ? 'over' : remProt < 20 ? 'warn' : 'good');
 
   const remCarbEl = document.getElementById('remCarb');
-  remCarbEl.textContent = remCarb >= 0 ? `${remCarb}g left` : `${Math.abs(remCarb)}g OVER`;
+  remCarbEl.textContent = remCarb >= 0 ? `${Math.round(remCarb * 10)/10}g left` : `${Math.round(Math.abs(remCarb)*10)/10}g OVER`;
   remCarbEl.className = 'rem-val ' + (remCarb < 0 ? 'over' : remCarb < 10 ? 'warn' : 'good');
 
   // Ketosis badge
