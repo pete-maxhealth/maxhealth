@@ -3734,12 +3734,33 @@ function handlePhotoSelect(input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(e) {
-    const dataUrl = e.target.result;
-    _pendingPhotoBase64 = dataUrl.split(',')[1];
-    _pendingPhotoMime = file.type || 'image/jpeg';
-    document.getElementById('photoPreview').src = dataUrl;
-    document.getElementById('photoPreviewWrap').style.display = 'block';
-    document.getElementById('photoBtn').style.borderColor = 'var(--green)';
+    // Compress image to stay under 4MB API limit
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      // Max dimension 1600px — keeps quality high but reduces file size
+      const maxDim = 1600;
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else        { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      // Try 0.85 quality first, reduce if still too large
+      let quality = 0.85;
+      let dataUrl = canvas.toDataURL('image/jpeg', quality);
+      while (dataUrl.length > 4 * 1024 * 1024 * 1.37 && quality > 0.3) {
+        quality -= 0.1;
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+      }
+      _pendingPhotoBase64 = dataUrl.split(',')[1];
+      _pendingPhotoMime = 'image/jpeg';
+      document.getElementById('photoPreview').src = dataUrl;
+      document.getElementById('photoPreviewWrap').style.display = 'block';
+      document.getElementById('photoBtn').style.borderColor = 'var(--green)';
+    };
+    img.src = e.target.result;
     input.value = '';
   };
   reader.readAsDataURL(file);
