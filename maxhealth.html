@@ -3814,15 +3814,15 @@ async function parseWithAI(userText, imageBase64, imageMime) {
   if (provider === 'none' && !apiKey) return null; // proxy always available
 
   const totals  = calcTotals(state.todayLog);
-  const targets = TARGETS[state.dayMode];
+  const targets = (TARGETS[state.dayMode] || TARGETS['standard'] || {kcal:3000, protein:145, carbs:50});
   const name    = localStorage.getItem('mh_name') || 'the user';
   const hasImage = !!(imageBase64 && imageMime);
 
   const csvRow = `${todayStr()}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${state.notes || state.dayMode}`;
 
   // Detect label mode
-  const isLabelPhoto = !!(imageBase64 && text && text.startsWith('[LABEL]'));
-  const cleanText = isLabelPhoto ? text.replace('[LABEL]', '').trim() : text;
+  const isLabelPhoto = !!(imageBase64 && userText && userText.startsWith('[LABEL]'));
+  const cleanText = isLabelPhoto ? userText.replace('[LABEL]', '').trim() : userText;
 
   const systemPrompt = isLabelPhoto
     ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label.
@@ -3868,7 +3868,6 @@ If the user asks a question (remaining intake, ketosis, weight, suggestions), re
 }
 
 Use evidence-based nutritional values. Be precise with portions. If quantity is unclear from an image, state your assumption in the message field.`;
-
   try {
     let response;
 
@@ -3931,10 +3930,10 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
             { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
           ]}]
         : [{ role: 'user', content: userText || 'this meal' }];
-      response = await fetch(PROXY, {
+      addBubble('DEBUG: about to fetch proxy | targets: ' + (targets ? targets.kcal : 'UNDEFINED'), 'system');
+      const fetchPromise = fetch(PROXY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 500,
@@ -3942,6 +3941,10 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
           messages: proxyMessages
         })
       });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timed out after 10s')), 10000)
+      );
+      response = await Promise.race([fetchPromise, timeoutPromise]);
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'Proxy error');
       const rawText = data.content[0].text.trim();
@@ -4238,6 +4241,7 @@ async function processMessage(text, imageBase64, imageMime) {
   const { provider, apiKey } = getAIConfig();
   if (provider !== 'none' || true) { // proxy always available
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
+    addBubble('DEBUG: calling AI with: ' + text + ' | provider: ' + provider + ' | apiKey: ' + (apiKey ? 'YES' : 'NO'), 'system');
     const result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
     if (!result) {
