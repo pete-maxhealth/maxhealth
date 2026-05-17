@@ -2545,14 +2545,18 @@
 <div class="view" id="view-library">
   <div class="dash-scroll">
 
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; margin-top:4px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; margin-top:4px;">
       <div class="section-title" style="margin:0">Your Food Library</div>
       <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
     </div>
 
+    <input id="libraryFilter" class="modal-input" placeholder="🔍 Search library…"
+      style="width:100%;margin-bottom:10px;font-size:13px;padding:8px 12px;"
+      oninput="filterLibrary(this.value)">
+
     <div class="settings-card" style="padding:12px 16px; margin-bottom:14px;">
       <div style="font-size:12px; color:var(--text3); line-height:1.6;">
-        Tap any food to quick-log it. 🔒 Locked values never change. Foods saved from AI parsing are confirmed by you before locking.
+        Tap any food to quick-log it. Foods saved from AI or the database have confirmed macro values.
       </div>
     </div>
 
@@ -2567,7 +2571,7 @@
 <div class="save-modal-overlay" id="saveLibraryModal">
   <div class="save-modal">
     <div class="save-modal-title">SAVE TO LIBRARY</div>
-    <div class="save-modal-sub" id="saveModalSub">Save this food with locked values for instant future logging.</div>
+    <div class="save-modal-sub" id="saveModalSub">Save this food to your library for instant one-tap logging.</div>
     <div class="save-modal-macros" id="saveModalMacros">
       <span class="c" id="saveModalKcal">—</span>
       <span class="p" id="saveModalProt">—</span>
@@ -2576,7 +2580,7 @@
     <input class="save-modal-name-input" id="saveModalName" placeholder="Food name (e.g. ASDA Mixed Nuts 30g)" maxlength="80">
     <div class="modal-row">
       <button class="modal-btn cancel" onclick="closeSaveLibraryModal()">Skip</button>
-      <button class="modal-btn confirm" onclick="confirmSaveToLibrary()">Save & Lock ✓</button>
+      <button class="modal-btn confirm" onclick="confirmSaveToLibrary()">Save ✓</button>
     </div>
   </div>
 </div>
@@ -2585,7 +2589,7 @@
 <div class="save-modal-overlay" id="addFoodModal">
   <div class="save-modal">
     <div class="save-modal-title">ADD TO LIBRARY</div>
-    <div class="save-modal-sub">Enter confirmed macros. Values will be locked once saved.</div>
+    <div class="save-modal-sub">Enter confirmed macros and save to your library.</div>
     <input class="save-modal-name-input" id="addFoodName" placeholder="Food name + amount (e.g. ASDA Mixed Nuts 30g)" maxlength="80">
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px;">
       <div>
@@ -3288,6 +3292,20 @@ function findInLibrary(name) {
   return lib.find(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().split(' ').slice(0,3).join(' ')));
 }
 
+function filterLibrary(query) {
+  const q = query.toLowerCase().trim();
+  const items = document.querySelectorAll('#libraryList .library-item, #libraryList .library-edit-form');
+  // Show/hide pairs (edit form + item)
+  const lib = loadLibrary();
+  lib.forEach((f, i) => {
+    const matches = !q || f.name.toLowerCase().includes(q);
+    const item = document.getElementById('lib-item-' + i);
+    const form = document.getElementById('lib-edit-form-' + i);
+    if (item) item.style.display = matches ? 'flex' : 'none';
+    if (form) form.style.display = matches && form.classList.contains('open') ? 'flex' : 'none';
+  });
+}
+
 function renderLibrary() {
   const lib = loadLibrary();
   const el = document.getElementById('libraryList');
@@ -3913,15 +3931,18 @@ function onFoodSearchInput(val) {
 async function searchOpenFoodFacts(query) {
   const res = document.getElementById('foodResults');
   try {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,nutriments,serving_size,quantity,countries_tags`;
+    // Search with UK preference — try UK-specific first, fall back to global
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,serving_size,quantity,countries_tags&tagtype_0=countries&tag_contains_0=contains&tag_0=united-kingdom`;
     const r = await fetch(url);
     const data = await r.json();
-    const products = (data.products || []).filter(p =>
-      p.product_name &&
-      p.nutriments?.['energy-kcal_100g'] != null &&
-      p.nutriments?.proteins_100g != null &&
-      p.nutriments?.carbohydrates_100g != null
-    );
+    const products = (data.products || [])
+      .filter(p =>
+        p.product_name &&
+        p.nutriments?.['energy-kcal_100g'] != null &&
+        p.nutriments?.proteins_100g != null &&
+        p.nutriments?.carbohydrates_100g != null
+      )
+      .slice(0, 8);
     if (!products.length) {
       res.innerHTML = '<div class="food-result-loading">No results found. Try a different search term.</div>';
       return;
@@ -4210,7 +4231,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span><span class="k">${newTotals.carbs}/${targets.carbs}g C</span>`;
   bubbleDiv.appendChild(macrosDiv);
   if (carbWarn) {
-    addBubble(`⚠️ Carb ceiling hit (${newTotals.carbs}g / ${targets.carbs}g). Protein and fat only for remaining meals.`, 'system', 'warn');
+    addBubble(`⚠️ Carb ceiling hit (${Math.round(newTotals.carbs * 10) / 10}g / ${targets.carbs}g). Protein and fat only for remaining meals.`, 'system', 'warn');
     // One-time explanation on first ceiling hit
     const seen = getTipsSeen();
     if (!seen['carb_ceiling']) {
@@ -4381,11 +4402,11 @@ function updateDashboard() {
   } else if (totals.carbs < 30) {
     const remaining = targets.carbs - totals.carbs;
     badge.className = 'ketosis-badge green';
-    badge.textContent = `⚡ DEEP KETOSIS — ${totals.carbs}g used · ${remaining}g remaining`;
+    badge.textContent = `⚡ DEEP KETOSIS — ${Math.round(totals.carbs * 10) / 10}g used · ${Math.round(remaining * 10) / 10}g remaining`;
   } else if (totals.carbs < targets.carbs) {
     const remaining = targets.carbs - totals.carbs;
     badge.className = 'ketosis-badge green';
-    badge.textContent = `✓ KETOSIS ZONE — ${totals.carbs}g used · ${remaining}g remaining`;
+    badge.textContent = `✓ KETOSIS ZONE — ${Math.round(totals.carbs * 10) / 10}g used · ${Math.round(remaining * 10) / 10}g remaining`;
   } else if (totals.carbs < 75) {
     badge.className = 'ketosis-badge yellow';
     badge.textContent = `⚠ BORDERLINE — ${totals.carbs}g carbs`;
