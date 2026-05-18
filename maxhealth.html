@@ -1723,10 +1723,18 @@
   <div class="chat-scroll" id="chatScroll">
     <div class="bubble-system">
       <div class="bubble-label">MAXEDHEALTH</div>
-      Log a meal, ask what's remaining, or query your intake. Examples:<br><br>
-      <em>"2 eggs scrambled, 30g cheddar, butter"</em><br>
-      <em>"What do I still need today?"</em><br>
-      <em>"250g chicken breast, broccoli"</em>
+      <strong style="color:var(--text);">Welcome to the Nutrition tab.</strong> This is where you track everything you eat and drink throughout the day. Your daily totals build up here and feed into your targets, trends and history.<br><br>
+      <strong style="color:var(--text2);">How to log:</strong><br>
+      <em style="color:var(--text3);">"2 eggs scrambled, 30g cheddar, butter"</em><br>
+      <em style="color:var(--text3);">"250g chicken breast with broccoli and butter"</em><br>
+      <em style="color:var(--text3);">"ASDA Roasted Nuts 50g"</em><br><br>
+      <strong style="color:var(--text2);">Other things you can ask:</strong><br>
+      <em style="color:var(--text3);">"What do I still need today?"</em><br>
+      <em style="color:var(--text3);">"Am I in ketosis?"</em><br>
+      <em style="color:var(--text3);">"What should I eat next to hit targets?"</em><br><br>
+      <strong style="color:var(--text2);">Photos:</strong> Tap 📷 to photograph a meal or a nutrition label. For a label, switch to 🏷 Label mode and type the product name and amount in the box.<br><br>
+      <strong style="color:var(--text2);">Food database:</strong> Tap 🔍 to search 3M+ products by name — select one, enter the amount, and it logs with exact values.<br><br>
+      <strong style="color:var(--accent);">Made a mistake? Don't panic!</strong> In Today's Log below, tap any entry to edit the values directly — change the calories, protein or carbs to the correct amount. Or tap × to remove it entirely (you can undo for 5 seconds). The daily total updates instantly.
     </div>
   </div>
   <div class="chat-input-wrap">
@@ -2730,6 +2738,7 @@
         📂 SELECT MASTER.CSV
       </button>
       <div id="nutritionImportStatus" style="font-size:12px;color:var(--text3);margin-bottom:8px;font-family:'Syne',sans-serif;font-weight:600;"></div>
+      <button class="copy-btn" onclick="backupMasterCSV()" style="margin-top:6px;width:100%;font-size:12px;">💾 Backup master.csv to Downloads</button>
       <div class="output-box idle" id="nutritionImportOutput">No file loaded yet.</div>
     </div>
 
@@ -3099,6 +3108,21 @@ let state = loadState();
 function saveState() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return;
   localStorage.setItem('maxhealth_v1', JSON.stringify(state));
+  // Also maintain a running master.csv cache in localStorage
+  try {
+    const history = state.history || [];
+    const nutritionRows = history
+      .filter(h => h.totals?.kcal > 0)
+      .map(h => `${h.date}|${h.totals.kcal}|${Math.round(h.totals.protein)}|${Math.round(h.totals.carbs * 10)/10}|${h.notes || h.mode || 'standard'}`)
+      .join('\n');
+    if (nutritionRows) {
+      localStorage.setItem('mh_master_csv_cache', nutritionRows);
+      localStorage.setItem('mh_master_csv_meta', JSON.stringify({
+        date: new Date().toLocaleDateString('en-GB'),
+        rows: history.filter(h => h.totals?.kcal > 0).length
+      }));
+    }
+  } catch(e) {}
 }
 
 function todayStr() {
@@ -3712,6 +3736,22 @@ function exportData() {
   showToast('Data exported');
 }
 
+function backupMasterCSV() {
+  const dateStr = todayStr().replace(/\//g, '-');
+  const rows = state.history
+    .filter(h => h.totals?.kcal > 0)
+    .sort((a,b) => a.date < b.date ? -1 : 1)
+    .map(h => `${h.date}|${h.totals.kcal}|${Math.round(h.totals.protein)}|${Math.round(h.totals.carbs*10)/10}|${h.notes||h.mode||'standard'}`)
+    .join('\n');
+  if (!rows) { showToast('No nutrition history to export'); return; }
+  const blob = new Blob([rows], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `master_${dateStr}.csv`; a.click();
+  URL.revokeObjectURL(url);
+  showToast('master.csv saved to Downloads ✓');
+}
+
 function exportAll() {
   const dateStr = todayStr().replace(/\//g,'-');
   let count = 0;
@@ -3784,12 +3824,13 @@ function handlePhotoSelect(input) {
       document.getElementById('photoPreview').src = dataUrl;
       document.getElementById('photoPreviewWrap').style.display = 'block';
       document.getElementById('photoBtn').style.borderColor = 'var(--green)';
-      // Auto-switch to Label mode — user can switch to Meal if needed
-      setPhotoMode('label');
-      // Update placeholder to guide user
+      // Keep Meal mode by default — user switches to Label explicitly
+      // Update placeholder hint based on current mode
       const inp = document.getElementById('chatInput');
       if (inp) {
-        inp.placeholder = 'Name and amount — e.g. "ASDA Cottage Cheese 150g"';
+        inp.placeholder = _photoMode === 'label'
+          ? 'Name and amount — e.g. "ASDA Cottage Cheese 150g"'
+          : 'Describe what\'s in the photo (optional)…';
         inp.focus();
       }
     };
@@ -3807,6 +3848,13 @@ function setPhotoMode(mode) {
   document.getElementById('photoModeLabel').style.background = mode === 'label' ? 'var(--accent)' : 'var(--surface2)';
   document.getElementById('photoModeLabel').style.color = mode === 'label' ? 'var(--bg)' : 'var(--text2)';
   document.getElementById('photoModeLabel').style.border = mode === 'label' ? 'none' : '1px solid var(--border)';
+  // Update placeholder
+  const inp = document.getElementById('chatInput');
+  if (inp && document.getElementById('photoPreviewWrap')?.style.display !== 'none') {
+    inp.placeholder = mode === 'label'
+      ? 'Name and amount — e.g. "ASDA Cottage Cheese 150g"'
+      : 'Describe what\'s in the photo (optional)…';
+  }
 }
 
 function clearPhoto() {
@@ -4318,7 +4366,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   }), { kcal: 0, protein: 0, carbs: 0 });
 
   const entry = {
-    id: Date.now(), time: nowTime(), description: originalText, items: foods,
+    id: Date.now(), time: nowTime(), description: originalText || foods.map(f=>f.name).join(', '), items: foods,
     kcal: Math.round(mealTotals.kcal),
     protein: Math.round(mealTotals.protein * 10) / 10,
     carbs: Math.round(mealTotals.carbs * 10) / 10
@@ -4568,9 +4616,9 @@ function updateDashboard() {
     logEl.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:20px 0;">No meals logged yet</div>';
   } else {
     logEl.innerHTML = state.todayLog.map(e => `
-      <div class="log-entry">
+      <div class="log-entry" id="log-entry-${e.id}">
         <div class="log-time">${e.time}</div>
-        <div class="log-food">${e.description.length > 40 ? e.description.slice(0,40)+'…' : e.description}</div>
+        <div class="log-food" style="cursor:pointer;" onclick="editLogEntry(${e.id})" title="Tap to edit">${e.description.length > 40 ? e.description.slice(0,40)+'…' : e.description}</div>
         <div class="log-macros">
           <span class="c">${e.kcal}</span>
           <span class="p">${e.protein}p</span>
@@ -4618,6 +4666,69 @@ function updateDashboard() {
 let _undoTimer = null;
 let _undoEntry = null;
 let _undoIndex = null;
+
+function editLogEntry(id) {
+  const entry = state.todayLog.find(e => e.id === id);
+  if (!entry) return;
+
+  // Build inline edit form
+  const entryEl = document.getElementById('log-entry-' + id);
+  if (!entryEl || entryEl.querySelector('.log-edit-form')) return; // already open
+
+  const form = document.createElement('div');
+  form.className = 'log-edit-form';
+  form.style.cssText = 'padding:8px 0 4px;display:flex;flex-direction:column;gap:8px;';
+  form.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;">EDIT ENTRY</div>
+    <input id="edit-desc-${id}" class="modal-input" value="${entry.description}" placeholder="Description" style="font-size:13px;padding:7px 10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">KCAL</div>
+        <input id="edit-kcal-${id}" class="modal-input" type="number" value="${entry.kcal}" style="font-size:14px;padding:7px 10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--green);margin-bottom:3px;">PROTEIN g</div>
+        <input id="edit-prot-${id}" class="modal-input" type="number" value="${entry.protein}" step="0.1" style="font-size:14px;padding:7px 10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--yellow);margin-bottom:3px;">CARBS g</div>
+        <input id="edit-carb-${id}" class="modal-input" type="number" value="${entry.carbs}" step="0.1" style="font-size:14px;padding:7px 10px;">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="modal-btn cancel" style="flex:1;font-size:12px;padding:8px;" onclick="cancelLogEdit(${id})">Cancel</button>
+      <button class="modal-btn confirm" style="flex:2;font-size:12px;padding:8px;" onclick="saveLogEdit(${id})">Save changes</button>
+    </div>`;
+  entryEl.appendChild(form);
+}
+
+function cancelLogEdit(id) {
+  const form = document.querySelector('#log-entry-' + id + ' .log-edit-form');
+  if (form) form.remove();
+}
+
+function saveLogEdit(id) {
+  const entry = state.todayLog.find(e => e.id === id);
+  if (!entry) return;
+  const desc = document.getElementById('edit-desc-' + id)?.value.trim();
+  const kcal = parseFloat(document.getElementById('edit-kcal-' + id)?.value);
+  const prot = parseFloat(document.getElementById('edit-prot-' + id)?.value);
+  const carb = parseFloat(document.getElementById('edit-carb-' + id)?.value);
+  if (isNaN(kcal) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
+  entry.description = desc || entry.description;
+  entry.kcal = Math.round(kcal);
+  entry.protein = Math.round(prot * 10) / 10;
+  entry.carbs = Math.round(carb * 10) / 10;
+  // Also update items array if present
+  if (entry.items && entry.items.length === 1) {
+    entry.items[0].kcal = entry.kcal;
+    entry.items[0].protein = entry.protein;
+    entry.items[0].carbs = entry.carbs;
+  }
+  saveState();
+  updateDashboard();
+  showToast('Entry updated ✓');
+}
 
 function deleteEntry(id) {
   const index = state.todayLog.findIndex(e => e.id === id);
@@ -6268,7 +6379,7 @@ function renderDailyView(data) {
   const prot = d.totals && d.totals.protein ? d.totals.protein : 0;
   const carbs = d.totals && d.totals.carbs ? d.totals.carbs : 0;
   el.appendChild(makeSection('Nutrition', [
-    ['\uD83D\uDD25', 'Calories', kcal ? kcal.toLocaleString() + ' / ' + targets.kcal.toLocaleString() + ' kcal' : '\u2014', col(kcal, targets.kcal * 0.9, targets.kcal * 0.7)],
+    ['\uD83D\uDD25', 'Calories', kcal ? kcal.toLocaleString() + ' / ' + (targets?.kcal||'?') + ' kcal' : '\u2014', col(kcal, (targets?.kcal||3000) * 0.9, (targets?.kcal||3000) * 0.7)],
     ['\uD83D\uDCAA', 'Protein', prot ? prot + 'g / ' + targets.protein + 'g' : '\u2014', prot >= targets.protein ? 'var(--accent)' : 'var(--yellow)'],
     ['\uD83C\uDF3E', 'Carbs', carbs ? carbs + 'g / ' + targets.carbs + 'g ceiling' : '\u2014', carbs > 0 && carbs <= targets.carbs ? 'var(--accent)' : carbs > targets.carbs ? 'var(--red)' : 'var(--text3)'],
   ]));
