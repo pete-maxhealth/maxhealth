@@ -4,7 +4,7 @@
 
 > Built by a GBM patient who needed it. Given freely to everyone who does.
 
-[Read the full story →](https://pete-maxhealth.github.io/maxhealth/docs/story.html) &nbsp;·&nbsp; [Why free? →](https://pete-maxhealth.github.io/maxhealth/why-free.html)
+[Read the full story →](https://pete-maxhealth.github.io/maxhealth/docs/story.html) &nbsp;·&nbsp; [Why free? →](https://pete-maxhealth.github.io/maxhealth/docs/story.html#sec-free)
 
 ---
 
@@ -85,7 +85,7 @@ Full pipeline documentation: [Pipeline Setup Guide](https://pete-maxhealth.githu
 maxhealth.html          # The app — single file
 sw.js                   # Service worker (PWA/offline)
 manifest.json           # PWA manifest
-why-free.html           # Why free / how it differs
+docs/story.html         # Full story including why free
 carer.html              # Read-only carer view
 setup.sh                # One-command Termux setup
 distribute.sh           # Post-pull file distribution + inbox automation
