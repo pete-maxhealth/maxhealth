@@ -4411,7 +4411,9 @@ function openFoodSearch() {
 }
 
 function closeFoodSearch() {
-  document.getElementById('foodSearchOverlay').classList.remove('open');
+  const overlay = document.getElementById('foodSearchOverlay');
+  overlay.classList.remove('open');
+  overlay.style.zIndex = ''; // reset z-index
   document.getElementById('foodSearchInput').value = '';
   document.getElementById('foodResults').innerHTML = '<div class="food-result-loading">Type to search…</div>';
 }
@@ -4553,6 +4555,27 @@ function logFoodFromDatabase() {
   const grams = parseFloat(document.getElementById('foodAmountGrams').value);
   if (isNaN(grams) || grams <= 0) { showToast('Enter an amount in grams'); return; }
   const factor = grams / 100;
+
+  // Recipe mode — add to recipe instead of logging
+  if (_recipeSearchMode) {
+    _recipeSearchMode = false;
+    const displayName = (_selectedFoodItem.brand
+      ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})`
+      : _selectedFoodItem.name) + ` ${grams}g`;
+    _recipeIngredients.push({
+      name:    displayName,
+      kcal:    Math.round(_selectedFoodItem.kcal * factor),
+      protein: Math.round(_selectedFoodItem.prot * factor * 10) / 10,
+      carbs:   Math.round(_selectedFoodItem.carb * factor * 10) / 10,
+      fibre:   Math.round((_selectedFoodItem.fibre || 0) * factor * 10) / 10,
+    });
+    closeFoodSearch();
+    document.getElementById('recipeBuilderModal').style.display = 'flex';
+    renderRecipeIngredients();
+    updateRecipeTotals();
+    showToast('Added to recipe ✓');
+    return;
+  }
   const kcal = Math.round(_selectedFoodItem.kcal * factor);
   const prot = Math.round(_selectedFoodItem.prot * factor * 10) / 10;
   const carb = Math.round(_selectedFoodItem.carb * factor * 10) / 10;
@@ -5476,41 +5499,22 @@ function closeRecipeLibPicker() {
 }
 
 function recipeOpenSearch() {
-  // Reuse existing food search — after selection, add to recipe instead of logging
   _recipeSearchMode = true;
   openFoodSearch();
+  // Raise z-index above recipe builder modal
+  const overlay = document.getElementById('foodSearchOverlay');
+  if (overlay) overlay.style.zIndex = '220';
 }
 
 let _recipeSearchMode = false;
 
-// Override logFoodFromDatabase to support recipe mode
-const _origLogFoodFromDatabase = logFoodFromDatabase;
-function logFoodFromDatabase() {
-  if (_recipeSearchMode) {
-    _recipeSearchMode = false;
-    if (!_selectedFoodItem) return;
-    const grams = parseFloat(document.getElementById('foodAmountGrams').value);
-    if (isNaN(grams) || grams <= 0) { showToast('Enter an amount'); return; }
-    const factor = grams / 100;
-    _recipeIngredients.push({
-      name: (_selectedFoodItem.brand ? _selectedFoodItem.name + ' (' + _selectedFoodItem.brand + ')' : _selectedFoodItem.name) + ' ' + grams + 'g',
-      kcal: Math.round(_selectedFoodItem.kcal * factor),
-      protein: Math.round(_selectedFoodItem.prot * factor * 10) / 10,
-      carbs: Math.round(_selectedFoodItem.carb * factor * 10) / 10,
-      fibre: Math.round((_selectedFoodItem.fibre || 0) * factor * 10) / 10,
-    });
-    closeFoodSearch();
-    document.getElementById('recipeBuilderModal').style.display = 'flex';
-    renderRecipeIngredients();
-    updateRecipeTotals();
-    showToast('Added to recipe ✓');
-  } else {
-    _origLogFoodFromDatabase();
-  }
-}
+// Recipe search mode handled inside logFoodFromDatabase directly
 
 async function handleRecipeBarcode(input) {
   _recipeSearchMode = true;
+  // Raise food search overlay above recipe builder
+  const overlay = document.getElementById('foodSearchOverlay');
+  if (overlay) overlay.style.zIndex = '220';
   await handleBarcodeCapture(input);
 }
 
@@ -5585,7 +5589,7 @@ function saveRecipe() {
   }
   saveRecipes(recipes);
   closeRecipeBuilder();
-  renderRecipeList();
+  setTimeout(renderRecipeList, 100);
   showToast(`Recipe "${name}" saved ✓`);
 }
 
@@ -5649,8 +5653,8 @@ function logRecipe(id, servings) {
   logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
   showToast(`${recipe.name} logged ✓`);
   // Switch to Nutrition tab to show the logged entry
-  const tab = document.querySelector('[onclick*="switchTab(\'chat\'"]');
-  if (tab) switchTab('chat', tab);
+  const chatTab = Array.from(document.querySelectorAll('.tab')).find(t => t.textContent.trim() === 'Nutrition');
+  if (chatTab) switchTab('chat', chatTab);
 }
 
 function promptRecipeServings(id) {
