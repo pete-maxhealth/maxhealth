@@ -1746,6 +1746,7 @@
     <div class="input-row">
       <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoSelect(this)">
       <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(this)">
+      <input type="file" id="barcodeInput" accept="image/*" capture="environment" style="display:none" onchange="handleBarcodeCapture(this)">
       <button onclick="document.getElementById('cameraInput').click()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:46px;height:46px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" id="photoBtn">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
       </button>
@@ -1754,6 +1755,13 @@
       </button>
       <button onclick="openFoodSearch()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:46px;height:46px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" title="Search food database">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button onclick="document.getElementById('barcodeInput').click()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:46px;height:46px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" title="Scan barcode">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9V5a2 2 0 0 1 2-2h4M3 15v4a2 2 0 0 0 2 2h4M21 9V5a2 2 0 0 0-2-2h-4M21 15v4a2 2 0 0 1-2 2h-4"/>
+          <line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>
+          <line x1="13" y1="8" x2="13" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/>
+        </svg>
       </button>
       <textarea class="chat-input" id="chatInput" placeholder="Log a meal, ingredient or ask a question..." rows="1"
         onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
@@ -4139,6 +4147,118 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
 let _foodSearchTimer = null;
 let _selectedFoodItem = null;
 
+async function handleBarcodeCapture(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  // Show scanning indicator
+  const thinkingMsg = addBubble('🔍 Scanning barcode…', 'system');
+
+  try {
+    // Use BarcodeDetector API if available (Chrome Android supports this)
+    if ('BarcodeDetector' in window) {
+      const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
+      const img = await createImageBitmap(file);
+      const barcodes = await detector.detect(img);
+      if (barcodes.length > 0) {
+        const barcode = barcodes[0].rawValue;
+        thinkingMsg.textContent = `🔍 Found barcode: ${barcode} — looking up…`;
+        await lookupBarcode(barcode, thinkingMsg);
+        return;
+      }
+    }
+    // Fallback — send image to AI to read the barcode
+    thinkingMsg.textContent = '🔍 Reading barcode with AI…';
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result.split(',')[1];
+      await lookupBarcodeViaAI(base64, thinkingMsg);
+    };
+    reader.readAsDataURL(file);
+  } catch(e) {
+    thinkingMsg.textContent = '⚠ Could not read barcode — try the search button instead.';
+    thinkingMsg.classList.add('warn');
+  }
+}
+
+async function lookupBarcode(barcode, statusBubble) {
+  try {
+    const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,brands,nutriments,quantity`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.status !== 1 || !data.product) {
+      if (statusBubble) statusBubble.textContent = `⚠ Barcode ${barcode} not found in database — try searching by name.`;
+      return;
+    }
+
+    const p = data.product;
+    const n = p.nutriments;
+    const kcal    = Math.round(n['energy-kcal_100g'] || 0);
+    const protein = Math.round((n.proteins_100g || 0) * 10) / 10;
+    const carbs   = Math.round((n.carbohydrates_100g || 0) * 10) / 10;
+    const fat     = Math.round((n.fat_100g || 0) * 10) / 10;
+    const fibre   = Math.round((n.fiber_100g || 0) * 10) / 10;
+    const name    = p.product_name || 'Unknown product';
+    const brand   = p.brands ? p.brands.split(',')[0].trim() : '';
+
+    if (!kcal) {
+      if (statusBubble) statusBubble.textContent = `⚠ Found "${name}" but nutrition data is incomplete — try searching by name.`;
+      return;
+    }
+
+    if (statusBubble) statusBubble.remove();
+
+    // Populate food amount panel
+    _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre };
+    document.getElementById('foodSearchView').style.display = 'none';
+    document.getElementById('foodAmountView').classList.add('open');
+    document.getElementById('foodSearchOverlay').classList.add('open');
+    const displayName = brand ? `${name} (${brand})` : name;
+    document.getElementById('foodAmountName').textContent = displayName;
+    document.getElementById('foodAmountPer100').textContent =
+      `per 100g: ${kcal}kcal · ${protein}g P · ${carbs}g C · ${fat}g F${fibre ? ' · ' + fibre + 'g fibre' : ''}`;
+    document.getElementById('foodAmountGrams').value = '';
+    document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+    setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
+
+    addBubble(`✓ Found: ${displayName}`, 'system', 'success');
+
+  } catch(e) {
+    if (statusBubble) statusBubble.textContent = '⚠ Barcode lookup failed — check your connection.';
+  }
+}
+
+async function lookupBarcodeViaAI(base64, statusBubble) {
+  // Ask AI to read the barcode number from the image, then look it up
+  try {
+    const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+    const res = await fetch(PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 100,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: 'Read the barcode number from this image. Reply with ONLY the barcode digits, nothing else. If you cannot read it, reply with "NONE".' }
+        ]}]
+      })
+    });
+    const data = await res.json();
+    const barcode = data.content?.[0]?.text?.trim().replace(/\D/g, '');
+    if (!barcode || barcode === 'NONE' || barcode.length < 8) {
+      if (statusBubble) statusBubble.textContent = '⚠ Could not read barcode — try holding the camera closer and steadier, or search by name.';
+      return;
+    }
+    if (statusBubble) statusBubble.textContent = `🔍 Found barcode: ${barcode} — looking up…`;
+    await lookupBarcode(barcode, statusBubble);
+  } catch(e) {
+    if (statusBubble) statusBubble.textContent = '⚠ Barcode scan failed — try searching by name instead.';
+  }
+}
+
 function openFoodSearch() {
   const overlay = document.getElementById('foodSearchOverlay');
   overlay.classList.add('open');
@@ -4733,10 +4853,9 @@ function updateDashboard() {
     `).join('');
   }
 
-  // CSV row
+  // CSV row (element removed — auto-saves to server on close-out)
   const csvDate = todayStr();
   const notes = state.notes || state.dayMode;
-  document.getElementById('csvRow').textContent = `${csvDate}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${notes}`;
 
   // Weight
   document.getElementById('displayWeight').innerHTML = `${state.weight}<span>kg</span>`;
