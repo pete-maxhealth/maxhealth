@@ -119,6 +119,6 @@ MIT — do what you want with it.
 
 ---
 
-*Built by Pete. Software architect, Oracle DBA, RPA developer — and GBM patient in remission.*
+*Built by Pete. Software architect, retired Oracle DBA and RPA developer — and GBM patient in remission.*
 
 *YOUR DATA. YOUR HEALTH. YOUR RULES.*

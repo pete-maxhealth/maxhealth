@@ -132,5 +132,5 @@
 
 ---
 
-*MaxHealth is built and maintained by Pete — retired Oracle DBA, retired RPA developer, GBM patient.*
+*MaxHealth is built and maintained by Pete — software architect, retired Oracle DBA and RPA developer, GBM patient.*
 *Developed with Claude (Anthropic). May it be useful to someone else too.*
