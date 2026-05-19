@@ -2,6 +2,8 @@
 
 **Architecture, proxy setup, pipeline structure, data schema, and adding new extractors.**
 
+*Last updated: May 2026 — v1.9 (Phase 5)*
+
 ---
 
 ## Architecture Overview
@@ -10,35 +12,37 @@ MaxedHealth is a static single-page web application with no server-side componen
 
 ```
 ┌─────────────────────────────────────────┐
-│  Browser (Chrome on Android)            │
+│  Browser (Chrome / Safari)              │
 │                                         │
 │  maxhealth.html                         │
-│  ├── Nutrition tracker (localStorage)   │
-│  ├── Trends / Reports / Library         │
-│  ├── Import tab (CSV file picker)       │
-│  └── Assistant tab (AI meal logging)    │
+│  ├── Dashboard (weight, macros, water)  │
+│  ├── Nutrition tab (AI meal logging)    │
+│  ├── History / Trends / Reports         │
+│  ├── Library (saved foods + recipes)    │
+│  ├── Import tab (CSV + pipeline)        │
+│  └── Settings                           │
 │              │                          │
-│              │ fetch (text only)        │
+│              │ fetch (text / image)     │
 └──────────────┼──────────────────────────┘
                │
-               ▼
-┌──────────────────────────────────────────┐
-│  Cloudflare Workers Proxy                │
-│  maxhealth-ai.bogginsuk.workers.dev      │
-│                                          │
-│  Adds API key, forwards to Anthropic     │
-│  Rate-limited, no user data stored       │
-└──────────────┬───────────────────────────┘
-               │
-               ▼
-        Anthropic API (Claude)
+      ┌────────┴────────┐
+      │                 │
+      ▼                 ▼
+┌──────────────┐  ┌─────────────────────────┐
+│  Anthropic   │  │  Cloudflare Workers      │
+│  API (direct)│  │  Proxy (no-key users)    │
+│              │  │  bogginsuk.workers.dev   │
+│  User's own  │  │  Adds API key, forwards  │
+│  API key     │  │  to Anthropic            │
+└──────────────┘  └─────────────────────────┘
 ```
 
 **Key design decisions:**
 
 - No backend means no server to maintain, no accounts, no database
 - GitHub Pages hosting is free, reliable, and requires no deployment pipeline beyond `git push`
-- The Cloudflare proxy keeps the API key out of client-side code while keeping AI free for users
+- The Cloudflare proxy keeps the API key out of client-side code while keeping AI free for users with no personal key
+- Users with their own Claude or OpenAI key bypass the proxy entirely — direct API calls only
 - All health data stays on the device — only meal descriptions (text/photo) leave the device for AI processing
 
 ---
@@ -51,22 +55,25 @@ MaxedHealth is a static single-page web application with no server-side componen
 Deployment is a `git push` to `main`. GitHub Pages serves the repo root automatically.
 
 Docs live at `docs/` and are accessible as:
-- `pete-maxhealth.github.io/maxhealth/docs/story.html`
-- `pete-maxhealth.github.io/maxhealth/docs/pipeline-setup.html`
+- `pete-maxhealth.github.io/maxhealth/docs/user-guide.html`
 - `pete-maxhealth.github.io/maxhealth/docs/gbm_patient_guide.html`
+- `pete-maxhealth.github.io/maxhealth/docs/story.html`
+- `pete-maxhealth.github.io/maxhealth/carer.html` (read-only carer portal)
 
 ---
 
 ## Cloudflare Workers Proxy
 
 **Worker URL:** `maxhealth-ai.bogginsuk.workers.dev`  
-**Purpose:** Relay AI requests from the app to the Anthropic API without exposing the API key in client-side code.
+**Purpose:** Relay AI requests from the app to the Anthropic API without exposing the API key in client-side code. Used only when the user has no personal API key configured.
 
 The worker:
-1. Receives POST requests from the app containing only the meal description (text) or image
+1. Receives POST requests containing a `messages` array (no `system` field)
 2. Injects the `x-api-key` header from a Worker secret
 3. Forwards to `https://api.anthropic.com/v1/messages`
 4. Returns the response
+
+**Important:** The proxy does not support a top-level `system` field. The app inlines the system prompt as the first entry in the `messages` array when using the proxy path. The direct API path (user's own key) sends `system` as a separate field as normal.
 
 No user health data is ever sent to the proxy — only the meal logging prompt and any food photo.
 
@@ -76,6 +83,37 @@ wrangler secret put ANTHROPIC_API_KEY
 ```
 
 **Rate limiting:** configured in the Cloudflare dashboard to prevent abuse.
+
+---
+
+## Carer & Clinician Portal
+
+`carer.html` is a standalone read-only HTML file in the repo root.
+
+When a user taps **Generate Carer View Link** in Settings, the app encodes a snapshot of the last 30 days of nutrition history as base64 JSON in the URL hash:
+
+```
+pete-maxhealth.github.io/maxhealth/carer.html#<base64-payload>
+```
+
+**Payload structure:**
+```json
+{
+  "name": "Pete",
+  "generated": "2026-05-19T07:50:54.870Z",
+  "expires": "2026-05-26T07:50:54.874Z",
+  "targets": {
+    "standard": { "kcal": 3500, "protein": 164, "carbs": 50 },
+    "occasion": { "kcal": 3500, "protein": 164, "carbs": 75 },
+    "holiday":  { "kcal": 3500, "protein": 164, "carbs": 100 }
+  },
+  "history": [
+    { "date": "DD/MM/YY", "totals": { "kcal": 0, "protein": 0, "carbs": 0 }, "weight": null, "mode": "standard" }
+  ]
+}
+```
+
+The link is valid for 7 days. After expiry, carer.html shows an expired banner. No data is stored server-side — everything is in the URL hash. Zero-day entries are filtered from the display automatically.
 
 ---
 
@@ -90,23 +128,28 @@ The pipeline is an optional Python-based system that runs on Android via Termux.
 ├── app/
 │   ├── maxhealth/              # Git repo (web app + docs)
 │   │   ├── maxhealth.html
-│   │   ├── distribute.sh       # Run after every git pull
-│   │   ├── pipeline/
-│   │   │   └── auto.py         # Thin trigger → app/update_health.py
+│   │   ├── carer.html
+│   │   ├── CHANGELOG.md
+│   │   ├── TECHNICAL.md
+│   │   ├── README.md
 │   │   └── docs/
-│   ├── extractors/             # Pipeline extractors (outside repo)
+│   │       ├── user-guide.html
+│   │       ├── gbm_patient_guide.html
+│   │       └── story.html
+│   ├── extractors/
 │   │   ├── withings.py
 │   │   ├── ringconn.py
 │   │   └── amazfit.py
 │   ├── update_health.py        # Pipeline entry point
-│   ├── server.py
-│   └── utils.py
+│   ├── server.py               # Local HTTP server (dev only)
+│   ├── merge.py                # Builds combined.csv
+│   └── utils.py                # Logging, CSV helpers, backup
 ├── data/
 │   ├── inbox/                  # Drop wearable exports here
 │   ├── tables/
 │   │   ├── combined.csv        # Merged wearable data
 │   │   └── nutrition.csv       # Exported from app
-│   └── backup/                 # Auto-backups (7 max)
+│   └── backup/                 # Auto-backups (7 max per file)
 └── logs/
     └── pipeline.log            # Structured error log
 ```
@@ -114,6 +157,9 @@ The pipeline is an optional Python-based system that runs on Android via Termux.
 ### Running the pipeline
 
 ```bash
+# Quick alias (configured by setup.sh)
+mhstart
+
 # Process all devices with files in inbox/
 cd /storage/emulated/0/MaxHealth/app && python update_health.py
 
@@ -130,7 +176,7 @@ cd /storage/emulated/0/MaxHealth/app && python update_health.py --dry-run
 
 When multiple devices report the same metric for the same date, precedence determines which value is used. Secondary sources fill gaps where the primary has no value.
 
-Default order (configurable in Import tab → Source Precedence):
+Default order (configurable in Import tab → Device Precedence):
 
 | Metric  | Priority order                          |
 |---------|-----------------------------------------|
@@ -143,7 +189,7 @@ Default order (configurable in Import tab → Source Precedence):
 
 ### File versioning and backup
 
-Before every pipeline write, `combined.csv` and `nutrition.csv` are automatically copied to `data/backup/` with a timestamp suffix. A maximum of 7 backups are retained (oldest deleted automatically).
+Before every pipeline write, `combined.csv` and `nutrition.csv` are automatically copied to `data/backup/` with a timestamp suffix. A maximum of 7 backups are retained per file (oldest deleted automatically).
 
 To restore a backup: open the app → Import tab → Restore Backup.
 
@@ -204,7 +250,28 @@ Exported from the app. One row per day.
 | protein     | float  | Protein in grams                |
 | carbs       | float  | Net carbohydrates in grams      |
 | fat         | float  | Fat in grams                    |
+| fibre       | float  | Fibre in grams                  |
+| water_ml    | int    | Water intake in ml              |
+| mode        | string | standard / occasion / holiday   |
 | notes       | string | Optional daily notes            |
+
+### localStorage keys (app state)
+
+| Key                    | Description                                      |
+|------------------------|--------------------------------------------------|
+| `maxhealth_v1`         | Full app state (history, today's log, weight)    |
+| `mh_target_kcal`       | Daily calorie target                             |
+| `mh_target_protein`    | Daily protein target                             |
+| `mh_target_carbs`      | Daily carb ceiling                               |
+| `mh_name`              | User's name                                      |
+| `mh_provider`          | AI provider: claude / openai / local             |
+| `mh_api_key`           | Encrypted API key (if set)                       |
+| `mh_health_context`    | Free-text health context injected into AI        |
+| `mh_condition`         | Selected condition (gbm / t2d / recomp / general)|
+| `mh_water_target`      | Daily water target in ml                         |
+| `mh_fibre_target`      | Daily fibre target in grams                      |
+| `maxhealth_foods`      | Saved food library                               |
+| `mh_tips_seen`         | Dismissed contextual tips per tab                |
 
 ---
 
@@ -275,11 +342,21 @@ The password is displayed in the Zepp app at the time of export. It is also ofte
 
 `maxhealth.html` includes a Web App Manifest and Service Worker registration enabling:
 
-- **Add to Home Screen** — installs as a standalone app icon on Android
+- **Add to Home Screen** — installs as a standalone app icon on Android and iOS
 - **Offline access** — cached assets work without connectivity
-- **Background sync** — AI requests queued when offline, sent when connectivity returns (Phase 3)
+- **iOS Safari support** — Apple touch icon, safe area insets, input zoom prevention (Phase 5)
 
-The Service Worker caches the app shell on first load. Nutrition data is stored in localStorage (survives app closure, cleared only by explicit data export or browser data clear).
+The Service Worker caches the app shell on first load. All nutrition data is stored in localStorage (survives app closure, cleared only by explicit export or browser data clear).
+
+**iOS-specific meta tags (Phase 5):**
+```html
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MaxedHealth">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+```
+
+All `<input>` and `<textarea>` elements use `font-size: 16px` minimum to prevent iOS Safari auto-zoom.
 
 ---
 
@@ -290,13 +367,10 @@ The Service Worker caches the app shell on first load. Nutrition data is stored 
 ```bash
 #!/data/data/com.termux/files/usr/bin/bash
 # MaxedHealth — runs on every device boot
-# The app is hosted on GitHub Pages — no local server needed.
-# This script auto-runs the pipeline if new inbox files are present.
-cd /storage/emulated/0/MaxHealth/app
 cd /storage/emulated/0/MaxHealth/app && python update_health.py 2>> /storage/emulated/0/MaxHealth/logs/pipeline.log
 ```
 
-Termux:Boot runs this on every reboot. The app needs no local server — it runs entirely from GitHub Pages. The boot script processes any wearable exports left in the inbox overnight.
+Termux:Boot runs this on every reboot. The app itself runs entirely from GitHub Pages — no local server needed for normal use. The `mhstart` alias launches the local dev server when needed.
 
 ---
 
@@ -304,6 +378,8 @@ Termux:Boot runs this on every reboot. The app needs no local server — it runs
 
 - The Cloudflare proxy API key is stored as a Worker secret — never in the codebase
 - No health data transits the proxy — only meal descriptions and food photos
+- Users with their own API key communicate directly with Anthropic — the proxy is never involved
 - localStorage data is scoped to the origin and not accessible to other sites
 - The pipeline runs entirely on-device with no network calls
 - The GitHub repo contains no credentials, keys, or personal data
+- The carer view URL contains only nutrition totals and weight — no food log details, no personal notes
