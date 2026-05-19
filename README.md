@@ -12,25 +12,28 @@
 
 MaxedHealth runs in your browser. No installation required. **No API key needed.**
 
-**Open Chrome on your Android phone and go to:**
+**Open Chrome (Android) or Safari (iPhone/iPad) and go to:**
 
 ```
 pete-maxhealth.github.io/maxhealth/maxhealth.html
 ```
 
-Bookmark it, or tap Chrome's menu → **Add to Home Screen** to install it like an app. A setup wizard walks you through everything in about 2 minutes.
+Bookmark it, or use your browser's **Add to Home Screen** option to install it like an app. A setup wizard walks you through everything in about 2 minutes.
 
 ---
 
 ## What it does
 
 - **AI meal logging** — log meals by text or photo. AI identifies macros instantly. No API key required
+- **Barcode scanner** — scan any product barcode for exact nutritional values
+- **Recipe builder** — create multi-ingredient recipes, save to library, log as single entries
 - **Personal food library** — locked macro values for your regular foods
-- **Daily targets** — calories, protein, carbs, ketosis zone indicator
-- **Trends** — weight, sleep, HRV, SpO2, steps, activity — all connected to nutrition
+- **Daily targets** — calories, protein, carbs, fat, fibre, water — ketosis zone indicator
+- **Water tracking** — one-tap hydration logging with daily target and celebration on completion
+- **Trends** — weight, sleep, HRV, SpO₂, steps, activity — all connected to nutrition
 - **Wearable data** — import from Withings, RingConn, Garmin, Oura, Amazfit/Zepp, or any CSV export
-- **Reports** — GBM monthly brief, correlation analysis, date-range queries
-- **End of day logging** — one tap generates your daily nutrition row
+- **Reports** — GBM monthly brief, correlation analysis, date-range queries, seasonal comparison
+- **Carer & clinician view** — share a read-only 7-day snapshot with family or medical team
 - **No account, no cloud, no subscription** — everything stays on your device
 
 ---
@@ -74,29 +77,29 @@ curl -sSL https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/setup.
 
 Supported devices: Withings, RingConn, Amazfit/Zepp. Any device that exports CSV can be added via Import → Add New Device.
 
-Full pipeline documentation: [Pipeline Setup Guide](https://pete-maxhealth.github.io/maxhealth/docs/pipeline-setup.html)
+Full guide: [User Guide → Pipeline section](https://pete-maxhealth.github.io/maxhealth/docs/user-guide.html#wearables)
 
 ---
 
 ## Repository structure
 
 ```
-# Web app (served via GitHub Pages)
 maxhealth.html          # The app — single file
+carer.html              # Read-only carer & clinician portal
 sw.js                   # Service worker (PWA/offline)
 manifest.json           # PWA manifest
-docs/story.html         # Full story including why free
-carer.html              # Read-only carer view
 setup.sh                # One-command Termux setup
-distribute.sh           # Post-pull file distribution + inbox automation
+distribute.sh           # Post-pull file distribution
+CHANGELOG.md            # Full version history
+TECHNICAL.md            # Architecture and data schema
+README.md               # This file
+icons/                  # PWA and iOS icons
 pipeline/
   auto.py               # Thin trigger → app/update_health.py
 docs/
-  story.html            # Why it exists
-  pipeline-setup.html   # Wearable setup guide
+  user-guide.html       # Setup, daily workflow, pipeline guide
   gbm_patient_guide.html
-README.md
-TECHNICAL.md
+  story.html
 
 # Pipeline (on-device only, outside repo)
 # /storage/emulated/0/MaxHealth/app/
@@ -110,6 +113,12 @@ TECHNICAL.md
 ## Privacy
 
 Everything runs locally on your device. No data sent anywhere except AI meal logging requests (text/photo descriptions only — no personal health data). No analytics. No tracking.
+
+---
+
+## Feedback
+
+Found a bug or have a suggestion? [Open an issue on GitHub →](https://github.com/pete-maxhealth/maxhealth/issues/new)
 
 ---
 
