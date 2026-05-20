@@ -338,7 +338,62 @@ The password is displayed in the Zepp app at the time of export. It is also ofte
 
 ---
 
-## PWA (Progressive Web App)
+## Visual Theme System
+
+MaxHealth has two independent appearance layers, both stored in localStorage.
+
+### Visual Style (`mh_visual_theme`)
+
+Controls the full design language of the app. Values: `none` (Classic), `vital`, `pulse`, `forge`.
+
+Applied via `data-visual-theme` attribute on `<html>`. All theme CSS uses attribute selectors (`[data-visual-theme="vital"] .card { ... }`) so existing styles are never overridden — only supplemented.
+
+| Theme | Palette | Radius | Typography | Card style |
+|-------|---------|--------|------------|------------|
+| Classic | Green accent, dark bg | 12px | DM Sans | Border + surface |
+| Vital | Blue (#38bdf8) | 6px | Space Mono headers | Left border accent |
+| Pulse | Green (#2deb8f) | 18-20px | DM Sans rounded | Gradient fill |
+| Forge | Amber (#f97316) | 2-4px | Syne bold | Top border accent |
+
+When a visual theme is active, colour swatches only update `--accent` (not the full palette).
+
+### Icon Pack (`mh_icon_pack`)
+
+Controls SVG icons for tab bar and input buttons. Values: `classic`, `outline`, `organic`, `bold`, `neon`, `mono`.
+
+Stored in `ICON_SETS` (tab icons) and `INPUT_ICONS` (button icons) JS objects. Applied via `applyTabIcons()` and `applyInputIcons()` on theme change and page load.
+
+Selecting a visual theme auto-selects its matching icon pack, but the user can override independently.
+
+| Pack | Style | Auto-selected by |
+|------|-------|-----------------|
+| Classic | Emoji + original SVGs | Classic theme |
+| Outline | Thin-line SVG | Vital |
+| Organic | Rounded filled SVG | Pulse |
+| Bold | Solid chunky SVG | Forge |
+| Neon | Outline + accent glow | Manual only |
+| Mono | Greyscale solid | Manual only |
+
+### localStorage keys
+
+| Key | Description |
+|-----|-------------|
+| `mh_visual_theme` | Active visual theme (`none`/`vital`/`pulse`/`forge`) |
+| `mh_icon_pack` | Active icon pack (`classic`/`outline`/`organic`/`bold`/`neon`/`mono`) |
+| `mh_theme` | Colour palette (`midnight`/`aurora`/`carbon`/`slate`/`light`) |
+| `mh_custom_accent` | Custom accent hex colour override |
+
+---
+
+## Chart Lightbox
+
+A full-screen chart overlay (`#chartLightbox`) separate from the metric drill-down overlay (`#metricDrillOverlay`).
+
+Triggered by tapping any chart card in the Trends → Full Charts view. Renders the selected metric's data on a large canvas with period selector (30D/90D/All). A "Deep Dive →" button closes the lightbox and opens the drill overlay for stats/insights.
+
+Attempts `screen.orientation.lock('landscape')` on open where supported (Android Chrome). Falls back to a "rotate for wider view" hint.
+
+---
 
 `maxhealth.html` includes a Web App Manifest and Service Worker registration enabling:
 

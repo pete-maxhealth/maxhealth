@@ -7,21 +7,42 @@
 
 ## v1.9 — Phase 5 (May 2026)
 
+### Visual Theme System
+- **VITAL / PULSE / FORGE visual themes** — three complete design languages selectable from Settings → Appearance. Each changes colours, border radius, card styling, typography and animations. Stackable with existing Midnight/Aurora/Carbon/Slate/Light colour themes and custom accent colour picker.
+  - **VITAL** — clinical precision. Deep blue palette, monospace typography, thin ruled borders, data-forward aesthetic.
+  - **PULSE** — organic energy. Deep green palette, rounded everything (20px radius), gradient card fills, breathing animations.
+  - **FORGE** — athletic intensity. Dark amber palette, sharp corners (2-4px), bold typography, top-border card accents.
+- **Independent icon packs** — six icon sets selectable separately from visual theme: Classic (original emoji), Outline (thin-line SVG), Organic (rounded filled), Bold (solid chunky), Neon (accent-coloured glow), Mono (greyscale minimal). Visual themes auto-select their matching pack but any combination works.
+- **Per-theme tab bar icons** — 8 tab icons swap with the active icon pack.
+- **Per-theme input button icons** — camera, gallery, search, barcode buttons swap style and SVG per theme.
+- **Per-theme card styling** — dashboard progress cards, phase banner, ketosis badge, water card all adapt per theme.
+- **Macro colour preservation** — calories (blue), protein (green), carbs (yellow) maintained across all themes.
+- **Demo mode launches in Vital** — showcases the most striking theme. Restores previous theme on exit.
+
 ### New Features
 - **Carer & Clinician portal** — `carer.html` standalone read-only view. Generates a shareable 7-day link from Settings. Shows daily nutrition history, weekly summaries with adherence bars, sparkline trends, and colour-coded target compliance. Zero-day filtering so carers only see logged days.
 - **iOS / Safari support** — PWA installable from Safari. Apple touch icon, safe area insets for iPhone notch, input zoom prevention, overscroll-behavior on all scroll containers.
-- **Water target celebration** — Water card pulses with animated blue glow when daily target is reached. Matches ketosis badge animation style.
-- **Dedicated Carer & Clinician section in Settings** — moved from buried inside Data & Backup to its own clearly labelled section.
-- **Nutrition input redesign** — Icon buttons (camera, gallery, search, barcode) moved to their own row above the text input, giving the input field full width.
-- **Shorter welcome message** — Nutrition tab welcome bubble condensed to one line so the input area is immediately accessible.
+- **Water target celebration** — Water card pulses with animated blue glow when daily target is reached.
+- **Chart lightbox** — tap any chart in Full Charts view to open full screen with period selector (30D/90D/All) and Deep Dive button.
+- **New PWA icon** — M lettermark above a heartbeat pulse line. Survives Android circular crop. 96px/192px/512px.
+- **Feedback link** — Settings → About links to GitHub Issues with pre-filled template.
+- **Unified button design** — all action buttons use tinted accent background + border. Eliminates clashing solid-filled buttons.
+- **Dedicated Carer & Clinician section in Settings** — own clearly labelled section.
+- **Nutrition input redesign** — icon buttons on own row, full-width textarea.
+- **New device onboarding improved** — Import tab Add New Device section explains requirements and AI mapping flow.
 
 ### Bug Fixes
-- **AI food logging proxy fix** — Cloudflare proxy path now inlines system prompt into user message, matching the pattern used by the working Reports path. Fixes "Failed to fetch" for users without a personal API key.
+- **Missing `</div>` in Nutrition view** — pre-existing bug causing all tabs except Dash and Nutrition to show black screens.
+- **App wrapper flex chain** — fixed Trends and all tab scrolling with `height: 100dvh` wrapper.
+- **Header sticky positioning** — removed sticky after moving header inside app-wrapper.
+- **AI food logging proxy fix** — Cloudflare proxy path inlines system prompt. Fixes "Failed to fetch" for no-key users.
+- **CSS brace imbalance** — orphaned `.drill-section-title` block causing stylesheet corruption.
 - **Drill-down overlay scroll** (Android Chrome) — Fixed.
 - **Daily view tappable rows** (Android Chrome) — Fixed.
 
 ### Demo Mode
-- Demo data updated with full Phase 4+ fields: water_ml, fibre, fat, steps, heart_rate, hrv, spo2, sleep_hours, occasion days, richer meal log entries.
+- Launches in Vital theme. Restores previous theme on exit.
+- Full Phase 4/5 data: water_ml, fibre, fat, steps, heart_rate, hrv, spo2, sleep_hours, occasion days.
 
 ---
 
@@ -121,7 +142,7 @@
 
 ---
 
-## Roadmap (Phase 5+)
+## Roadmap (Phase 6+)
 
 - Supplement tracker (omega-3, Vitamin D, magnesium)
 - Carer portal expansion — live sync, PIN access, notification alerts
@@ -132,5 +153,5 @@
 
 ---
 
-*MaxHealth is built and maintained by Pete — software architect, retired Oracle DBA and RPA developer, GBM patient.*
+*MaxHealth is built and maintained by Pete — software architect, retired Oracle DBA and RPA developer, GBM patient in remission.*
 *Developed with Claude (Anthropic). May it be useful to someone else too.*

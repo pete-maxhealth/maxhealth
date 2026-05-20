@@ -30,10 +30,11 @@ Bookmark it, or use your browser's **Add to Home Screen** option to install it l
 - **Personal food library** — locked macro values for your regular foods
 - **Daily targets** — calories, protein, carbs, fat, fibre, water — ketosis zone indicator
 - **Water tracking** — one-tap hydration logging with daily target and celebration on completion
-- **Trends** — weight, sleep, HRV, SpO₂, steps, activity — all connected to nutrition
-- **Wearable data** — import from Withings, RingConn, Garmin, Oura, Amazfit/Zepp, or any CSV export
+- **Trends** — weight, sleep, HRV, SpO₂, steps, activity — all connected to nutrition. Full-screen chart lightbox with period selector
+- **Wearable data** — import from Withings, RingConn, Garmin, Oura, Amazfit/Zepp, or any CSV export via AI column mapper
 - **Reports** — GBM monthly brief, correlation analysis, date-range queries, seasonal comparison
 - **Carer & clinician view** — share a read-only 7-day snapshot with family or medical team
+- **Visual themes** — VITAL (clinical), PULSE (organic), FORGE (intense) plus 6 independent icon packs
 - **No account, no cloud, no subscription** — everything stays on your device
 
 ---
