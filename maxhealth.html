@@ -3339,6 +3339,10 @@
           <div class="trend-title" style="color:#a78bfa;">📍 Distance (km)</div>
           <div class="trend-canvas-wrap"><canvas id="chartDistance"></canvas></div>
         </div>
+        <div class="trend-card" onclick="openChartLightbox('bone_mass')" style="cursor:pointer;">
+          <div class="trend-title" style="color:#e2e8f0;">🦴 Bone Mass (kg)</div>
+          <div class="trend-canvas-wrap"><canvas id="chartBoneMass"></canvas></div>
+        </div>
       </div>
     </div>
 
@@ -4804,7 +4808,7 @@ async function parseWithAI(userText, imageBase64, imageMime) {
   const name    = localStorage.getItem('mh_name') || 'the user';
   const hasImage = !!(imageBase64 && imageMime);
 
-  const csvRow = `${todayStr()}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${state.notes || state.dayMode}`;
+  const csvRow = `${todayStr()}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${(state.notes || state.dayMode || "").replace(/["|'\\]/g, "")}`;
 
   // Detect label mode
   const isLabelPhoto = !!(imageBase64 && userText && userText.startsWith('[LABEL]'));
@@ -4844,7 +4848,9 @@ If the user describes food or a meal (or you can see food in an image), respond 
 }
 
 CRITICAL: Always identify EVERY separate food component as its own item.
-Include additional nutrients if known — add optional fields: "fibre" (g), "sugars" (g), "satFat" (g), "salt" (g), "iron" (mg). "Fried egg and chips" = two items: "fried egg" AND "chips". "Chicken with rice and broccoli" = three items. Never combine multiple foods into a single item. If quantity is not stated, assume a typical serving.
+"Fried egg and chips" = two items: "fried egg" AND "chips". "Chicken with rice and broccoli" = three items. Never combine multiple foods into a single item. If quantity is not stated, assume a typical serving.
+
+CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose. No preamble. Start with { and end with }. Never use ** or * characters. Never explain yourself.
 
 CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. "1 pepperami fire stick" → name must be "pepperami fire stick (x1)", NOT "pepper" or "pepperami" alone. "200g ASDA double cream" → name must be "ASDA double cream (200g)". Preserve brand names and product descriptions exactly as given.
 
@@ -4882,14 +4888,28 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
+          max_tokens: 1000,
           system: systemPrompt,
           messages: [{ role: 'user', content: userContent }]
         })
       });
-      const data = await response.json();
+      const _respText = await response.text();
+      let _dd2 = document.getElementById('_aiDbg2');
+      if (!_dd2) { _dd2 = document.createElement('div'); _dd2.id='_aiDbg2'; _dd2.style.cssText='position:fixed;top:60px;left:0;right:0;background:#300;color:#f99;font-size:9px;padding:8px;z-index:9999;max-height:200px;overflow-y:auto;word-break:break-all;'; document.body.appendChild(_dd2); }
+      _dd2.textContent = _respText.slice(0, 500);
+      const data = JSON.parse(_respText);
       if (data.error) throw new Error(data.error.message);
-      return JSON.parse(data.content[0].text);
+      const _raw = data.content[0].text.trim();
+      // Show debug overlay
+      let _dd = document.getElementById('_aiDbg');
+      if (!_dd) { _dd = document.createElement('div'); _dd.id='_aiDbg'; _dd.style.cssText='position:fixed;bottom:80px;left:0;right:0;background:#000;color:#0f0;font-size:9px;padding:8px;z-index:9999;max-height:150px;overflow-y:auto;word-break:break-all;'; document.body.appendChild(_dd); }
+      _dd.textContent = _raw;
+      const _clean = _raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+      try { return JSON.parse(_clean); } catch(_e) {
+        const _m = _clean.match(/\{[\s\S]*\}/);
+        if (_m) try { return JSON.parse(_m[0]); } catch(_e2) {}
+        return { type: 'query', message: _clean.replace(/[*#`]/g,'').trim() };
+      }
 
     } else if (provider === 'openai') {
       const userContent = hasImage
@@ -4937,29 +4957,68 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
         signal: AbortSignal.timeout(25000),
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 500,
-          messages: pms
+          max_tokens: 1200,
+          messages: proxyMessages.map((m,idx) => {
+            if (idx !== 0) return m;
+            const inject = systemPrompt + '\n\nIMPORTANT: Respond ONLY with a JSON object. No prose. No markdown. No explanations.\n\nUser input: ';
+            if (typeof m.content === 'string') return {...m, content: inject + m.content};
+            if (Array.isArray(m.content)) return {...m, content: [{type:'text', text: inject}, ...m.content]};
+            return m;
+          })
         })
       });
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || 'Proxy error');
       const rawText = data.content[0].text.trim();
+      window._lastAIRaw = rawText;
+      // Show raw in a temp div for mobile debugging
+      let _dbgDiv = document.getElementById('_aiDebug');
+      if (!_dbgDiv) { _dbgDiv = document.createElement('div'); _dbgDiv.id='_aiDebug'; _dbgDiv.style.cssText='position:fixed;bottom:100px;left:0;right:0;background:#000;color:#0f0;font-size:9px;padding:8px;z-index:9999;max-height:200px;overflow-y:auto;word-break:break-all;'; document.body.appendChild(_dbgDiv); }
+      _dbgDiv.textContent = rawText;
       // Strip markdown fences if present
-      const cleaned = rawText.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+      let cleaned = rawText.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+      window._dbgRaw = cleaned; // store for inspection
+      // Sanitise characters that break JSON parsing inside string values
+      cleaned = cleaned
+        .replace(/\u00f7/g, ' div ')  // division sign ÷
+        .replace(/\u2019/g, "\'")    // right single quote
+        .replace(/\u2018/g, "\'")    // left single quote
+        .replace(/\u201c/g, '\\"')  // left double quote
+        .replace(/\u201d/g, '\\"')  // right double quote
+        .replace(/\r/g, ' ')          // carriage returns
+        .replace(/\t/g, ' ')          // tabs
+        .replace(/\u00e9/g, 'e')      // é
+        .replace(/\u00e8/g, 'e')      // è
+        .replace(/[\u0080-\u009F]/g, '') // control chars
+        .replace(/[\u2000-\u206F]/g, ' '); // general punctuation
       // Try to extract JSON if response contains prose + JSON
       try {
         return JSON.parse(cleaned);
       } catch(e) {
-        // Try to find JSON object in the response
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-        if (jsonMatch) return JSON.parse(jsonMatch[0]);
+        // Try to extract JSON array or object
+        const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+        if (arrMatch) {
+          try { return JSON.parse(arrMatch[0]); } catch(e2) {}
+        }
+        const objMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (objMatch) {
+          try { return JSON.parse(objMatch[0]); } catch(e2) {}
+        }
+        // Aggressive repair: remove control chars, fix common issues
+        try {
+          const repaired = cleaned
+            .replace(/[\x00-\x1F\x7F]/g, ' ')
+            .replace(/,\s*([}\]])/g, '$1')
+            .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+          return JSON.parse(repaired);
+        } catch(e3) {}
         // If it's a natural language response, convert to query type
-        return { type: 'query', message: cleaned.replace(/```/g, '').trim() };
+        const _pos = parseInt((e.message.match(/\d+/)||[900])[0]); return { type: 'error', message: 'pos=' + _pos + ' [' + cleaned.slice(Math.max(0,_pos-40), _pos+60) + ']' };
       }
     }
   } catch (e) {
     console.error('AI parse error:', e);
-    return { type: 'error', message: `AI error: ${e.message}` };
+    return { type: 'error', message: `AI error: ${e.message} | near: ${cleaned.slice(Math.max(0,820),920)}` };
   }
 }
 
@@ -5436,6 +5495,25 @@ async function processMessage(text, imageBase64, imageMime) {
   // ── AI fallback ───────────────────────────────────────────
   const { provider, apiKey } = getAIConfig();
   if (provider !== 'none' || true) { // proxy always available
+    // Split long meals (>6 items) into two requests to avoid token truncation
+    const itemList = text.split(',').map(s => s.trim()).filter(Boolean);
+    if (!imageBase64 && itemList.length > 6) {
+      const thinkingBubble = addBubble('Thinking… (long meal, processing in parts)', 'system');
+      const mid = Math.ceil(itemList.length / 2);
+      const part1 = itemList.slice(0, mid).join(', ');
+      const part2 = itemList.slice(mid).join(', ');
+      const [r1, r2] = await Promise.all([parseWithAI(part1, null, null), parseWithAI(part2, null, null)]);
+      thinkingBubble.remove();
+      const combined = { type: 'food', items: [...(r1?.items||[]), ...(r2?.items||[])], message: 'Logged in two parts' };
+      const result = combined;
+      if (!result || !result.items || result.items.length === 0) {
+        addBubble("Couldn't parse the meal. Try describing it in smaller groups.", 'system', 'warn');
+        return;
+      }
+      const foods = result.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
+      logFoods(foods, text);
+      return;
+    }
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
     const result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
@@ -5524,32 +5602,97 @@ function logFoods(foods, originalText, aiMessage = null) {
     editBtn.onclick = () => {
       editBtn.style.display = 'none';
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'margin-top:8px;display:flex;gap:6px;align-items:center;';
-      const inp = document.createElement('input');
-      inp.className = 'modal-input';
-      inp.style.cssText = 'flex:1;font-size:12px;padding:6px 10px;';
-      inp.placeholder = 'Describe what it actually was…';
-      const btn = document.createElement('button');
-      btn.className = 'copy-btn';
-      btn.style.cssText = 'font-size:11px;padding:6px 10px;white-space:nowrap;';
-      btn.textContent = 'Re-log';
-      btn.onclick = () => {
-        const correction = inp.value.trim();
-        if (!correction) return;
-        // Remove the items just logged
+      wrap.style.cssText = 'margin-top:10px;';
+
+      // Build editable rows for each food item
+      const rows = foods.map((food, i) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid;grid-template-columns:1fr 60px 60px 60px 24px;gap:4px;margin-bottom:6px;align-items:center;';
+        row.innerHTML = `
+          <input class="modal-input" style="font-size:11px;padding:4px 6px;" value="${food.name}" data-idx="${i}" data-field="name">
+          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.kcal}" data-idx="${i}" data-field="kcal" placeholder="kcal">
+          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.protein}" data-idx="${i}" data-field="protein" placeholder="P">
+          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.carbs}" data-idx="${i}" data-field="carbs" placeholder="C">
+          <span style="color:var(--red);cursor:pointer;font-size:14px;text-align:center;" data-delete="${i}">✕</span>
+        `;
+        return row;
+      });
+
+      // Column headers
+      const header = document.createElement('div');
+      header.style.cssText = 'display:grid;grid-template-columns:1fr 60px 60px 60px 24px;gap:4px;margin-bottom:4px;';
+      header.innerHTML = '<span style="font-size:9px;color:var(--text3);font-family:monospace;">ITEM</span><span style="font-size:9px;color:var(--text3);font-family:monospace;text-align:center;">KCAL</span><span style="font-size:9px;color:var(--text3);font-family:monospace;text-align:center;">P</span><span style="font-size:9px;color:var(--text3);font-family:monospace;text-align:center;">C</span><span></span>';
+      wrap.appendChild(header);
+      rows.forEach(r => wrap.appendChild(r));
+
+      // Buttons row
+      const btnRow = document.createElement('div');
+      btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'modal-btn confirm-new';
+      saveBtn.style.cssText = 'flex:1;font-size:11px;padding:8px;';
+      saveBtn.textContent = 'Save corrections';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.className = 'modal-btn cancel';
+      cancelBtn.style.cssText = 'flex:1;font-size:11px;padding:8px;';
+      cancelBtn.textContent = 'Cancel';
+
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(saveBtn);
+      wrap.appendChild(btnRow);
+      bubbleDiv.appendChild(wrap);
+
+      // Delete row handler
+      wrap.addEventListener('click', e => {
+        if (e.target.dataset.delete !== undefined) {
+          e.target.closest('div[style*="grid"]').remove();
+        }
+      });
+
+      cancelBtn.onclick = () => {
+        wrap.remove();
+        editBtn.style.display = 'inline-block';
+      };
+
+      saveBtn.onclick = () => {
+        // Remove original logged items
         foods.forEach(food => {
           const idx = state.todayLog.findIndex(l => l.description === food.name || l.items?.some(i => i.name === food.name));
           if (idx > -1) state.todayLog.splice(idx, 1);
         });
+
+        // Build corrected foods from edited rows
+        const correctedFoods = [];
+        wrap.querySelectorAll('div[style*="grid-template-columns"]').forEach(row => {
+          const inputs = row.querySelectorAll('input');
+          if (inputs.length === 4) {
+            const name = inputs[0].value.trim();
+            const kcal = parseFloat(inputs[1].value) || 0;
+            const protein = parseFloat(inputs[2].value) || 0;
+            const carbs = parseFloat(inputs[3].value) || 0;
+            if (name) correctedFoods.push({ name, kcal, protein, carbs });
+          }
+        });
+
+        // Log corrected items
+        correctedFoods.forEach(food => {
+          state.todayLog.push({
+            id: Date.now() + Math.random(),
+            time: new Date().toTimeString().slice(0,5),
+            description: food.name,
+            kcal: food.kcal, protein: food.protein, carbs: food.carbs,
+            fibre: 0, fat: 0
+          });
+        });
+
         saveState();
         renderDash();
-        addBubble(correction, 'user');
-        processMessage(correction, null, null);
+        wrap.remove();
+        editBtn.style.display = 'none';
+        addBubble(`✓ Corrected — ${correctedFoods.length} item(s) updated`, 'system', '');
       };
-      wrap.appendChild(inp);
-      wrap.appendChild(btn);
-      bubbleDiv.appendChild(wrap);
-      inp.focus();
     };
     bubbleDiv.appendChild(editBtn);
   }
@@ -7501,6 +7644,17 @@ function renderTrends() {
     chartInstances['chartMusclePct'] = new Chart(document.getElementById('chartMusclePct'), {
       type: 'line',
       data: { labels, datasets: [{ label: 'Muscle %', data: muscleVals, borderColor: '#2deb8f', backgroundColor: 'rgba(45,235,143,0.1)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }]},
+      options: { ...CHART_DEFAULTS }
+    });
+  }
+
+  // Bone Mass
+  const boneVals = data.map(d => d.bone_mass_kg || null);
+  destroyChart('chartBoneMass');
+  if (document.getElementById('chartBoneMass') && boneVals.some(v => v)) {
+    chartInstances['chartBoneMass'] = new Chart(document.getElementById('chartBoneMass'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Bone Mass (kg)', data: boneVals, borderColor: '#e2e8f0', backgroundColor: 'rgba(226,232,240,0.1)', borderWidth: 2, pointRadius: 0, fill: true, tension: 0.3, spanGaps: true }]},
       options: { ...CHART_DEFAULTS }
     });
   }
@@ -10297,7 +10451,7 @@ var LIGHTBOX_LABELS = {
   weight: 'Weight', calories: 'Calories', protein: 'Protein',
   carbs: 'Carbohydrates', steps: 'Steps', sleep: 'Sleep',
   hrv: 'HRV', spo2: 'SpO2', water: 'Water',
-  fat_pct: 'Body Fat %', muscle_pct: 'Muscle %', distance: 'Distance'
+  fat_pct: 'Body Fat %', muscle_pct: 'Muscle %', distance: 'Distance', bone_mass: 'Bone Mass'
 };
 
 function openChartLightbox(metric) {
