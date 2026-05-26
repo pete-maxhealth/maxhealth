@@ -1896,6 +1896,35 @@
     padding: 4px 0;
     letter-spacing: 0.05em;
   }
+
+  /* ── MODE TOGGLE ─────────────────────────────────────────── */
+  .mode-toggle {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 7px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text3);
+    transition: all 0.2s;
+  }
+  .mode-btn.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 </style>
 </head>
 <body>
@@ -2267,11 +2296,21 @@
     </div>
   </div>
   <div class="chat-input-wrap">
-    <div class="quick-btns">
+    <div class="mode-toggle">
+      <div class="mode-btn active" id="modeLog" onclick="setChatMode('log')">🍽 Log food</div>
+      <div class="mode-btn" id="modeQuery" onclick="setChatMode('query')">💬 Ask</div>
+    </div>
+    <div class="quick-btns" id="quickBtnsLog">
+      <div class="quick-btn" onclick="quickPrompt('suggest a meal to hit my remaining targets')">Next meal idea</div>
+      <div class="quick-btn" onclick="document.getElementById('missedDayBtn').click()">+ Missed day</div>
+      <div class="quick-btn" onclick="quickPrompt('ketosis check')">Ketosis check</div>
+      <div class="quick-btn" onclick="quickPrompt('show today summary')">Today summary</div>
+    </div>
+    <div class="quick-btns" id="quickBtnsQuery" style="display:none;">
       <div class="quick-btn" onclick="quickPrompt('What do I still need today?')">What's remaining?</div>
       <div class="quick-btn" onclick="quickPrompt('Am I in ketosis?')">Ketosis check</div>
-      <div class="quick-btn" onclick="quickPrompt('What should I eat for my next meal to hit targets?')">Next meal idea</div>
-      <div class="quick-btn" onclick="quickPrompt('Show today summary')">Summary</div>
+      <div class="quick-btn" onclick="quickPrompt('Show my weekly summary')">Weekly summary</div>
+      <div class="quick-btn" onclick="quickPrompt('What is my weight trend?')">Weight trend</div>
     </div>
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
@@ -4861,6 +4900,14 @@ If the user signals they are done for the day (e.g. "that's me done", "done for 
   "csv": "${csvRow}"
 }
 
+If the user logs water, a soft drink, tea, coffee or any non-caloric/low-calorie drink, respond ONLY with:
+{
+  "type": "water",
+  "ml": 250,
+  "message": "one line e.g. 250ml water logged"
+}
+Use 250ml for a glass, 330ml for a can, 500ml for a bottle, 568ml for a pint. If the user specifies ml, use that.
+
 If the user asks a question (remaining intake, ketosis, weight, suggestions), respond ONLY with:
 {
   "type": "query",
@@ -5457,6 +5504,21 @@ async function processMessage(text, imageBase64, imageMime) {
     return;
   }
 
+  // ── Query mode — skip food parsing, go straight to AI ────
+  if (_chatMode === 'query') {
+    const { provider, apiKey } = getAIConfig();
+    const thinkingBubble = addBubble('Thinking…', 'system');
+    const result = await parseWithAI(text, null, null);
+    thinkingBubble.remove();
+    if (!result) { addBubble("Couldn't reach the AI.", 'system', 'warn'); return; }
+    if (result.type === 'query') { addBubble(result.message, 'system'); return; }
+    if (result.type === 'food') {
+      // User described food in query mode — switch to log mode and proceed
+      setChatMode('log');
+      addBubble('Switched to Log mode — logging this meal…', 'system');
+    }
+  }
+
   // ── Try food library first ────────────────────────────────
   // ── Photos always go straight to AI — never match library or parseFood ──────
   const hasPhoto = !!(imageBase64 && imageMime);
@@ -5478,6 +5540,24 @@ async function processMessage(text, imageBase64, imageMime) {
     const lib2 = loadLibrary();
     const newFoods = foods.filter(f => !lib2.some(l => l.name.toLowerCase() === f.name.toLowerCase()));
     if (newFoods.length === 1) setTimeout(() => promptSaveToLibrary(newFoods[0]), 600);
+    return;
+  }
+
+  // ── Water intercept — handle before AI ───────────────────
+  const waterOnlyPattern = /^(a\s+)?(glass|cup|bottle|pint|\d+\s*ml|\d+\s*l)\s*(of\s+)?(water|sparkling water|still water|mineral water|tap water)?$/i;
+  const pureWaterPattern = /^(\d+\s*ml\s+)?(water|a glass of water|glass of water|cup of water|bottle of water|pint of water|sparkling water|mineral water|still water)$/i;
+  if (!hasPhoto && (waterOnlyPattern.test(text.trim()) || pureWaterPattern.test(text.trim()))) {
+    const mlMatch = text.match(/(\d+)\s*ml/i);
+    const litreMatch = text.match(/(\d+\.?\d*)\s*l\b/i);
+    const ml = mlMatch ? parseInt(mlMatch[1]) :
+               litreMatch ? Math.round(parseFloat(litreMatch[1]) * 1000) :
+               text.match(/bottle/i) ? 500 :
+               text.match(/pint/i) ? 568 :
+               250;
+    state.waterToday = (state.waterToday || 0) + ml;
+    saveState();
+    renderDash();
+    addBubble(`💧 ${ml}ml added to water tracker (${state.water_ml}ml today)`, 'system', 'success');
     return;
   }
 
@@ -5515,6 +5595,15 @@ async function processMessage(text, imageBase64, imageMime) {
       return;
     }
     if (result.type === 'error') { addBubble(`⚠ ${result.message}`, 'system', 'warn'); return; }
+    if (result.type === 'water') {
+      const ml = result.ml || 250;
+      state.waterToday = (state.waterToday || 0) + ml;
+      saveState();
+      renderDash();
+      addBubble(`💧 ${result.message || ml + 'ml added to water tracker'}`, 'system', 'success');
+      thinkingBubble.remove();
+      return;
+    }
     if (result.type === 'eod') {
       showEODSummary(result.message, result.csv);
       return;
@@ -5562,6 +5651,27 @@ function logFoods(foods, originalText, aiMessage = null) {
     carbs: Math.round(mealTotals.carbs * 10) / 10
   };
   state.todayLog.push(entry);
+
+  // Auto-add water for low/zero calorie drinks
+  const waterKeywords = /\b(water|squash|herbal tea|green tea|black tea|black coffee|sparkling water|mineral water|cordial|diluted|sugar free|zero cal|diet |tea|coffee)\b/i;
+  let waterAdded = 0;
+  foods.forEach(f => {
+    if (f.kcal <= 10 && waterKeywords.test(f.name)) {
+      const mlMatch = f.name.match(/(\d+)\s*ml/i);
+      const glassMatch = f.name.match(/(\d+)\s*glass(?:es)?/i);
+      const cupMatch = f.name.match(/(\d+)\s*cup/i);
+      let ml = mlMatch ? parseInt(mlMatch[1]) :
+               glassMatch ? parseInt(glassMatch[1]) * 250 :
+               cupMatch ? parseInt(cupMatch[1]) * 250 :
+               f.name.match(/glass/i) ? 250 :
+               f.name.match(/cup/i) ? 250 :
+               f.name.match(/bottle/i) ? 500 : 250;
+      state.waterToday = (state.waterToday || 0) + ml;
+      waterAdded += ml;
+    }
+  });
+  if (waterAdded > 0) { saveState(); renderDash(); showToast(waterAdded + 'ml added to water tracker'); }
+
   saveState();
 
   const newTotals = calcTotals(state.todayLog);
@@ -10556,6 +10666,20 @@ function renderLightboxChart() {
       }
     }
   });
+}
+
+
+// ── CHAT MODE ──────────────────────────────────────────────
+let _chatMode = 'log'; // 'log' or 'query'
+
+function setChatMode(mode) {
+  _chatMode = mode;
+  document.getElementById('modeLog').classList.toggle('active', mode === 'log');
+  document.getElementById('modeQuery').classList.toggle('active', mode === 'query');
+  document.getElementById('quickBtnsLog').style.display = mode === 'log' ? 'flex' : 'none';
+  document.getElementById('quickBtnsQuery').style.display = mode === 'query' ? 'flex' : 'none';
+  const inp = document.getElementById('chatInput');
+  if (inp) inp.placeholder = mode === 'log' ? 'Describe a meal, snap a photo, scan a barcode…' : 'Ask anything about your health data…';
 }
 
 </script>
