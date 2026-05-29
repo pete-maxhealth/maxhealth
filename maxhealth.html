@@ -3248,7 +3248,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div class="section-title" style="margin:0;">Supplements</div>
       <div style="display:flex;gap:6px;">
-        <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="if(confirm('Reset to default stack?')){localStorage.removeItem('mh_supplement_defs');renderSupplementSettings();renderSupplements();showToast('Reset to defaults ✓')}">Reset</button>
+        <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="if(confirm('Clear all supplements?')){localStorage.removeItem('mh_supplement_defs');localStorage.removeItem('mh_supplement_log');renderSupplementSettings();renderSupplements();showToast('Supplements cleared ✓')}">Clear all</button>
         <button class="settings-save-btn" onclick="addSupplement('morning')">+ Add</button>
       </div>
     </div>
@@ -4863,7 +4863,7 @@ The "amount" field should contain the quantity/portion (e.g. "200g", "1 tablespo
 CRITICAL: Always identify EVERY separate food component as its own item.
 "Fried egg and chips" = two items: "fried egg" AND "chips". "Chicken with rice and broccoli" = three items. Never combine multiple foods into a single item. If quantity is not stated, assume a typical serving.
 
-CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose. No preamble. Start with { and end with }. Never use ** or * characters. Never explain yourself.
+CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose. No preamble. Start with { and end with }. Never use ** or * characters. Never explain yourself. NEVER return a table, list, or summary — always return JSON. Even if the user's message looks like a question about food, if it describes food items with amounts, return the food JSON type.
 
 CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. Put the quantity in the "amount" field, not the name. "1 pepperami fire stick" → name: "pepperami fire stick", amount: "x1". "200g ASDA double cream" → name: "ASDA double cream", amount: "200g". Preserve brand names and product descriptions exactly as given.
 
@@ -5022,7 +5022,13 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
             .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
           return JSON.parse(repaired);
         } catch(e3) {}
-        // If it's a natural language response, convert to query type
+        // If it's a natural language response, check if it looks like a food table
+        // (contains numbers suggesting macros were calculated but returned as text)
+        const looksLikeTable = /\d+\s+\d+\s+\d+/.test(cleaned) && cleaned.includes('TOTAL');
+        if (looksLikeTable) {
+          // AI returned a table instead of JSON — ask it to retry as JSON
+          return { type: 'query', message: '⚠️ I returned the wrong format. Please tap Log Food again and I\'ll log it correctly as JSON.' };
+        }
         return { type: 'query', message: cleaned.replace(/```/g, '').trim() };
       }
     }
@@ -5488,6 +5494,15 @@ async function processMessage(text, imageBase64, imageMime) {
     addBubble('You have a meal ready to log — tap "Log it ✓" or "Cancel" first.', 'system', 'warn');
     return;
   }
+
+  // ── Nutrition tracker table format detector ──────────────────
+  // Detects pasted output from the MaxedHealth nutrition tracker table:
+  // "Item Cal P C F\nMCT C8 Oil 1 tbsp 155 0 0 17\n...TOTAL 1758 49.8 20.8 161.1"
+  const tableResult = _parseNutritionTable(text);
+  if (tableResult) {
+    showMealPreview(tableResult, text, 'Parsed from nutrition table');
+    return;
+  }
   // ── Health context query from Reports — intercept before food parsing ──
   if (text && text.startsWith('My health data')) {
     const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
@@ -5700,6 +5715,48 @@ async function processMessage(text, imageBase64, imageMime) {
   }
   const aiTip = provider === 'none' ? '\n\nTip: Add an AI provider in Settings for free-text meal logging.' : '';
   addBubble(`I didn't recognise that. Try:\n"200g chicken breast, broccoli"\nor ask "What do I still need today?"${aiTip}`, 'system');
+}
+
+// ─── NUTRITION TABLE PARSER ───────────────────────────────
+// Parses the MaxedHealth nutrition tracker table format:
+// "Item Cal P C F\nFood name amount kcal prot carbs fat\n...TOTAL ..."
+function _parseNutritionTable(text) {
+  if (!text) return null;
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Must contain TOTAL line
+  const totalLineIdx = lines.findIndex(l => /^TOTAL\b/i.test(l));
+  if (totalLineIdx < 0) return null;
+
+  // Must have a header line with "Item" and "Cal"
+  const headerIdx = lines.findIndex(l => /\bItem\b.*\bCal\b/i.test(l));
+  if (headerIdx < 0) return null;
+
+  const foods = [];
+  for (let i = headerIdx + 1; i < totalLineIdx; i++) {
+    const line = lines[i];
+    // Line ends with kcal prot carbs [fat [fibre]]
+    const match = line.match(/^(.+?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s+[\d.]+)*\s*$/);
+    if (!match) continue;
+    const nameAndAmount = match[1].trim();
+    const kcal    = parseFloat(match[2]);
+    const protein = parseFloat(match[3]);
+    const carbs   = parseFloat(match[4]);
+    if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) continue;
+
+    // Split name from amount (amount at end: x1, 200g, 1 tbsp, 50g, x4 slices etc)
+    const amountMatch = nameAndAmount.match(/\s+(x?\d+(?:\.\d+)?\s*(?:g|ml|l|kg|tbsp|tsp|tablespoons?|teaspoons?|slices?|pieces?|cloves?|rashers?|cups?)?)\s*$/i);
+    let name, amount;
+    if (amountMatch) {
+      name   = nameAndAmount.slice(0, nameAndAmount.length - amountMatch[0].length).trim();
+      amount = amountMatch[1].trim();
+    } else {
+      name = nameAndAmount; amount = '';
+    }
+    if (name) foods.push({ name, amount, kcal, protein, carbs });
+  }
+
+  return foods.length > 0 ? foods : null;
 }
 
 // ─── MEAL PREVIEW ────────────────────────────────────────
@@ -6393,27 +6450,7 @@ function undoDelete() {
 
 // ─── SUPPLEMENTS ─────────────────────────────────────────
 
-const DEFAULT_SUPPLEMENTS = [
-  { id: 's1',  name: 'MCT C8 Oil',           dose: '1 tablespoon',          periods: ['morning'],                    active: true },
-  { id: 's2',  name: 'Curcumin',              dose: '2,400 mg',              periods: ['morning'],                    active: true },
-  { id: 's3',  name: 'Omega-3 (EPA/DHA)',     dose: '1g per period',         periods: ['morning','midday','evening'], active: true },
-  { id: 's4',  name: 'Sulforaphane',          dose: '35 mg',                 periods: ['morning','evening'],          active: true },
-  { id: 's5',  name: 'Metformin',             dose: '1,000 mg',              periods: ['morning'],                    active: true },
-  { id: 's6',  name: 'THC',                   dose: 'Morn: 42mg / Eve: 98mg',periods: ['morning','evening'],          active: true },
-  { id: 's7',  name: 'CBD',                   dose: '21 mg',                 periods: ['morning','evening'],          active: true },
-  { id: 's8',  name: 'CBG',                   dose: '30 mg',                 periods: ['morning','evening'],          active: true },
-  { id: 's9',  name: 'Lamotrigine',           dose: '150 mg',                periods: ['morning','evening'],          active: true },
-  { id: 's10', name: 'Irbesartan',            dose: '400 mg',                periods: ['morning'],                    active: true },
-  { id: 's11', name: 'Boswellia Serrata',     dose: '4,200 mg',              periods: ['midday'],                     active: true },
-  { id: 's12', name: 'Quercetin',             dose: '500–1,000 mg',          periods: ['midday'],                     active: true },
-  { id: 's13', name: 'Mushroom Complex',      dose: '1,200 mg',              periods: ['midday'],                     active: true },
-  { id: 's15', name: 'Probiotic',             dose: '1 capsule',             periods: ['midday'],                     active: true },
-  { id: 's16', name: 'Turkey Tail (PSK/PSP)', dose: '500 mg',                periods: ['evening'],                    active: true },
-  { id: 's17', name: 'Vitamin D3 + K2',       dose: '3,000–5,000 IU',        periods: ['evening'],                    active: true },
-  { id: 's21', name: 'Simvastatin',           dose: '40 mg',                 periods: ['evening'],                    active: true },
-  { id: 's25', name: 'Melatonin',             dose: '20 mg',                 periods: ['bedtime'],                    active: true },
-  { id: 's26', name: 'Magnesium Glycinate',   dose: '400 mg',                periods: ['bedtime'],                    active: true },
-];
+const DEFAULT_SUPPLEMENTS = [];  // New users start with empty list — add your own stack
 
 const PERIOD_LABELS = {
   morning: '🌅 Morning',
@@ -6546,7 +6583,7 @@ function renderSupplementSettings() {
   const defs = loadSupplementDefs();
 
   if (!defs.length) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No supplements yet — tap + Add to get started.</div>';
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No supplements added yet.<br>Tap + Add to build your stack.</div>';
     return;
   }
 
