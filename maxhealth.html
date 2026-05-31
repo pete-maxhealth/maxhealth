@@ -4035,51 +4035,61 @@ function findFood(name) {
 // ─── FOOD LIBRARY ────────────────────────────────────────
 const LIBRARY_KEY = 'maxhealth_foods';
 
-const SEED_LIBRARY = [
-  {
-    id: 'asda_mixed_nuts_100g',
-    name: 'ASDA Roasted & Salted Mixed Nuts 100g',
-    per_amount: 100, per_unit: 'g',
-    kcal: 658, protein: 19, carbs: 11, fat: 58,
-    locked: true, source: 'pete'
-  },
-  {
-    id: 'asda_mixed_nuts_30g',
-    name: 'ASDA Roasted & Salted Mixed Nuts 30g',
-    per_amount: 30, per_unit: 'g',
-    kcal: 197, protein: 5.7, carbs: 3.3, fat: 17.4,
-    locked: true, source: 'pete'
-  },
-  {
-    id: 'asda_mixed_nuts_50g',
-    name: 'ASDA Roasted & Salted Mixed Nuts 50g',
-    per_amount: 50, per_unit: 'g',
-    kcal: 329, protein: 9.5, carbs: 5.5, fat: 29,
-    locked: true, source: 'pete'
-  }
-];
+const SEED_LIBRARY = [];  // New users start with empty library
 
 function loadLibrary() {
-  try {
-    const raw = localStorage.getItem(LIBRARY_KEY);
-    if (raw) return JSON.parse(raw);
-    // Try backup key
-    const backup = localStorage.getItem('mh_library_backup');
-    if (backup) {
-      const lib = JSON.parse(backup);
-      localStorage.setItem(LIBRARY_KEY, backup);
-      return lib;
-    }
-  } catch(e) {}
-  // First load — seed with confirmed items
-  localStorage.setItem(LIBRARY_KEY, JSON.stringify(SEED_LIBRARY));
-  return SEED_LIBRARY;
+  // Try all three storage locations in order
+  const keys = [LIBRARY_KEY, 'mh_library_backup', 'mh_library_b2'];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const lib = JSON.parse(raw);
+        if (Array.isArray(lib) && lib.length > 0) {
+          // Restore to primary key if it was missing
+          if (key !== LIBRARY_KEY) {
+            localStorage.setItem(LIBRARY_KEY, raw);
+            console.log(`[library] Restored from ${key}`);
+          }
+          return lib;
+        }
+      }
+    } catch(e) {}
+  }
+  // No data found anywhere — first use
+  return SEED_LIBRARY.slice();
 }
 
 function saveLibrary(lib) {
-  localStorage.setItem(LIBRARY_KEY, JSON.stringify(lib));
-  // Also save to backup key for resilience
-  localStorage.setItem('mh_library_backup', JSON.stringify(lib));
+  const json = JSON.stringify(lib);
+  localStorage.setItem(LIBRARY_KEY, json);
+  localStorage.setItem('mh_library_backup', json);
+  localStorage.setItem('mh_library_b2', json);
+  // Persist to local server if available
+  if (_serverOnline) {
+    fetch(`${MH_SERVER}/save-library?data=${encodeURIComponent(json)}`)
+      .catch(() => {}); // Silent fail — localStorage is the primary store
+  }
+}
+
+async function loadLibraryFromServer() {
+  try {
+    const res = await fetch(`${MH_SERVER}/load-library`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return;
+    const lib = await res.json();
+    if (!Array.isArray(lib) || lib.length === 0) return;
+    // Only restore if localStorage is empty or has fewer items
+    const current = loadLibrary();
+    if (current.length < lib.length) {
+      const json = JSON.stringify(lib);
+      localStorage.setItem(LIBRARY_KEY, json);
+      localStorage.setItem('mh_library_backup', json);
+      localStorage.setItem('mh_library_b2', json);
+      console.log(`[library] Restored ${lib.length} items from server`);
+      renderLibrary();
+      showToast(`Library restored from server (${lib.length} items)`);
+    }
+  } catch(e) {}
 }
 
 function findInLibrary(name) {
@@ -10976,6 +10986,8 @@ async function checkServer() {
       const data = await res.json();
       _serverOnline = true;
       setServerDot('online');
+      // Restore library from server if localStorage was cleared
+      loadLibraryFromServer();
       const btn = document.getElementById('syncBtn');
       if (btn) { btn.disabled = false; btn.textContent = '⟳ SYNC NOW'; }
       const msg = document.getElementById('syncStatusMsg');
