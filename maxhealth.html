@@ -4201,9 +4201,51 @@ function quickLogFromLibrary(index) {
   const lib = loadLibrary();
   const f = lib[index];
   if (!f) return;
-  logFoods([{ name: f.name, kcal: f.kcal, protein: f.protein, carbs: f.carbs }], f.name);
+
+  // If stored per100g, open amount panel so user can specify grams
+  if (f.per100g) {
+    const defaultGrams = f.portion ? parseFloat(f.portion) || 100 : 100;
+    _selectedFoodItem = {
+      name:    f.name,
+      brand:   '',
+      kcal:    f.kcal,
+      prot:    f.protein,
+      carb:    f.carbs,
+      fat:     f.fat || 0,
+      fibre:   f.fibre || 0,
+      satFat:  f.satFat || 0,
+      sugars:  f.sugars || 0,
+      salt:    f.salt || 0,
+      iron:    0,
+      qty:     '100g',
+      _defaultGrams: defaultGrams,
+    };
+    openFoodSearch();
+    setTimeout(() => {
+      document.getElementById('foodSearchView').style.display = 'none';
+      document.getElementById('foodAmountView').classList.add('open');
+      document.getElementById('foodAmountName').textContent = f.name;
+      const _p = _selectedFoodItem;
+      document.getElementById('foodAmountPer100').textContent =
+        `per 100g: ${_p.kcal}kcal · ${_p.prot}g P · ${_p.carb}g C`;
+      document.getElementById('foodAmountGrams').value = defaultGrams;
+      updateFoodAmountScaled();
+      setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
+    }, 50);
+    return;
+  }
+
+  // Fixed portion — show preview card so user can edit before logging
+  const food = {
+    name:    f.name,
+    amount:  f.portion || '',
+    kcal:    f.kcal,
+    protein: f.protein,
+    carbs:   f.carbs,
+    fat:     f.fat || 0,
+  };
+  showMealPreview([food], f.name, `From library — tap ✎ to adjust`);
   switchTabById('chat');
-  showToast(`${f.name} logged ✓`);
 }
 
 function deleteFromLibrary(index) {
@@ -4913,6 +4955,8 @@ CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose
 
 CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. Put the quantity in the "amount" field, not the name. "1 pepperami fire stick" → name: "pepperami fire stick", amount: "x1". "200g ASDA double cream" → name: "ASDA double cream", amount: "200g". Preserve brand names and product descriptions exactly as given.
 
+CRITICAL MACRO ACCURACY: When the user specifies a gram amount (e.g. "30g cheddar", "150g chicken breast"), you MUST calculate macros by scaling from standard per-100g values. Never guess or estimate when a weight is given — calculate. Example: if cheddar is 25g protein per 100g, then 30g = 7.5g protein. Show your working in the message field. If you are uncertain of the per-100g values for a product, state the values you used in the message field so the user can verify.
+
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
 {
   "type": "eod",
@@ -5395,8 +5439,11 @@ function selectFoodResult(i) {
     (_p.satFat ? ` · ${_p.satFat}g sat fat`: '') +
     (_p.salt   ? ` · ${_p.salt}g salt`     : '') +
     (_p.iron   ? ` · ${_p.iron}mg iron`    : '');
-  document.getElementById('foodAmountGrams').value = '';
-  document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+  // Pre-fill with default grams if provided (e.g. from library portion hint)
+  const defaultGrams = _selectedFoodItem._defaultGrams || '';
+  document.getElementById('foodAmountGrams').value = defaultGrams;
+  if (defaultGrams) updateFoodAmountScaled();
+  else document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
   setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 }
 
@@ -5830,6 +5877,26 @@ function renderMealPreview() {
     carbs: a.carbs + (f.carbs || 0)
   }), { kcal: 0, protein: 0, carbs: 0 });
 
+  // Plausibility check — flag suspicious macros
+  const warnings = [];
+  foods.forEach(f => {
+    if (f.kcal > 50 && f.protein < f.kcal * 0.01) {
+      // protein is less than 1% of kcal in grams — suspiciously low for most foods
+      warnings.push(`⚠️ ${f.name}: ${f.protein}g protein seems low for ${Math.round(f.kcal)}kcal — check label or use barcode scan`);
+    }
+    // Check if amount is specified and protein looks unscaled
+    if (f.amount) {
+      const grams = parseFloat(f.amount);
+      if (grams > 0 && grams < 90 && f.protein > 0) {
+        // If protein is suspiciously high relative to grams (suggesting per-100g not scaled)
+        const proteinPer100 = (f.protein / grams) * 100;
+        if (proteinPer100 > 50) {
+          warnings.push(`⚠️ ${f.name}: protein may not be scaled to ${f.amount} — verify values`);
+        }
+      }
+    }
+  });
+
   const itemRows = foods.map((f, i) => {
     // Extract amount from name if present (e.g. "200g", "1 tbsp", "2 cloves")
     const amountMatch = f.name.match(/^([\d.]+\s*(?:g|kg|ml|l|oz|lb|tbsp|tsp|tablespoon|teaspoon|cup|clove[s]?|slice[s]?|piece[s]?|portion[s]?|handful|rasher[s]?|fillet[s]?|breast[s]?|can|tin|scoop[s]?|sachet[s]?|packet[s]?|bar|sheet[s]?|wrap[s]?|pint|litre[s]?))\b/i)
@@ -5861,6 +5928,7 @@ function renderMealPreview() {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;margin-top:2px;">
       <div style="font-size:12px;color:var(--text3);">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C</strong></div>
     </div>
+    ${warnings.length ? `<div style="margin-top:8px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:4px 0;">${w}</div>`).join('')}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="cancelMealPreview()">Cancel</button>
@@ -7468,6 +7536,12 @@ function saveMissedDayConv(kcal, protein, carbs) {
   saveState();
   saveNutritionToServer(dateVal, kcal, protein, carbs, notes);
   cancelMissedDayFlow();
+  // Switch to All filter so the saved entry is always visible
+  histFilter = 'all';
+  document.querySelectorAll('.hist-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.trim() === 'All');
+  });
+  switchSubTab('log', 'hist');
   renderHistory();
   addBubble(`✓ ${dateVal} saved — ${kcal} kcal · ${protein}g P · ${carbs}g C`, 'system', 'success');
 }
