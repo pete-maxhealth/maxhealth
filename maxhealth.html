@@ -2139,7 +2139,10 @@
 <div class="app-wrapper">
 <div class="header">
   <div class="logo">MAXED<span>HEALTH</span></div>
-  <div class="date-badge" id="headerDate"></div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div id="serverModeBadge" style="font-size:10px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;" onclick="switchSubTab('settings','import')" title="Tap to open Import settings">☁ CLOUD</div>
+    <div class="date-badge" id="headerDate"></div>
+  </div>
 </div>
 <div id="demoBanner" style="display:none;background:rgba(245,197,66,0.1);border-bottom:1px solid rgba(245,197,66,0.3);padding:8px 16px;text-align:center;font-size:12px;color:var(--yellow);font-family:'Space Mono',monospace;letter-spacing:0.04em;">
   👁 DEMO MODE — sample data only, nothing is saved &nbsp;·&nbsp; <span style="text-decoration:underline;cursor:pointer;" onclick="exitDemoMode()">Exit demo →</span>
@@ -4065,29 +4068,62 @@ function saveLibrary(lib) {
   localStorage.setItem(LIBRARY_KEY, json);
   localStorage.setItem('mh_library_backup', json);
   localStorage.setItem('mh_library_b2', json);
-  // Persist to local server if available
-  if (_serverOnline) {
-    fetch(`${MH_SERVER}/save-library?data=${encodeURIComponent(json)}`)
-      .catch(() => {}); // Silent fail — localStorage is the primary store
-  }
+  // Persist to server as CSV
+  if (_serverOnline) _saveLibraryCSV(lib);
+}
+
+function _saveLibraryCSV(lib) {
+  // Write library as pipe-delimited CSV to server
+  const rows = lib.map(f =>
+    [f.id||'', f.name||'', f.kcal||0, f.protein||0, f.carbs||0,
+     f.fat||0, f.portion||'', f.per100g?'1':'0',
+     f.locked?'1':'0', f.source||''].join('|')
+  );
+  const csv = 'id|name|kcal|protein|carbs|fat|portion|per100g|locked|source\n' + rows.join('\n');
+  fetch(`${MH_SERVER}/save-library-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: csv
+  }).catch(() => {});
 }
 
 async function loadLibraryFromServer() {
   try {
-    const res = await fetch(`${MH_SERVER}/load-library`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${MH_SERVER}/library`, { signal: AbortSignal.timeout(2000) });
     if (!res.ok) return;
-    const lib = await res.json();
-    if (!Array.isArray(lib) || lib.length === 0) return;
-    // Only restore if localStorage is empty or has fewer items
+    const text = await res.text();
+    if (!text || text.trim() === '{}' || text.includes('"items"')) return;
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return;
+    const headers = lines[0].split('|');
+    const lib = lines.slice(1).map(line => {
+      const parts = line.split('|');
+      const row = {};
+      headers.forEach((h, i) => row[h.trim()] = (parts[i]||'').trim());
+      return {
+        id:      row.id || 'lib_' + Date.now(),
+        name:    row.name,
+        kcal:    parseFloat(row.kcal) || 0,
+        protein: parseFloat(row.protein) || 0,
+        carbs:   parseFloat(row.carbs) || 0,
+        fat:     parseFloat(row.fat) || 0,
+        portion: row.portion || null,
+        per100g: row.per100g === '1',
+        locked:  row.locked === '1',
+        source:  row.source || 'server',
+      };
+    }).filter(f => f.name);
+
+    if (lib.length === 0) return;
     const current = loadLibrary();
-    if (current.length < lib.length) {
+    if (lib.length > current.length) {
       const json = JSON.stringify(lib);
       localStorage.setItem(LIBRARY_KEY, json);
       localStorage.setItem('mh_library_backup', json);
       localStorage.setItem('mh_library_b2', json);
-      console.log(`[library] Restored ${lib.length} items from server`);
+      console.log(`[library] Restored ${lib.length} items from server CSV`);
       renderLibrary();
-      showToast(`Library restored from server (${lib.length} items)`);
+      showToast(`Library restored (${lib.length} items) ✓`);
     }
   } catch(e) {}
 }
@@ -6474,7 +6510,6 @@ function loadSupplementDefs() {
     const stored = localStorage.getItem('mh_supplement_defs');
     if (stored) {
       let defs = JSON.parse(stored);
-      // Migrate old single-period format to periods array
       let migrated = false;
       defs = defs.map(s => {
         if (!s.periods) {
@@ -6491,12 +6526,55 @@ function loadSupplementDefs() {
       return defs;
     }
   } catch(e) {}
-  saveSupplementDefs(DEFAULT_SUPPLEMENTS);
-  return DEFAULT_SUPPLEMENTS.map(s => ({...s}));
+  // Try loading from server CSV asynchronously
+  if (_serverOnline) _loadSupplementsFromServer();
+  return DEFAULT_SUPPLEMENTS.slice();
+}
+
+async function _loadSupplementsFromServer() {
+  try {
+    const res = await fetch(`${MH_SERVER}/supplements`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return;
+    const text = await res.text();
+    if (!text || text.includes('"status"')) return;
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return;
+    const defs = lines.slice(1).map(line => {
+      const [id, name, dose, periodsStr, active] = line.split('|');
+      return {
+        id: (id||'').trim(),
+        name: (name||'').trim(),
+        dose: (dose||'').trim(),
+        periods: (periodsStr||'').trim().split(';').filter(Boolean),
+        active: (active||'').trim() !== '0'
+      };
+    }).filter(s => s.name);
+    if (!defs.length) return;
+    localStorage.setItem('mh_supplement_defs', JSON.stringify(defs));
+    renderSupplements();
+    renderSupplementSettings();
+    showToast(`Supplements restored (${defs.length} items) ✓`);
+  } catch(e) {}
 }
 
 function saveSupplementDefs(defs) {
   localStorage.setItem('mh_supplement_defs', JSON.stringify(defs));
+  // Persist to server as CSV
+  if (_serverOnline) _saveSupplementsCSV(defs);
+}
+
+function _saveSupplementsCSV(defs) {
+  const rows = defs.map(s =>
+    [s.id||'', s.name||'', s.dose||'',
+     (s.periods||[s.period]||[]).join(';'),
+     s.active===false?'0':'1'].join('|')
+  );
+  const csv = 'id|name|dose|periods|active\n' + rows.join('\n');
+  fetch(`${MH_SERVER}/save-supplements-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: csv
+  }).catch(() => {});
 }
 
 function loadSupplementLog() {
@@ -10988,6 +11066,14 @@ async function checkServer() {
       setServerDot('online');
       // Restore library from server if localStorage was cleared
       loadLibraryFromServer();
+      // Update mode badge
+      const badge = document.getElementById('serverModeBadge');
+      if (badge) {
+        badge.textContent = '⬡ LOCAL';
+        badge.style.color = 'var(--accent)';
+        badge.style.borderColor = 'var(--accent-glow)';
+        badge.style.background = 'var(--accent-dim)';
+      }
       const btn = document.getElementById('syncBtn');
       if (btn) { btn.disabled = false; btn.textContent = '⟳ SYNC NOW'; }
       const msg = document.getElementById('syncStatusMsg');
@@ -10999,6 +11085,14 @@ async function checkServer() {
   } catch(e) {}
   _serverOnline = false;
   setServerDot('offline');
+  // Update mode badge
+  const badge = document.getElementById('serverModeBadge');
+  if (badge) {
+    badge.textContent = '☁ CLOUD';
+    badge.style.color = 'var(--text3)';
+    badge.style.borderColor = 'var(--border)';
+    badge.style.background = 'var(--surface)';
+  }
   const btn = document.getElementById('syncBtn');
   if (btn) { btn.disabled = true; }
   const msg = document.getElementById('syncStatusMsg');

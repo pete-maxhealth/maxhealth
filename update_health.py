@@ -166,15 +166,15 @@ def backup_files():
     backed_up = []
 
     MASTER      = os.path.join(TABLES, 'master.csv')
-    LIBRARY     = os.path.join(TABLES, 'library.json')
-    SUPPLEMENTS = os.path.join(TABLES, 'supplements.json')
+    LIBRARY_CSV     = os.path.join(TABLES, 'library.csv')
+    SUPPLEMENTS_CSV = os.path.join(TABLES, 'supplements.csv')
 
     for src_path, name, ext in [
-        (COMBINED,     'combined',     'csv'),
-        (NUTRITION,    'nutrition',    'csv'),
-        (MASTER,       'master',       'csv'),
-        (LIBRARY,      'library',      'json'),
-        (SUPPLEMENTS,  'supplements',  'json'),
+        (COMBINED,       'combined',     'csv'),
+        (NUTRITION,      'nutrition',    'csv'),
+        (MASTER,         'master',       'csv'),
+        (LIBRARY_CSV,    'library',      'csv'),
+        (SUPPLEMENTS_CSV,'supplements',  'csv'),
     ]:
         if os.path.exists(src_path):
             dst = os.path.join(BACKUP_DIR, f"{name}_{ts}.{ext}")
@@ -182,7 +182,7 @@ def backup_files():
             backed_up.append(dst)
 
     # Trim to MAX_BACKUPS per file type
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','json'),('supplements','json')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         files = sorted(glob.glob(pattern))
         while len(files) > MAX_BACKUPS:

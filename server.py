@@ -38,8 +38,10 @@ BACKUP_DIR = os.path.join(DATA_DIR, 'backup')
 DOWNLOAD   = '/storage/emulated/0/Download'
 LOGS_DIR   = os.path.join(ROOT_DIR, 'logs')
 COMBINED   = os.path.join(TABLES_DIR, 'combined.csv')
-MASTER_CSV = os.path.join(TABLES_DIR, 'master.csv')
-LIBRARY_JSON = os.path.join(TABLES_DIR, 'library.json')
+MASTER_CSV      = os.path.join(TABLES_DIR, 'master.csv')
+LIBRARY_CSV     = os.path.join(TABLES_DIR, 'library.csv')
+SUPPLEMENTS_CSV = os.path.join(TABLES_DIR, 'supplements.csv')
+
 TRACKER    = os.path.join(APP_DIR, 'maxhealth', 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
 PORT       = 5757
@@ -279,6 +281,30 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
 
             self.send_json({'status': 'ok', 'saved': len(results), 'results': results})
 
+        elif path == '/save-library-csv':
+            try:
+                length = int(self.headers.get('Content-Length', 0))
+                csv_data = self.rfile.read(length).decode('utf-8')
+                os.makedirs(TABLES_DIR, exist_ok=True)
+                with open(LIBRARY_CSV, 'w', encoding='utf-8') as lf:
+                    lf.write(csv_data)
+                rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
+                self.send_json({'status': 'ok', 'rows': rows})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+
+        elif path == '/save-supplements-csv':
+            try:
+                length = int(self.headers.get('Content-Length', 0))
+                csv_data = self.rfile.read(length).decode('utf-8')
+                os.makedirs(TABLES_DIR, exist_ok=True)
+                with open(SUPPLEMENTS_CSV, 'w', encoding='utf-8') as lf:
+                    lf.write(csv_data)
+                rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
+                self.send_json({'status': 'ok', 'rows': rows})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+
         else:
             self.send_json({'error': f'Unknown POST endpoint: {path}'}, 404)
 
@@ -445,6 +471,35 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(body)
             else:
                 self.send_json([])
+
+
+        elif path == '/library':
+            if os.path.exists(LIBRARY_CSV):
+                with open(LIBRARY_CSV, 'r', encoding='utf-8') as lf:
+                    body = lf.read().encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/csv')
+                self.send_header('Content-Length', str(len(body)))
+                for k, v in CORS.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_json({'status': 'empty'})
+
+        elif path == '/supplements':
+            if os.path.exists(SUPPLEMENTS_CSV):
+                with open(SUPPLEMENTS_CSV, 'r', encoding='utf-8') as lf:
+                    body = lf.read().encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/csv')
+                self.send_header('Content-Length', str(len(body)))
+                for k, v in CORS.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_json({'status': 'empty'})
 
         else:
             self.send_json({'error': f'Unknown endpoint: {path}'}, 404)
