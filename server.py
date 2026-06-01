@@ -235,9 +235,30 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path   = parsed.path
 
+        content_type = self.headers.get('Content-Type', '')
         try:
             length = int(self.headers.get('Content-Length', 0))
-            body   = json.loads(self.rfile.read(length)) if length > 0 else {}
+            raw = self.rfile.read(length) if length > 0 else b''
+        except Exception:
+            self.send_json({'error': 'Could not read body'}, 400)
+            return
+
+        # CSV endpoints — handle raw text directly
+        if path in ('/save-library-csv', '/save-supplements-csv'):
+            try:
+                csv_data = raw.decode('utf-8')
+                os.makedirs(TABLES_DIR, exist_ok=True)
+                target = LIBRARY_CSV if path == '/save-library-csv' else SUPPLEMENTS_CSV
+                with open(target, 'w', encoding='utf-8') as lf:
+                    lf.write(csv_data)
+                rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
+                self.send_json({'status': 'ok', 'rows': rows})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
+        try:
+            body = json.loads(raw) if raw else {}
         except Exception:
             self.send_json({'error': 'Invalid JSON body'}, 400)
             return
@@ -281,29 +302,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
 
             self.send_json({'status': 'ok', 'saved': len(results), 'results': results})
 
-        elif path == '/save-library-csv':
-            try:
-                length = int(self.headers.get('Content-Length', 0))
-                csv_data = self.rfile.read(length).decode('utf-8')
-                os.makedirs(TABLES_DIR, exist_ok=True)
-                with open(LIBRARY_CSV, 'w', encoding='utf-8') as lf:
-                    lf.write(csv_data)
-                rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
-                self.send_json({'status': 'ok', 'rows': rows})
-            except Exception as e:
-                self.send_json({'error': str(e)}, 400)
 
-        elif path == '/save-supplements-csv':
-            try:
-                length = int(self.headers.get('Content-Length', 0))
-                csv_data = self.rfile.read(length).decode('utf-8')
-                os.makedirs(TABLES_DIR, exist_ok=True)
-                with open(SUPPLEMENTS_CSV, 'w', encoding='utf-8') as lf:
-                    lf.write(csv_data)
-                rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
-                self.send_json({'status': 'ok', 'rows': rows})
-            except Exception as e:
-                self.send_json({'error': str(e)}, 400)
 
         else:
             self.send_json({'error': f'Unknown POST endpoint: {path}'}, 404)
