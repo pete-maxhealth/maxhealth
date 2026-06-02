@@ -2140,7 +2140,7 @@
 <div class="header">
   <div class="logo">MAXED<span>HEALTH</span></div>
   <div style="display:flex;align-items:center;gap:8px;">
-    <div id="serverModeBadge" style="font-size:10px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;" onclick="switchSubTab('settings','import')" title="Tap to open Import settings">☁ CLOUD</div>
+    <div id="serverModeBadge" style="font-size:10px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;" onclick="showServerStatus()" title="Tap for connection status">☁ CLOUD</div>
     <div class="date-badge" id="headerDate"></div>
   </div>
 </div>
@@ -3492,6 +3492,31 @@
       <button class="copy-btn" onclick="backupMasterCSV()" style="margin-top:6px;width:100%;font-size:12px;">💾 Backup master.csv to Downloads</button>
       <button class="copy-btn" onclick="syncAllNutritionToServer()" style="margin-top:6px;width:100%;font-size:12px;background:rgba(45,235,143,0.1);border-color:rgba(45,235,143,0.3);color:var(--accent);">🔄 Sync all history to master.csv</button>
       <div class="output-box idle" id="nutritionImportOutput">No file loaded yet.</div>
+    </div>
+
+    <!-- Library CSV -->
+    <div class="import-card">
+      <div class="import-label">Food Library</div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Your saved foods — backed up to library.csv. Import a CSV to restore from backup or move library between devices.</p>
+      <input type="file" id="libraryCsvInput" accept=".csv" style="display:none" onchange="importLibraryCSV(this)">
+      <button class="run-btn" style="margin-bottom:8px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);" onclick="document.getElementById('libraryCsvInput').click()">
+        📂 IMPORT LIBRARY.CSV
+      </button>
+      <button class="copy-btn" onclick="exportLibraryCSV()" style="margin-top:6px;width:100%;font-size:12px;">💾 Export library to Downloads</button>
+      <button class="copy-btn" onclick="saveLibrary(loadLibrary())" style="margin-top:6px;width:100%;font-size:12px;background:rgba(45,235,143,0.1);border-color:rgba(45,235,143,0.3);color:var(--accent);">🔄 Save library to server now</button>
+      <div id="libraryImportStatus" style="font-size:12px;color:var(--text3);margin-top:8px;"></div>
+    </div>
+
+    <!-- Supplements CSV -->
+    <div class="import-card">
+      <div class="import-label">Supplements</div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Your supplement stack — backed up to supplements.csv. Import to restore or transfer to another device.</p>
+      <input type="file" id="supplementsCsvInput" accept=".csv" style="display:none" onchange="importSupplementsCSV(this)">
+      <button class="run-btn" style="margin-bottom:8px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);" onclick="document.getElementById('supplementsCsvInput').click()">
+        📂 IMPORT SUPPLEMENTS.CSV
+      </button>
+      <button class="copy-btn" onclick="exportSupplementsCSV()" style="margin-top:6px;width:100%;font-size:12px;">💾 Export supplements to Downloads</button>
+      <div id="supplementsImportStatus" style="font-size:12px;color:var(--text3);margin-top:8px;"></div>
     </div>
 
     <!-- Data Preview & Validator -->
@@ -5810,7 +5835,101 @@ async function processMessage(text, imageBase64, imageMime) {
   addBubble(`I didn't recognise that. Try:\n"200g chicken breast, broccoli"\nor ask "What do I still need today?"${aiTip}`, 'system');
 }
 
-// ─── NUTRITION TABLE PARSER ───────────────────────────────
+// ─── LIBRARY CSV IMPORT/EXPORT ───────────────────────────
+function exportLibraryCSV() {
+  const lib = loadLibrary();
+  const rows = lib.map(f =>
+    [f.id||'', f.name||'', f.kcal||0, f.protein||0, f.carbs||0,
+     f.fat||0, f.portion||'', f.per100g?'1':'0',
+     f.locked?'1':'0', f.source||''].join('|')
+  );
+  const csv = 'id|name|kcal|protein|carbs|fat|portion|per100g|locked|source\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'library.csv';
+  a.click();
+  showToast(`Exported ${lib.length} library items ✓`);
+}
+
+function importLibraryCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) { showToast('No data found in file'); return; }
+    const headers = lines[0].split('|');
+    const lib = lines.slice(1).map(line => {
+      const parts = line.split('|');
+      const row = {};
+      headers.forEach((h, i) => row[h.trim()] = (parts[i]||'').trim());
+      return {
+        id:      row.id || 'lib_' + Date.now() + Math.random(),
+        name:    row.name,
+        kcal:    parseFloat(row.kcal) || 0,
+        protein: parseFloat(row.protein) || 0,
+        carbs:   parseFloat(row.carbs) || 0,
+        fat:     parseFloat(row.fat) || 0,
+        portion: row.portion || null,
+        per100g: row.per100g === '1',
+        locked:  row.locked === '1',
+        source:  row.source || 'imported',
+      };
+    }).filter(f => f.name);
+    saveLibrary(lib);
+    renderLibrary();
+    const el = document.getElementById('libraryImportStatus');
+    if (el) el.textContent = `✓ Imported ${lib.length} items`;
+    showToast(`Library imported: ${lib.length} items ✓`);
+  };
+  reader.readAsText(file);
+}
+
+function exportSupplementsCSV() {
+  const defs = loadSupplementDefs();
+  const rows = defs.map(s =>
+    [s.id||'', s.name||'', s.dose||'',
+     (s.periods||[]).join(';'),
+     s.active===false?'0':'1'].join('|')
+  );
+  const csv = 'id|name|dose|periods|active\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'supplements.csv';
+  a.click();
+  showToast(`Exported ${defs.length} supplements ✓`);
+}
+
+function importSupplementsCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result;
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) { showToast('No data found in file'); return; }
+    const defs = lines.slice(1).map(line => {
+      const [id, name, dose, periodsStr, active] = line.split('|');
+      return {
+        id:      (id||'').trim() || 's' + Date.now(),
+        name:    (name||'').trim(),
+        dose:    (dose||'').trim(),
+        periods: (periodsStr||'').trim().split(';').filter(Boolean),
+        active:  (active||'').trim() !== '0',
+      };
+    }).filter(s => s.name);
+    saveSupplementDefs(defs);
+    renderSupplements();
+    renderSupplementSettings();
+    const el = document.getElementById('supplementsImportStatus');
+    if (el) el.textContent = `✓ Imported ${defs.length} supplements`;
+    showToast(`Supplements imported: ${defs.length} items ✓`);
+  };
+  reader.readAsText(file);
+}
 // Parses the MaxedHealth nutrition tracker table format:
 // "Item Cal P C F\nFood name amount kcal prot carbs fat\n...TOTAL ..."
 function _parseNutritionTable(text) {
@@ -6562,7 +6681,71 @@ function undoDelete() {
   showToast('Restored ✓');
 }
 
-// ─── SUPPLEMENTS ─────────────────────────────────────────
+function showServerStatus() {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const url = window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+
+  let title, body, colour;
+  if (_serverOnline && isLocal) {
+    title = '⬡ LOCAL MODE';
+    colour = 'var(--accent)';
+    body = `Server running at <strong>${MH_SERVER}</strong><br>All data saved to disk. Full sync available.`;
+  } else if (!isLocal && _serverOnline) {
+    title = '⬡ REDIRECTING…';
+    colour = 'var(--accent)';
+    body = `Server detected — redirecting to localhost…`;
+    setTimeout(tryLocalhostRedirect, 300);
+  } else if (!isLocal) {
+    title = '☁ CLOUD MODE';
+    colour = 'var(--text3)';
+    body = `No local server at <strong>${MH_SERVER}</strong><br><br>AI logging, barcode and library work normally.<br>For wearable sync and full data backup, start the local server in Termux.<br><br>Currently on: <strong>${url}</strong>`;
+  } else {
+    title = '☁ SERVER OFFLINE';
+    colour = 'var(--yellow)';
+    body = `On localhost but server not responding.<br><br>In Termux run:<br><code style="font-size:11px;color:var(--accent);">cd /storage/emulated/0/maxhealth/app && python server.py &</code>`;
+  }
+
+  // Remove existing
+  const existing = document.getElementById('serverStatusModal');
+  if (existing) { existing.remove(); return; }
+
+  const modal = document.createElement('div');
+  modal.id = 'serverStatusModal';
+  modal.style.cssText = 'position:fixed;top:56px;left:8px;right:8px;z-index:400;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);';
+  modal.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;color:${colour};font-weight:700;">${title}</div>
+      <div onclick="document.getElementById('serverStatusModal').remove()" style="cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px;">✕</div>
+    </div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.7;">${body}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="copy-btn" style="flex:1;font-size:12px;" onclick="document.getElementById('serverStatusModal').remove();switchSubTab('settings','import')">Open Import →</button>
+    </div>`;
+  document.body.appendChild(modal);
+
+  // Auto-dismiss after 8 seconds
+  setTimeout(() => { const m = document.getElementById('serverStatusModal'); if (m) m.remove(); }, 8000);
+}
+
+function tryLocalhostRedirect() {
+// Detects local server using WebSocket (allowed from HTTPS→HTTP localhost)
+// then redirects to localhost for full functionality
+function tryLocalhostRedirect() {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
+  try {
+    const ws = new WebSocket('ws://localhost:5757/ws-probe');
+    const timeout = setTimeout(() => { try { ws.close(); } catch(e) {} }, 1500);
+    ws.onopen = function() {
+      clearTimeout(timeout);
+      ws.close();
+      window.location.replace('http://localhost:5757/');
+    };
+    ws.onerror = function() {
+      clearTimeout(timeout);
+      // Server not running or no WebSocket support — stay in cloud mode
+    };
+  } catch(e) {}
+}
 
 const DEFAULT_SUPPLEMENTS = [];  // New users start with empty list — add your own stack
 
@@ -11314,6 +11497,7 @@ function initSyncUI() {
 
 // ─── INIT ─────────────────────────────────────────────────
 try {
+  tryLocalhostRedirect(); // Redirect to localhost if server running (removes GitHub/localhost ambiguity)
   loadTheme();
   loadLibrary();
   renderSavedDevices();

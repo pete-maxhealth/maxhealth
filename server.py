@@ -312,6 +312,22 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         path   = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
 
+        if path == '/ws-probe' and self.headers.get('Upgrade','').lower() == 'websocket':
+            import hashlib, base64
+            key = self.headers.get('Sec-WebSocket-Key','')
+            accept = base64.b64encode(
+                hashlib.sha1((key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest()
+            ).decode()
+            self.send_response(101)
+            self.send_header('Upgrade', 'websocket')
+            self.send_header('Connection', 'Upgrade')
+            self.send_header('Sec-WebSocket-Accept', accept)
+            for k, v in CORS.items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(bytes([0x88, 0x00]))
+            return
+
         # ── Health check ──────────────────────────────────────────────────
         if path == '/ping':
             self.send_json({'status': 'ok', 'version': '2.0', 'combined_exists': os.path.exists(COMBINED)})
