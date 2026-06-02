@@ -181,12 +181,13 @@ def backup_files():
             shutil.copy2(src_path, dst)
             backed_up.append(dst)
 
-    # Trim to MAX_BACKUPS per file type
+    # Trim backups older than 7 days per file type
+    cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
     for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
-        files = sorted(glob.glob(pattern))
-        while len(files) > MAX_BACKUPS:
-            os.remove(files.pop(0))
+        for f in glob.glob(pattern):
+            if os.path.getmtime(f) < cutoff:
+                os.remove(f)
 
     if backed_up:
         log('pipeline', 'backup', 'ok', f"Backed up {len(backed_up)} file(s) to {BACKUP_DIR}")
