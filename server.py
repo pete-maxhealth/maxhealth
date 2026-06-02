@@ -19,6 +19,11 @@ Usage:
 
 import os
 import sys
+try:
+    import pyzipper
+    HAS_PYZIPPER = True
+except ImportError:
+    HAS_PYZIPPER = False
 import json
 import glob
 import shutil
@@ -303,6 +308,46 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.send_json({'status': 'ok', 'saved': len(results), 'results': results})
 
 
+
+        elif path == '/extract-zepp':
+            if not HAS_PYZIPPER:
+                self.send_json({'error': 'pyzipper not installed — run: pip install pyzipper --break-system-packages'}, 500)
+                return
+            try:
+                password = body.get('password', '').strip()
+                if not password:
+                    self.send_json({'error': 'Password required'}, 400)
+                    return
+                # Find Zepp zips in inbox
+                zepp_zips = []
+                if os.path.exists(INBOX_DIR):
+                    for name in os.listdir(INBOX_DIR):
+                        if name[0].isdigit() and name.lower().endswith('.zip'):
+                            zepp_zips.append(os.path.join(INBOX_DIR, name))
+                if not zepp_zips:
+                    self.send_json({'error': 'No Zepp zip found in inbox'}, 404)
+                    return
+                extracted = []
+                errors = []
+                for zip_path in zepp_zips:
+                    try:
+                        with pyzipper.AESZipFile(zip_path) as zf:
+                            zf.pwd = password.encode('utf-8')
+                            zf.extractall(INBOX_DIR)
+                        extracted.append(os.path.basename(zip_path))
+                        # Move zip to old
+                        old_dir = os.path.join(INBOX_DIR, 'old')
+                        os.makedirs(old_dir, exist_ok=True)
+                        import shutil
+                        shutil.move(zip_path, os.path.join(old_dir, os.path.basename(zip_path)))
+                    except Exception as e:
+                        errors.append(f"{os.path.basename(zip_path)}: {str(e)}")
+                if errors and not extracted:
+                    self.send_json({'error': 'Wrong password or corrupt zip: ' + '; '.join(errors)}, 400)
+                else:
+                    self.send_json({'status': 'ok', 'extracted': extracted, 'errors': errors})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
 
         else:
             self.send_json({'error': f'Unknown POST endpoint: {path}'}, 404)

@@ -3412,11 +3412,12 @@
       </button>
       <!-- Progress log — hidden until running -->
       <div id="syncLog" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-family:'Space Mono',monospace;font-size:10px;color:var(--green);line-height:1.8;max-height:160px;overflow-y:auto;white-space:pre-wrap;"></div>
-      <!-- ZArchiver notice — shown when needed -->
+      <!-- Zepp password notice — shown when encrypted zip detected -->
       <div id="zArchiverNotice" style="display:none;margin-top:12px;background:var(--yellow-dim);border:1px solid rgba(245,197,66,0.25);border-radius:var(--radius-sm);padding:12px 14px;">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;">Zepp zip detected — one extra step</div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.7;">Open <strong style="color:var(--text);">ZArchiver</strong> → navigate to the inbox folder → tap the zip → Extract → enter your Zepp password. Then tap Sync again.</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:6px;font-family:'Space Mono',monospace;">/storage/emulated/0/maxhealth/data/inbox/</div>
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Zepp zip detected — enter password</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:10px;">Your Zepp/Amazfit export is encrypted. Enter your Zepp app password to extract it automatically.</div>
+        <input id="zeppPasswordInput" type="password" class="modal-input" placeholder="Zepp app password" style="width:100%;font-size:14px;padding:10px 12px;margin-bottom:8px;box-sizing:border-box;">
+        <button class="run-btn" style="width:100%;" onclick="extractZeppZip()">🔓 Extract &amp; Sync</button>
       </div>
       <!-- Server offline notice -->
       <div id="serverOfflineNotice" style="display:none;margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;">
@@ -11468,10 +11469,13 @@ async function doSync() {
 
       if (data.result === 'needs_zarchiver') {
         clearInterval(_syncPollTimer);
-        document.getElementById('zArchiverNotice').style.display = 'block';
-        document.getElementById('syncStatusMsg').textContent = 'Zepp zip needs ZArchiver extraction first.';
+        const notice = document.getElementById('zArchiverNotice');
+        if (notice) notice.style.display = 'block';
+        const msg = document.getElementById('syncStatusMsg');
+        if (msg) msg.textContent = 'Zepp zip detected — enter your Zepp password below.';
         btn.disabled = false; btn.textContent = '⟳ SYNC AGAIN';
         setServerDot('online');
+        setTimeout(() => document.getElementById('zeppPasswordInput')?.focus(), 300);
         return;
       }
 
@@ -11551,6 +11555,37 @@ async function advRun(device, dryRun) {
 }
 
 // Called when Import tab opens
+async function extractZeppZip() {
+  const password = document.getElementById('zeppPasswordInput')?.value.trim();
+  if (!password) { showToast('Enter your Zepp password first'); return; }
+
+  const btn = document.querySelector('#zArchiverNotice .run-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '🔓 Extracting…'; }
+
+  try {
+    const res = await fetch(`${MH_SERVER}/extract-zepp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      showToast(`Extracted ✓ — syncing now…`);
+      document.getElementById('zArchiverNotice').style.display = 'none';
+      document.getElementById('zeppPasswordInput').value = '';
+      // Auto-trigger sync
+      setTimeout(() => doSync(), 500);
+    } else {
+      showToast(`Error: ${data.error}`);
+      if (btn) { btn.disabled = false; btn.textContent = '🔓 Extract & Sync'; }
+    }
+  } catch(e) {
+    showToast(`Failed: ${e.message}`);
+    if (btn) { btn.disabled = false; btn.textContent = '🔓 Extract & Sync'; }
+  }
+}
+
 function initSyncUI() {
   checkServer();
 }
