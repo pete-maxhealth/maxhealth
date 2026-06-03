@@ -4659,6 +4659,24 @@ function initSettings() {
   setProvider(provider);
   const name = localStorage.getItem('mh_name') || '';
   document.getElementById('settingsName').value = name;
+  // One-time dedup: merge duplicate dates in history
+  const _seenDates = {};
+  state.history = state.history.reduce((acc, entry) => {
+    if (_seenDates[entry.date]) {
+      const existing = _seenDates[entry.date];
+      if (!existing.totals?.kcal && entry.totals?.kcal) {
+        existing.totals = entry.totals;
+        existing.log = entry.log || existing.log;
+        existing.notes = entry.notes || existing.notes;
+      }
+      if (!existing.weight && entry.weight) existing.weight = entry.weight;
+    } else {
+      _seenDates[entry.date] = entry;
+      acc.push(entry);
+    }
+    return acc;
+  }, []);
+  saveState();
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
@@ -6039,9 +6057,10 @@ function renderMealPreview() {
   }), { kcal: 0, protein: 0, carbs: 0 });
 
   // Plausibility check — flag suspicious macros
+  const _zeroProteinFoods = /(oil|butter|cream|lurpak|lard|ghee|margarine|spread|fat|suet|dripping|coconut oil|olive oil|mct|vegetable oil|rapeseed|sunflower)/i;
   const warnings = [];
   foods.forEach(f => {
-    if (f.kcal > 50 && f.protein < f.kcal * 0.01) {
+    if (f.kcal > 50 && f.protein < f.kcal * 0.01 && !_zeroProteinFoods.test(f.name)) {
       // protein is less than 1% of kcal in grams — suspiciously low for most foods
       warnings.push(`⚠️ ${f.name}: ${f.protein}g protein seems low for ${Math.round(f.kcal)}kcal — check label or use barcode scan`);
     }
