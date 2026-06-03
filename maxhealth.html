@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-E8G21SK2FW"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-E8G21SK2FW');
-  </script>
 <meta charset="UTF-8"><!-- v2.0 — Phase 6: 4-tab navigation -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
@@ -3134,12 +3126,6 @@
           <input class="modal-input" type="number" id="settingCarbTarget" style="flex:1;font-size:16px;padding:8px;" placeholder="e.g. 50">
         </div>
       </div>
-      <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
-        <div class="settings-label">Daily fat target (g)</div>
-        <div style="display:flex;gap:8px;width:100%;align-items:center;">
-          <input class="modal-input" type="number" id="settingFatTarget" style="flex:1;font-size:16px;padding:8px;" placeholder="e.g. 247">
-        </div>
-      </div>
     </div>
 
     <div class="section-title">Carb Ceilings</div>
@@ -3858,25 +3844,15 @@ function loadState() {
       if (parsed.lastDate !== todayStr()) {
         if (parsed.todayLog.length > 0) {
           const rolledTotals = calcTotals(parsed.todayLog);
-          const existingRollIdx = parsed.history.findIndex(h => h.date === parsed.lastDate);
-          if (existingRollIdx >= 0) {
-            parsed.history[existingRollIdx].log = parsed.todayLog;
-            parsed.history[existingRollIdx].totals = rolledTotals;
-            parsed.history[existingRollIdx].mode = parsed.dayMode;
-            parsed.history[existingRollIdx].notes = parsed.notes;
-            parsed.history[existingRollIdx].weight = parsed.weight;
-            parsed.history[existingRollIdx].water_ml = parsed.waterToday || 0;
-          } else {
-            parsed.history.unshift({
-              date: parsed.lastDate,
-              log: parsed.todayLog,
-              totals: rolledTotals,
-              mode: parsed.dayMode,
-              notes: parsed.notes,
-              weight: parsed.weight,
-              water_ml: parsed.waterToday || 0
-            });
-          }
+          parsed.history.unshift({
+            date: parsed.lastDate,
+            log: parsed.todayLog,
+            totals: rolledTotals,
+            mode: parsed.dayMode,
+            notes: parsed.notes,
+            weight: parsed.weight,
+            water_ml: parsed.waterToday || 0
+          });
           // Auto-sync rolled day to master.csv
           setTimeout(() => saveNutritionToServer(
             parsed.lastDate,
@@ -4236,9 +4212,7 @@ function renderLibrary() {
         <input class="library-edit-input" id="lib-edit-kcal-${i}" type="number" value="${f.kcal}" style="max-width:80px;">
         <span class="library-edit-label" style="width:auto;margin-left:8px;">Protein</span>
         <input class="library-edit-input" id="lib-edit-prot-${i}" type="number" step="0.1" value="${f.protein}" style="max-width:70px;">
-      </div>
-      <div class="library-edit-row">
-        <span class="library-edit-label">Carbs</span>
+        <span class="library-edit-label" style="width:auto;margin-left:8px;">Carbs</span>
         <input class="library-edit-input" id="lib-edit-carb-${i}" type="number" step="0.1" value="${f.carbs}" style="max-width:70px;">
       </div>
       <div class="library-edit-actions">
@@ -4373,8 +4347,6 @@ function promptSaveToLibrary(item) {
   _pendingSaveItem = item;
   document.getElementById('saveModalSub').textContent = `Save to your library?`;
   document.getElementById('saveModalName').value = item.name || '';
-  const portionEl = document.getElementById('saveModalPortion');
-  if (portionEl) portionEl.value = item.amount || item.portion || '';
   const kcalEl = document.getElementById('saveModalKcalEdit');
   const protEl = document.getElementById('saveModalProtEdit');
   const carbEl = document.getElementById('saveModalCarbsEdit');
@@ -4386,8 +4358,6 @@ function promptSaveToLibrary(item) {
 
 function closeSaveLibraryModal() {
   document.getElementById('saveLibraryModal').classList.remove('open');
-  const portionEl = document.getElementById('saveModalPortion');
-  if (portionEl) portionEl.value = '';
   _pendingSaveItem = null;
 }
 
@@ -4402,7 +4372,7 @@ function confirmSaveToLibrary() {
   const newEntry = {
     id: 'ai_' + Date.now(),
     name: name,
-    portion: (document.getElementById('saveModalPortion')?.value.trim()) || _pendingSaveItem.amount || null,
+    portion: _pendingSaveItem.amount || null,
     per100g: false,
     kcal: Math.round(kcal),
     protein: Math.round(prot * 10) / 10,
@@ -4659,30 +4629,10 @@ function initSettings() {
   if (protEl) protEl.value = localStorage.getItem('mh_target_protein') || '165';
   const carbEl = document.getElementById('settingCarbTarget');
   if (carbEl) carbEl.value = localStorage.getItem('mh_target_carbs') || '50';
-  const fatEl = document.getElementById('settingFatTarget');
-  if (fatEl) fatEl.value = localStorage.getItem('mh_target_fat') || '247';
   const { provider, apiKey } = getAIConfig();
   setProvider(provider);
   const name = localStorage.getItem('mh_name') || '';
   document.getElementById('settingsName').value = name;
-  // One-time dedup: merge duplicate dates in history
-  const _seenDates = {};
-  state.history = state.history.reduce((acc, entry) => {
-    if (_seenDates[entry.date]) {
-      const existing = _seenDates[entry.date];
-      if (!existing.totals?.kcal && entry.totals?.kcal) {
-        existing.totals = entry.totals;
-        existing.log = entry.log || existing.log;
-        existing.notes = entry.notes || existing.notes;
-      }
-      if (!existing.weight && entry.weight) existing.weight = entry.weight;
-    } else {
-      _seenDates[entry.date] = entry;
-      acc.push(entry);
-    }
-    return acc;
-  }, []);
-  saveState();
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
@@ -4729,11 +4679,9 @@ function saveMacroTargets() {
   const kcal = parseInt(document.getElementById('settingKcalTarget')?.value);
   const prot = parseInt(document.getElementById('settingProteinTarget')?.value);
   const carb = parseInt(document.getElementById('settingCarbTarget')?.value);
-  const fat  = parseInt(document.getElementById('settingFatTarget')?.value);
   if (kcal && kcal >= 500 && kcal <= 10000) localStorage.setItem('mh_target_kcal', kcal);
   if (prot && prot >= 10 && prot <= 500) localStorage.setItem('mh_target_protein', prot);
   if (carb && carb >= 0 && carb <= 500) localStorage.setItem('mh_target_carbs', carb);
-  if (fat  && fat  >= 0 && fat  <= 1000) localStorage.setItem('mh_target_fat', fat);
   updateDashboard();
   showToast('Targets saved ✓');
 }
@@ -5609,6 +5557,19 @@ function logFoodFromDatabase() {
   const salt   = _selectedFoodItem.salt   ? Math.round((_selectedFoodItem.salt   * factor) * 100) / 100 : 0;
   const iron   = _selectedFoodItem.iron   ? Math.round((_selectedFoodItem.iron   * factor) * 10) / 10 : 0;
   const food = { name: displayName, kcal, protein: prot, carbs: carb, fibre, satFat, sugars, salt, iron };
+  // Offer to save to library after logging
+  const lib = loadLibrary();
+  const alreadyInLib = lib.some(l => l.name.toLowerCase() === displayName.toLowerCase());
+  if (!alreadyInLib) {
+    window._pendingLibrarySave = {
+      name: _selectedFoodItem.brand
+        ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})`
+        : _selectedFoodItem.name,
+      kcal, protein: prot, carbs: carb,
+      fat: _selectedFoodItem.fat ? Math.round(_selectedFoodItem.fat * factor * 10) / 10 : null,
+      amount: `${grams}g`
+    };
+  }
   logFoods([food], displayName);
   closeFoodSearch();
 }
@@ -6063,10 +6024,9 @@ function renderMealPreview() {
   }), { kcal: 0, protein: 0, carbs: 0 });
 
   // Plausibility check — flag suspicious macros
-  const _zeroProteinFoods = /(oil|butter|cream|lurpak|lard|ghee|margarine|spread|fat|suet|dripping|coconut oil|olive oil|mct|vegetable oil|rapeseed|sunflower)/i;
   const warnings = [];
   foods.forEach(f => {
-    if (f.kcal > 50 && f.protein < f.kcal * 0.01 && !_zeroProteinFoods.test(f.name)) {
+    if (f.kcal > 50 && f.protein < f.kcal * 0.01) {
       // protein is less than 1% of kcal in grams — suspiciously low for most foods
       warnings.push(`⚠️ ${f.name}: ${f.protein}g protein seems low for ${Math.round(f.kcal)}kcal — check label or use barcode scan`);
     }
@@ -6787,7 +6747,7 @@ function showServerStatus() {
   } else {
     title = '☁ SERVER OFFLINE';
     colour = 'var(--yellow)';
-    body = `On localhost but server not responding?<br><br>In Termux run:<br><code onclick="navigator.clipboard.writeText('cd /storage/emulated/0/maxhealth/app/maxhealth && python server.py &').then(()=>showToast('Command copied ✓')).catch(()=>{})" style="font-size:11px;color:var(--accent);cursor:pointer;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);">cd /storage/emulated/0/maxhealth/app/maxhealth && python server.py &<br><span style="font-size:10px;color:var(--text3);">Tap to copy</span></code>`;
+    body = `On localhost but server not responding.<br><br>In Termux run:<br><code onclick="navigator.clipboard.writeText('cd /storage/emulated/0/maxhealth/app && python server.py &').then(()=>showToast('Command copied ✓')).catch(()=>{})" style="font-size:11px;color:var(--accent);cursor:pointer;display:block;margin-top:6px;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);">cd /storage/emulated/0/maxhealth/app && python server.py &<br><span style="font-size:10px;color:var(--text3);">Tap to copy</span></code>`;
   }
 
   // Remove existing
@@ -7215,7 +7175,6 @@ function renderHistory() {
           <span class="c">${day.totals.kcal}kcal</span>
           <span class="p">${day.totals.protein}g P</span>
           <span class="k">${day.totals.carbs}g C</span>
-          <span class="f" style="color:var(--orange);">${day.totals.fat||0}g F</span>
         </div>
       </div>
       <div class="hist-day-body" id="histBody${i}">
@@ -7226,7 +7185,6 @@ function renderHistory() {
               <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C</span>
               <span style="color:var(--red);cursor:pointer;padding:2px 6px;font-size:16px;font-weight:700;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})">×</span>
             </div>
-            ${e.items && e.items.length > 1 ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;line-height:1.6;">${e.items.map(it => it.amount ? `${it.name} <span style="color:var(--text2);">(${it.amount})</span>` : it.name).join(' · ')}</div>` : (e.items && e.items.length === 1 && e.items[0].amount ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${e.items[0].amount}</div>` : '')}
           </div>
         `).join('')}
         ${(!day.log || day.log.length === 0) ? `<div style="margin-top:8px;"><span style="font-size:11px;color:var(--red);cursor:pointer;text-decoration:underline;" onclick="deleteHistDay('${day.date}')">🗑 Delete this day</span></div>` : ''}
@@ -12303,10 +12261,6 @@ function closePreviewOnboarding() {
       The name should include the amount — e.g. <em>"sausage roll (x1)"</em> or <em>"chicken breast 150g"</em> — so you know exactly what one tap logs.
     </div>
     <input class="save-modal-name-input" id="saveModalName" placeholder="Food name + amount (e.g. Sausage roll x1)" maxlength="80">
-    <div style="margin-bottom:8px;">
-      <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">PORTION SIZE</div>
-      <input class="modal-input" type="text" id="saveModalPortion" placeholder="e.g. 30g, 1 tbsp, x1" style="width:100%;font-size:14px;padding:8px 10px;box-sizing:border-box;">
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
       <div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:'Space Mono',monospace;">KCAL</div>
