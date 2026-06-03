@@ -3844,6 +3844,8 @@ function loadState() {
       if (parsed.lastDate !== todayStr()) {
         if (parsed.todayLog.length > 0) {
           const rolledTotals = calcTotals(parsed.todayLog);
+          // Remove any existing entry for this date before adding
+          parsed.history = parsed.history.filter(h => h.date !== parsed.lastDate);
           parsed.history.unshift({
             date: parsed.lastDate,
             log: parsed.todayLog,
@@ -7151,6 +7153,22 @@ function renderHistory() {
   const el = document.getElementById('histEntries');
   let data = state.history;
 
+  // Deduplicate by date — keep entry with highest kcal
+  const seen = {};
+  data = data.filter(d => {
+    if (!seen[d.date] || (d.totals?.kcal || 0) > (seen[d.date].totals?.kcal || 0)) {
+      seen[d.date] = d;
+      return true;
+    }
+    return false;
+  });
+  // Re-filter seen to only keep winners
+  data = Object.values(seen).sort((a, b) => {
+    const [da,ma,ya] = a.date.split('/');
+    const [db,mb,yb] = b.date.split('/');
+    return new Date(`20${yb}-${mb}-${db}`) - new Date(`20${ya}-${ma}-${da}`);
+  });
+
   if (histFilter === 'week') {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
     data = data.filter(d => {
@@ -7178,14 +7196,15 @@ function renderHistory() {
           <span class="c">${day.totals.kcal}kcal</span>
           <span class="p">${day.totals.protein}g P</span>
           <span class="k">${day.totals.carbs}g C</span>
+          ${day.totals.fat ? `<span style="color:var(--text3);font-size:11px;">${day.totals.fat}g F</span>` : ''}
         </div>
       </div>
       <div class="hist-day-body" id="histBody${i}">
         ${(day.log||[]).map((e, j) => `
           <div class="hist-entry" id="hist-entry-${i}-${j}" style="flex-direction:column;align-items:flex-start;padding:5px 0;">
             <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}</span>
-              <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C</span>
+              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${e.amount ? ` <span style="color:var(--text3);font-size:11px;">(${e.amount})</span>` : ''}</span>
+              <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C${e.fat ? ` · ${e.fat}g F` : ''}</span>
               <span style="color:var(--red);cursor:pointer;padding:2px 6px;font-size:16px;font-weight:700;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})">×</span>
             </div>
           </div>
