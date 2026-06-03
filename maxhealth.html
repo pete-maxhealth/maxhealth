@@ -2281,7 +2281,24 @@
       </div>
     </div>
 
-    <!-- WATER TRACKING CARD -->
+    <!-- MACRO RATIO BAR -->
+    <div id="macroRatioCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:none;">
+      <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Macro Ratio Today</div>
+      <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;" id="macroRatioBar">
+        <div id="ratioProtBar" style="background:#4d9fff;transition:width 0.4s;"></div>
+        <div id="ratioFatBar" style="background:#a78bfa;transition:width 0.4s;"></div>
+        <div id="ratioCarbBar" style="background:var(--yellow);transition:width 0.4s;"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;font-family:'Space Mono',monospace;">
+        <span style="color:#4d9fff;">P <span id="ratioPct">0%</span></span>
+        <span style="color:#a78bfa;">F <span id="ratioFatPct">0%</span></span>
+        <span style="color:var(--yellow);">C <span id="ratioCarbPct">0%</span></span>
+        <span id="ketoRatioLabel" style="color:var(--text3);font-size:10px;"></span>
+      </div>
+    </div>
+
+    <!-- KETOSIS SMART ALERT -->
+    <div id="ketoSmartAlert" style="display:none;padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;line-height:1.6;"></div>
     <div class="water-card">
       <div class="water-header">
         <div class="water-title">💧 Water</div>
@@ -6426,10 +6443,17 @@ function copyEODRow(btn) {
 }
 
 function getKetosisStatus(carbs, ceiling) {
-  if (carbs < 30) return { type: 'success', message: `Deep ketosis range — ${carbs}g carbs. Well within therapeutic zone. GBM-relevant ketosis likely maintained.` };
-  if (carbs < ceiling) return { type: 'success', message: `Ketosis maintained — ${carbs}g / ${ceiling}g ceiling. You're good.` };
-  if (carbs < 75) return { type: 'warn', message: `Borderline — ${carbs}g carbs. Ketosis may be reduced. Limit carbs for rest of day.` };
-  return { type: 'error', message: `Over limit — ${carbs}g carbs. Ketosis likely interrupted. Holiday day? Log it and move on.` };
+  const totals = calcTotals(state.todayLog);
+  const fatTotal = totals.fat || 0;
+  const fatCalories = fatTotal * 9;
+  const fatPct = totals.kcal > 0 ? Math.round(fatCalories / totals.kcal * 100) : 0;
+  const fatContext = fatTotal > 0 ? ` Fat: ${fatTotal}g (${fatPct}% of calories).` : '';
+  const ketoRatio = fatPct >= 65 ? ' Macro ratio is ketogenic ✓.' : fatPct >= 50 ? ' Macro ratio is borderline — increase fat.' : fatTotal > 0 ? ' Macro ratio is not yet ketogenic — fat too low.' : '';
+
+  if (carbs < 30) return { type: 'success', message: `Deep ketosis range — ${carbs}g carbs. Well within therapeutic zone. GBM-relevant ketosis likely maintained.${fatContext}${ketoRatio}` };
+  if (carbs < ceiling) return { type: 'success', message: `Ketosis maintained — ${carbs}g / ${ceiling}g ceiling. You're good.${fatContext}${ketoRatio}` };
+  if (carbs < 75) return { type: 'warn', message: `Borderline — ${carbs}g carbs. Ketosis may be reduced. Limit carbs for rest of day.${fatContext}` };
+  return { type: 'error', message: `Over limit — ${carbs}g carbs. Ketosis likely interrupted. Holiday day? Log it and move on.${fatContext}` };
 }
 
 function addBubble(text, type, modifier = '') {
@@ -6501,8 +6525,57 @@ function updateDashboard() {
   if (waterTargetEl) waterTargetEl.textContent = `/ ${waterTarget}ml`;
   if (remWaterEl) remWaterEl.textContent = `${waterMl}ml / ${waterTarget}ml`;
 
-  // Fat
-  const fatTarget = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  // Fat % on tile
+  const fatCalories = fatTotal * 9;
+  const fatPct = totals.kcal > 0 ? Math.round(fatCalories / totals.kcal * 100) : 0;
+  if (fatEl) fatEl.innerHTML = `${fatTotal}<span class="prog-unit">g</span><span style="font-size:10px;color:var(--text3);margin-left:4px;">${fatPct}%</span>`;
+
+  // Macro ratio bar
+  const ratioCard = document.getElementById('macroRatioCard');
+  if (ratioCard && totals.kcal > 20) {
+    ratioCard.style.display = 'block';
+    const protCal = totals.protein * 4;
+    const carbCal = totals.carbs * 4;
+    const total = protCal + fatCalories + carbCal || 1;
+    const pP = Math.round(protCal / total * 100);
+    const pF = Math.round(fatCalories / total * 100);
+    const pC = 100 - pP - pF;
+    document.getElementById('ratioProtBar').style.width = pP + '%';
+    document.getElementById('ratioFatBar').style.width = pF + '%';
+    document.getElementById('ratioCarbBar').style.width = Math.max(0,pC) + '%';
+    document.getElementById('ratioPct').textContent = pP + '%';
+    document.getElementById('ratioFatPct').textContent = pF + '%';
+    document.getElementById('ratioCarbPct').textContent = Math.max(0,pC) + '%';
+    // Ketogenic ratio label — keto is typically >65% fat
+    const ketoLabel = document.getElementById('ketoRatioLabel');
+    if (ketoLabel) {
+      if (pF >= 65) ketoLabel.textContent = '✓ Ketogenic ratio';
+      else if (pF >= 50) ketoLabel.textContent = '↑ Increase fat';
+      else ketoLabel.textContent = '⚠ Low fat ratio';
+    }
+  } else if (ratioCard) {
+    ratioCard.style.display = 'none';
+  }
+
+  // Ketosis smart alert
+  const alertEl = document.getElementById('ketoSmartAlert');
+  if (alertEl && totals.kcal > 100) {
+    const carbs = totals.carbs;
+    const ceiling = TARGETS[state.dayMode]?.carbs || 50;
+    let alertMsg = '', alertStyle = '';
+    if (carbs < ceiling && fatTotal < 50 && totals.kcal < 1000) {
+      alertMsg = `⚠️ Low fat + low carbs = low energy. You're at ${totals.kcal}kcal with only ${fatTotal}g fat. Add a fat source to fuel ketosis properly.`;
+      alertStyle = 'background:rgba(245,197,66,0.08);border:1px solid rgba(245,197,66,0.25);color:var(--yellow);';
+    } else if (carbs < ceiling && fatPct < 50 && totals.kcal > 500) {
+      alertMsg = `💡 Carbs in range (${carbs}g) but fat is only ${fatPct}% of calories. For therapeutic ketosis, aim for 65%+ from fat.`;
+      alertStyle = 'background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.2);color:var(--blue);';
+    } else if (carbs < 30 && fatPct >= 65) {
+      alertMsg = `✓ Deep ketosis ratio — ${carbs}g carbs, ${fatPct}% fat calories. Optimal for GBM protocol.`;
+      alertStyle = 'background:var(--accent-dim);border:1px solid var(--accent-glow);color:var(--accent);';
+    }
+    alertEl.style.cssText = alertStyle + 'display:' + (alertMsg ? 'block' : 'none') + ';padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;line-height:1.6;';
+    alertEl.textContent = alertMsg;
+  }
   const fatTotal = totals.fat || 0;
   const fatEl = document.getElementById('fatCurrent');
   const fatBarEl = document.getElementById('fatBar');
