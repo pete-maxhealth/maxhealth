@@ -3057,6 +3057,16 @@
             <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;">Avg Protein</div>
           </div>
         </div>
+        <div id="gbm-stats-row2" style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:14px;">
+          <div style="background:var(--surface2);padding:12px 10px;text-align:center;">
+            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#a78bfa;" id="gbmAvgFat">—</div>
+            <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;">Avg Fat</div>
+          </div>
+          <div style="background:var(--surface2);padding:12px 10px;text-align:center;">
+            <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#a78bfa;" id="gbmAvgFatPct">—</div>
+            <div style="font-family:'Syne',sans-serif;font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;">Fat % Calories</div>
+          </div>
+        </div>
         <button class="run-btn" onclick="generateGBMSummary()" id="gbmSummaryBtn" style="width:100%;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;">Generate Monthly Summary →</button>
         <div id="gbm-summary-output" style="display:none;margin-top:16px;">
           <div id="gbm-summary-text" style="font-size:14px;color:var(--text2);line-height:1.9;white-space:pre-wrap;"></div>
@@ -4289,50 +4299,103 @@ function quickLogFromLibrary(index) {
   const f = lib[index];
   if (!f) return;
 
-  // If stored per100g, open amount panel so user can specify grams
-  if (f.per100g) {
-    const defaultGrams = f.portion ? parseFloat(f.portion) || 100 : 100;
-    _selectedFoodItem = {
-      name:    f.name,
-      brand:   '',
-      kcal:    f.kcal,
-      prot:    f.protein,
-      carb:    f.carbs,
-      fat:     f.fat || 0,
-      fibre:   f.fibre || 0,
-      satFat:  f.satFat || 0,
-      sugars:  f.sugars || 0,
-      salt:    f.salt || 0,
-      iron:    0,
-      qty:     '100g',
-      _defaultGrams: defaultGrams,
-    };
-    openFoodSearch();
-    setTimeout(() => {
-      document.getElementById('foodSearchView').style.display = 'none';
-      document.getElementById('foodAmountView').classList.add('open');
-      document.getElementById('foodAmountName').textContent = f.name;
-      const _p = _selectedFoodItem;
-      document.getElementById('foodAmountPer100').textContent =
-        `per 100g: ${_p.kcal}kcal · ${_p.prot}g P · ${_p.carb}g C${_p.fat ? ' · ' + _p.fat + 'g F' : ''}`;
-      document.getElementById('foodAmountGrams').value = defaultGrams;
-      updateFoodAmountScaled();
-      setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
-    }, 50);
+  // Always show portion selector so user can choose/adjust amount
+  showLibraryPortionSelector(f, index);
+}
+
+function showLibraryPortionSelector(f, index) {
+  // Remove existing
+  const existing = document.getElementById('libraryPortionModal');
+  if (existing) existing.remove();
+
+  // Base values — per100g or per portion
+  const isPer100g = f.per100g;
+  const basePortion = f.portion ? parseFloat(f.portion) || 100 : 100;
+  const baseLabel   = f.portion || '100g';
+
+  const UNITS = [
+    { label: baseLabel + ' (default)', grams: basePortion },
+    { label: '½ portion', grams: basePortion * 0.5 },
+    { label: '2× portion', grams: basePortion * 2 },
+    { label: '1 teaspoon (5g)', grams: 5 },
+    { label: '1 tablespoon (15g)', grams: 15 },
+    { label: '100ml / 100g', grams: 100 },
+    { label: 'Custom…', grams: null },
+  ];
+
+  const modal = document.createElement('div');
+  modal.id = 'libraryPortionModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Log from Library</div>
+      <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;">${f.name}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Per ${baseLabel}: ${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C</div>
+
+      <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">SELECT AMOUNT</div>
+      <div id="portionButtons" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+        ${UNITS.map((u, i) => `
+          <button onclick="selectLibraryPortion(${index}, ${u.grams}, ${basePortion}, '${u.label}')"
+            style="padding:12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
+            <span>${u.label}</span>
+            ${u.grams ? `<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text3);">${Math.round(f.kcal * u.grams / basePortion)}kcal</span>` : '<span style="color:var(--accent);font-size:12px;">Enter →</span>'}
+          </button>
+        `).join('')}
+      </div>
+
+      <div id="customPortionRow" style="display:none;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">CUSTOM AMOUNT (grams or ml)</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="customPortionInput" type="number" class="modal-input" placeholder="e.g. 170" style="flex:1;font-size:18px;padding:10px;"
+            oninput="(function(){
+              const g = parseFloat(this.value);
+              const lib = loadLibrary();
+              const f = lib[${index}];
+              const factor = g / ${basePortion};
+              if (g > 0 && f) {
+                document.getElementById('customPortionPreview').textContent =
+                  g + 'g = ' + Math.round(f.kcal*factor) + 'kcal · ' + Math.round(f.protein*factor*10)/10 + 'g P · ' + Math.round((f.fat||0)*factor*10)/10 + 'g F · ' + Math.round(f.carbs*factor*10)/10 + 'g C';
+              }
+            }).call(this)">
+          <button onclick="confirmCustomPortion(${index}, ${basePortion})" style="padding:10px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Log</button>
+        </div>
+        <div id="customPortionPreview" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
+      </div>
+
+      <button onclick="document.getElementById('libraryPortionModal').remove()" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;">Cancel</button>
+    </div>`;
+
+  document.body.appendChild(modal);
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+}
+
+function selectLibraryPortion(index, grams, basePortion, label) {
+  if (grams === null) {
+    // Custom — show input
+    document.getElementById('customPortionRow').style.display = 'block';
+    document.getElementById('customPortionInput').focus();
     return;
   }
-
-  // Fixed portion — show preview card so user can edit before logging
+  const lib = loadLibrary();
+  const f = lib[index];
+  const factor = grams / basePortion;
   const food = {
     name:    f.name,
-    amount:  f.portion || '',
-    kcal:    f.kcal,
-    protein: f.protein,
-    carbs:   f.carbs,
-    fat:     f.fat || 0,
+    amount:  label.includes('default') ? (f.portion || basePortion + 'g') : label,
+    kcal:    Math.round(f.kcal    * factor),
+    protein: Math.round(f.protein * factor * 10) / 10,
+    fat:     Math.round((f.fat||0) * factor * 10) / 10,
+    carbs:   Math.round(f.carbs   * factor * 10) / 10,
   };
-  showMealPreview([food], f.name, `From library — tap ✎ to adjust`);
+  document.getElementById('libraryPortionModal').remove();
+  showMealPreview([food], f.name, `From library (${label})`);
   switchTabById('chat');
+}
+
+function confirmCustomPortion(index, basePortion) {
+  const grams = parseFloat(document.getElementById('customPortionInput').value);
+  if (!grams || grams <= 0) { showToast('Enter a valid amount'); return; }
+  selectLibraryPortion(index, grams, basePortion, grams + 'g');
 }
 
 function deleteFromLibrary(index) {
@@ -6500,16 +6563,33 @@ function copyEODRow(btn) {
 
 function getKetosisStatus(carbs, ceiling) {
   const totals = calcTotals(state.todayLog);
-  const fatTotal = totals.fat || 0;
+  const fatTotal    = totals.fat || 0;
   const fatCalories = fatTotal * 9;
-  const fatPct = totals.kcal > 0 ? Math.round(fatCalories / totals.kcal * 100) : 0;
-  const fatContext = fatTotal > 0 ? ` Fat: ${fatTotal}g (${fatPct}% of calories).` : '';
-  const ketoRatio = fatPct >= 65 ? ' Macro ratio is ketogenic ✓.' : fatPct >= 50 ? ' Macro ratio is borderline — increase fat.' : fatTotal > 0 ? ' Macro ratio is not yet ketogenic — fat too low.' : '';
+  const protCalories = (totals.protein || 0) * 4;
+  const carbCalories = (totals.carbs || 0) * 4;
+  const totalCals   = totals.kcal || 0;
+  const fatPct = totalCals > 0 ? Math.round(fatCalories / totalCals * 100) : 0;
+  const protPct = totalCals > 0 ? Math.round(protCalories / totalCals * 100) : 0;
+  const carbPct = totalCals > 0 ? Math.round(carbCalories / totalCals * 100) : 0;
 
-  if (carbs < 30) return { type: 'success', message: `Deep ketosis range — ${carbs}g carbs. Well within therapeutic zone. GBM-relevant ketosis likely maintained.${fatContext}${ketoRatio}` };
-  if (carbs < ceiling) return { type: 'success', message: `Ketosis maintained — ${carbs}g / ${ceiling}g ceiling. You're good.${fatContext}${ketoRatio}` };
-  if (carbs < 75) return { type: 'warn', message: `Borderline — ${carbs}g carbs. Ketosis may be reduced. Limit carbs for rest of day.${fatContext}` };
-  return { type: 'error', message: `Over limit — ${carbs}g carbs. Ketosis likely interrupted. Holiday day? Log it and move on.${fatContext}` };
+  let ketoRatioMsg = '';
+  let ketoRatioWarning = '';
+  if (totalCals > 200) {
+    if (fatPct >= 65) {
+      ketoRatioMsg = `\n\n✓ Macro ratio is ketogenic: Fat ${fatPct}% · Protein ${protPct}% · Carbs ${carbPct}%`;
+    } else if (fatPct >= 50) {
+      ketoRatioMsg = `\n\n⚠ Macro ratio borderline: Fat ${fatPct}% · Protein ${protPct}% · Carbs ${carbPct}%\nFor therapeutic ketosis aim for 65%+ from fat.`;
+    } else if (fatPct > 0) {
+      ketoRatioWarning = `\n\n🔴 Macro ratio not ketogenic: Fat only ${fatPct}% of calories (${fatTotal}g).\nFor GBM protocol, fat should be 65–75% of calories. Add high-fat foods.`;
+    }
+  }
+
+  const fatSummary = fatTotal > 0 ? ` Fat logged: ${fatTotal}g (${fatPct}% of calories).` : ' No fat logged yet.';
+
+  if (carbs < 30) return { type: 'success', message: `Deep ketosis range — ${carbs}g carbs. Well within therapeutic zone. GBM-relevant ketosis likely maintained.${fatSummary}${ketoRatioMsg}${ketoRatioWarning}` };
+  if (carbs < ceiling) return { type: 'success', message: `Ketosis maintained — ${carbs}g / ${ceiling}g ceiling. You're good.${fatSummary}${ketoRatioMsg}${ketoRatioWarning}` };
+  if (carbs < 75) return { type: 'warn', message: `Borderline — ${carbs}g carbs. Ketosis may be reduced. Limit carbs for rest of day.${fatSummary}${ketoRatioWarning}` };
+  return { type: 'error', message: `Over limit — ${carbs}g carbs. Ketosis likely interrupted. Holiday day? Log it and move on.${fatSummary}` };
 }
 
 function addBubble(text, type, modifier = '') {
@@ -6837,11 +6917,17 @@ function cancelLogEdit(id) {
 
 function deleteLogEntry(id) {
   const idx = state.todayLog.findIndex(e => e.id == id);
-  if (idx === -1) return;
+  if (idx === -1) { showToast('Entry not found'); return; }
   state.todayLog.splice(idx, 1);
   saveState();
-  renderDash();
-  showToast('Entry deleted');
+  updateDashboard();
+  // Force re-render of log list
+  const logEl = document.getElementById('todayLogList');
+  if (logEl) {
+    const entry = document.getElementById('log-entry-' + id);
+    if (entry) entry.remove();
+  }
+  showToast('Entry deleted ✓');
 }
 
 function saveLogEdit(id) {
@@ -11098,13 +11184,22 @@ function updateGBMStats() {
   const n = h.length;
   const carbs = h.map(e => e.totals?.carbs || 0);
   const prots = h.map(e => e.totals?.protein || 0);
+  const fats  = h.map(e => e.totals?.fat || 0);
+  const kcals = h.map(e => e.totals?.kcal || 0);
   const on = carbs.filter(c => c <= t.carbs).length;
   const avgCarb = Math.round(carbs.reduce((a,b)=>a+b,0)/n);
   const avgProt = Math.round(prots.reduce((a,b)=>a+b,0)/n);
+  const avgFat  = Math.round(fats.reduce((a,b)=>a+b,0)/n);
+  const avgKcal = Math.round(kcals.reduce((a,b)=>a+b,0)/n);
+  const avgFatPct = avgKcal > 0 ? Math.round(avgFat * 9 / avgKcal * 100) : 0;
   document.getElementById('gbmSummaryDays').textContent = n;
   document.getElementById('gbmCarbAdh').textContent = Math.round(on/n*100) + '%';
   document.getElementById('gbmAvgCarb').textContent = avgCarb + 'g';
   document.getElementById('gbmAvgProt').textContent = avgProt + 'g';
+  const fatEl = document.getElementById('gbmAvgFat');
+  const fatPctEl = document.getElementById('gbmAvgFatPct');
+  if (fatEl) fatEl.textContent = avgFat + 'g';
+  if (fatPctEl) fatPctEl.textContent = avgFatPct + '%';
 }
 
 async function generateGBMSummary() {
