@@ -6046,7 +6046,7 @@ function _parseNutritionTable(text) {
     } else {
       name = nameAndAmount; amount = '';
     }
-    if (name) foods.push({ name, amount, kcal, protein, carbs });
+    if (name) foods.push({ name, amount, kcal, protein, fat: 0, carbs });
   }
 
   return foods.length > 0 ? foods : null;
@@ -6072,10 +6072,11 @@ function renderMealPreview() {
   if (!foods) return;
 
   const totals = foods.reduce((a, f) => ({
-    kcal: a.kcal + (f.kcal || 0),
+    kcal:    a.kcal    + (f.kcal    || 0),
     protein: a.protein + (f.protein || 0),
-    carbs: a.carbs + (f.carbs || 0)
-  }), { kcal: 0, protein: 0, carbs: 0 });
+    fat:     a.fat     + (f.fat     || 0),
+    carbs:   a.carbs   + (f.carbs   || 0)
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   // Plausibility check — flag suspicious macros
   const warnings = [];
@@ -6112,6 +6113,7 @@ function renderMealPreview() {
         <div style="font-size:11px;color:var(--text3);cursor:pointer;white-space:nowrap;text-align:right;" onclick="editPreviewItem(${i})" title="Tap to edit">
           <span style="color:var(--text2);">${Math.round(f.kcal)}</span>kcal ·
           <span style="color:var(--green);">${Math.round(f.protein*10)/10}g</span>P ·
+          <span style="color:#a78bfa;">${Math.round((f.fat||0)*10)/10}g</span>F ·
           <span style="color:var(--blue);">${Math.round(f.carbs*10)/10}g</span>C
           <span style="color:var(--text3);font-size:10px;margin-left:2px;">✎</span>
         </div>
@@ -6126,7 +6128,7 @@ function renderMealPreview() {
     <div style="font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Ready to log — tap ✎ to edit any item</div>
     ${itemRows}
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;margin-top:2px;">
-      <div style="font-size:12px;color:var(--text3);">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C</strong></div>
+      <div style="font-size:12px;color:var(--text3);">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.fat*10)/10}g F · ${Math.round(totals.carbs*10)/10}g C</strong></div>
     </div>
     ${warnings.length ? `<div style="margin-top:8px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:4px 0;">${w}</div>`).join('')}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -6245,8 +6247,8 @@ function logFoods(foods, originalText, aiMessage = null) {
   if (_todayH && state.weight && !_todayH.weight) _todayH.weight = state.weight;
   const targets = TARGETS[state.dayMode];
   const mealTotals = foods.reduce((a, f) => ({
-    kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), carbs: a.carbs + (f.carbs || 0)
-  }), { kcal: 0, protein: 0, carbs: 0 });
+    kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0)
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const entry = {
     id: Date.now(), time: nowTime(), description: originalText || foods.map(f=>f.name).join(', '), items: foods,
@@ -6289,7 +6291,7 @@ function logFoods(foods, originalText, aiMessage = null) {
     return `  ${f.name}: ${f.kcal}kcal / ${f.protein}g P / ${f.fat||0}g F / ${f.carbs}g C${extras ? ' / ' + extras : ''}`;
   }).join('\n');
   const aiNote = aiMessage ? `\n${aiMessage}` : '';
-  const reply = `Logged ✓${aiNote}\n\n${itemList}\n\nMeal total: ${Math.round(mealTotals.kcal)}kcal | ${Math.round(mealTotals.protein*10)/10}g protein | ${Math.round(mealTotals.carbs*10)/10}g carbs`;
+  const reply = `Logged ✓${aiNote}\n\n${itemList}\n\nMeal total: ${Math.round(mealTotals.kcal)}kcal | ${Math.round(mealTotals.protein*10)/10}g protein | ${Math.round((mealTotals.fat||0)*10)/10}g fat | ${Math.round(mealTotals.carbs*10)/10}g carbs`;
 
   const bubbleDiv = addBubble(reply, 'system', carbWarn ? 'warn' : 'success');
   const macrosDiv = document.createElement('div');
@@ -6381,7 +6383,7 @@ function logFoods(foods, originalText, aiMessage = null) {
             const kcal = parseFloat(inputs[1].value) || 0;
             const protein = parseFloat(inputs[2].value) || 0;
             const carbs = parseFloat(inputs[3].value) || 0;
-            if (name) correctedFoods.push({ name, kcal, protein, carbs });
+            if (name) correctedFoods.push({ name, kcal, protein, fat: 0, carbs });
           }
         });
 
@@ -7674,7 +7676,7 @@ function updateRecipeTotals() {
 
   totalsBar.style.display = 'block';
   totalsText.textContent = `${Math.round(total.kcal)}kcal · ${Math.round(total.protein*10)/10}g P · ${Math.round((total.fat||0)*10)/10}g F · ${Math.round(total.carbs*10)/10}g C`;
-  perServingText.textContent = `Per serving (÷${servings}): ${per.kcal}kcal · ${per.protein}g P · ${per.carbs}g C${per.fibre ? ' · ' + per.fibre + 'g fibre' : ''}`;
+  perServingText.textContent = `Per serving (÷${servings}): ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C${per.fibre ? ' · ' + per.fibre + 'g fibre' : ''}`;
 }
 
 function saveRecipe() {
@@ -7730,7 +7732,7 @@ function renderRecipeList() {
         </div>
       </div>
       <div style="font-size:12px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:10px;">
-        Per serving: ${per.kcal}kcal · ${per.protein}g P · ${per.carbs}g C
+        Per serving: ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C
       </div>
       <div style="display:flex;gap:6px;">
         <button class="run-btn" style="flex:1;font-size:12px;padding:8px;" onclick="logRecipe('${r.id}', 1)">Log 1 serving</button>
@@ -8029,8 +8031,8 @@ Respond ONLY with a JSON object (no markdown):
     const raw = data.content?.[0]?.text?.trim() || '';
     const cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*10)/10, carbs: Math.round(parsed.carbs*10)/10 };
-    resultEl.innerHTML = `<strong style="color:var(--text);">${_missedAITotals.kcal} kcal · ${_missedAITotals.protein}g P · ${_missedAITotals.carbs}g C</strong><br><span style="color:var(--text3);font-size:12px;">${parsed.breakdown}</span><br><span style="font-size:11px;color:var(--text3);">Happy with this? Tap Save to History — or adjust the description and recalculate.</span>`;
+    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*10)/10, fat: Math.round((parsed.fat||0)*10)/10, carbs: Math.round(parsed.carbs*10)/10 };
+    resultEl.innerHTML = `<strong style="color:var(--text);">${_missedAITotals.kcal} kcal · ${_missedAITotals.protein}g P · ${_missedAITotals.fat||0}g F · ${_missedAITotals.carbs}g C</strong><br><span style="color:var(--text3);font-size:12px;">${parsed.breakdown}</span><br><span style="font-size:11px;color:var(--text3);">Happy with this? Tap Save to History — or adjust the description and recalculate.</span>`;
     resultEl.style.display = 'block';
   } catch(e) {
     resultEl.innerHTML = `<span style="color:var(--red);">Could not calculate — check connection and try again.</span>`;
