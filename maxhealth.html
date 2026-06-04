@@ -3163,6 +3163,7 @@
         <div style="display:flex;gap:8px;width:100%;align-items:center;">
           <input class="modal-input" type="number" id="settingFatTarget" style="flex:1;font-size:16px;padding:8px;" placeholder="e.g. 247">
         </div>
+        <div id="fatTargetAdvice" style="font-size:11px;color:#a78bfa;line-height:1.5;margin-top:2px;"></div>
       </div>
       <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
         <div class="settings-label">Daily carb target (g)</div>
@@ -4749,7 +4750,25 @@ function initSettings() {
   const protEl = document.getElementById('settingProteinTarget');
   if (protEl) protEl.value = localStorage.getItem('mh_target_protein') || '165';
   const fatSettingEl = document.getElementById('settingFatTarget');
-  if (fatSettingEl) fatSettingEl.value = localStorage.getItem('mh_target_fat') || '247';
+  if (fatSettingEl) {
+    fatSettingEl.value = localStorage.getItem('mh_target_fat') || '247';
+    // Show keto advice
+    const kcalTgt = parseInt(localStorage.getItem('mh_target_kcal')) || 3420;
+    const ketoFat65 = Math.round(kcalTgt * 0.65 / 9);
+    const ketoFat70 = Math.round(kcalTgt * 0.70 / 9);
+    const adviceEl = document.getElementById('fatTargetAdvice');
+    if (adviceEl) adviceEl.textContent = `For ketogenic ratio (65–70% of calories from fat) at ${kcalTgt} kcal: ${ketoFat65}–${ketoFat70}g fat/day`;
+    fatSettingEl.addEventListener('input', () => {
+      const fatG = parseInt(fatSettingEl.value);
+      if (fatG && kcalTgt) {
+        const pct = Math.round(fatG * 9 / kcalTgt * 100);
+        if (adviceEl) {
+          adviceEl.textContent = `${fatG}g fat = ${pct}% of ${kcalTgt} kcal${pct >= 65 ? ' ✓ Ketogenic' : pct >= 50 ? ' — borderline, increase for ketosis' : ' — too low for therapeutic ketosis'}`;
+          adviceEl.style.color = pct >= 65 ? 'var(--accent)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
+        }
+      }
+    });
+  }
   const carbEl = document.getElementById('settingCarbTarget');
   if (carbEl) carbEl.value = localStorage.getItem('mh_target_carbs') || '50';
   const { provider, apiKey } = getAIConfig();
@@ -10644,12 +10663,23 @@ function renderReportSummary() {
     <div style="font-size:22px;font-weight:700;color:var(--text);line-height:1.1;">${val}</div>
     ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>`:''}
   </div>`;
+  const fats  = h.map(e=>e.totals?.fat||0);
+  const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  const avgFat = av(fats);
+  const avgFatPct = av(kcals) > 0 ? Math.round(avgFat * 9 / av(kcals) * 100) : 0;
+  const fatMisses = h.filter(e=>(e.totals?.fat||0)<fatTgt*0.7).length;
+  const ketoRatioDays = h.filter(e=>{
+    const k=e.totals?.kcal||0; const f=(e.totals?.fat||0)*9;
+    return k>200 && Math.round(f/k*100)>=65;
+  }).length;
   el.innerHTML =
     card('Days tracked', n, `${_rptRange>0?`last ${_rptRange} days`:'all time'}`)+
     card('Avg calories', av(kcals)+' kcal', `target ${t.kcal} kcal`)+
     card('Avg protein', av(prots)+'g', `target ${t.protein}g`)+
+    card('Avg fat', avgFat+'g', `${avgFatPct}% of calories`, avgFatPct>=65?'var(--accent)':avgFatPct>=50?'var(--yellow)':'#a78bfa')+
     card('Avg carbs', av(carbs)+'g', `ceiling ${t.carbs}g`)+
     card('Carb adherence', adh+'%', `${on}/${n} days within ceiling`, adh>=80?'var(--green)':'var(--yellow)')+
+    card('Ketogenic ratio', ketoRatioDays+' days', `fat ≥65% of calories`, ketoRatioDays>=on*0.8?'var(--accent)':'var(--yellow)')+
     card('Protein misses', h.filter(e=>(e.totals?.protein||0)<t.protein).length+' days', `below ${t.protein}g target`)+
     card('Streak', streak+' days', 'consecutive days within ceiling', streak>=7?'var(--green)':'var(--text3)')+
     card('Best carbs', Math.min(...carbs)+'g', 'lowest single day');
@@ -10661,6 +10691,7 @@ function renderReportSummary() {
 const QUERY_COLS = {
   kcal:           { label: 'Calories',        unit: 'kcal', src: 'nutrition' },
   protein:        { label: 'Protein',          unit: 'g',    src: 'nutrition' },
+  fat:            { label: 'Fat',              unit: 'g',    src: 'nutrition' },
   carbs:          { label: 'Carbs',            unit: 'g',    src: 'nutrition' },
   steps:          { label: 'Steps',            unit: '',     src: 'wearable'  },
   distance_m:     { label: 'Distance',         unit: 'm',    src: 'wearable'  },
