@@ -6230,14 +6230,29 @@ function renderMealPreview() {
     </div>`;
   }).join('');
 
+  // If single item and per100g (from label/photo), add portion scaler
+  const showPortionScaler = foods.length === 1 && !foods[0].amount;
+  const scaler = showPortionScaler ? `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:8px;">
+      <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">HOW MUCH DID YOU EAT?</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input id="previewPortionInput" type="number" placeholder="100" value="100"
+          style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:16px;"
+          oninput="scalePreviewPortion(this.value)">
+        <span style="font-size:13px;color:var(--text3);">g / ml</span>
+      </div>
+      <div id="previewPortionMacros" style="font-size:11px;color:var(--text3);margin-top:6px;"></div>
+    </div>` : '';
+
   const bubble = document.createElement('div');
   bubble.id = 'mealPreviewBubble';
   bubble.className = 'bubble system';
   bubble.innerHTML = `
     <div style="font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Ready to log — tap ✎ to edit any item</div>
     ${itemRows}
+    ${scaler}
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;margin-top:2px;">
-      <div style="font-size:12px;color:var(--text3);">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.fat*10)/10}g F · ${Math.round(totals.carbs*10)/10}g C</strong></div>
+      <div style="font-size:12px;color:var(--text3);" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.fat*10)/10}g F · ${Math.round(totals.carbs*10)/10}g C</strong></div>
     </div>
     ${warnings.length ? `<div style="margin-top:8px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:4px 0;">${w}</div>`).join('')}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -6250,6 +6265,38 @@ function renderMealPreview() {
   const scroll = document.getElementById('chatScroll');
   scroll.appendChild(bubble);
   scroll.scrollTop = scroll.scrollHeight;
+}
+
+function scalePreviewPortion(gramsStr) {
+  const grams = parseFloat(gramsStr);
+  if (!grams || grams <= 0 || !window._pendingMealFoods) return;
+  const f = window._pendingMealFoods[0];
+  // Base values are per 100g — scale to new amount
+  const factor = grams / 100;
+  window._pendingMealFoods[0] = {
+    ...f,
+    kcal:    Math.round(f.kcal    * factor),
+    protein: Math.round(f.protein * factor * 10) / 10,
+    fat:     Math.round((f.fat||0) * factor * 10) / 10,
+    carbs:   Math.round(f.carbs   * factor * 10) / 10,
+    amount:  grams + 'g',
+    _base:   f._base || { kcal: f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs }
+  };
+  // Restore from base if grams changes
+  if (f._base) {
+    window._pendingMealFoods[0]._base = f._base;
+    const base = f._base;
+    window._pendingMealFoods[0].kcal    = Math.round(base.kcal    * factor);
+    window._pendingMealFoods[0].protein = Math.round(base.protein * factor * 10) / 10;
+    window._pendingMealFoods[0].fat     = Math.round((base.fat||0) * factor * 10) / 10;
+    window._pendingMealFoods[0].carbs   = Math.round(base.carbs   * factor * 10) / 10;
+  }
+  const scaled = window._pendingMealFoods[0];
+  // Update preview display
+  const macrosEl = document.getElementById('previewPortionMacros');
+  if (macrosEl) macrosEl.textContent = `${grams}g = ${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C`;
+  const totalEl = document.getElementById('previewTotalLine');
+  if (totalEl) totalEl.innerHTML = `Total: <strong style="color:var(--text);">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C</strong>`;
 }
 
 function editPreviewItem(index) {
@@ -6494,12 +6541,13 @@ function logFoods(foods, originalText, aiMessage = null) {
         const correctedFoods = [];
         wrap.querySelectorAll('div[style*="grid-template-columns"]').forEach(row => {
           const inputs = row.querySelectorAll('input');
-          if (inputs.length === 4) {
-            const name = inputs[0].value.trim();
-            const kcal = parseFloat(inputs[1].value) || 0;
+          if (inputs.length >= 4) {
+            const name    = inputs[0].value.trim();
+            const kcal    = parseFloat(inputs[1].value) || 0;
             const protein = parseFloat(inputs[2].value) || 0;
-            const carbs = parseFloat(inputs[3].value) || 0;
-            if (name) correctedFoods.push({ name, kcal, protein, fat: 0, carbs });
+            const fat     = inputs.length >= 5 ? parseFloat(inputs[3].value) || 0 : 0;
+            const carbs   = parseFloat(inputs[inputs.length >= 5 ? 4 : 3].value) || 0;
+            if (name) correctedFoods.push({ name, kcal, protein, fat, carbs });
           }
         });
 
@@ -6509,15 +6557,15 @@ function logFoods(foods, originalText, aiMessage = null) {
             id: Date.now() + Math.random(),
             time: new Date().toTimeString().slice(0,5),
             description: food.name,
-            kcal: food.kcal, protein: food.protein, carbs: food.carbs,
-            fibre: 0, fat: 0
+            kcal: food.kcal, protein: food.protein, fat: food.fat, carbs: food.carbs,
+            fibre: 0
           });
         });
 
         wrap.remove();
         editBtn.style.display = 'none';
         saveState();
-        renderDash();
+        updateDashboard();
         addBubble(`✓ Corrected — ${correctedFoods.length} item(s) updated`, 'system', '');
       };
     };
