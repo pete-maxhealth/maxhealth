@@ -2402,7 +2402,7 @@
     </div>
   </div>
   <div class="chat-input-wrap">
-    <div class="mode-toggle">
+    <div class="mode-toggle" id="chatModeBar">
       <div class="mode-btn active" id="modeLog" onclick="setChatMode('log')">🍽 Log food</div>
       <div class="mode-btn" id="modeQuery" onclick="setChatMode('query')">💬 Ask</div>
     </div>
@@ -2501,9 +2501,20 @@
       <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
     </div>
 
-    <input id="libraryFilter" class="modal-input" placeholder="🔍 Search library…"
-      style="width:100%;margin-bottom:10px;font-size:13px;padding:8px 12px;"
-      oninput="filterLibrary(this.value)">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input id="libraryFilter" class="modal-input" placeholder="🔍 Search library…"
+        style="flex:1;font-size:13px;padding:8px 12px;"
+        oninput="filterLibrary(this.value)">
+      <select id="librarySort" onchange="renderLibrary()"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:6px 10px;font-family:'Space Mono',monospace;">
+        <option value="name">A–Z</option>
+        <option value="kcal">Kcal ↓</option>
+        <option value="protein">Protein ↓</option>
+        <option value="fat">Fat ↓</option>
+        <option value="carbs">Carbs ↓</option>
+        <option value="recent">Recent</option>
+      </select>
+    </div>
 
     <div class="settings-card" style="padding:12px 16px; margin-bottom:14px;">
       <div style="font-size:12px; color:var(--text3); line-height:1.6;">
@@ -4237,13 +4248,26 @@ function filterLibrary(query) {
 }
 
 function renderLibrary() {
-  const lib = loadLibrary();
+  let lib = loadLibrary();
   const el = document.getElementById('libraryList');
   if (!el) return;
   if (lib.length === 0) {
     el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No foods saved yet.<br>Log a meal via AI and tap Save to Library.</div>';
     return;
   }
+
+  // Apply sort
+  const sortEl = document.getElementById('librarySort');
+  const sort = sortEl ? sortEl.value : 'name';
+  lib = [...lib].sort((a, b) => {
+    if (sort === 'name')    return a.name.localeCompare(b.name);
+    if (sort === 'kcal')    return (b.kcal || 0) - (a.kcal || 0);
+    if (sort === 'protein') return (b.protein || 0) - (a.protein || 0);
+    if (sort === 'fat')     return (b.fat || 0) - (a.fat || 0);
+    if (sort === 'carbs')   return (b.carbs || 0) - (a.carbs || 0);
+    if (sort === 'recent')  return 0; // keep insertion order (most recent last)
+    return 0;
+  });
   el.innerHTML = lib.map((f, i) => {
     const portionLabel = f.portion ? `${f.portion}${f.per100g ? ' · per 100g' : ''}` : f.per100g ? 'per 100g' : '';
     const macrosLine = `${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C${f.fat ? ' · ' + f.fat + 'g F' : ''}${portionLabel ? ' <span style="color:var(--text3);font-size:10px;">(' + portionLabel + ')</span>' : ''}`;
@@ -6162,6 +6186,10 @@ function showMealPreview(foods, originalText, aiMessage) {
   window._pendingMealText = originalText;
   window._pendingMealMessage = aiMessage;
 
+  // Hide mode buttons while preview is active to avoid confusion
+  const modeBar = document.getElementById('chatModeBar');
+  if (modeBar) modeBar.style.display = 'none';
+
   renderMealPreview();
 }
 
@@ -6369,6 +6397,8 @@ function applyPreviewEdit(index) {
 function confirmMealLog() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
+  const modeBar = document.getElementById('chatModeBar');
+  if (modeBar) modeBar.style.display = '';
   if (window._pendingMealFoods) {
     logFoods(window._pendingMealFoods, window._pendingMealText, window._pendingMealMessage);
     // Offer to save to library — single item saves as-is, multiple items save as combined meal
@@ -6399,6 +6429,8 @@ function cancelMealPreview() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   window._pendingMealFoods = null;
+  const modeBar = document.getElementById('chatModeBar');
+  if (modeBar) modeBar.style.display = '';
   addBubble('Cancelled — nothing logged.', 'system');
 }
 
