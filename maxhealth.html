@@ -5559,9 +5559,9 @@ Reply ONLY with a JSON object:
         name:    f.name,
         amount:  est.label || `${g}g (estimated)`,
         kcal:    Math.round(f.kcal    * factor),
-        protein: Math.round(f.prot    * factor * 10) / 10,
+        protein: Math.round(f.prot    * factor * 100) / 100,
         fat:     Math.round((f.fat||0)* factor * 10) / 10,
-        carbs:   Math.round(f.carb    * factor * 10) / 10,
+        carbs:   Math.round(f.carb    * factor * 100) / 100,
       };
       showMealPreview([food], f.name, `${est.reasoning || 'AI portion estimate'} — tap edit to adjust.`);
     } catch(e) {
@@ -6051,6 +6051,16 @@ async function processMessage(text, imageBase64, imageMime) {
     return;
   }
 
+  // ── Single-line pipe format: "Food name x1 | kcal | P | C | F" ──
+  // Catches pasted single items from the nutrition tracker without header/total rows
+  if (text && text.includes('|')) {
+    const singlePipeResult = _parseSinglePipeLine(text);
+    if (singlePipeResult) {
+      showMealPreview(singlePipeResult, text, 'Parsed from pipe format — values used exactly as entered');
+      return;
+    }
+  }
+
   // ── Nutrition tracker table format detector ──────────────────
   // Detects pasted output from the MaxedHealth nutrition tracker table:
   // "Item Cal P C F\nMCT C8 Oil 1 tbsp 155 0 0 17\n...TOTAL 1758 49.8 20.8 161.1"
@@ -6260,8 +6270,8 @@ async function processMessage(text, imageBase64, imageMime) {
       const mealItem = {
         name: text.length <= 50 ? text : text.slice(0,47) + '...',
         kcal: Math.round(result.items.reduce((a,i)=>a+i.kcal,0)),
-        protein: Math.round(result.items.reduce((a,i)=>a+i.protein,0)*10)/10,
-        carbs: Math.round(result.items.reduce((a,i)=>a+i.carbs,0)*10)/10,
+        protein: Math.round(result.items.reduce((a,i)=>a+i.protein,0)*100)/100,
+        carbs: Math.round(result.items.reduce((a,i)=>a+i.carbs,0)*100)/100,
       };
       const lib = loadLibrary();
       const alreadySaved = lib.some(l => l.name.toLowerCase() === mealItem.name.toLowerCase());
@@ -6378,6 +6388,49 @@ function importSupplementsCSV(input) {
 }
 // Parses the MaxedHealth nutrition tracker table format:
 // "Item Cal P C F\nFood name amount kcal prot carbs fat\n...TOTAL ..."
+function _parseSinglePipeLine(text) {
+  if (!text) return null;
+  // Split into lines, filter to lines containing pipes with 4 numeric values
+  // Format per line: "Name (amount) | kcal | protein | carbs | fat"
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.includes('|'));
+  const foods = [];
+
+  for (const line of lines) {
+    // Skip header lines and total lines
+    if (/\b(Item|Cal|TOTAL|SINGLE PORTION)\b/i.test(line)) continue;
+    // Skip separator lines
+    if (/^[-─═|]+$/.test(line.replace(/\s/g,''))) continue;
+
+    const parts = line.split('|').map(p => p.trim());
+    if (parts.length < 5) continue;
+
+    const nameRaw = parts[0];
+    const kcal    = parseFloat(parts[1]);
+    const protein = parseFloat(parts[2]);
+    const carbs   = parseFloat(parts[3]);
+    const fat     = parseFloat(parts[4]);
+
+    if (isNaN(kcal) || isNaN(protein) || isNaN(carbs) || isNaN(fat)) continue;
+    if (!nameRaw) continue;
+
+    // Extract amount from name — "(250g)", "x1", "150g" at end, or parenthetical
+    const parenMatch = nameRaw.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    const trailMatch = nameRaw.match(/^(.+?)\s+(x?\d+(?:\.\d+)?\s*(?:g|ml|l|kg|tbsp|tsp|tablespoons?|teaspoons?|slices?|pieces?|cloves?|rashers?|cups?)|x\d+)\s*$/i);
+    let name, amount;
+    if (parenMatch) {
+      name = parenMatch[1].trim(); amount = parenMatch[2].trim();
+    } else if (trailMatch) {
+      name = trailMatch[1].trim(); amount = trailMatch[2].trim();
+    } else {
+      name = nameRaw; amount = '';
+    }
+
+    if (name) foods.push({ name, amount, kcal, protein, fat, carbs });
+  }
+
+  return foods.length > 0 ? foods : null;
+}
+
 function _parseNutritionTable(text) {
   if (!text) return null;
 
@@ -6397,7 +6450,7 @@ function _parseNutritionTable(text) {
   const foods = [];
   for (let i = headerIdx + 1; i < totalLineIdx; i++) {
     const line = lines[i];
-    // Format: name (amount) kcal protein carbs fat [fibre]
+    // Format: name (amount) kcal protein carbs fat [fibre] — column order: Cal | P | C | F
     const match = line.match(/^(.+?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s+[\d.]+)*\s*$/);
     if (!match) continue;
     const nameAndAmount = match[1].trim();
@@ -6514,9 +6567,9 @@ function renderMealPreview() {
         </div>
         <div style="font-size:11px;color:var(--text3);cursor:pointer;white-space:nowrap;text-align:right;" onclick="editPreviewItem(${i})" title="Tap to edit">
           <span style="color:var(--text2);">${Math.round(f.kcal)}</span>kcal ·
-          <span style="color:var(--green);">${Math.round(f.protein*10)/10}g</span>P ·
-          <span style="color:#a78bfa;">${Math.round((f.fat||0)*10)/10}g</span>F ·
-          <span style="color:var(--blue);">${Math.round(f.carbs*10)/10}g</span>C
+          <span style="color:var(--green);">${Math.round(f.protein*100)/100}g</span>P ·
+          <span style="color:#a78bfa;">${Math.round((f.fat||0)*100)/100}g</span>F ·
+          <span style="color:var(--blue);">${Math.round(f.carbs*100)/100}g</span>C
           <span style="color:var(--text3);font-size:10px;margin-left:2px;">✎</span>
         </div>
       </div>
@@ -6545,7 +6598,7 @@ function renderMealPreview() {
     ${itemRows}
     ${scaler}
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;margin-top:2px;">
-      <div style="font-size:12px;color:var(--text3);" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.fat*10)/10}g F · ${Math.round(totals.carbs*10)/10}g C</strong></div>
+      <div style="font-size:12px;color:var(--text3);" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*100)/100}g P · ${Math.round(totals.fat*100)/100}g F · ${Math.round(totals.carbs*100)/100}g C</strong></div>
     </div>
     ${warnings.length ? `<div style="margin-top:8px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:4px 0;">${w}</div>`).join('')}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -6569,9 +6622,9 @@ function scalePreviewPortion(gramsStr) {
   window._pendingMealFoods[0] = {
     ...f,
     kcal:    Math.round(f.kcal    * factor),
-    protein: Math.round(f.protein * factor * 10) / 10,
+    protein: Math.round(f.protein * factor * 100) / 100,
     fat:     Math.round((f.fat||0) * factor * 10) / 10,
-    carbs:   Math.round(f.carbs   * factor * 10) / 10,
+    carbs:   Math.round(f.carbs   * factor * 100) / 100,
     amount:  grams + 'g',
     _base:   f._base || { kcal: f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs }
   };
@@ -6623,15 +6676,15 @@ function editPreviewItem(index) {
       </div>
       <div>
         <div style="font-size:10px;color:var(--green);margin-bottom:3px;">PROT (g)</div>
-        <input id="editProtein" type="number" step="0.1" value="${Math.round(f.protein*10)/10}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input id="editProtein" type="number" step="0.1" value="${Math.round(f.protein*100)/100}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
       </div>
       <div>
         <div style="font-size:10px;color:#a78bfa;margin-bottom:3px;">FAT (g)</div>
-        <input id="editFat" type="number" step="0.1" value="${Math.round((f.fat||0)*10)/10}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input id="editFat" type="number" step="0.1" value="${Math.round((f.fat||0)*100)/100}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
       </div>
       <div>
         <div style="font-size:10px;color:var(--blue);margin-bottom:3px;">CARBS (g)</div>
-        <input id="editCarbs" type="number" step="0.1" value="${Math.round(f.carbs*10)/10}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
+        <input id="editCarbs" type="number" step="0.1" value="${Math.round(f.carbs*100)/100}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
       </div>
     </div>
     <div style="display:flex;gap:8px;">
@@ -6677,8 +6730,8 @@ function confirmMealLog() {
       const combined = {
         name: text && text.length <= 60 ? text : (foods[0].name + ' + ' + (foods.length-1) + ' more'),
         kcal: Math.round(totals.kcal),
-        protein: Math.round(totals.protein*10)/10,
-        carbs: Math.round(totals.carbs*10)/10,
+        protein: Math.round(totals.protein*100)/100,
+        carbs: Math.round(totals.carbs*100)/100,
         amount: null
       };
       const lib = loadLibrary();
@@ -6750,7 +6803,7 @@ function logFoods(foods, originalText, aiMessage = null) {
     return `  ${f.name}: ${f.kcal}kcal / ${f.protein}g P / ${f.fat||0}g F / ${f.carbs}g C${extras ? ' / ' + extras : ''}`;
   }).join('\n');
   const aiNote = aiMessage ? `\n${aiMessage}` : '';
-  const reply = `Logged ✓${aiNote}\n\n${itemList}\n\nMeal total: ${Math.round(mealTotals.kcal)}kcal | ${Math.round(mealTotals.protein*10)/10}g protein | ${Math.round((mealTotals.fat||0)*10)/10}g fat | ${Math.round(mealTotals.carbs*10)/10}g carbs`;
+  const reply = `Logged ✓${aiNote}\n\n${itemList}\n\nMeal total: ${Math.round(mealTotals.kcal)}kcal | ${Math.round(mealTotals.protein*100)/100}g protein | ${Math.round((mealTotals.fat||0)*100)/100}g fat | ${Math.round(mealTotals.carbs*100)/100}g carbs`;
 
   const bubbleDiv = addBubble(reply, 'system', carbWarn ? 'warn' : 'success');
   const macrosDiv = document.createElement('div');
@@ -7146,11 +7199,11 @@ function updateDashboard() {
   remCalEl.className = 'rem-val ' + (remCal < 0 ? 'over' : remCal < 300 ? 'warn' : 'good');
 
   const remProtEl = document.getElementById('remProt');
-  remProtEl.textContent = remProt >= 0 ? `${Math.round(remProt * 10)/10}g` : `${Math.round(Math.abs(remProt)*10)/10}g OVER`;
+  remProtEl.textContent = remProt >= 0 ? `${Math.round(remProt * 100)/100}g` : `${Math.round(Math.abs(remProt)*100)/100}g OVER`;
   remProtEl.className = 'rem-val ' + (remProt < 0 ? 'over' : remProt < 20 ? 'warn' : 'good');
 
   const remCarbEl = document.getElementById('remCarb');
-  remCarbEl.textContent = remCarb >= 0 ? `${Math.round(remCarb * 10)/10}g left` : `${Math.round(Math.abs(remCarb)*10)/10}g OVER`;
+  remCarbEl.textContent = remCarb >= 0 ? `${Math.round(remCarb * 100)/100}g left` : `${Math.round(Math.abs(remCarb)*100)/100}g OVER`;
   remCarbEl.className = 'rem-val ' + (remCarb < 0 ? 'over' : remCarb < 10 ? 'warn' : 'good');
 
   // Ketosis badge
@@ -7161,11 +7214,11 @@ function updateDashboard() {
   } else if (totals.carbs < 30) {
     const remaining = targets.carbs - totals.carbs;
     badge.className = 'ketosis-badge green';
-    badge.textContent = `⚡ DEEP KETOSIS — ${Math.round(totals.carbs * 10) / 10}g used · ${Math.round(remaining * 10) / 10}g remaining`;
+    badge.textContent = `⚡ DEEP KETOSIS — ${Math.round(totals.carbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining`;
   } else if (totals.carbs < targets.carbs) {
     const remaining = targets.carbs - totals.carbs;
     badge.className = 'ketosis-badge green';
-    badge.textContent = `✓ KETOSIS ZONE — ${Math.round(totals.carbs * 10) / 10}g used · ${Math.round(remaining * 10) / 10}g remaining`;
+    badge.textContent = `✓ KETOSIS ZONE — ${Math.round(totals.carbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining`;
   } else if (totals.carbs < 75) {
     badge.className = 'ketosis-badge yellow';
     badge.textContent = `⚠ BORDERLINE — ${totals.carbs}g carbs`;
@@ -8177,7 +8230,7 @@ function updateRecipeTotals() {
   };
 
   totalsBar.style.display = 'block';
-  totalsText.textContent = `${Math.round(total.kcal)}kcal · ${Math.round(total.protein*10)/10}g P · ${Math.round((total.fat||0)*10)/10}g F · ${Math.round(total.carbs*10)/10}g C`;
+  totalsText.textContent = `${Math.round(total.kcal)}kcal · ${Math.round(total.protein*100)/100}g P · ${Math.round((total.fat||0)*100)/100}g F · ${Math.round(total.carbs*100)/100}g C`;
   perServingText.textContent = `Per serving (÷${servings}): ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C${per.fibre ? ' · ' + per.fibre + 'g fibre' : ''}`;
 }
 
@@ -8380,7 +8433,7 @@ async function calculateMissedDayConv() {
     const raw = data.content?.[0]?.text?.trim() || '';
     const cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-    const totals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*10)/10, carbs: Math.round(parsed.carbs*10)/10 };
+    const totals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*100)/100, carbs: Math.round(parsed.carbs*100)/100 };
 
     // Remove meals prompt bubble
     const mealsBubble = document.getElementById('missedDayMealsBubble');
@@ -8533,7 +8586,7 @@ Respond ONLY with a JSON object (no markdown):
     const raw = data.content?.[0]?.text?.trim() || '';
     const cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*10)/10, fat: Math.round((parsed.fat||0)*10)/10, carbs: Math.round(parsed.carbs*10)/10 };
+    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*100)/100, fat: Math.round((parsed.fat||0)*100)/100, carbs: Math.round(parsed.carbs*100)/100 };
     resultEl.innerHTML = `<strong style="color:var(--text);">${_missedAITotals.kcal} kcal · ${_missedAITotals.protein}g P · ${_missedAITotals.fat||0}g F · ${_missedAITotals.carbs}g C</strong><br><span style="color:var(--text3);font-size:12px;">${parsed.breakdown}</span><br><span style="font-size:11px;color:var(--text3);">Happy with this? Tap Save to History — or adjust the description and recalculate.</span>`;
     resultEl.style.display = 'block';
   } catch(e) {
@@ -8560,7 +8613,7 @@ function saveMissedDay() {
     protein = parseFloat(document.getElementById('missedProtein').value);
     carbs   = parseFloat(document.getElementById('missedCarbs').value);
     if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) { showToast('Enter all three values'); return; }
-    kcal = Math.round(kcal); protein = Math.round(protein*10)/10; carbs = Math.round(carbs*10)/10;
+    kcal = Math.round(kcal); protein = Math.round(protein*100)/100; carbs = Math.round(carbs*100)/100;
   }
 
   // Check if date already exists
