@@ -2194,12 +2194,12 @@
         <div class="weight-kg" id="displayWeight">90.6<span>kg</span></div>
         <div class="weight-sub">Last updated today</div>
       </div>
-      <div class="weight-target">
+      <div class="weight-target" style="flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
         <div class="target-label">Target</div>
         <div class="target-value" id="dashWeightTarget">92–93</div>
         <div class="gap-value" id="weightGap">+1.4kg to go</div>
+        <button class="weight-edit-btn" onclick="openWeightModal()" style="margin-top:2px;">UPDATE</button>
       </div>
-      <button class="weight-edit-btn" onclick="openWeightModal()">UPDATE</button>
     </div>
 
     <div class="day-mode-row">
@@ -2376,12 +2376,6 @@
       <div class="food-amount-macros100" id="foodAmountPer100"></div>
       <div style="font-size:12px;color:var(--accent);font-family:'Space Mono',monospace;margin:8px 0 6px;letter-spacing:0.04em;">HOW MUCH DID YOU HAVE?</div>
       <div id="foodAmountSuggestions" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
-      <div style="margin-bottom:8px;">
-        <button onclick="requestDatabasePortionEstimate()"
-          style="padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:12px;cursor:pointer;">
-          🤖 Not sure? AI estimate →
-        </button>
-      </div>
       <div class="food-amount-row">
         <input class="food-amount-input" id="foodAmountGrams" type="number" placeholder="Enter grams" oninput="updateFoodAmountScaled()">
         <span class="food-amount-unit">g</span>
@@ -5148,9 +5142,17 @@ CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose
 
 CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. Put the quantity in the "amount" field, not the name. "1 pepperami fire stick" → name: "pepperami fire stick", amount: "x1". "200g ASDA double cream" → name: "ASDA double cream", amount: "200g". Preserve brand names and product descriptions exactly as given.
 
-CRITICAL MACRO ACCURACY: When the user specifies a gram amount (e.g. "30g cheddar", "150g chicken breast"), you MUST calculate macros by scaling from standard per-100g values. Never guess or estimate when a weight is given — calculate. Example: if cheddar is 25g protein per 100g, then 30g = 7.5g protein. Show your working in the message field. If you are uncertain of the per-100g values for a product, state the values you used in the message field so the user can verify.
+CRITICAL MACRO ACCURACY: When the user specifies a gram amount (e.g. "30g cheddar", "150g chicken breast"), you MUST calculate macros by scaling from standard per-100g values. Never guess or estimate when a weight is given — calculate. Always include fat — never return 0g fat for meat, oil, dairy, nuts or eggs. Example: if cheddar is 25g protein/34g fat per 100g, then 30g = 7.5g protein/10.2g fat. Show your working in the message field. If you are uncertain of the per-100g values for a product, state the values you used in the message field so the user can verify.
+
+CRITICAL DEDUPLICATION: Never return the same food item twice under different names. "chicken breast" and "chicken" are the same item — return only one. "mushrooms" and "mushroom" are the same — return only one. If you identify the same ingredient by two names, merge them into a single item with the most descriptive name.
 
 LABEL PHOTO PRIORITY: If the user sends a photo of a nutrition label, READ THE EXACT VALUES FROM THE LABEL. Label values override all other sources including your training data. State clearly "Macros calculated from label values" in the message field and show the per-100g figures you read.
+
+MEAL PHOTO REASONING: If the user sends a photo of a plate or meal (not a label), follow these three steps before calculating anything:
+Step 1 — IDENTIFY: List every visible food component separately. Use the plate, bowl, or hand as a size reference.
+Step 2 — ESTIMATE WEIGHT: For each component, state your gram estimate and your reasoning — e.g. "chicken breast ~150g (palm-sized), rice ~75g (small mound, ~half cup dry equiv), broccoli ~60g (3 florets)".
+Step 3 — CALCULATE: Scale macros from your stated gram estimates using standard per-100g values. State the per-100g values you used.
+Always show the Step 2 estimates in the message field so the user can sanity-check and correct if needed. If the user has also typed a description or amounts, their text overrides your visual estimate for those items.
 
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
 {
@@ -5182,7 +5184,7 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
       const userContent = hasImage
         ? [
             { type: 'image', source: { type: 'base64', media_type: imageMime, data: imageBase64 } },
-            { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
+            { type: 'text', text: userText || 'Identify every food item on the plate, estimate each weight using the plate as a size reference, then calculate macros from those estimates. Show your weight estimates in the message field.' }
           ]
         : userText;
       response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -5213,7 +5215,7 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
     } else if (provider === 'openai') {
       const userContent = hasImage
         ? [
-            { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' },
+            { type: 'text', text: userText || 'Identify every food item on the plate, estimate each weight using the plate as a size reference, then calculate macros from those estimates. Show your weight estimates in the message field.' },
             { type: 'image_url', image_url: { url: `data:${imageMime};base64,${imageBase64}`, detail: 'low' } }
           ]
         : userText;
@@ -5241,7 +5243,7 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
       const proxyMessages = hasImage
         ? [{ role: 'user', content: [
             { type: 'image', source: { type: 'base64', media_type: imageMime, data: imageBase64 } },
-            { type: 'text', text: userText || 'What food is in this image? Estimate the macros.' }
+            { type: 'text', text: userText || 'Identify every food item on the plate, estimate each weight using the plate as a size reference, then calculate macros from those estimates. Show your weight estimates in the message field.' }
           ]}]
         : [{ role: 'user', content: userText || 'this meal' }];
       const pms = proxyMessages.map((m,i) => {
@@ -6378,10 +6380,14 @@ function importSupplementsCSV(input) {
 // "Item Cal P C F\nFood name amount kcal prot carbs fat\n...TOTAL ..."
 function _parseNutritionTable(text) {
   if (!text) return null;
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Must contain TOTAL line
-  const totalLineIdx = lines.findIndex(l => /^TOTAL\b/i.test(l));
+  // Normalise: collapse pipe-delimited format into spaces, normalise whitespace
+  const normalised = text.replace(/\|/g, ' ').replace(/[ \t]+/g, ' ');
+  // Split on newlines OR on pattern that looks like a new item starting (caps word after a number)
+  const lines = normalised.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Accept TOTAL or SINGLE PORTION TOTALS
+  const totalLineIdx = lines.findIndex(l => /^(TOTAL|SINGLE PORTION TOTALS)\b/i.test(l));
   if (totalLineIdx < 0) return null;
 
   // Must have a header line with "Item" and "Cal"
@@ -6391,25 +6397,28 @@ function _parseNutritionTable(text) {
   const foods = [];
   for (let i = headerIdx + 1; i < totalLineIdx; i++) {
     const line = lines[i];
-    // Line ends with kcal prot carbs [fat [fibre]]
-    const match = line.match(/^(.+?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s+[\d.]+)*\s*$/);
+    // Format: name (amount) kcal protein carbs fat [fibre]
+    const match = line.match(/^(.+?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s+[\d.]+)*\s*$/);
     if (!match) continue;
     const nameAndAmount = match[1].trim();
     const kcal    = parseFloat(match[2]);
     const protein = parseFloat(match[3]);
     const carbs   = parseFloat(match[4]);
+    const fat     = parseFloat(match[5]);
     if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) continue;
 
-    // Split name from amount (amount at end: x1, 200g, 1 tbsp, 50g, x4 slices etc)
-    const amountMatch = nameAndAmount.match(/\s+(x?\d+(?:\.\d+)?\s*(?:g|ml|l|kg|tbsp|tsp|tablespoons?|teaspoons?|slices?|pieces?|cloves?|rashers?|cups?)?)\s*$/i);
+    // Split name from amount — handles "(250g)", "(0.5 tbsp / 7.5ml)", trailing "200g", "x1"
+    const parenMatch = nameAndAmount.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    const trailMatch = nameAndAmount.match(/^(.+?)\s+(x?\d+(?:\.\d+)?\s*(?:g|ml|l|kg|tbsp|tsp|tablespoons?|teaspoons?|slices?|pieces?|cloves?|rashers?|cups?))\s*$/i);
     let name, amount;
-    if (amountMatch) {
-      name   = nameAndAmount.slice(0, nameAndAmount.length - amountMatch[0].length).trim();
-      amount = amountMatch[1].trim();
+    if (parenMatch) {
+      name = parenMatch[1].trim(); amount = parenMatch[2].trim();
+    } else if (trailMatch) {
+      name = trailMatch[1].trim(); amount = trailMatch[2].trim();
     } else {
       name = nameAndAmount; amount = '';
     }
-    if (name) foods.push({ name, amount, kcal, protein, fat: 0, carbs });
+    if (name) foods.push({ name, amount, kcal, protein, fat: isNaN(fat) ? 0 : fat, carbs });
   }
 
   return foods.length > 0 ? foods : null;
@@ -6420,7 +6429,25 @@ function showMealPreview(foods, originalText, aiMessage) {
   const existing = document.getElementById('mealPreviewBubble');
   if (existing) existing.remove();
 
-  window._pendingMealFoods = foods.map(f => ({...f})); // clone
+  // Deduplicate: merge items whose names are singular/plural variants or identical
+  const dedupedFoods = [];
+  const normalise = n => n.toLowerCase().trim().replace(/s$/, ''); // strip trailing s for plural match
+  foods.forEach(f => {
+    const key = normalise(f.name);
+    const existing = dedupedFoods.find(e => normalise(e.name) === key);
+    if (existing) {
+      // Merge — sum macros, keep the more descriptive name (longer)
+      existing.kcal    = (existing.kcal    || 0) + (f.kcal    || 0);
+      existing.protein = (existing.protein || 0) + (f.protein || 0);
+      existing.fat     = (existing.fat     || 0) + (f.fat     || 0);
+      existing.carbs   = (existing.carbs   || 0) + (f.carbs   || 0);
+      if (f.name.length > existing.name.length) existing.name = f.name;
+    } else {
+      dedupedFoods.push({...f});
+    }
+  });
+
+  window._pendingMealFoods = dedupedFoods;
   window._pendingMealText = originalText;
   window._pendingMealMessage = aiMessage;
 
