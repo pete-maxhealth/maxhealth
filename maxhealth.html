@@ -2374,8 +2374,16 @@
       </div>
       <div class="food-amount-product" id="foodAmountName"></div>
       <div class="food-amount-macros100" id="foodAmountPer100"></div>
+      <div style="font-size:12px;color:var(--accent);font-family:'Space Mono',monospace;margin:8px 0 6px;letter-spacing:0.04em;">HOW MUCH DID YOU HAVE?</div>
+      <div id="foodAmountSuggestions" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+      <div style="margin-bottom:8px;">
+        <button onclick="requestDatabasePortionEstimate()"
+          style="padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:12px;cursor:pointer;">
+          🤖 Not sure? AI estimate →
+        </button>
+      </div>
       <div class="food-amount-row">
-        <input class="food-amount-input" id="foodAmountGrams" type="number" placeholder="100" oninput="updateFoodAmountScaled()">
+        <input class="food-amount-input" id="foodAmountGrams" type="number" placeholder="Enter grams" oninput="updateFoodAmountScaled()">
         <span class="food-amount-unit">g</span>
       </div>
       <div class="food-amount-scaled" id="foodAmountScaled">Enter amount above</div>
@@ -5102,9 +5110,9 @@ async function parseWithAI(userText, imageBase64, imageMime) {
     ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label with a description: "${cleanText || 'unknown product'}".
 The description contains the product name and the amount they had (e.g. "ASDA Cottage Cheese 150g").
 
-Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate.
-Step 2: Extract the amount in grams from the user's description. If no amount is given, use 100g.
-Step 3: Scale the per-100g values to the stated amount.
+Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate or use your training data.
+Step 2: Extract the amount in grams or ml from the user's description. The amount MUST be stated — do not assume 100g if no amount is given; instead set amount to "unknown" and note this in the message field.
+Step 3: If a valid gram amount is present, scale the per-100g values to that amount. Show the per-100g values you read AND the scaled values in the message field.
 
 Use the product name from the user's description if provided, otherwise identify it from the label.
 
@@ -5114,7 +5122,7 @@ Respond ONLY with a JSON object (no markdown, no preamble):
   "items": [
     { "name": "Product name (no quantity)", "amount": "150g", "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }
   ],
-  "message": "Read from label per 100g, scaled to Xg."
+  "message": "Read from label: 107kcal/100g · 9.1g P · 5.5g F · 4.1g C. Scaled to 150g."
 }`
     : `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
@@ -5404,6 +5412,7 @@ async function lookupBarcode(barcode, statusBubble) {
       (iron   ? ` · ${iron}mg iron`    : '');
     document.getElementById('foodAmountGrams').value = '';
     document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+    renderPortionSuggestions(name, brand, p.quantity || '');
     setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 
     addBubble(`✓ Found: ${displayName}\n⚠ Values from Open Food Facts — verify against label before saving to library.`, 'system', 'success');
@@ -5494,6 +5503,128 @@ function _typicalPortion(name, brand, qty) {
 
   // Default: 100g
   return { g: 100, label: '100g (standard)' };
+}
+
+function requestDatabasePortionEstimate() {
+  if (!_selectedFoodItem) return;
+  const f = _selectedFoodItem;
+  const displayName = f.brand ? `${f.name} (${f.brand})` : f.name;
+
+  // Cross-reference library for similar items
+  const lib = loadLibrary() || [];
+  const words = f.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const matches = lib.filter(item =>
+    words.some(w => item.name.toLowerCase().includes(w)) && item.portion
+  );
+  let libraryHint = '';
+  if (matches.length > 0) {
+    const refs = matches.slice(0, 3).map(m => `"${m.name}" at ${m.portion}`).join(', ');
+    libraryHint = ` The user's library has similar items: ${refs}.`;
+  }
+
+  const prompt = `The user scanned or searched for: "${displayName}".
+Per 100g: ${f.kcal}kcal · ${f.prot}g protein · ${f.carb}g carbs · ${f.fat||0}g fat.${libraryHint}
+Estimate a typical single serving size in grams for this product. Consider common UK portion sizes and any pack context.
+Reply ONLY with a JSON object:
+{ "grams": 125, "label": "125g (typical single serve)", "reasoning": "one line explanation" }`;
+
+  closeFoodSearch();
+  switchTabById('chat');
+
+  (async () => {
+    const thinking = addBubble(`🤖 Estimating a typical portion for ${f.name}…`, 'system');
+    try {
+      const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+      const res = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+      const data = await res.json();
+      const raw = data.content?.[0]?.text?.trim().replace(/```json|```/g, '') || '';
+      const est = JSON.parse(raw);
+      thinking.remove();
+
+      const g = parseFloat(est.grams);
+      if (!g || g <= 0) throw new Error('bad grams');
+
+      const factor = g / 100;
+      const food = {
+        name:    f.name,
+        amount:  est.label || `${g}g (estimated)`,
+        kcal:    Math.round(f.kcal    * factor),
+        protein: Math.round(f.prot    * factor * 10) / 10,
+        fat:     Math.round((f.fat||0)* factor * 10) / 10,
+        carbs:   Math.round(f.carb    * factor * 10) / 10,
+      };
+      showMealPreview([food], f.name, `${est.reasoning || 'AI portion estimate'} — tap edit to adjust.`);
+    } catch(e) {
+      thinking.remove();
+      addBubble(`Couldn't estimate a portion for ${f.name} — please re-open and enter the amount manually.`, 'system', 'warn');
+    }
+  })();
+}
+
+function renderPortionSuggestions(name, brand, qty) {
+  const el = document.getElementById('foodAmountSuggestions');
+  if (!el || !_selectedFoodItem) return;
+
+  // Build candidate suggestions — start with pack/piece sizes from product quantity string
+  const suggestions = [];
+  const q = qty || '';
+
+  // Whole pack: e.g. "200g"
+  const packMatch = q.match(/^(\d+(?:\.\d+)?)\s*g$/i);
+  if (packMatch) {
+    const g = parseFloat(packMatch[1]);
+    if (g > 0 && g <= 1000) suggestions.push({ g, label: `${g}g (whole pack)` });
+  }
+  // Per piece: e.g. "6 x 30g"
+  const pieceMatch = q.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*g/i);
+  if (pieceMatch) {
+    const g = parseFloat(pieceMatch[2]);
+    suggestions.push({ g, label: `${g}g (1 piece)` });
+    suggestions.push({ g: g * 2, label: `${g * 2}g (2 pieces)` });
+  }
+
+  // Keyword-based common amounts — only if no pack data
+  if (!suggestions.length) {
+    const n = (name + ' ' + (brand || '')).toLowerCase();
+    if (/cream\b/.test(n))                              suggestions.push({ g: 15, label: '15g (1 tbsp)' }, { g: 30, label: '30g (2 tbsp)' }, { g: 100, label: '100g' });
+    else if (/peanut butter|almond butter|nut butter/.test(n)) suggestions.push({ g: 15, label: '15g (1 tbsp)' }, { g: 30, label: '30g (2 tbsp)' });
+    else if (/butter\b/.test(n))                        suggestions.push({ g: 10, label: '10g (pat)' }, { g: 25, label: '25g' });
+    else if (/olive oil|coconut oil|vegetable oil/.test(n)) suggestions.push({ g: 14, label: '14g (1 tbsp)' }, { g: 28, label: '28g (2 tbsp)' });
+    else if (/yogurt|yoghurt/.test(n))                  suggestions.push({ g: 125, label: '125g (1 pot)' }, { g: 200, label: '200g' });
+    else if (/cheddar|cheese\b/.test(n))                suggestions.push({ g: 30, label: '30g (matchbox)' }, { g: 50, label: '50g' });
+    else if (/egg\b/.test(n))                           suggestions.push({ g: 60, label: '60g (1 egg)' }, { g: 120, label: '120g (2 eggs)' });
+    else if (/bacon\b/.test(n))                         suggestions.push({ g: 25, label: '25g (1 rasher)' }, { g: 75, label: '75g (3 rashers)' });
+    else if (/milk\b/.test(n))                          suggestions.push({ g: 100, label: '100ml' }, { g: 200, label: '200ml (1 glass)' });
+    else if (/nuts|almonds|cashews|peanuts|walnuts/.test(n)) suggestions.push({ g: 30, label: '30g (handful)' }, { g: 50, label: '50g' });
+    else if (/salmon|tuna|cod|haddock|mackerel/.test(n)) suggestions.push({ g: 100, label: '100g' }, { g: 150, label: '150g (1 fillet)' });
+    else if (/chicken/.test(n))                         suggestions.push({ g: 100, label: '100g' }, { g: 150, label: '150g (1 breast)' });
+    else                                                 suggestions.push({ g: 50, label: '50g' }, { g: 100, label: '100g' }, { g: 150, label: '150g' });
+  }
+
+  // Always offer 100g if not already in list
+  if (!suggestions.find(s => s.g === 100)) suggestions.push({ g: 100, label: '100g' });
+
+  el.innerHTML = suggestions.map(s => {
+    const kcal = _selectedFoodItem ? Math.round(_selectedFoodItem.kcal * s.g / 100) : '';
+    return `<button onclick="setPortionSuggestion(${s.g})"
+      style="padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;color:var(--text2);font-size:12px;cursor:pointer;white-space:nowrap;">
+      ${s.label}${kcal ? ` <span style="color:var(--text3);font-size:11px;">${kcal}kcal</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+function setPortionSuggestion(grams) {
+  document.getElementById('foodAmountGrams').value = grams;
+  updateFoodAmountScaled();
+  document.getElementById('foodAmountGrams').focus();
 }
 
 function openFoodSearch() {
@@ -5626,11 +5757,11 @@ function selectFoodResult(i) {
     (_p.satFat ? ` · ${_p.satFat}g sat fat`: '') +
     (_p.salt   ? ` · ${_p.salt}g salt`     : '') +
     (_p.iron   ? ` · ${_p.iron}mg iron`    : '');
-  // Pre-fill with default grams if provided (e.g. from library portion hint)
-  const defaultGrams = _selectedFoodItem._defaultGrams || '';
-  document.getElementById('foodAmountGrams').value = defaultGrams;
-  if (defaultGrams) updateFoodAmountScaled();
-  else document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+  // Clear input — never pre-fill, always make user confirm
+  document.getElementById('foodAmountGrams').value = '';
+  document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+  // Render portion suggestions from product data
+  renderPortionSuggestions(_selectedFoodItem.name, _selectedFoodItem.brand, '');
   setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 }
 
@@ -5770,11 +5901,126 @@ function sendChat() {
 
   const displayText = text || (photoMode === 'label' ? '🏷 Label photo' : '📷 Photo');
   addBubble(displayText, 'user');
+
+  // Label mode: check if user included a gram amount — prompt if not
+  if (hasPhoto && photoMode === 'label') {
+    const hasGrams = /\d+\s*(g|ml|kg)\b/i.test(text || '');
+    if (!hasGrams) {
+      // Store pending so user can reply with amount OR tap AI help
+      window._pendingLabelPhoto = { b64: photoB64, mime: photoMime, text: text || '' };
+      // Build interactive bubble
+      const bubble = addBubble('', 'system', 'warn');
+      bubble.innerHTML = `
+        <div style="margin-bottom:8px;">How much did you have? Type the amount (e.g. <strong>150g</strong>) and I'll scale the label values accurately.</div>
+        <div style="margin-bottom:6px;font-size:11px;color:var(--text3);">Not sure?</div>
+        <button onclick="requestLabelPortionEstimate()"
+          style="padding:8px 14px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:13px;cursor:pointer;font-family:'Space Mono',monospace;">
+          🤖 AI help needed?
+        </button>`;
+      return;
+    }
+  }
+
   // Prepend label instruction if label mode
   const messageText = (hasPhoto && photoMode === 'label')
     ? '[LABEL] ' + (text || '')
     : text;
   processMessage(messageText, photoB64, photoMime);
+}
+
+function requestLabelPortionEstimate() {
+  const pending = window._pendingLabelPhoto;
+  if (!pending) return;
+  window._pendingLabelPhoto = null;
+
+  addBubble('🤖 AI help needed?', 'user');
+
+  // Cross-reference library for similar items
+  const lib = loadLibrary() || [];
+  const productName = (pending.text || '').toLowerCase();
+  let libraryHint = '';
+  if (lib.length > 0 && productName) {
+    // Simple similarity: any library item whose name shares a word with the product description
+    const words = productName.split(/\s+/).filter(w => w.length > 3);
+    const matches = lib.filter(item =>
+      words.some(w => item.name.toLowerCase().includes(w))
+      && item.portion
+    );
+    if (matches.length > 0) {
+      const refs = matches.slice(0, 3).map(m => `"${m.name}" at ${m.portion}`).join(', ');
+      libraryHint = `\n\nThe user's food library contains similar items for reference: ${refs}. Use these as a guide if relevant.`;
+    }
+  }
+
+  // Build estimate prompt — label mode but asking AI to guess the portion
+  const estimatePrompt = `[LABEL_ESTIMATE] ${pending.text || 'unknown product'}`;
+  const systemOverride = `You are a nutrition label reader and portion estimator.
+The user has sent a photo of a nutrition label but is unsure how much they consumed.
+
+Step 1: Read the per-100g values from the label exactly — LEFT or FIRST column on UK labels.
+Step 2: Identify the product type and estimate a typical single serving based on:
+  - Any pack size visible on the label
+  - Common serving sizes for this type of product
+  - The user's food library references below (if relevant)
+Step 3: State your assumption clearly in the message field — e.g. "Estimated 125g — typical single serve for this style of yogurt."${libraryHint}
+
+Respond ONLY with a JSON object (no markdown, no preamble):
+{
+  "type": "food",
+  "items": [
+    { "name": "Product name (no quantity)", "amount": "125g (estimated)", "kcal": 134, "protein": 11.4, "fat": 6.9, "carbs": 5.2 }
+  ],
+  "message": "Read from label: 107kcal/100g. Estimated 125g — typical single serve. Tap edit if you know the exact amount."
+}`;
+
+  // Send directly — bypass the normal system prompt
+  _processLabelEstimate(pending.b64, pending.mime, systemOverride);
+}
+
+async function _processLabelEstimate(b64, mime, systemPrompt) {
+  const thinking = addBubble('🤖 Estimating portion from label…', 'system');
+  try {
+    const provider = localStorage.getItem('mh_provider') || 'proxy';
+    const apiKey   = localStorage.getItem('mh_api_key') || '';
+    const PROXY    = 'https://maxhealth-ai.bogginsuk.workers.dev';
+    const useProxy = provider !== 'openai' && !apiKey;
+    const endpoint = useProxy ? PROXY : 'https://api.anthropic.com/v1/messages';
+
+    const payload = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 600,
+      messages: [
+        { role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+          { type: 'text', text: systemPrompt }
+        ]}
+      ]
+    };
+    if (!useProxy) payload.system = systemPrompt;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (!useProxy && apiKey) {
+      headers['x-api-key'] = apiKey;
+      headers['anthropic-version'] = '2023-06-01';
+    }
+
+    const res  = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
+    const data = await res.json();
+    const raw  = data.content?.[0]?.text?.trim() || '';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    thinking.remove();
+    if (parsed.type === 'food' && parsed.items?.length) {
+      showMealPreview(parsed.items, parsed.items[0].name, parsed.message || 'AI portion estimate — verify before saving');
+      switchTabById('chat');
+    } else {
+      addBubble('Couldn\'t estimate a portion — try entering the amount manually.', 'system', 'warn');
+    }
+  } catch(e) {
+    thinking.remove();
+    addBubble('Estimation failed — please type the amount (e.g. 150g) to continue.', 'system', 'warn');
+  }
 }
 
 function quickPrompt(text) {
@@ -5783,6 +6029,20 @@ function quickPrompt(text) {
 }
 
 async function processMessage(text, imageBase64, imageMime) {
+  // ── Resume pending label photo if user replies with an amount ──
+  if (window._pendingLabelPhoto && !imageBase64) {
+    const hasGrams = /\d+\s*(g|ml|kg)\b/i.test(text || '');
+    if (hasGrams) {
+      const pending = window._pendingLabelPhoto;
+      window._pendingLabelPhoto = null;
+      const combined = (pending.text ? pending.text + ' ' : '') + text.trim();
+      processMessage('[LABEL] ' + combined, pending.b64, pending.mime);
+      return;
+    }
+    // If they replied but still no grams, clear pending and continue normally
+    window._pendingLabelPhoto = null;
+  }
+
   // ── If a meal preview is pending, don't start a new one ──
   if (window._pendingMealFoods) {
     addBubble('You have a meal ready to log — tap "Log it ✓" or "Cancel" first.', 'system', 'warn');
