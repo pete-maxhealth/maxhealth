@@ -6712,6 +6712,135 @@ function applyPreviewEdit(index) {
   renderMealPreview();
 }
 
+function _libNormName(n) {
+  return (n || '').toLowerCase().trim().replace(/s$/, '');
+}
+
+function _libDupeCheck(name) {
+  const lib = loadLibrary() || [];
+  const key = _libNormName(name);
+  return lib.find(item => _libNormName(item.name) === key);
+}
+
+function showSaveMealDialog(foods, saveBar) {
+  saveBar._saveFoods = foods;
+  saveBar.setAttribute('data-savebar','1');
+  saveBar.innerHTML = `
+    <div style="width:100%;margin-top:4px;">
+      <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">MEAL NAME</div>
+      <div style="display:flex;gap:6px;">
+        <input id="saveMealName" class="modal-input" style="flex:1;font-size:13px;padding:8px 10px;" placeholder="e.g. Chicken stir fry" value="">
+        <button onclick="confirmSaveMeal(this)"
+          style="padding:8px 14px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save</button>
+        <button onclick="this.closest('[data-savebar]').innerHTML=''"
+          style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:13px;cursor:pointer;">✕</button>
+      </div>
+    </div>`;
+  saveBar.querySelector('#saveMealName')?.focus();
+}
+
+function confirmSaveMeal(btn) {
+  const saveBar = btn.closest('[data-savebar]');
+  const foods = saveBar?._saveFoods;
+  if (!foods) return;
+  const nameEl = document.getElementById('saveMealName');
+  const name = nameEl?.value?.trim();
+  if (!name) { showToast('Enter a meal name'); return; }
+
+  const dupe = _libDupeCheck(name);
+  if (dupe) { showToast(`"${dupe.name}" already in library`); return; }
+
+  const totals = foods.reduce((a, f) => ({
+    kcal:    a.kcal    + (f.kcal    || 0),
+    protein: a.protein + (f.protein || 0),
+    fat:     a.fat     + (f.fat     || 0),
+    carbs:   a.carbs   + (f.carbs   || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+
+  const entry = {
+    name,
+    kcal:    Math.round(totals.kcal * 100) / 100,
+    protein: Math.round(totals.protein * 100) / 100,
+    fat:     Math.round(totals.fat * 100) / 100,
+    carbs:   Math.round(totals.carbs * 100) / 100,
+    portion: '1 serving',
+    locked: false,
+  };
+
+  const lib = loadLibrary() || [];
+  lib.push(entry);
+  saveLibrary(lib);
+  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ "${name}" saved to library</span>`;
+  showToast(`"${name}" saved to library`);
+}
+
+function showSaveIngredientsDialog(foods, saveBar) {
+  saveBar._saveFoods = foods;
+  saveBar.setAttribute('data-savebar','1');
+
+  const rows = foods.map((f, i) => {
+    const dupe = _libDupeCheck(f.name);
+    const dupeLabel = dupe
+      ? `<span style="font-size:10px;color:var(--text3);margin-left:4px;">(already saved)</span>`
+      : '';
+    const checked = !dupe ? 'checked' : '';
+    const disabled = dupe ? 'disabled style="opacity:0.4;"' : '';
+    return `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:${dupe ? 'default' : 'pointer'};" ${disabled}>
+        <input type="checkbox" data-idx="${i}" ${checked} ${disabled}
+          style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+        <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}${dupeLabel}</span>
+        <span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:'Space Mono',monospace;">${Math.round(f.kcal)}kcal</span>
+      </label>`;
+  }).join('');
+
+  saveBar.innerHTML = `
+    <div style="width:100%;margin-top:4px;">
+      <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">SELECT ITEMS TO SAVE</div>
+      <div id="saveIngredientsList">${rows}</div>
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button onclick="confirmSaveIngredients(this)"
+          style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:8px;font-size:13px;font-size:13px;font-weight:700;cursor:pointer;">Save selected</button>
+        <button onclick="this.closest('[data-savebar]').innerHTML=''"
+          style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:13px;cursor:pointer;">✕</button>
+      </div>
+    </div>`;
+}
+
+function confirmSaveIngredients(btn) {
+  const saveBar = btn.closest('[data-savebar]');
+  const foods = saveBar?._saveFoods;
+  if (!foods) return;
+  const list = saveBar.querySelector('#saveIngredientsList');
+  if (!list) return;
+  const checkboxes = list.querySelectorAll('input[type="checkbox"]:not([disabled])');
+  const lib = loadLibrary() || [];
+  const saved = [];
+
+  checkboxes.forEach(cb => {
+    if (!cb.checked) return;
+    const f = foods[parseInt(cb.dataset.idx)];
+    if (!f) return;
+    const dupe = _libDupeCheck(f.name);
+    if (dupe) return;
+    lib.push({
+      name:    f.name,
+      kcal:    Math.round(f.kcal * 100) / 100,
+      protein: Math.round(f.protein * 100) / 100,
+      fat:     Math.round((f.fat || 0) * 100) / 100,
+      carbs:   Math.round(f.carbs * 100) / 100,
+      portion: f.amount || '',
+      locked:  false,
+    });
+    saved.push(f.name);
+  });
+
+  if (!saved.length) { showToast('Nothing new to save'); return; }
+  saveLibrary(lib);
+  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ Saved: ${saved.join(', ')}</span>`;
+  showToast(`${saved.length} item${saved.length > 1 ? 's' : ''} saved to library`);
+}
+
 function confirmMealLog() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
@@ -6920,6 +7049,28 @@ function logFoods(foods, originalText, aiMessage = null) {
       };
     };
     bubbleDiv.appendChild(editBtn);
+  }
+
+  // ── Save to Library options (multi-item meals) ──
+  if (foods && foods.length > 0) {
+    const saveBar = document.createElement('div');
+    saveBar.style.cssText = 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;';
+
+    if (foods.length > 1) {
+      const saveMealBtn = document.createElement('button');
+      saveMealBtn.style.cssText = 'padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:"Space Mono",monospace;';
+      saveMealBtn.textContent = '📚 Save as meal';
+      saveMealBtn.onclick = () => showSaveMealDialog(foods, saveBar);
+      saveBar.appendChild(saveMealBtn);
+    }
+
+    const saveItemsBtn = document.createElement('button');
+    saveItemsBtn.style.cssText = 'padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:"Space Mono",monospace;';
+    saveItemsBtn.textContent = foods.length === 1 ? '📚 Save to library' : '📚 Save ingredients';
+    saveItemsBtn.onclick = () => showSaveIngredientsDialog(foods, saveBar);
+    saveBar.appendChild(saveItemsBtn);
+
+    bubbleDiv.appendChild(saveBar);
   }
   if (carbWarn) {
     addBubble(`⚠️ Carb ceiling hit (${Math.round(newTotals.carbs * 10) / 10}g / ${targets.carbs}g). Protein and fat only for remaining meals.`, 'system', 'warn');
