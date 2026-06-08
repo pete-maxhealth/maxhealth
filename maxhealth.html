@@ -5142,7 +5142,7 @@ CRITICAL JSON RULES: Your response must be pure JSON only. No markdown. No prose
 
 CRITICAL: Use the user's EXACT words as the food name — never substitute, simplify or rename. Put the quantity in the "amount" field, not the name. "1 pepperami fire stick" → name: "pepperami fire stick", amount: "x1". "200g ASDA double cream" → name: "ASDA double cream", amount: "200g". Preserve brand names and product descriptions exactly as given.
 
-CRITICAL MACRO ACCURACY: When the user specifies a gram amount (e.g. "30g cheddar", "150g chicken breast"), you MUST calculate macros by scaling from standard per-100g values. Never guess or estimate when a weight is given — calculate. Always include fat — never return 0g fat for meat, oil, dairy, nuts or eggs. Example: if cheddar is 25g protein/34g fat per 100g, then 30g = 7.5g protein/10.2g fat. Show your working in the message field. If you are uncertain of the per-100g values for a product, state the values you used in the message field so the user can verify.
+CRITICAL MACRO ACCURACY: When the user specifies a gram amount (e.g. "30g cheddar", "150g chicken breast"), you MUST calculate macros by scaling from standard per-100g values. Never guess or estimate when a weight is given — calculate. Always include fat — never return 0g fat for meat, oil, dairy, nuts or eggs. Common values you must use: olive oil 100g fat per 100g; chicken breast 3.6g fat per 100g; salmon 13g fat per 100g; cheddar 34g fat per 100g; double cream 48g fat per 100g; eggs 11g fat per 100g; butter 81g fat per 100g. Example: 2 tbsp olive oil (28g) = 28g fat, 252kcal. Show your working in the message field.
 
 CRITICAL DEDUPLICATION: Never return the same food item twice under different names. "chicken breast" and "chicken" are the same item — return only one. "mushrooms" and "mushroom" are the same — return only one. If you identify the same ingredient by two names, merge them into a single item with the most descriptive name.
 
@@ -6476,20 +6476,31 @@ function showMealPreview(foods, originalText, aiMessage) {
   const existing = document.getElementById('mealPreviewBubble');
   if (existing) existing.remove();
 
-  // Deduplicate: merge items whose names are singular/plural variants or identical
+  // Deduplicate: merge only exact name matches or direct singular/plural pairs
+  // e.g. "mushroom" + "mushrooms" → merge. But "onion" + "onions" → merge only if both present.
+  // Do NOT strip s blindly — "carrots" and "carrot" are both valid separate entries if only one appears.
   const dedupedFoods = [];
-  const normalise = n => n.toLowerCase().trim().replace(/s$/, ''); // strip trailing s for plural match
+  const seen = new Map(); // normalised key → index in dedupedFoods
+  const normalise = n => n.toLowerCase().trim();
+  const singularOf = n => n.replace(/ies$/i, 'y').replace(/([^aeiou])s$/i, '$1'); // basic singular
+
   foods.forEach(f => {
-    const key = normalise(f.name);
-    const existing = dedupedFoods.find(e => normalise(e.name) === key);
-    if (existing) {
-      // Merge — sum macros, keep the more descriptive name (longer)
-      existing.kcal    = (existing.kcal    || 0) + (f.kcal    || 0);
-      existing.protein = (existing.protein || 0) + (f.protein || 0);
-      existing.fat     = (existing.fat     || 0) + (f.fat     || 0);
-      existing.carbs   = (existing.carbs   || 0) + (f.carbs   || 0);
-      if (f.name.length > existing.name.length) existing.name = f.name;
+    const exact = normalise(f.name);
+    const singular = singularOf(exact);
+    // Check if we've seen this exact name or its singular/plural twin
+    const existingKey = seen.has(exact) ? exact : seen.has(singular) ? singular : null;
+    if (existingKey !== null) {
+      const idx = seen.get(existingKey);
+      const e = dedupedFoods[idx];
+      e.kcal    = (e.kcal    || 0) + (f.kcal    || 0);
+      e.protein = (e.protein || 0) + (f.protein || 0);
+      e.fat     = (e.fat     || 0) + (f.fat     || 0);
+      e.carbs   = (e.carbs   || 0) + (f.carbs   || 0);
+      if (f.name.length > e.name.length) e.name = f.name;
     } else {
+      seen.set(exact, dedupedFoods.length);
+      // Also register the singular so plural twin is caught
+      if (singular !== exact) seen.set(singular, dedupedFoods.length);
       dedupedFoods.push({...f});
     }
   });
