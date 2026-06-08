@@ -4256,10 +4256,11 @@ function renderLibrary() {
     return;
   }
 
-  // Apply sort
+  // Apply sort — preserve original index so delete/edit always target the right array entry
   const sortEl = document.getElementById('librarySort');
   const sort = sortEl ? sortEl.value : 'name';
-  lib = [...lib].sort((a, b) => {
+  const libWithIdx = lib.map((f, origIdx) => ({ ...f, _origIdx: origIdx }));
+  libWithIdx.sort((a, b) => {
     if (sort === 'name')    return a.name.localeCompare(b.name);
     if (sort === 'kcal')    return (b.kcal || 0) - (a.kcal || 0);
     if (sort === 'protein') return (b.protein || 0) - (a.protein || 0);
@@ -4268,52 +4269,53 @@ function renderLibrary() {
     if (sort === 'recent')  return 0; // keep insertion order (most recent last)
     return 0;
   });
-  el.innerHTML = lib.map((f, i) => {
+  el.innerHTML = libWithIdx.map((f, i) => {
+    const origIdx = f._origIdx;
     const portionLabel = f.portion ? `${f.portion}${f.per100g ? ' · per 100g' : ''}` : f.per100g ? 'per 100g' : '';
     const macrosLine = `${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C${f.fat ? ' · ' + f.fat + 'g F' : ''}${portionLabel ? ' <span style="color:var(--text3);font-size:10px;">(' + portionLabel + ')</span>' : ''}`;
-    const deleteBtn = `<button class="library-edit-cancel" style="color:var(--red);border-color:rgba(255,94,94,0.3);margin-right:auto;" onclick="deleteFromLibrary(${i})">Delete</button>`;
+    const deleteBtn = `<button class="library-edit-cancel" style="color:var(--red);border-color:rgba(255,94,94,0.3);margin-right:auto;" onclick="deleteFromLibrary(${origIdx})">Delete</button>`;
     return `
-    <div class="library-edit-form" id="lib-edit-form-${i}">
+    <div class="library-edit-form" id="lib-edit-form-${origIdx}">
       <div class="library-edit-row">
         <span class="library-edit-label">Name</span>
-        <input class="library-edit-input" id="lib-edit-name-${i}" value="${f.name.replace(/"/g,'&quot;')}">
+        <input class="library-edit-input" id="lib-edit-name-${origIdx}" value="${f.name.replace(/"/g,'&quot;')}">
       </div>
       <div class="library-edit-row">
         <span class="library-edit-label">Portion</span>
-        <input class="library-edit-input" id="lib-edit-portion-${i}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp">
+        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
         <div>
           <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:'Space Mono',monospace;">KCAL</div>
-          <input class="library-edit-input" id="lib-edit-kcal-${i}" type="number" value="${f.kcal}" style="width:100%;">
+          <input class="library-edit-input" id="lib-edit-kcal-${origIdx}" type="number" value="${f.kcal}" style="width:100%;">
         </div>
         <div>
           <div style="font-size:10px;color:var(--green);margin-bottom:3px;font-family:'Space Mono',monospace;">PROTEIN g</div>
-          <input class="library-edit-input" id="lib-edit-prot-${i}" type="number" step="0.1" value="${f.protein}" style="width:100%;">
+          <input class="library-edit-input" id="lib-edit-prot-${origIdx}" type="number" step="0.1" value="${f.protein}" style="width:100%;">
         </div>
         <div>
           <div style="font-size:10px;color:#a78bfa;margin-bottom:3px;font-family:'Space Mono',monospace;">FAT g</div>
-          <input class="library-edit-input" id="lib-edit-fat-${i}" type="number" step="0.1" value="${f.fat||0}" style="width:100%;">
+          <input class="library-edit-input" id="lib-edit-fat-${origIdx}" type="number" step="0.1" value="${f.fat||0}" style="width:100%;">
         </div>
         <div>
           <div style="font-size:10px;color:var(--yellow);margin-bottom:3px;font-family:'Space Mono',monospace;">CARBS g</div>
-          <input class="library-edit-input" id="lib-edit-carb-${i}" type="number" step="0.1" value="${f.carbs}" style="width:100%;">
+          <input class="library-edit-input" id="lib-edit-carb-${origIdx}" type="number" step="0.1" value="${f.carbs}" style="width:100%;">
         </div>
       </div>
       <div class="library-edit-actions">
         ${deleteBtn}
-        <button class="library-edit-cancel" onclick="cancelLibraryEdit(${i})">Cancel</button>
-        <button class="library-edit-save" onclick="saveLibraryEdit(${i})">Save</button>
+        <button class="library-edit-cancel" onclick="cancelLibraryEdit(${origIdx})">Cancel</button>
+        <button class="library-edit-save" onclick="saveLibraryEdit(${origIdx})">Save</button>
       </div>
     </div>
-    <div class="library-item" id="lib-item-${i}">
+    <div class="library-item" id="lib-item-${origIdx}">
       <div class="library-item-info">
         <div class="library-item-name">${f.name}</div>
         <div class="library-item-macros">${macrosLine}</div>
       </div>
       <span class="${f.locked ? 'library-item-locked' : 'library-item-ai'}">${f.locked ? '🔒' : 'AI ✓'}</span>
-      <div class="library-add-btn" onclick="quickLogFromLibrary(${i})">LOG</div>
-      <div class="library-edit-btn" onclick="openLibraryEdit(${i})">EDIT</div>
+      <div class="library-add-btn" onclick="quickLogFromLibrary(${origIdx})">LOG</div>
+      <div class="library-edit-btn" onclick="openLibraryEdit(${origIdx})">EDIT</div>
     </div>
   `;}).join('');
 }
@@ -4333,94 +4335,70 @@ function showLibraryPortionSelector(f, index) {
   const existing = document.getElementById('libraryPortionModal');
   if (existing) existing.remove();
 
-  // Base values — per100g or per portion
-  const isPer100g = f.per100g;
   const basePortion = f.portion ? parseFloat(f.portion) || 100 : 100;
   const baseLabel   = f.portion || '100g';
-
-  const UNITS = [
-    { label: baseLabel + ' (default)', grams: basePortion },
-    { label: '½ portion', grams: basePortion * 0.5 },
-    { label: '2× portion', grams: basePortion * 2 },
-    { label: '1 teaspoon (5g)', grams: 5 },
-    { label: '1 tablespoon (15g)', grams: 15 },
-    { label: '100ml / 100g', grams: 100 },
-    { label: 'Custom…', grams: null },
-  ];
+  const baseKcal    = f.kcal;
 
   const modal = document.createElement('div');
   modal.id = 'libraryPortionModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Log from Library</div>
-      <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;">${f.name}</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Per ${baseLabel}: ${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C</div>
+      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:4px;">${f.name}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px;">Base: ${baseLabel} · ${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C</div>
 
-      <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">SELECT AMOUNT</div>
-      <div id="portionButtons" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
-        ${UNITS.map((u, i) => `
-          <button onclick="selectLibraryPortion(${index}, ${u.grams}, ${basePortion}, '${u.label}')"
-            style="padding:12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;">
-            <span>${u.label}</span>
-            ${u.grams ? `<span style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text3);">${Math.round(f.kcal * u.grams / basePortion)}kcal</span>` : '<span style="color:var(--accent);font-size:12px;">Enter →</span>'}
-          </button>
-        `).join('')}
-      </div>
+      <button onclick="selectLibraryDefault(${index})"
+        style="width:100%;padding:14px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span>Log ${baseLabel}</span>
+        <span style="font-family:'Space Mono',monospace;font-size:12px;">${baseKcal}kcal</span>
+      </button>
 
-      <div id="customPortionRow" style="display:none;margin-bottom:16px;">
-        <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">CUSTOM AMOUNT (grams or ml)</div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="customPortionInput" type="number" class="modal-input" placeholder="e.g. 170" style="flex:1;font-size:18px;padding:10px;"
-            oninput="(function(){
-              const g = parseFloat(this.value);
-              const lib = loadLibrary();
-              const f = lib[${index}];
-              const factor = g / ${basePortion};
-              if (g > 0 && f) {
-                document.getElementById('customPortionPreview').textContent =
-                  g + 'g = ' + Math.round(f.kcal*factor) + 'kcal · ' + Math.round(f.protein*factor*10)/10 + 'g P · ' + Math.round((f.fat||0)*factor*10)/10 + 'g F · ' + Math.round(f.carbs*factor*10)/10 + 'g C';
-              }
-            }).call(this)">
-          <button onclick="confirmCustomPortion(${index}, ${basePortion})" style="padding:10px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">Log</button>
-        </div>
-        <div id="customPortionPreview" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
-      </div>
+      <button onclick="logLibraryViaChat(${index})"
+        style="width:100%;padding:14px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:15px;cursor:pointer;margin-bottom:10px;">
+        Different amount? Ask the AI →
+      </button>
 
-      <button onclick="document.getElementById('libraryPortionModal').remove()" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;">Cancel</button>
+      <button onclick="document.getElementById('libraryPortionModal').remove()"
+        style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;">Cancel</button>
     </div>`;
 
   document.body.appendChild(modal);
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
 }
 
-function selectLibraryPortion(index, grams, basePortion, label) {
-  if (grams === null) {
-    // Custom — show input
-    document.getElementById('customPortionRow').style.display = 'block';
-    document.getElementById('customPortionInput').focus();
-    return;
-  }
+function selectLibraryDefault(index) {
   const lib = loadLibrary();
   const f = lib[index];
-  const factor = grams / basePortion;
+  if (!f) return;
+  const baseLabel = f.portion || '100g';
   const food = {
     name:    f.name,
-    amount:  label.includes('default') ? (f.portion || basePortion + 'g') : label,
-    kcal:    Math.round(f.kcal    * factor),
-    protein: Math.round(f.protein * factor * 10) / 10,
-    fat:     Math.round((f.fat||0) * factor * 10) / 10,
-    carbs:   Math.round(f.carbs   * factor * 10) / 10,
+    amount:  baseLabel,
+    kcal:    f.kcal,
+    protein: f.protein,
+    fat:     f.fat || 0,
+    carbs:   f.carbs,
   };
   document.getElementById('libraryPortionModal').remove();
-  showMealPreview([food], f.name, `From library (${label})`);
+  showMealPreview([food], f.name, `From library (${baseLabel})`);
   switchTabById('chat');
 }
 
-function confirmCustomPortion(index, basePortion) {
-  const grams = parseFloat(document.getElementById('customPortionInput').value);
-  if (!grams || grams <= 0) { showToast('Enter a valid amount'); return; }
-  selectLibraryPortion(index, grams, basePortion, grams + 'g');
+function logLibraryViaChat(index) {
+  const lib = loadLibrary();
+  const f = lib[index];
+  if (!f) return;
+  const baseLabel = f.portion || '100g';
+  document.getElementById('libraryPortionModal').remove();
+  // Pre-fill chat with item name so AI knows what it's scaling
+  const chatInput = document.getElementById('chatInput') || document.querySelector('.chat-input textarea') || document.querySelector('#userInput');
+  if (chatInput) {
+    chatInput.value = `${f.name} `;
+    chatInput.focus();
+  }
+  switchTabById('chat');
+  showToast(`Tell me how much ${f.name} you had`);
 }
 
 function deleteFromLibrary(index) {
@@ -6920,7 +6898,7 @@ function updateDashboard() {
     logEl.innerHTML = state.todayLog.map(e => `
       <div class="log-entry" id="log-entry-${e.id}">
         <div class="log-time">${e.time}</div>
-        <div class="log-food" style="cursor:pointer;" onclick="editLogEntry(${e.id})" title="Tap to edit">${e.description.length > 40 ? e.description.slice(0,40)+'…' : e.description}</div>
+        <div class="log-food" style="cursor:pointer;" onclick="editLogEntry(${e.id})" title="Tap to edit">${e.description.length > 40 ? e.description.slice(0,40)+'…' : e.description}${e.amount ? `<span style="color:var(--text3);font-size:11px;font-family:'Space Mono',monospace;margin-left:5px;">(${e.amount})</span>` : ''}</div>
         <div class="log-macros">
           <span class="c">${e.kcal}</span>
           <span class="p">${e.protein}p</span>
@@ -11449,21 +11427,29 @@ function checkNotifications() {
   const prefs=getNotifPrefs();
   const now=new Date(); const hour=now.getHours(); const day=now.getDay();
   const todayKey=now.toISOString().slice(0,10);
-  if (localStorage.getItem('mh_last_notif_check')===todayKey) return;
   if (prefs.eod && hour>=21) {
-    const log=state.todayLog||[];
-    if (log.length===0) sendLocalNotif('MaxedHealth','End of day — nothing logged yet. Don\'t forget to record your meals.','chat');
-  }
-  if (prefs.weekly && day===0 && hour>=8) {
-    const week=(state.history||[]).slice(0,7);
-    if (week.length>0) {
-      const t=getTargets();
-      const avgC=Math.round(week.reduce((a,e)=>a+(e.totals?.carbs||0),0)/week.length);
-      const msg=avgC<=t.carbs?`7-day avg carbs: ${avgC}g — within your ${t.carbs}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${t.carbs}g ceiling. Check Reports.`;
-      sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports');
+    const eodKey=`mh_notif_eod_${todayKey}`;
+    if (!localStorage.getItem(eodKey)) {
+      const log=state.todayLog||[];
+      if (log.length===0) {
+        sendLocalNotif('MaxedHealth','End of day — nothing logged yet. Don\'t forget to record your meals.','chat');
+        localStorage.setItem(eodKey,'1');
+      }
     }
   }
-  localStorage.setItem('mh_last_notif_check',todayKey);
+  if (prefs.weekly && day===0 && hour>=8) {
+    const weekKey=`mh_notif_weekly_${todayKey}`;
+    if (!localStorage.getItem(weekKey)) {
+      const week=(state.history||[]).slice(0,7);
+      if (week.length>0) {
+        const t=getTargets();
+        const avgC=Math.round(week.reduce((a,e)=>a+(e.totals?.carbs||0),0)/week.length);
+        const msg=avgC<=t.carbs?`7-day avg carbs: ${avgC}g — within your ${t.carbs}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${t.carbs}g ceiling. Check Reports.`;
+        sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports');
+        localStorage.setItem(weekKey,'1');
+      }
+    }
+  }
 }
 
 function sendLocalNotif(title, body, tab) {
@@ -12048,6 +12034,7 @@ try {
   showNewUserBanner();
   registerServiceWorker();
   setTimeout(checkNotifications, 3000);
+  setInterval(checkNotifications, 20 * 60 * 1000); // re-check every 20 minutes
 } catch(e) {
   document.body.innerHTML = `<div style="padding:40px;font-family:monospace;color:#ff5e5e;background:#080a0d;min-height:100vh;">
     <div style="font-size:20px;margin-bottom:16px;">MaxedHealth startup error</div>

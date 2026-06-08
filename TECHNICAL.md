@@ -2,28 +2,36 @@
 
 **Architecture, proxy setup, pipeline structure, data schema, and adding new extractors.**
 
-*Last updated: May 2026 — v1.9 (Phase 5)*
+*Last updated: June 2026 — v2.0 (Phase 7)*
 
 ---
 
 ## Architecture Overview
 
-MaxedHealth is a static single-page web application with no server-side component.
+MaxedHealth is a static single-page web application backed by an optional local Python server for wearable data sync.
 
 ```
-┌─────────────────────────────────────────┐
-│  Browser (Chrome / Safari)              │
-│                                         │
-│  maxhealth.html                         │
-│  ├── Dashboard (weight, macros, water)  │
-│  ├── Nutrition tab (AI meal logging)    │
-│  ├── History / Trends / Reports         │
-│  ├── Library (saved foods + recipes)    │
-│  ├── Import tab (CSV + pipeline)        │
-│  └── Settings                           │
-│              │                          │
-│              │ fetch (text / image)     │
-└──────────────┼──────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  Browser (Chrome / Safari)                       │
+│                                                  │
+│  maxhealth.html                                  │
+│  ├── Today tab (dashboard, macros, water, log)   │
+│  ├── Log tab (AI chat, library, recipes)         │
+│  │   ├── Chat sub-tab  (AI meal logging)         │
+│  │   ├── Library sub-tab (saved foods)           │
+│  │   └── Recipes sub-tab (recipe builder)        │
+│  ├── Insights tab (history, trends, reports)     │
+│  │   ├── History sub-tab                         │
+│  │   ├── Trends sub-tab                          │
+│  │   └── Reports sub-tab (query builder)         │
+│  └── Settings tab                                │
+│      ├── Profile, targets, notifications         │
+│      ├── Supplements tracker (19 supplements)    │
+│      ├── Devices & import                        │
+│      └── Appearance & accessibility              │
+│              │                                   │
+│              │ fetch (text / image)              │
+└──────────────┼───────────────────────────────────┘
                │
       ┌────────┴────────┐
       │                 │
@@ -35,6 +43,19 @@ MaxedHealth is a static single-page web application with no server-side componen
 │  User's own  │  │  Adds API key, forwards  │
 │  API key     │  │  to Anthropic            │
 └──────────────┘  └─────────────────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│  Local Python server         │
+│  server.py (localhost:5757)  │
+│  Termux on Android           │
+│                              │
+│  Serves & persists:          │
+│  ├── library.csv             │
+│  ├── supplements.csv         │
+│  ├── master.csv              │
+│  └── combined.csv            │
+└──────────────────────────────┘
 ```
 
 **Key design decisions:**
@@ -44,13 +65,15 @@ MaxedHealth is a static single-page web application with no server-side componen
 - The Cloudflare proxy keeps the API key out of client-side code while keeping AI free for users with no personal key
 - Users with their own Claude or OpenAI key bypass the proxy entirely — direct API calls only
 - All health data stays on the device — only meal descriptions (text/photo) leave the device for AI processing
+- The local server (`server.py`) is optional — the app works fully from GitHub Pages without it, but loses wearable sync and CSV persistence for library/supplements
 
 ---
 
 ## GitHub Pages Hosting
 
 **Repo:** `github.com/pete-maxhealth/maxhealth`  
-**Live URL:** `pete-maxhealth.github.io/maxhealth/maxhealth.html`
+**Live URL:** `pete-maxhealth.github.io/maxhealth/maxhealth.html`  
+**Install page:** `pete-maxhealth.github.io/maxhealth/` (index.html with MacroDroid guide)
 
 Deployment is a `git push` to `main`. GitHub Pages serves the repo root automatically.
 
@@ -75,6 +98,8 @@ The worker:
 
 **Important:** The proxy does not support a top-level `system` field. The app inlines the system prompt as the first entry in the `messages` array when using the proxy path. The direct API path (user's own key) sends `system` as a separate field as normal.
 
+Meals with 6+ items are split into two parallel AI requests to avoid token truncation on the proxy path.
+
 No user health data is ever sent to the proxy — only the meal logging prompt and any food photo.
 
 **Worker secret setup (one-time):**
@@ -83,6 +108,30 @@ wrangler secret put ANTHROPIC_API_KEY
 ```
 
 **Rate limiting:** configured in the Cloudflare dashboard to prevent abuse.
+
+---
+
+## Local Server (server.py)
+
+`server.py` runs on Android via Termux and serves `localhost:5757`. It handles:
+
+- Static file serving (fallback to GitHub Pages URL when offline)
+- CSV read/write endpoints for `library.csv`, `supplements.csv`, `master.csv`, `combined.csv`
+- WebSocket probe endpoint (`ws://localhost:5757/ws-probe`) — used by the app to detect whether the local server is running and switch between local and GitHub Pages modes automatically
+
+**Auto-start:** Termux:Boot runs the boot script at `~/.termux/boot/start-maxedhealth.sh` on every device reboot.
+
+**mhstart:** A script at `~/bin/mhstart` (on `$PATH`) restarts the server from any Termux session. Created automatically by `setup.sh`.
+
+**Deploy command:**
+```bash
+cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html
+```
+
+**Standard push** (always copies server.py and update_health.py into repo before committing):
+```bash
+cd /storage/emulated/0/maxhealth/app/maxhealth && git add -A && git commit -m "vX.X" && git push
+```
 
 ---
 
@@ -113,7 +162,7 @@ pete-maxhealth.github.io/maxhealth/carer.html#<base64-payload>
 }
 ```
 
-The link is valid for 7 days. After expiry, carer.html shows an expired banner. No data is stored server-side — everything is in the URL hash. Zero-day entries are filtered from the display automatically.
+The link is valid for 7 days. No data is stored server-side — everything is in the URL hash.
 
 ---
 
@@ -124,11 +173,14 @@ The pipeline is an optional Python-based system that runs on Android via Termux.
 ### Directory structure (on-device)
 
 ```
-/storage/emulated/0/MaxHealth/
+/storage/emulated/0/maxhealth/
 ├── app/
 │   ├── maxhealth/              # Git repo (web app + docs)
 │   │   ├── maxhealth.html
 │   │   ├── carer.html
+│   │   ├── index.html          # Install page with MacroDroid guide
+│   │   ├── manifest.json       # PWA manifest
+│   │   ├── icons/              # PWA icons (96, 192, 512px)
 │   │   ├── CHANGELOG.md
 │   │   ├── TECHNICAL.md
 │   │   ├── README.md
@@ -141,14 +193,17 @@ The pipeline is an optional Python-based system that runs on Android via Termux.
 │   │   ├── ringconn.py
 │   │   └── amazfit.py
 │   ├── update_health.py        # Pipeline entry point
-│   ├── server.py               # Local HTTP server (dev only)
+│   ├── server.py               # Local HTTP + WebSocket server
 │   ├── merge.py                # Builds combined.csv
 │   └── utils.py                # Logging, CSV helpers, backup
 ├── data/
 │   ├── inbox/                  # Drop wearable exports here
 │   ├── tables/
-│   │   ├── combined.csv        # Merged wearable data
-│   │   └── nutrition.csv       # Exported from app
+│   │   ├── combined.csv        # Merged wearable data (39 fields)
+│   │   ├── nutrition.csv       # Exported from app
+│   │   ├── master.csv          # Full merged health + nutrition master
+│   │   ├── library.csv         # Saved food library (persisted by server.py)
+│   │   └── supplements.csv     # Supplement log (persisted by server.py)
 │   └── backup/                 # Auto-backups (7 max per file)
 └── logs/
     └── pipeline.log            # Structured error log
@@ -161,22 +216,18 @@ The pipeline is an optional Python-based system that runs on Android via Termux.
 mhstart
 
 # Process all devices with files in inbox/
-cd /storage/emulated/0/MaxHealth/app && python update_health.py
+cd /storage/emulated/0/maxhealth/app && python update_health.py
 
 # Specific device only
-cd /storage/emulated/0/MaxHealth/app && python update_health.py --device withings
-cd /storage/emulated/0/MaxHealth/app && python update_health.py --device ringconn
-cd /storage/emulated/0/MaxHealth/app && python update_health.py --device amazfit --password YOUR_ZEPP_PASSWORD
+cd /storage/emulated/0/maxhealth/app && python update_health.py --device withings
+cd /storage/emulated/0/maxhealth/app && python update_health.py --device ringconn
+cd /storage/emulated/0/maxhealth/app && python update_health.py --device amazfit --password YOUR_ZEPP_PASSWORD
 
 # Preview without writing
-cd /storage/emulated/0/MaxHealth/app && python update_health.py --dry-run
+cd /storage/emulated/0/maxhealth/app && python update_health.py --dry-run
 ```
 
 ### Source precedence
-
-When multiple devices report the same metric for the same date, precedence determines which value is used. Secondary sources fill gaps where the primary has no value.
-
-Default order (configurable in Import tab → Device Precedence):
 
 | Metric  | Priority order                          |
 |---------|-----------------------------------------|
@@ -195,8 +246,6 @@ To restore a backup: open the app → Import tab → Restore Backup.
 
 ### Error logging
 
-The pipeline writes structured logs to `/storage/emulated/0/MaxHealth/logs/pipeline.log`:
-
 ```
 2026-05-11 14:30:22 | amazfit   | extract  | ok      | 2 days processed
 2026-05-11 14:30:22 | withings  | extract  | error   | No files found in inbox/
@@ -213,7 +262,7 @@ The last 50 lines are viewable in the app at Import tab → View Pipeline Log.
 
 ### combined.csv
 
-One row per date. All wearable data merged by date according to source precedence.
+One row per date. All wearable data merged by date according to source precedence. 39 fields total.
 
 | Column           | Type    | Description                                      |
 |------------------|---------|--------------------------------------------------|
@@ -255,6 +304,38 @@ Exported from the app. One row per day.
 | mode        | string | standard / occasion / holiday   |
 | notes       | string | Optional daily notes            |
 
+### master.csv
+
+Full merged dataset combining wearable data and nutrition. Built by `merge.py` after each pipeline run. Used by the Reports query builder for cross-domain analysis (e.g. "days where sleep > 7h AND carbs < 50g").
+
+### library.csv
+
+Saved food library. Persisted by `server.py` at `/data/tables/library.csv`. Mirrors `localStorage['maxhealth_foods']` — synced on load and on every save. One row per food item.
+
+| Column   | Type   | Description                              |
+|----------|--------|------------------------------------------|
+| name     | string | Food name                                |
+| kcal     | float  | Calories per base portion                |
+| protein  | float  | Protein per base portion (g)             |
+| fat      | float  | Fat per base portion (g)                 |
+| carbs    | float  | Carbs per base portion (g)               |
+| portion  | string | Base portion label (e.g. "30g", "1 tbsp")|
+| per100g  | bool   | True if values are per 100g              |
+| locked   | bool   | True if locked (prevents accidental edit)|
+| fibre    | float  | Fibre per base portion (g), optional     |
+
+### supplements.csv
+
+Supplement log. Persisted by `server.py` at `/data/tables/supplements.csv`. One row per supplement per day taken.
+
+| Column     | Type   | Description                          |
+|------------|--------|--------------------------------------|
+| date       | string | YYYY-MM-DD                           |
+| name       | string | Supplement name                      |
+| dose       | string | Dose taken (e.g. "500mg", "2 caps")  |
+| period     | string | Morning / Afternoon / Evening / Night|
+| taken      | bool   | Whether taken that period            |
+
 ### localStorage keys (app state)
 
 | Key                    | Description                                      |
@@ -263,6 +344,7 @@ Exported from the app. One row per day.
 | `mh_target_kcal`       | Daily calorie target                             |
 | `mh_target_protein`    | Daily protein target                             |
 | `mh_target_carbs`      | Daily carb ceiling                               |
+| `mh_target_fat`        | Daily fat target                                 |
 | `mh_name`              | User's name                                      |
 | `mh_provider`          | AI provider: claude / openai / local             |
 | `mh_api_key`           | Encrypted API key (if set)                       |
@@ -270,8 +352,27 @@ Exported from the app. One row per day.
 | `mh_condition`         | Selected condition (gbm / t2d / recomp / general)|
 | `mh_water_target`      | Daily water target in ml                         |
 | `mh_fibre_target`      | Daily fibre target in grams                      |
-| `maxhealth_foods`      | Saved food library                               |
+| `maxhealth_foods`      | Saved food library (also persisted to library.csv)|
+| `mh_supplements`       | Supplement definitions and log                   |
 | `mh_tips_seen`         | Dismissed contextual tips per tab                |
+| `mh_visual_theme`      | Active visual theme                              |
+| `mh_icon_pack`         | Active icon pack                                 |
+| `mh_theme`             | Colour palette                                   |
+| `mh_custom_accent`     | Custom accent hex colour override                |
+| `mh_text_size`         | Text size preference (normal/large/larger)       |
+
+---
+
+## Supplements Tracker
+
+The supplements tracker (Settings → Supplements) manages a configurable stack of up to 20+ supplements across four daily periods: Morning, Afternoon, Evening, Night.
+
+Each supplement has:
+- Name, dose, notes
+- Active periods (which times of day it's taken)
+- Per-period toggle (mark taken/not taken each period independently)
+
+Resets at midnight. Persisted to `supplements.csv` via server.py when local server is running; falls back to localStorage only when on GitHub Pages.
 
 ---
 
@@ -280,13 +381,6 @@ Exported from the app. One row per day.
 Extractors live in `extractors/`. Each is a self-contained Python module.
 
 ### Required interface
-
-Every extractor must expose a `run(inbox_path, output_path, dry_run=False)` function that:
-
-1. Finds its export file(s) in `inbox_path`
-2. Extracts and transforms data into the `combined.csv` schema
-3. Returns a list of dicts — one per date — with keys matching the schema columns above
-4. Does **not** write to disk itself — the pipeline runner handles merging and writing
 
 ```python
 # extractors/mydevice.py
@@ -300,20 +394,16 @@ def run(inbox_path, output_path, dry_run=False):
     Returns: list of dicts, one per date
     """
     rows = []
-    # ... find and parse your export file ...
     rows.append({
         'date': '2026-05-11',
         'steps': 10234,
         'sleep_duration': 420,
-        # ... other fields as available ...
         'source': 'mydevice',
     })
     return rows
 ```
 
 ### Registering the extractor
-
-Add it to the device registry in `update_health.py`:
 
 ```python
 EXTRACTORS = {
@@ -326,92 +416,46 @@ EXTRACTORS = {
 
 ### Amazfit / Zepp specifics
 
-The Amazfit extractor (`extractors/amazfit.py`) handles the AES-256 encrypted zip that Zepp exports. Pass the password via:
+The Amazfit extractor handles AES-256 encrypted zip exports using `pyzipper`. Pass the password via:
 
 ```bash
-cd /storage/emulated/0/MaxHealth/app && python update_health.py --device amazfit --password YOUR_PASSWORD
+cd /storage/emulated/0/maxhealth/app && python update_health.py --device amazfit --password YOUR_PASSWORD
 # or
-export ZEPP_PASSWORD=YOUR_PASSWORD && cd /storage/emulated/0/MaxHealth/app && python update_health.py --device amazfit
+export ZEPP_PASSWORD=YOUR_PASSWORD && python update_health.py --device amazfit
 ```
 
-The password is displayed in the Zepp app at the time of export. It is also often the numeric user ID at the start of the export filename.
+The password is displayed in the Zepp app at export time and is often the numeric user ID at the start of the export filename.
 
 ---
 
 ## Visual Theme System
 
-MaxHealth has two independent appearance layers, both stored in localStorage.
-
 ### Visual Style (`mh_visual_theme`)
 
-Controls the full design language of the app. Values: `none` (Classic), `vital`, `pulse`, `forge`.
+Values: `none` (Classic), `vital`, `pulse`, `forge`. Applied via `data-visual-theme` on `<html>`.
 
-Applied via `data-visual-theme` attribute on `<html>`. All theme CSS uses attribute selectors (`[data-visual-theme="vital"] .card { ... }`) so existing styles are never overridden — only supplemented.
-
-| Theme | Palette | Radius | Typography | Card style |
-|-------|---------|--------|------------|------------|
-| Classic | Green accent, dark bg | 12px | DM Sans | Border + surface |
-| Vital | Blue (#38bdf8) | 6px | Space Mono headers | Left border accent |
-| Pulse | Green (#2deb8f) | 18-20px | DM Sans rounded | Gradient fill |
-| Forge | Amber (#f97316) | 2-4px | Syne bold | Top border accent |
-
-When a visual theme is active, colour swatches only update `--accent` (not the full palette).
+| Theme   | Palette              | Radius   | Typography       | Card style        |
+|---------|----------------------|----------|------------------|-------------------|
+| Classic | Green accent, dark   | 12px     | DM Sans          | Border + surface  |
+| Vital   | Blue (#38bdf8)       | 6px      | Space Mono heads | Left border accent|
+| Pulse   | Green (#2deb8f)      | 18-20px  | DM Sans rounded  | Gradient fill     |
+| Forge   | Amber (#f97316)      | 2-4px    | Syne bold        | Top border accent |
 
 ### Icon Pack (`mh_icon_pack`)
 
-Controls SVG icons for tab bar and input buttons. Values: `classic`, `outline`, `organic`, `bold`, `neon`, `mono`.
-
-Stored in `ICON_SETS` (tab icons) and `INPUT_ICONS` (button icons) JS objects. Applied via `applyTabIcons()` and `applyInputIcons()` on theme change and page load.
-
-Selecting a visual theme auto-selects its matching icon pack, but the user can override independently.
-
-| Pack | Style | Auto-selected by |
-|------|-------|-----------------|
-| Classic | Emoji + original SVGs | Classic theme |
-| Outline | Thin-line SVG | Vital |
-| Organic | Rounded filled SVG | Pulse |
-| Bold | Solid chunky SVG | Forge |
-| Neon | Outline + accent glow | Manual only |
-| Mono | Greyscale solid | Manual only |
-
-### localStorage keys
-
-| Key | Description |
-|-----|-------------|
-| `mh_visual_theme` | Active visual theme (`none`/`vital`/`pulse`/`forge`) |
-| `mh_icon_pack` | Active icon pack (`classic`/`outline`/`organic`/`bold`/`neon`/`mono`) |
-| `mh_theme` | Colour palette (`midnight`/`aurora`/`carbon`/`slate`/`light`) |
-| `mh_custom_accent` | Custom accent hex colour override |
+Values: `classic`, `outline`, `organic`, `bold`, `neon`, `mono`. Auto-selected by visual theme, overridable independently.
 
 ---
 
-## Chart Lightbox
+## PWA & Service Worker
 
-A full-screen chart overlay (`#chartLightbox`) separate from the metric drill-down overlay (`#metricDrillOverlay`).
-
-Triggered by tapping any chart card in the Trends → Full Charts view. Renders the selected metric's data on a large canvas with period selector (30D/90D/All). A "Deep Dive →" button closes the lightbox and opens the drill overlay for stats/insights.
-
-Attempts `screen.orientation.lock('landscape')` on open where supported (Android Chrome). Falls back to a "rotate for wider view" hint.
-
----
-
-`maxhealth.html` includes a Web App Manifest and Service Worker registration enabling:
+`maxhealth.html` includes a Web App Manifest (`manifest.json`) and Service Worker registration enabling:
 
 - **Add to Home Screen** — installs as a standalone app icon on Android and iOS
 - **Offline access** — cached assets work without connectivity
-- **iOS Safari support** — Apple touch icon, safe area insets, input zoom prevention (Phase 5)
+- **iOS Safari support** — Apple touch icon, safe area insets, input zoom prevention
 
-The Service Worker caches the app shell on first load. All nutrition data is stored in localStorage (survives app closure, cleared only by explicit export or browser data clear).
-
-**iOS-specific meta tags (Phase 5):**
-```html
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MaxedHealth">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-```
-
-All `<input>` and `<textarea>` elements use `font-size: 16px` minimum to prevent iOS Safari auto-zoom.
+The Service Worker caches the app shell on first load. All nutrition data is stored in localStorage.
 
 ---
 
@@ -422,10 +466,10 @@ All `<input>` and `<textarea>` elements use `font-size: 16px` minimum to prevent
 ```bash
 #!/data/data/com.termux/files/usr/bin/bash
 # MaxedHealth — runs on every device boot
-cd /storage/emulated/0/MaxHealth/app && python update_health.py 2>> /storage/emulated/0/MaxHealth/logs/pipeline.log
+cd /storage/emulated/0/maxhealth/app && python update_health.py 2>> /storage/emulated/0/maxhealth/logs/pipeline.log
 ```
 
-Termux:Boot runs this on every reboot. The app itself runs entirely from GitHub Pages — no local server needed for normal use. The `mhstart` alias launches the local dev server when needed.
+`setup.sh` also installs `mhstart` as a script at `~/bin/mhstart` (on `$PATH`), so it works regardless of how Termux is launched — not as a `.bashrc` alias.
 
 ---
 
