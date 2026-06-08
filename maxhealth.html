@@ -6235,7 +6235,7 @@ async function processMessage(text, imageBase64, imageMime) {
         return;
       }
       const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
-      showMealPreview(foods, text, 'Long meal — processed in two parts');
+      showMealPreview(sanitiseFatValues(foods), text, 'Long meal — processed in two parts');
       return;
     }
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
@@ -6270,7 +6270,7 @@ async function processMessage(text, imageBase64, imageMime) {
         protein: Math.round(result.items.reduce((a,i)=>a+i.protein,0)*100)/100,
         carbs: Math.round(result.items.reduce((a,i)=>a+i.carbs,0)*100)/100,
       };
-      showMealPreview(result.items, text, result.message);
+      showMealPreview(sanitiseFatValues(result.items), text, result.message);
       return;
     }
     if (result.type === 'query') { addBubble(result.message, 'system'); return; }
@@ -6471,6 +6471,61 @@ function _parseNutritionTable(text) {
   return foods.length > 0 ? foods : null;
 }
 
+// ─── FAT SANITISER ───────────────────────────────────────
+// AI frequently omits fat or returns 0g for foods that definitely contain fat.
+// This function applies known per-100g fat values as a floor check.
+const FAT_FLOOR_DB = {
+  'olive oil':      { fat100: 100 },
+  'vegetable oil':  { fat100: 100 },
+  'coconut oil':    { fat100: 100 },
+  'butter':         { fat100: 81  },
+  'cream':          { fat100: 48  },
+  'double cream':   { fat100: 48  },
+  'cheddar':        { fat100: 34  },
+  'cheese':         { fat100: 25  },
+  'eggs':           { fat100: 11  },
+  'egg':            { fat100: 11  },
+  'chicken':        { fat100: 3.6 },
+  'chicken breast': { fat100: 3.6 },
+  'salmon':         { fat100: 13  },
+  'beef':           { fat100: 16  },
+  'mince':          { fat100: 16  },
+  'steak':          { fat100: 10  },
+  'pork':           { fat100: 10  },
+  'bacon':          { fat100: 25  },
+  'sausage':        { fat100: 25  },
+  'nuts':           { fat100: 50  },
+  'peanut butter':  { fat100: 50  },
+  'avocado':        { fat100: 15  },
+  'yogurt':         { fat100: 5   },
+  'milk':           { fat100: 3.5 },
+};
+
+function sanitiseFatValues(items) {
+  return items.map(item => {
+    const f = {...item};
+    if (f.fat && f.fat > 0) return f; // already has fat, leave it
+    const nameLower = (f.name || '').toLowerCase();
+    for (const [key, val] of Object.entries(FAT_FLOOR_DB)) {
+      if (nameLower.includes(key)) {
+        // Try to get grams from amount field first
+        const grams = parseFloat(f.amount) || null;
+        if (grams && grams > 0) {
+          f.fat = Math.round(val.fat100 * grams / 100 * 100) / 100;
+        } else {
+          // Estimate from kcal: fat contributes 9kcal/g
+          // Assume fat provides ~val.fat100/(val.fat100 + 4*protein_per100 + 4*carb_per100) of kcal
+          // Simplified: fat_g ≈ kcal * (fat100*9) / (fat100*9 + 165*9) * (1/9)
+          // Even simpler: use fat% of kcal based on known food
+          f.fat = Math.round(f.kcal * (val.fat100 * 9) / (val.fat100 * 9 + 400) / 9 * 100) / 100;
+        }
+        break;
+      }
+    }
+    return f;
+  });
+}
+
 // ─── MEAL PREVIEW ────────────────────────────────────────
 function showMealPreview(foods, originalText, aiMessage) {
   const existing = document.getElementById('mealPreviewBubble');
@@ -6532,14 +6587,15 @@ function renderMealPreview() {
 
   // Plausibility check — flag suspicious macros
   const warnings = [];
+  const isPureFat = n => /oil|butter|cream|lard|ghee|dripping/i.test(n);
   foods.forEach(f => {
-    if (f.kcal > 50 && f.protein < f.kcal * 0.01) {
+    if (f.kcal > 50 && f.protein < f.kcal * 0.01 && !isPureFat(f.name)) {
       const isMeat = /steak|beef|chicken|pork|turkey|lamb|meat|fish|salmon|tuna|prawn/i.test(f.name);
       const emoji = isMeat ? '🔴' : '⚠️';
       warnings.push(`${emoji} ${f.name}: ${f.protein}g protein seems low for ${Math.round(f.kcal)}kcal — check label or use barcode scan`);
     }
     // Warn if fat is zero for meat — almost certainly wrong
-    if (f.fat === 0 || f.fat === null || f.fat === undefined) {
+    if ((f.fat === 0 || f.fat === null || f.fat === undefined) && !isPureFat(f.name)) {
       const isMeat = /steak|beef|chicken|pork|turkey|lamb|meat|fish|salmon|tuna/i.test(f.name);
       if (isMeat && f.kcal > 100) {
         warnings.push(`🔴 ${f.name}: 0g fat is incorrect for meat — verify label values`);
