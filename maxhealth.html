@@ -6219,22 +6219,38 @@ async function processMessage(text, imageBase64, imageMime) {
   // ── AI fallback ───────────────────────────────────────────
   const { provider, apiKey } = getAIConfig();
   if (provider !== 'none' || true) { // proxy always available
-    // Split long meals (>6 items) into two requests to avoid token truncation
-    const itemList = text.split(',').map(s => s.trim()).filter(Boolean);
-    if (!imageBase64 && itemList.length > 6) {
+    // Split long meals into two requests to avoid token truncation
+    // Trigger: >6 comma-separated items OR text >200 chars with multiple ingredients
+    const itemList = text.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+    const looksLong = text.length > 200 || itemList.length > 6;
+    if (!imageBase64 && looksLong) {
+      // Split either on commas/newlines, or on ingredient boundaries (numbers followed by units/words)
+      let parts;
+      if (itemList.length > 1) {
+        const mid = Math.ceil(itemList.length / 2);
+        parts = [itemList.slice(0, mid).join(', '), itemList.slice(mid).join(', ')];
+      } else {
+        // No commas — split on ingredient pattern: number+unit+word boundaries
+        const tokens = text.split(/(?=\b\d+\s*(?:g|kg|ml|l|tbsp|tsp|tablespoon|teaspoon|x\d|\d+k)\b)/i).map(s => s.trim()).filter(Boolean);
+        if (tokens.length > 1) {
+          const mid = Math.ceil(tokens.length / 2);
+          parts = [tokens.slice(0, mid).join(' '), tokens.slice(mid).join(' ')];
+        } else {
+          // Last resort — split roughly in half by word count
+          const words = text.split(' ');
+          const mid = Math.ceil(words.length / 2);
+          parts = [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+        }
+      }
       const thinkingBubble = addBubble('Thinking… (long meal, processing in parts)', 'system');
-      const mid = Math.ceil(itemList.length / 2);
-      const part1 = itemList.slice(0, mid).join(', ');
-      const part2 = itemList.slice(mid).join(', ');
-      const [r1, r2] = await Promise.all([parseWithAI(part1, null, null), parseWithAI(part2, null, null)]);
+      const [r1, r2] = await Promise.all([parseWithAI(parts[0], null, null), parseWithAI(parts[1], null, null)]);
       thinkingBubble.remove();
-      const combined = { type: 'food', items: [...(r1?.items||[]), ...(r2?.items||[])], message: 'Logged in two parts' };
-      const result = combined;
-      if (!result || !result.items || result.items.length === 0) {
+      const combined = { type: 'food', items: [...(r1?.items||[]), ...(r2?.items||[])], message: 'Long meal — processed in two parts' };
+      if (!combined.items || combined.items.length === 0) {
         addBubble("Couldn't parse the meal. Try describing it in smaller groups.", 'system', 'warn');
         return;
       }
-      const foods = result.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
+      const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
       showMealPreview(foods, text, 'Long meal — processed in two parts');
       return;
     }
