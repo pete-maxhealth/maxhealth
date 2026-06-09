@@ -1,484 +1,358 @@
-# MaxedHealth — Technical Documentation
+# MaxedHealth — Technical Reference
 
-**Architecture, proxy setup, pipeline structure, data schema, and adding new extractors.**
-
-*Last updated: June 2026 — v2.0 (Phase 7)*
+**Version:** v2.2.x (Phase 7 / Phase 8)  
+**Last updated:** June 2026  
+**Repo:** `pete-maxhealth/maxhealth`  
+**Live URL:** `https://pete-maxhealth.github.io/maxhealth/maxhealth.html`  
+**Local URL:** `http://localhost:5757` (served by `server.py` via Termux)
 
 ---
 
 ## Architecture Overview
 
-MaxedHealth is a static single-page web application backed by an optional local Python server for wearable data sync.
+MaxedHealth is a **single-file PWA** (`maxhealth.html`) — all HTML, CSS, and JavaScript in one file, approximately 13,000+ lines. It runs locally on Android via Termux and a Python HTTP server, and is also accessible via GitHub Pages. There is no backend database; all user data is stored in `localStorage` and optionally persisted to CSV files on the device filesystem via the local server.
 
 ```
-┌──────────────────────────────────────────────────┐
-│  Browser (Chrome / Safari)                       │
-│                                                  │
-│  maxhealth.html                                  │
-│  ├── Today tab (dashboard, macros, water, log)   │
-│  ├── Log tab (AI chat, library, recipes)         │
-│  │   ├── Chat sub-tab  (AI meal logging)         │
-│  │   ├── Library sub-tab (saved foods)           │
-│  │   └── Recipes sub-tab (recipe builder)        │
-│  ├── Insights tab (history, trends, reports)     │
-│  │   ├── History sub-tab                         │
-│  │   ├── Trends sub-tab                          │
-│  │   └── Reports sub-tab (query builder)         │
-│  └── Settings tab                                │
-│      ├── Profile, targets, notifications         │
-│      ├── Supplements tracker (19 supplements)    │
-│      ├── Devices & import                        │
-│      └── Appearance & accessibility              │
-│              │                                   │
-│              │ fetch (text / image)              │
-└──────────────┼───────────────────────────────────┘
-               │
-      ┌────────┴────────┐
-      │                 │
-      ▼                 ▼
-┌──────────────┐  ┌─────────────────────────┐
-│  Anthropic   │  │  Cloudflare Workers      │
-│  API (direct)│  │  Proxy (no-key users)    │
-│              │  │  bogginsuk.workers.dev   │
-│  User's own  │  │  Adds API key, forwards  │
-│  API key     │  │  to Anthropic            │
-└──────────────┘  └─────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│  Local Python server         │
-│  server.py (localhost:5757)  │
-│  Termux on Android           │
-│                              │
-│  Serves & persists:          │
-│  ├── library.csv             │
-│  ├── supplements.csv         │
-│  ├── master.csv              │
-│  └── combined.csv            │
-└──────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│              maxhealth.html (PWA)           │
+│  4-tab nav: Today / Log / Insights /        │
+│             Settings                        │
+│                                             │
+│  AI meal logging → Cloudflare Worker proxy  │
+│  Barcode scan  → Open Food Facts API        │
+│  Wearable data ← combined.csv (via import)  │
+│  History/logs  ↔ localStorage               │
+│  Library/supps ↔ localStorage + server CSV  │
+└────────────────┬────────────────────────────┘
+                 │ HTTP (localhost:5757)
+┌────────────────▼────────────────────────────┐
+│              server.py (Termux)             │
+│  Serves static files                        │
+│  POST /save-nutrition   → master.csv        │
+│  POST /save-library-csv → library.csv       │
+│  POST /save-supplements → supplements.csv   │
+│  GET  /library          → library.csv       │
+│  GET  /health           → status check      │
+│  WS   /ws-probe         → server detection  │
+└────────────────┬────────────────────────────┘
+                 │ filesystem
+┌────────────────▼────────────────────────────┐
+│  /storage/emulated/0/maxhealth/data/tables/ │
+│    combined.csv      ← update_health.py     │
+│    master.csv        ← nutrition log        │
+│    library.csv       ← food library         │
+│    supplements.csv   ← supplement stack     │
+└─────────────────────────────────────────────┘
 ```
-
-**Key design decisions:**
-
-- No backend means no server to maintain, no accounts, no database
-- GitHub Pages hosting is free, reliable, and requires no deployment pipeline beyond `git push`
-- The Cloudflare proxy keeps the API key out of client-side code while keeping AI free for users with no personal key
-- Users with their own Claude or OpenAI key bypass the proxy entirely — direct API calls only
-- All health data stays on the device — only meal descriptions (text/photo) leave the device for AI processing
-- The local server (`server.py`) is optional — the app works fully from GitHub Pages without it, but loses wearable sync and CSV persistence for library/supplements
 
 ---
 
-## GitHub Pages Hosting
+## Key File Paths
 
-**Repo:** `github.com/pete-maxhealth/maxhealth`  
-**Live URL:** `pete-maxhealth.github.io/maxhealth/maxhealth.html`  
-**Install page:** `pete-maxhealth.github.io/maxhealth/` (index.html with MacroDroid guide)
-
-Deployment is a `git push` to `main`. GitHub Pages serves the repo root automatically.
-
-Docs live at `docs/` and are accessible as:
-- `pete-maxhealth.github.io/maxhealth/docs/user-guide.html`
-- `pete-maxhealth.github.io/maxhealth/docs/gbm_patient_guide.html`
-- `pete-maxhealth.github.io/maxhealth/docs/story.html`
-- `pete-maxhealth.github.io/maxhealth/carer.html` (read-only carer portal)
+| File | Path |
+|------|------|
+| App HTML | `/storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html` |
+| Server | `/storage/emulated/0/maxhealth/app/server.py` |
+| Pipeline | `/storage/emulated/0/maxhealth/app/update_health.py` |
+| Data dir | `/storage/emulated/0/maxhealth/data/tables/` |
+| Combined CSV | `/storage/emulated/0/maxhealth/data/tables/combined.csv` |
+| Master CSV | `/storage/emulated/0/maxhealth/data/tables/master.csv` |
+| Library CSV | `/storage/emulated/0/maxhealth/data/tables/library.csv` |
+| Supplements CSV | `/storage/emulated/0/maxhealth/data/tables/supplements.csv` |
 
 ---
 
-## Cloudflare Workers Proxy
+## Deploy Commands
 
-**Worker URL:** `maxhealth-ai.bogginsuk.workers.dev`  
-**Purpose:** Relay AI requests from the app to the Anthropic API without exposing the API key in client-side code. Used only when the user has no personal API key configured.
-
-The worker:
-1. Receives POST requests containing a `messages` array (no `system` field)
-2. Injects the `x-api-key` header from a Worker secret
-3. Forwards to `https://api.anthropic.com/v1/messages`
-4. Returns the response
-
-**Important:** The proxy does not support a top-level `system` field. The app inlines the system prompt as the first entry in the `messages` array when using the proxy path. The direct API path (user's own key) sends `system` as a separate field as normal.
-
-Meals with 6+ items are split into two parallel AI requests to avoid token truncation on the proxy path.
-
-No user health data is ever sent to the proxy — only the meal logging prompt and any food photo.
-
-**Worker secret setup (one-time):**
+**Standard deploy (after downloading updated maxhealth.html):**
 ```bash
-wrangler secret put ANTHROPIC_API_KEY
+cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html \
+  && cd /storage/emulated/0/maxhealth/app/maxhealth \
+  && git add -A \
+  && git commit -m "vX.X.X — description" \
+  && git push
 ```
 
-**Rate limiting:** configured in the Cloudflare dashboard to prevent abuse.
-
----
-
-## Local Server (server.py)
-
-`server.py` runs on Android via Termux and serves `localhost:5757`. It handles:
-
-- Static file serving (fallback to GitHub Pages URL when offline)
-- CSV read/write endpoints for `library.csv`, `supplements.csv`, `master.csv`, `combined.csv`
-- WebSocket probe endpoint (`ws://localhost:5757/ws-probe`) — used by the app to detect whether the local server is running and switch between local and GitHub Pages modes automatically
-
-**Auto-start:** Termux:Boot runs the boot script at `~/.termux/boot/start-maxedhealth.sh` on every device reboot.
-
-**mhstart:** A script at `~/bin/mhstart` (on `$PATH`) restarts the server from any Termux session. Created automatically by `setup.sh`.
-
-**Deploy command:**
+**Start server manually:**
 ```bash
-cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html
+mhstart
 ```
+(`~/bin/mhstart` — auto-starts via Termux:Boot on device restart)
 
-**Standard push** (always copies server.py and update_health.py into repo before committing):
+**Run pipeline:**
 ```bash
-cd /storage/emulated/0/maxhealth/app/maxhealth && git add -A && git commit -m "vX.X" && git push
+cd /storage/emulated/0/maxhealth/app
+python update_health.py           # all devices
+python update_health.py --device withings
+python update_health.py --device ringconn
+python update_health.py --device amazfit
+python update_health.py --dry-run
 ```
 
 ---
 
-## Carer & Clinician Portal
+## Navigation Structure (v2.0+)
 
-`carer.html` is a standalone read-only HTML file in the repo root.
+4-tab navigation at the bottom of the screen:
 
-When a user taps **Generate Carer View Link** in Settings, the app encodes a snapshot of the last 30 days of nutrition history as base64 JSON in the URL hash:
+| Tab | Sub-tabs / content |
+|-----|--------------------|
+| **Today** | Dashboard (weight, macros, supplements, water) |
+| **Log** | AI chat input, food search, barcode scanner, library |
+| **Insights** | Trends charts, body composition, drill-down |
+| **Settings** | Targets, themes, import/export, notifications, data management |
 
-```
-pete-maxhealth.github.io/maxhealth/carer.html#<base64-payload>
-```
+Reports is accessible via the Insights tab or direct tab switch.
 
-**Payload structure:**
+---
+
+## AI Integration
+
+**Provider:** Claude (Anthropic) via Cloudflare Worker proxy  
+**Proxy URL:** `https://maxhealth-ai.bogginsuk.workers.dev`  
+**Fallback:** Direct Anthropic API (requires user-supplied API key)  
+**Model:** `claude-sonnet-4-20250514`
+
+No API key is required for end users — the Cloudflare Worker handles authentication. The proxy adds CORS headers and forwards requests to `https://api.anthropic.com/v1/messages`.
+
+**Long meal handling:** Meals with 6+ food items are split into two parallel AI requests and merged before display (prevents token truncation on the proxy).
+
+**AI JSON response format** (meal logging):
 ```json
 {
-  "name": "Pete",
-  "generated": "2026-05-19T07:50:54.870Z",
-  "expires": "2026-05-26T07:50:54.874Z",
-  "targets": {
-    "standard": { "kcal": 3500, "protein": 164, "carbs": 50 },
-    "occasion": { "kcal": 3500, "protein": 164, "carbs": 75 },
-    "holiday":  { "kcal": 3500, "protein": 164, "carbs": 100 }
-  },
-  "history": [
-    { "date": "DD/MM/YY", "totals": { "kcal": 0, "protein": 0, "carbs": 0 }, "weight": null, "mode": "standard" }
-  ]
+  "type": "meal",
+  "items": [
+    {
+      "name": "Food name",
+      "amount": "150g",
+      "kcal": 280,
+      "protein": 32.5,
+      "carbs": 0,
+      "fat": 6.2
+    }
+  ],
+  "message": "Optional note shown to user"
+}
+```
+Other response types: `"water"`, `"query"`, `"supplement"`.
+
+**Fat sanitiser (`sanitiseFatValues`):** Applied to all AI responses before display. Corrects known-zero fat values using a reference database (`FAT_FLOOR_DB`) of per-100g fat values. Priority: gram amount from `amount` field → kcal-based estimation as fallback. Foods covered: oils, butter, cream, cheese, eggs, chicken, salmon, beef, bacon, nuts, peanut butter, avocado, yogurt, milk.
+
+---
+
+## Barcode Scanning
+
+1. **BarcodeDetector API** (Chrome Android) — reads EAN-13, EAN-8, UPC-A, UPC-E, Code 128, Code 39, QR
+2. **AI fallback** — sends image to Claude to extract barcode digits, then looks up
+3. **Open Food Facts API** — `https://world.openfoodfacts.org/api/v2/product/{barcode}`
+   - Fields fetched: `product_name`, `brands`, `nutriments`, `quantity`, `serving_size`, `serving_quantity`
+   - Macros extracted: kcal, protein, carbs, fat, fibre, saturated fat, sugars, salt, iron (all per 100g)
+
+**Portion suggestions** after scan are generated by `renderPortionSuggestions()`:
+1. OFF `serving_quantity` → "Xg (1 serving)" or "Xg (product serving label)" — primary
+2. Whole pack from `quantity` string (e.g. "200g") — secondary
+3. Piece size from `quantity` (e.g. "6 x 30g") — secondary
+4. Keyword-based fallbacks (cream, butter, nuts, chicken, etc.) — last resort
+5. 100g always added if not already present
+
+---
+
+## Food Library
+
+**localStorage key:** `maxhealth_foods`  
+**Backup keys:** `mh_library_backup`, `mh_library_b2` (triple-write for resilience)  
+**Server persistence:** `POST /save-library-csv` → `library.csv`
+
+Library entry schema:
+```json
+{
+  "name": "Product name",
+  "brand": "Brand (optional)",
+  "kcal": 250,
+  "prot": 20.5,
+  "carb": 5.2,
+  "fat": 15.0,
+  "fibre": 2.1,
+  "satFat": 6.0,
+  "sugars": 1.5,
+  "salt": 0.8,
+  "iron": 2.5,
+  "portion": "30g",
+  "servingQty": 30,
+  "servingLabel": "1 biscuit",
+  "added": "2026-05-01T10:30:00.000Z"
 }
 ```
 
-The link is valid for 7 days. No data is stored server-side — everything is in the URL hash.
+All values are per 100g except `portion`/`servingQty`/`servingLabel` which describe the default serving.
 
 ---
 
-## Local Data Pipeline
+## Supplement Tracker
 
-The pipeline is an optional Python-based system that runs on Android via Termux. It processes wearable device exports and produces `combined.csv` for import into the app.
+**localStorage keys:** `mh_supplement_defs`, `mh_supplement_log`  
+**Server persistence:** `supplements.csv`
 
-### Directory structure (on-device)
-
-```
-/storage/emulated/0/maxhealth/
-├── app/
-│   ├── maxhealth/              # Git repo (web app + docs)
-│   │   ├── maxhealth.html
-│   │   ├── carer.html
-│   │   ├── index.html          # Install page with MacroDroid guide
-│   │   ├── manifest.json       # PWA manifest
-│   │   ├── icons/              # PWA icons (96, 192, 512px)
-│   │   ├── CHANGELOG.md
-│   │   ├── TECHNICAL.md
-│   │   ├── README.md
-│   │   └── docs/
-│   │       ├── user-guide.html
-│   │       ├── gbm_patient_guide.html
-│   │       └── story.html
-│   ├── extractors/
-│   │   ├── withings.py
-│   │   ├── ringconn.py
-│   │   └── amazfit.py
-│   ├── update_health.py        # Pipeline entry point
-│   ├── server.py               # Local HTTP + WebSocket server
-│   ├── merge.py                # Builds combined.csv
-│   └── utils.py                # Logging, CSV helpers, backup
-├── data/
-│   ├── inbox/                  # Drop wearable exports here
-│   ├── tables/
-│   │   ├── combined.csv        # Merged wearable data (39 fields)
-│   │   ├── nutrition.csv       # Exported from app
-│   │   ├── master.csv          # Full merged health + nutrition master
-│   │   ├── library.csv         # Saved food library (persisted by server.py)
-│   │   └── supplements.csv     # Supplement log (persisted by server.py)
-│   └── backup/                 # Auto-backups (7 max per file)
-└── logs/
-    └── pipeline.log            # Structured error log
-```
-
-### Running the pipeline
-
-```bash
-# Quick alias (configured by setup.sh)
-mhstart
-
-# Process all devices with files in inbox/
-cd /storage/emulated/0/maxhealth/app && python update_health.py
-
-# Specific device only
-cd /storage/emulated/0/maxhealth/app && python update_health.py --device withings
-cd /storage/emulated/0/maxhealth/app && python update_health.py --device ringconn
-cd /storage/emulated/0/maxhealth/app && python update_health.py --device amazfit --password YOUR_ZEPP_PASSWORD
-
-# Preview without writing
-cd /storage/emulated/0/maxhealth/app && python update_health.py --dry-run
-```
-
-### Source precedence
-
-| Metric  | Priority order                          |
-|---------|-----------------------------------------|
-| Weight  | Withings > manual > RingConn > Amazfit  |
-| HRV     | RingConn > Withings > Garmin            |
-| Sleep   | RingConn > Withings > Garmin > Amazfit  |
-| Steps   | Garmin > Withings > RingConn > Amazfit  |
-| SpO2    | RingConn > Withings                     |
-| HR      | RingConn > Amazfit > Withings > Garmin  |
-
-### File versioning and backup
-
-Before every pipeline write, `combined.csv` and `nutrition.csv` are automatically copied to `data/backup/` with a timestamp suffix. A maximum of 7 backups are retained per file (oldest deleted automatically).
-
-To restore a backup: open the app → Import tab → Restore Backup.
-
-### Error logging
-
-```
-2026-05-11 14:30:22 | amazfit   | extract  | ok      | 2 days processed
-2026-05-11 14:30:22 | withings  | extract  | error   | No files found in inbox/
-2026-05-11 14:30:22 | pipeline  | write    | ok      | combined.csv written (847 rows)
-```
-
-Format: `timestamp | device | operation | status | message`
-
-The last 50 lines are viewable in the app at Import tab → View Pipeline Log.
-
----
-
-## Data Schema
-
-### combined.csv
-
-One row per date. All wearable data merged by date according to source precedence. 39 fields total.
-
-| Column           | Type    | Description                                      |
-|------------------|---------|--------------------------------------------------|
-| date             | string  | YYYY-MM-DD                                       |
-| steps            | int     | Total daily steps                                |
-| distance_m       | int     | Distance in metres                               |
-| calories_active  | int     | Active calories burned                           |
-| sleep_duration   | int     | Total sleep in minutes (excl. wake periods)      |
-| sleep_deep       | int     | Deep sleep in minutes                            |
-| sleep_light      | int     | Light/shallow sleep in minutes                   |
-| sleep_rem        | int     | REM sleep in minutes                             |
-| sleep_wake       | int     | Wake time during sleep window in minutes         |
-| hr_avg           | int     | Average heart rate for the day                   |
-| hr_min           | int     | Minimum heart rate                               |
-| hr_max           | int     | Maximum heart rate                               |
-| hrv              | float   | Heart rate variability (ms)                      |
-| spo2             | float   | Blood oxygen saturation (%)                      |
-| weight           | float   | Weight in kg                                     |
-| bmi              | float   | BMI                                              |
-| fat_pct          | float   | Body fat percentage                              |
-| muscle_pct       | float   | Muscle mass percentage                           |
-| source           | string  | Pipe-joined source tags e.g. `withings+ringconn` |
-
-Empty string = no data for that field on that date.
-
-### nutrition.csv
-
-Exported from the app. One row per day.
-
-| Column      | Type   | Description                     |
-|-------------|--------|---------------------------------|
-| date        | string | YYYY-MM-DD                      |
-| calories    | float  | Total kcal                      |
-| protein     | float  | Protein in grams                |
-| carbs       | float  | Net carbohydrates in grams      |
-| fat         | float  | Fat in grams                    |
-| fibre       | float  | Fibre in grams                  |
-| water_ml    | int    | Water intake in ml              |
-| mode        | string | standard / occasion / holiday   |
-| notes       | string | Optional daily notes            |
-
-### master.csv
-
-Full merged dataset combining wearable data and nutrition. Built by `merge.py` after each pipeline run. Used by the Reports query builder for cross-domain analysis (e.g. "days where sleep > 7h AND carbs < 50g").
-
-### library.csv
-
-Saved food library. Persisted by `server.py` at `/data/tables/library.csv`. Mirrors `localStorage['maxhealth_foods']` — synced on load and on every save. One row per food item.
-
-| Column   | Type   | Description                              |
-|----------|--------|------------------------------------------|
-| name     | string | Food name                                |
-| kcal     | float  | Calories per base portion                |
-| protein  | float  | Protein per base portion (g)             |
-| fat      | float  | Fat per base portion (g)                 |
-| carbs    | float  | Carbs per base portion (g)               |
-| portion  | string | Base portion label (e.g. "30g", "1 tbsp")|
-| per100g  | bool   | True if values are per 100g              |
-| locked   | bool   | True if locked (prevents accidental edit)|
-| fibre    | float  | Fibre per base portion (g), optional     |
-
-### supplements.csv
-
-Supplement log. Persisted by `server.py` at `/data/tables/supplements.csv`. One row per supplement per day taken.
-
-| Column     | Type   | Description                          |
-|------------|--------|--------------------------------------|
-| date       | string | YYYY-MM-DD                           |
-| name       | string | Supplement name                      |
-| dose       | string | Dose taken (e.g. "500mg", "2 caps")  |
-| period     | string | Morning / Afternoon / Evening / Night|
-| taken      | bool   | Whether taken that period            |
-
-### localStorage keys (app state)
-
-| Key                    | Description                                      |
-|------------------------|--------------------------------------------------|
-| `maxhealth_v1`         | Full app state (history, today's log, weight)    |
-| `mh_target_kcal`       | Daily calorie target                             |
-| `mh_target_protein`    | Daily protein target                             |
-| `mh_target_carbs`      | Daily carb ceiling                               |
-| `mh_target_fat`        | Daily fat target                                 |
-| `mh_name`              | User's name                                      |
-| `mh_provider`          | AI provider: claude / openai / local             |
-| `mh_api_key`           | Encrypted API key (if set)                       |
-| `mh_health_context`    | Free-text health context injected into AI        |
-| `mh_condition`         | Selected condition (gbm / t2d / recomp / general)|
-| `mh_water_target`      | Daily water target in ml                         |
-| `mh_fibre_target`      | Daily fibre target in grams                      |
-| `maxhealth_foods`      | Saved food library (also persisted to library.csv)|
-| `mh_supplements`       | Supplement definitions and log                   |
-| `mh_tips_seen`         | Dismissed contextual tips per tab                |
-| `mh_visual_theme`      | Active visual theme                              |
-| `mh_icon_pack`         | Active icon pack                                 |
-| `mh_theme`             | Colour palette                                   |
-| `mh_custom_accent`     | Custom accent hex colour override                |
-| `mh_text_size`         | Text size preference (normal/large/larger)       |
-
----
-
-## Supplements Tracker
-
-The supplements tracker (Settings → Supplements) manages a configurable stack of up to 20+ supplements across four daily periods: Morning, Afternoon, Evening, Night.
-
-Each supplement has:
-- Name, dose, notes
-- Active periods (which times of day it's taken)
-- Per-period toggle (mark taken/not taken each period independently)
-
-Resets at midnight. Persisted to `supplements.csv` via server.py when local server is running; falls back to localStorage only when on GitHub Pages.
-
----
-
-## Adding a New Extractor
-
-Extractors live in `extractors/`. Each is a self-contained Python module.
-
-### Required interface
-
-```python
-# extractors/mydevice.py
-
-def run(inbox_path, output_path, dry_run=False):
-    """
-    inbox_path: str — path to /data/inbox/
-    output_path: str — path to /data/tables/ (for reference only)
-    dry_run: bool — if True, return data without side effects
-
-    Returns: list of dicts, one per date
-    """
-    rows = []
-    rows.append({
-        'date': '2026-05-11',
-        'steps': 10234,
-        'sleep_duration': 420,
-        'source': 'mydevice',
-    })
-    return rows
-```
-
-### Registering the extractor
-
-```python
-EXTRACTORS = {
-    'withings': extractors.withings,
-    'ringconn': extractors.ringconn,
-    'amazfit':  extractors.amazfit,
-    'mydevice': extractors.mydevice,   # add here
+Supplement definition schema:
+```json
+{
+  "id": "supp_abc123",
+  "name": "Curcumin",
+  "dose": "2400mg",
+  "periods": ["morning", "evening"],
+  "notes": "Liposomal"
 }
 ```
 
-### Amazfit / Zepp specifics
+`periods` is an array of: `"morning"`, `"midday"`, `"evening"`, `"bedtime"`. Supplement log resets at midnight rollover. Legacy single `period` string is migrated to `periods` array on load.
 
-The Amazfit extractor handles AES-256 encrypted zip exports using `pyzipper`. Pass the password via:
+---
 
-```bash
-cd /storage/emulated/0/maxhealth/app && python update_health.py --device amazfit --password YOUR_PASSWORD
-# or
-export ZEPP_PASSWORD=YOUR_PASSWORD && python update_health.py --device amazfit
+## Data Pipeline (update_health.py)
+
+Processes wearable exports into a unified `combined.csv`. Supports:
+
+| Device | Export format |
+|--------|--------------|
+| Withings Body+ | CSV export from Health Mate app |
+| RingConn | CSV export (HRV, SpO2, sleep) |
+| Amazfit (Zepp) | ZIP file — password extracted via `pyzipper` |
+
+**Output:** `combined.csv` — 39 fields including weight, BMI, body fat %, muscle mass, bone mass, water %, HRV, SpO2, sleep duration/quality, steps, active calories, resting heart rate.
+
+---
+
+## History Storage
+
+History entries are stored in `state.history[]` within `maxhealth_v1` localStorage key.
+
+**Storage optimisation (v2.2.3+):** On save, entries older than 30 days have their `log` array stripped — only `totals`, `date`, `weight`, `mode`, `notes`, and `water_ml` are persisted. The last 30 days retain full per-item log data for editing. This prevents localStorage quota exhaustion on long-running installs (previously ~90 days before write failures).
+
+History entry schema (full, last 30 days):
+```json
+{
+  "date": "01/06/26",
+  "log": [ /* array of food items */ ],
+  "totals": { "kcal": 2950, "protein": 148, "carbs": 44, "fat": 238 },
+  "mode": "standard",
+  "notes": "rest day",
+  "weight": 92.1,
+  "water_ml": 2200
+}
 ```
 
-The password is displayed in the Zepp app at export time and is often the numeric user ID at the start of the export filename.
-
----
-
-## Visual Theme System
-
-### Visual Style (`mh_visual_theme`)
-
-Values: `none` (Classic), `vital`, `pulse`, `forge`. Applied via `data-visual-theme` on `<html>`.
-
-| Theme   | Palette              | Radius   | Typography       | Card style        |
-|---------|----------------------|----------|------------------|-------------------|
-| Classic | Green accent, dark   | 12px     | DM Sans          | Border + surface  |
-| Vital   | Blue (#38bdf8)       | 6px      | Space Mono heads | Left border accent|
-| Pulse   | Green (#2deb8f)      | 18-20px  | DM Sans rounded  | Gradient fill     |
-| Forge   | Amber (#f97316)      | 2-4px    | Syne bold        | Top border accent |
-
-### Icon Pack (`mh_icon_pack`)
-
-Values: `classic`, `outline`, `organic`, `bold`, `neon`, `mono`. Auto-selected by visual theme, overridable independently.
-
----
-
-## PWA & Service Worker
-
-`maxhealth.html` includes a Web App Manifest (`manifest.json`) and Service Worker registration enabling:
-
-- **Add to Home Screen** — installs as a standalone app icon on Android and iOS
-- **Offline access** — cached assets work without connectivity
-- **iOS Safari support** — Apple touch icon, safe area insets, input zoom prevention
-
-The Service Worker caches the app shell on first load. All nutrition data is stored in localStorage.
-
----
-
-## Termux:Boot Auto-Start
-
-`setup.sh` installs a boot script at `~/.termux/boot/start-maxedhealth.sh`:
-
-```bash
-#!/data/data/com.termux/files/usr/bin/bash
-# MaxedHealth — runs on every device boot
-cd /storage/emulated/0/maxhealth/app && python update_health.py 2>> /storage/emulated/0/maxhealth/logs/pipeline.log
+History entry schema (archived, 30+ days old):
+```json
+{
+  "date": "01/01/26",
+  "totals": { "kcal": 2800, "protein": 140, "carbs": 48, "fat": 220 },
+  "mode": "standard",
+  "notes": "",
+  "weight": 91.0,
+  "water_ml": 2000
+}
 ```
 
-`setup.sh` also installs `mhstart` as a script at `~/bin/mhstart` (on `$PATH`), so it works regardless of how Termux is launched — not as a `.bashrc` alias.
+---
+
+## localStorage Keys Reference
+
+| Key | Contents |
+|-----|----------|
+| `maxhealth_v1` | Full app state — history, today's log, weight, water, settings |
+| `maxhealth_foods` | Food library (array of items per 100g) |
+| `mh_library_backup` | Library backup copy #1 |
+| `mh_library_b2` | Library backup copy #2 |
+| `mh_supplement_defs` | Supplement definitions array |
+| `mh_supplement_log` | Today's supplement tick log |
+| `mh_master_csv_cache` | Cached nutrition history (pipe-delimited CSV) |
+| `mh_master_csv_meta` | Cache metadata (date, row count) |
+| `mh_nutrition_csv_cache` | Raw imported master.csv content |
+| `mh_combined_csv_cache` | Raw imported combined.csv content |
+| `mh_recipes` | Saved recipe definitions |
+| `mh_saved_queries` | Saved report queries |
+| `mh_notif_prefs` | Notification preferences |
+| `mh_provider` | AI provider (`claude` or `openai`) |
+| `mh_apikey` | User-supplied API key (if not using proxy) |
+| `mh_condition` | Health condition (`general`, `gbm`, `t2d`, etc.) |
+| `mh_theme` | UI colour theme |
+| `mh_visual_theme` | Visual theme pack |
+| `mh_text_size` | Accessibility text size |
+| `mh_target_kcal` | Daily kcal target |
+| `mh_target_protein` | Daily protein target (g) |
+| `mh_target_carbs` | Daily carbs ceiling (g) |
+| `mh_target_fat` | Daily fat target (g) |
+| `mh_target_water` | Daily water target (ml) |
+| `mh_target_fibre` | Daily fibre target (g) |
+| `mh_weight_target_low` | Weight goal lower bound (kg) |
+| `mh_weight_target_high` | Weight goal upper bound (kg) |
+| `mh_name` | User's name |
+| `mh_tdee` | Calculated TDEE |
+| `mh_goal` | Current goal mode |
 
 ---
 
-## Security Notes
+## Notifications
 
-- The Cloudflare proxy API key is stored as a Worker secret — never in the codebase
-- No health data transits the proxy — only meal descriptions and food photos
-- Users with their own API key communicate directly with Anthropic — the proxy is never involved
-- localStorage data is scoped to the origin and not accessible to other sites
-- The pipeline runs entirely on-device with no network calls
-- The GitHub repo contains no credentials, keys, or personal data
-- The carer view URL contains only nutrition totals and weight — no food log details, no personal notes
+Notifications use the browser `Notification` API (requires permission grant). Three notification types:
+
+| Type | Trigger | localStorage dedup key |
+|------|---------|------------------------|
+| End-of-day reminder | After 9pm if nothing logged | `mh_notif_eod_YYYY-MM-DD` |
+| Weekly summary | Sunday after 8am | `mh_notif_weekly_YYYY-MM-DD` |
+| Carb ceiling alert | When carbs reach 80% of target | `mh_carb_notif_YYYY-MM-DD` |
+
+Notification check runs 3 seconds after app load, then every 20 minutes (`setInterval`).
+
+---
+
+## Server Endpoints (server.py)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Serves `maxhealth.html` |
+| `GET` | `/health` | Returns `{"status":"ok"}` |
+| `GET` | `/library` | Returns `library.csv` content |
+| `POST` | `/save-nutrition` | Appends/updates a row in `master.csv` |
+| `POST` | `/save-nutrition-bulk` | Writes multiple rows to `master.csv` |
+| `POST` | `/save-library-csv` | Overwrites `library.csv` |
+| `POST` | `/save-supplements` | Overwrites `supplements.csv` |
+| `WS` | `/ws-probe` | WebSocket probe for server detection |
+
+Server detection: the app sends a WebSocket handshake to `ws://localhost:5757/ws-probe` on load. If it succeeds, `_serverOnline = true` and server-dependent features (CSV sync, library persistence) are enabled.
+
+---
+
+## Patching Workflow
+
+All code changes are made via Python patch scripts written to `~/fix_name.py` (not `/tmp/` — permissions issues on Android). Pattern:
+
+```bash
+cat > ~/fix_name.py << 'PYEOF'
+content = open('/home/..../maxhealth.html', encoding='utf-8').read()
+content = content.replace(old_str, new_str)
+open('/home/..../maxhealth.html', 'w', encoding='utf-8').write(content)
+PYEOF
+python3 ~/fix_name.py
+```
+
+**Mandatory checks before every commit:**
+1. Div balance: `<div` count must equal `</div>` count
+2. JS syntax: `node -e "const fs=require('fs');new Function(fs.readFileSync('maxhealth.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1])"`
+3. Version bump in `<div class="settings-value">MaxedHealth vX.X.X</div>`
+
+---
+
+## Version History
+
+| Version | Phase | Key changes |
+|---------|-------|-------------|
+| v1.0 | 1 | Initial build — dashboard, AI logging, localStorage, Cloudflare proxy |
+| v1.8 | 4 | Barcode scanner, Open Food Facts, recipe builder, nutrient tracking, water tracking, history editing |
+| v1.9 | 5 | Editable correction grid, JSON parse fix for long meals (parallel requests), history index fix, Log/Query mode toggle |
+| v2.0 | 6 | 4-tab navigation, fat tracking everywhere, library portion selector, macro ratio bar, supplement tracker (19 supps), midnight sync, missed day flow, install page, MacroDroid guide |
+| v2.1.x | 7A–B | Library delete/edit index bug fix, notifications interval fix, `parseFood` fallback intercept fix, fat returning 0g for oils/meat |
+| v2.1.x | 7C | Library LOG flow redesign, meal photo 3-step visual reasoning, label photo AI-help flow |
+| v2.1.9 | 7D | Post-logging save-to-library (combined or individual), duplicate detection, 2dp macro rounding, `sanitiseFatValues`, TECHNICAL.md rewrite, user guide corrections |
+| v2.2.2 | 7E | mhstart as `~/bin/mhstart` proper script |
+| v2.2.3 | 8 | Barcode portion scaling from OFF `serving_size`/`serving_quantity`; history storage optimisation (strip old logs, prevent ~90-day localStorage cap) |

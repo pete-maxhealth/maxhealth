@@ -3280,7 +3280,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.2.3</div>
+        <div class="settings-value">MaxedHealth v2.3.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -3940,7 +3940,28 @@ let state = loadState();
 
 function saveState() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return;
-  localStorage.setItem('maxhealth_v1', JSON.stringify(state));
+  // Slim old history entries before persisting — keep full logs for last 30 days only,
+  // strip log arrays from older entries (totals are preserved, just the per-item detail is dropped).
+  // This keeps localStorage well under quota for 365+ day histories.
+  try {
+    const KEEP_FULL = 30;
+    const slimmed = JSON.parse(JSON.stringify(state)); // deep copy — don't mutate live state
+    if (slimmed.history && slimmed.history.length > KEEP_FULL) {
+      slimmed.history = slimmed.history.map((e, i) => {
+        if (i < KEEP_FULL) return e; // recent — keep full
+        const { log, ...rest } = e;  // strip log array
+        return rest;
+      });
+    }
+    localStorage.setItem('maxhealth_v1', JSON.stringify(slimmed));
+  } catch(e) {
+    // Fallback — try saving without any logs at all
+    try {
+      const minimal = JSON.parse(JSON.stringify(state));
+      minimal.history = (minimal.history || []).map(({ log, ...rest }) => rest);
+      localStorage.setItem('maxhealth_v1', JSON.stringify(minimal));
+    } catch(e2) { console.warn('saveState failed:', e2); }
+  }
   // Also maintain a running master.csv cache in localStorage
   try {
     const history = state.history || [];
