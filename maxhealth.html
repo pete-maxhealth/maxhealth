@@ -3289,7 +3289,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.4.3</div>
+        <div class="settings-value">MaxedHealth v2.4.5</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6663,76 +6663,63 @@ function renderMealPreview() {
     }
   });
 
-  const itemRows = foods.map((f, i) => {
-    // Extract amount from name if present (e.g. "200g", "1 tbsp", "2 cloves")
-    const amountMatch = f.name.match(/^([\d.]+\s*(?:g|kg|ml|l|oz|lb|tbsp|tsp|tablespoon|teaspoon|cup|clove[s]?|slice[s]?|piece[s]?|portion[s]?|handful|rasher[s]?|fillet[s]?|breast[s]?|can|tin|scoop[s]?|sachet[s]?|packet[s]?|bar|sheet[s]?|wrap[s]?|pint|litre[s]?))\b/i)
-                     || f.amount && { 0: f.amount };
-    const amount = f.amount || (amountMatch ? amountMatch[0] : '');
-    return `
-    <div style="padding:7px 0;border-bottom:1px solid var(--border);">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.name}</div>
-          ${amount ? `<div style="font-size:11px;color:var(--text3);margin-top:1px;">${amount}</div>` : ''}
-        </div>
-        <div style="font-size:11px;color:var(--text3);cursor:pointer;white-space:nowrap;text-align:right;" onclick="editPreviewItem(${i})" title="Tap to edit">
-          <span style="color:var(--text2);">${Math.round(f.kcal)}</span>kcal ·
-          <span style="color:var(--green);">${Math.round(f.protein*100)/100}g</span>P ·
-          <span style="color:#a78bfa;">${Math.round((f.fat||0)*100)/100}g</span>F ·
-          <span style="color:var(--blue);">${Math.round(f.carbs*100)/100}g</span>C
-          <span style="color:var(--text3);font-size:10px;margin-left:2px;">✎</span>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Show portion scaler for single items — always useful to confirm amount
-  const showPortionScaler = foods.length === 1;
+  // Single item: large name, inline amount scaler, live macro update
+  // Multi item: compact rows, totals at bottom
   const f0 = foods[0];
-  // Determine base gram value for the scaler:
-  // - per100g items: base is 100g
-  // - per-portion items (library): base is the portion size
-  // Parse base grams from amount string — guard against "1 tablespoon", "2 tsp" etc.
-  // which parseFloat would give 1 or 2, causing massive scaling errors
   const _amtStr = (f0.amount || '').toLowerCase();
   const _amtNum = parseFloat(f0.amount) || 0;
-  const _amtIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)/i.test(_amtStr);
+  const _amtIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_amtStr);
   const _parsedGrams = _amtIsGrams && _amtNum > 0 ? _amtNum : 0;
-  const baseGrams = f0._per100g === false && f0._portionG > 0
-    ? f0._portionG
-    : (_parsedGrams || 100);
-  // Store base macros for correct scaling
-  if (!f0._base) {
-    f0._base = { kcal: f0.kcal, protein: f0.protein, fat: f0.fat||0, carbs: f0.carbs, baseG: baseGrams };
-  }
-  const scaler = showPortionScaler ? `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:8px;">
-      <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">HOW MUCH DID YOU EAT?</div>
-      <div style="display:flex;gap:8px;align-items:center;">
+  const baseGrams = f0._per100g === false && f0._portionG > 0 ? f0._portionG : (_parsedGrams || 100);
+  if (!f0._base) f0._base = { kcal: f0.kcal, protein: f0.protein, fat: f0.fat||0, carbs: f0.carbs, baseG: baseGrams };
+
+  let itemRows;
+  if (foods.length === 1) {
+    itemRows = `<div style="margin-bottom:12px;">
+      <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.3;">${f0.name}</div>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--text3);white-space:nowrap;">Amount (g/ml)</div>
         <input id="previewPortionInput" type="number" placeholder="${baseGrams}" value="${baseGrams}"
-          style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:16px;"
+          style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:20px;font-weight:700;text-align:center;min-width:0;"
           oninput="scalePreviewPortion(this.value)">
-        <span style="font-size:13px;color:var(--text3);">g / ml</span>
       </div>
-      <div id="previewPortionMacros" style="font-size:11px;color:var(--text3);margin-top:6px;"></div>
-    </div>` : '';
+      <div style="display:flex;gap:10px;font-size:13px;font-family:'Space Mono',monospace;">
+        <span style="color:var(--text2);" id="ppKcal">${Math.round(f0.kcal)}kcal</span>
+        <span style="color:var(--green);" id="ppProt">${Math.round(f0.protein*10)/10}g P</span>
+        <span style="color:#a78bfa;" id="ppFat">${Math.round((f0.fat||0)*10)/10}g F</span>
+        <span style="color:var(--yellow);" id="ppCarb">${Math.round(f0.carbs*10)/10}g C</span>
+      </div>
+    </div>`;
+  } else {
+    itemRows = foods.map(f => {
+      const amt = f.amount || '';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+          <div style="flex:1;min-width:0;">
+            <span style="font-size:14px;color:var(--text);">${f.name}</span>
+            ${amt ? `<span style="font-size:11px;color:var(--text3);margin-left:6px;">${amt}</span>` : ''}
+          </div>
+          <div style="font-size:11px;white-space:nowrap;color:var(--text3);">
+            ${Math.round(f.kcal)}kcal · <span style="color:var(--green);">${Math.round(f.protein*10)/10}P</span> · <span style="color:#a78bfa;">${Math.round((f.fat||0)*10)/10}F</span> · <span style="color:var(--yellow);">${Math.round(f.carbs*10)/10}C</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 
   const bubble = document.createElement('div');
   bubble.id = 'mealPreviewBubble';
   bubble.className = 'bubble system';
   bubble.innerHTML = `
-    <div style="font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Ready to log — tap ✎ to edit any item</div>
+    <div style="font-size:10px;color:var(--accent);font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Ready to log</div>
     ${itemRows}
-    ${scaler}
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 2px;margin-top:2px;">
-      <div style="font-size:12px;color:var(--text3);" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*100)/100}g P · ${Math.round(totals.fat*100)/100}g F · ${Math.round(totals.carbs*100)/100}g C</strong></div>
-    </div>
-    ${warnings.length ? `<div style="margin-top:8px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:4px 0;">${w}</div>`).join('')}</div>` : ''}
-    <div style="display:flex;gap:8px;margin-top:10px;">
+    ${foods.length > 1 ? `<div style="font-size:12px;color:var(--text3);padding:8px 0 4px;" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*100)/100}g P · ${Math.round(totals.fat*100)/100}g F · ${Math.round(totals.carbs*100)/100}g C</strong></div>` : ''}
+    ${warnings.length ? `<div style="margin-bottom:6px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:3px 0;">${w}</div>`).join('')}</div>` : ''}
+    ${window._pendingMealMessage ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;font-style:italic;">${window._pendingMealMessage}</div>` : ''}
+    <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="cancelMealPreview()">Cancel</button>
     </div>
-    ${window._pendingMealMessage ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.5;">${window._pendingMealMessage}</div>` : ''}
   `;
 
   const scroll = document.getElementById('chatScroll');
@@ -6757,11 +6744,11 @@ function scalePreviewPortion(gramsStr) {
     amount:  grams + 'g',
   };
   const scaled = window._pendingMealFoods[0];
-  // Update preview display
-  const macrosEl = document.getElementById('previewPortionMacros');
-  if (macrosEl) macrosEl.textContent = `${grams}g = ${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C`;
-  const totalEl = document.getElementById('previewTotalLine');
-  if (totalEl) totalEl.innerHTML = `Total: <strong style="color:var(--text);">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C</strong>`;
+  // Update inline macro spans
+  const ppKcal = document.getElementById('ppKcal'); if (ppKcal) ppKcal.textContent = scaled.kcal + 'kcal';
+  const ppProt = document.getElementById('ppProt'); if (ppProt) ppProt.textContent = scaled.protein + 'g P';
+  const ppFat  = document.getElementById('ppFat');  if (ppFat)  ppFat.textContent  = scaled.fat + 'g F';
+  const ppCarb = document.getElementById('ppCarb'); if (ppCarb) ppCarb.textContent = scaled.carbs + 'g C';
 }
 
 function editPreviewItem(index) {
@@ -7040,116 +7027,6 @@ function logFoods(foods, originalText, aiMessage = null) {
   const fibreLogged = Math.round((newTotals.fibre||0) * 10) / 10;
   macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}g F</span>` : ''}<span class="k">${newTotals.carbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}`;
   bubbleDiv.appendChild(macrosDiv);
-  // Add correction option for AI-logged items
-  if (aiMessage !== undefined && bubbleDiv) {
-    const editBtn = document.createElement('div');
-    editBtn.style.cssText = 'margin-top:8px;font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;display:inline-block;';
-    editBtn.textContent = '✏ Correct this';
-    editBtn.onclick = () => {
-      editBtn.style.display = 'none';
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'margin-top:10px;';
-
-      // Build editable rows for each food item
-      const rows = foods.map((food, i) => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:grid;grid-template-columns:1fr 55px 55px 55px 55px 24px;gap:4px;margin-bottom:6px;align-items:center;';
-        row.innerHTML = `
-          <input class="modal-input" style="font-size:11px;padding:4px 6px;" value="${food.name}" data-idx="${i}" data-field="name">
-          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.kcal}" data-idx="${i}" data-field="kcal" placeholder="kcal">
-          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.protein}" data-idx="${i}" data-field="protein" placeholder="P">
-          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.fat||0}" data-idx="${i}" data-field="fat" placeholder="F">
-          <input class="modal-input" style="font-size:11px;padding:4px 6px;text-align:center;" value="${food.carbs}" data-idx="${i}" data-field="carbs" placeholder="C">
-          <span style="color:var(--red);cursor:pointer;font-size:14px;text-align:center;" data-delete="${i}">✕</span>
-        `;
-        return row;
-      });
-
-      // Column headers
-      const header = document.createElement('div');
-      header.style.cssText = 'display:grid;grid-template-columns:1fr 55px 55px 55px 55px 24px;gap:4px;margin-bottom:4px;';
-      header.innerHTML = '<span style="font-size:9px;color:var(--text3);font-family:monospace;">ITEM</span><span style="font-size:9px;color:var(--text3);font-family:monospace;text-align:center;">KCAL</span><span style="font-size:9px;color:var(--green);font-family:monospace;text-align:center;">P</span><span style="font-size:9px;color:#a78bfa;font-family:monospace;text-align:center;">F</span><span style="font-size:9px;color:var(--yellow);font-family:monospace;text-align:center;">C</span><span></span>';
-      wrap.appendChild(header);
-      rows.forEach(r => wrap.appendChild(r));
-
-      // Buttons row
-      const btnRow = document.createElement('div');
-      btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
-
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'modal-btn confirm-new';
-      saveBtn.style.cssText = 'flex:1;font-size:11px;padding:8px;';
-      saveBtn.textContent = 'Save corrections';
-
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'modal-btn cancel';
-      cancelBtn.style.cssText = 'flex:1;font-size:11px;padding:8px;';
-      cancelBtn.textContent = 'Cancel';
-
-      btnRow.appendChild(cancelBtn);
-      btnRow.appendChild(saveBtn);
-      wrap.appendChild(btnRow);
-      bubbleDiv.appendChild(wrap);
-
-      // Delete row handler
-      wrap.addEventListener('click', e => {
-        if (e.target.dataset.delete !== undefined) {
-          e.target.closest('div[style*="grid"]').remove();
-        }
-      });
-
-      cancelBtn.onclick = () => {
-        wrap.remove();
-        editBtn.style.display = 'inline-block';
-      };
-
-      saveBtn.onclick = () => {
-        // Remove the original meal entry (find by matching the original text)
-        const origIdx = state.todayLog.findIndex(l => l.description === originalText);
-        if (origIdx > -1) {
-          state.todayLog.splice(origIdx, 1);
-        } else {
-          // Fallback — remove by individual food name matching
-          foods.forEach(food => {
-            const idx = state.todayLog.findIndex(l => l.description === food.name || l.items?.some(i => i.name === food.name));
-            if (idx > -1) state.todayLog.splice(idx, 1);
-          });
-        }
-
-        // Build corrected foods from edited rows
-        const correctedFoods = [];
-        wrap.querySelectorAll('div[style*="grid-template-columns"]').forEach(row => {
-          const inputs = row.querySelectorAll('input');
-          if (inputs.length >= 4) {
-            const name    = inputs[0].value.trim();
-            const kcal    = parseFloat(inputs[1].value) || 0;
-            const protein = parseFloat(inputs[2].value) || 0;
-            const fat     = inputs.length >= 5 ? parseFloat(inputs[3].value) || 0 : 0;
-            const carbs   = parseFloat(inputs[inputs.length >= 5 ? 4 : 3].value) || 0;
-            if (name) correctedFoods.push({ name, kcal, protein, fat, carbs });
-          }
-        });
-
-        // Log corrected items
-        correctedFoods.forEach(food => {
-          state.todayLog.push({
-            id: Date.now() + Math.random(),
-            time: new Date().toTimeString().slice(0,5),
-            description: food.name,
-            kcal: food.kcal, protein: food.protein, fat: food.fat, carbs: food.carbs,
-            fibre: 0
-          });
-        });
-
-        wrap.remove();
-        editBtn.style.display = 'none';
-        saveState();
-        updateDashboard();
-        addBubble(`✓ Corrected — ${correctedFoods.length} item(s) updated`, 'system', '');
-      };
-    };
-    bubbleDiv.appendChild(editBtn);
-  }
 
   // ── Save to Library options (multi-item meals) ──
   if (foods && foods.length > 0) {
