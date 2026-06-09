@@ -3280,7 +3280,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.1.9</div>
+        <div class="settings-value">MaxedHealth v2.2.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5349,7 +5349,7 @@ async function handleBarcodeCapture(input) {
 
 async function lookupBarcode(barcode, statusBubble) {
   try {
-    const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,brands,nutriments,quantity`;
+    const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,brands,nutriments,quantity,serving_size,serving_quantity`;
     const res = await fetch(url);
     const data = await res.json();
 
@@ -5380,7 +5380,9 @@ async function lookupBarcode(barcode, statusBubble) {
     if (statusBubble) statusBubble.remove();
 
     // Populate food amount panel
-    _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre, satFat, sugars, salt, iron };
+    const servingQty = parseFloat(p.serving_quantity) || 0;
+    const servingLabel = p.serving_size ? p.serving_size.trim() : '';
+    _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre, satFat, sugars, salt, iron, servingQty, servingLabel };
     document.getElementById('foodSearchView').style.display = 'none';
     document.getElementById('foodAmountView').classList.add('open');
     document.getElementById('foodSearchOverlay').classList.add('open');
@@ -5395,7 +5397,7 @@ async function lookupBarcode(barcode, statusBubble) {
       (iron   ? ` · ${iron}mg iron`    : '');
     document.getElementById('foodAmountGrams').value = '';
     document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
-    renderPortionSuggestions(name, brand, p.quantity || '');
+    renderPortionSuggestions(name, brand, p.quantity || '', servingQty, servingLabel);
     setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 
     addBubble(`✓ Found: ${displayName}\n⚠ Values from Open Food Facts — verify against label before saving to library.`, 'system', 'success');
@@ -5552,29 +5554,42 @@ Reply ONLY with a JSON object:
   })();
 }
 
-function renderPortionSuggestions(name, brand, qty) {
+function renderPortionSuggestions(name, brand, qty, servingQty, servingLabel) {
   const el = document.getElementById('foodAmountSuggestions');
   if (!el || !_selectedFoodItem) return;
 
-  // Build candidate suggestions — start with pack/piece sizes from product quantity string
+  // Build candidate suggestions — serving size first, then pack/piece, then keyword fallbacks
   const suggestions = [];
   const q = qty || '';
 
-  // Whole pack: e.g. "200g"
+  // 1. Serving size from OFF API (most accurate for packaged foods)
+  if (servingQty && servingQty > 0 && servingQty <= 1000) {
+    const normLabel = (servingLabel || '').replace(/\s*g$/i, 'g').trim();
+    const label = normLabel && normLabel !== `${servingQty}g` && !/^\d+(\.\d+)?g$/.test(normLabel)
+      ? `${servingQty}g (${normLabel})`
+      : `${servingQty}g (1 serving)`;
+    suggestions.push({ g: servingQty, label });
+    // Offer 2 servings if single serving is small (e.g. 30g crisp bag in a multi-pack)
+    if (servingQty <= 100) suggestions.push({ g: servingQty * 2, label: `${servingQty * 2}g (2 servings)` });
+  }
+
+  // 2. Whole pack from quantity string: e.g. "200g"
   const packMatch = q.match(/^(\d+(?:\.\d+)?)\s*g$/i);
   if (packMatch) {
     const g = parseFloat(packMatch[1]);
-    if (g > 0 && g <= 1000) suggestions.push({ g, label: `${g}g (whole pack)` });
+    if (g > 0 && g <= 1000 && !suggestions.find(s => s.g === g)) {
+      suggestions.push({ g, label: `${g}g (whole pack)` });
+    }
   }
   // Per piece: e.g. "6 x 30g"
   const pieceMatch = q.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*g/i);
   if (pieceMatch) {
     const g = parseFloat(pieceMatch[2]);
-    suggestions.push({ g, label: `${g}g (1 piece)` });
-    suggestions.push({ g: g * 2, label: `${g * 2}g (2 pieces)` });
+    if (!suggestions.find(s => s.g === g)) suggestions.push({ g, label: `${g}g (1 piece)` });
+    if (!suggestions.find(s => s.g === g * 2)) suggestions.push({ g: g * 2, label: `${g * 2}g (2 pieces)` });
   }
 
-  // Keyword-based common amounts — only if no pack data
+  // 3. Keyword-based common amounts — only if still nothing
   if (!suggestions.length) {
     const n = (name + ' ' + (brand || '')).toLowerCase();
     if (/cream\b/.test(n))                              suggestions.push({ g: 15, label: '15g (1 tbsp)' }, { g: 30, label: '30g (2 tbsp)' }, { g: 100, label: '100g' });
