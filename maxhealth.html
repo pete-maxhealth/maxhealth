@@ -3282,7 +3282,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.3.2</div>
+        <div class="settings-value">MaxedHealth v2.3.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -3921,7 +3921,8 @@ function loadState() {
             Math.round(rolledTotals.kcal),
             Math.round(rolledTotals.protein),
             Math.round(rolledTotals.carbs),
-            parsed.notes || parsed.dayMode
+            parsed.notes || parsed.dayMode,
+            Math.round((rolledTotals.fat || 0) * 10) / 10
           ), 1000);
         }
         parsed.todayLog = [];
@@ -4912,14 +4913,14 @@ function exportData() {
   showToast('Data exported');
 }
 
-async function saveNutritionToServer(date, kcal, protein, carbs, notes) {
+async function saveNutritionToServer(date, kcal, protein, carbs, notes, fat) {
   // Silently save a nutrition row to master.csv via local server
   // Only runs when server is available — fails silently if not
   try {
     const res = await fetch(`${MH_SERVER}/save-nutrition`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, kcal, protein, carbs, notes: notes || '' })
+      body: JSON.stringify({ date, kcal, protein, carbs, fat: fat || 0, notes: notes || '' })
     });
     const data = await res.json();
     if (data.status === 'ok') {
@@ -4939,6 +4940,7 @@ async function syncAllNutritionToServer() {
       kcal:    h.totals.kcal,
       protein: Math.round(h.totals.protein * 10) / 10,
       carbs:   Math.round(h.totals.carbs * 10) / 10,
+      fat:     Math.round((h.totals.fat || 0) * 10) / 10,
       notes:   h.notes || h.mode || 'standard'
     }));
 
@@ -6175,7 +6177,7 @@ async function processMessage(text, imageBase64, imageMime) {
   if (todayEntry && state.weight) todayEntry.weight = state.weight;
   const csvLine = `${todayStr()}|${totals2.kcal}|${Math.round(totals2.protein)}|${totals2.carbs}|${state.notes || state.dayMode}`;
   // Auto-save to master.csv on local server
-  saveNutritionToServer(todayStr(), totals2.kcal, Math.round(totals2.protein), totals2.carbs, state.notes || state.dayMode);
+  saveNutritionToServer(todayStr(), totals2.kcal, Math.round(totals2.protein), totals2.carbs, state.notes || state.dayMode, Math.round((totals2.fat||0)*10)/10);
     const tgts = TARGETS[state.dayMode];
     const summary = `Day complete ✓\n\nCalories: ${totals2.kcal} / ${tgts.kcal} kcal\nProtein: ${totals2.protein}g / ${tgts.protein}g\nFat: ${totals2.fat||0}g\nCarbs: ${totals2.carbs}g / ${tgts.carbs}g`;
     showEODSummary(summary, csvLine);
@@ -8728,7 +8730,7 @@ function saveMissedDayConv(kcal, protein, carbs) {
     showToast(`${dateVal} added to history ✓`);
   }
   saveState();
-  saveNutritionToServer(dateVal, kcal, protein, carbs, notes);
+  saveNutritionToServer(dateVal, kcal, protein, carbs, notes, Math.round((fat||0)*10)/10);
   cancelMissedDayFlow();
   // Switch to All filter so the saved entry is always visible
   histFilter = 'all';
@@ -8876,7 +8878,7 @@ function saveMissedDay() {
   }
   saveState();
   // Auto-save to master.csv on local server
-  saveNutritionToServer(dateVal, kcal, protein, carbs, notes);
+  saveNutritionToServer(dateVal, kcal, protein, carbs, notes, Math.round((fat||0)*10)/10);
   closeMissedDayModal();
   renderHistory();
 }
@@ -11303,13 +11305,23 @@ function renderReportSummary() {
     <div style="font-size:22px;font-weight:700;color:var(--text);line-height:1.1;">${val}</div>
     ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>`:''}
   </div>`;
-  const fats  = h.map(e=>e.totals?.fat||0);
+  // Back-calculate fat for entries logged before fat tracking was added
+  const fats  = h.map(e=>{
+    if (e.totals?.fat && e.totals.fat > 0) return e.totals.fat;
+    const k = e.totals?.kcal||0;
+    return Math.max(0, (k - (e.totals?.protein||0)*4 - (e.totals?.carbs||0)*4) / 9);
+  });
   const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
   const avgFat = av(fats);
   const avgFatPct = av(kcals) > 0 ? Math.round(avgFat * 9 / av(kcals) * 100) : 0;
   const fatMisses = h.filter(e=>(e.totals?.fat||0)<fatTgt*0.7).length;
   const ketoRatioDays = h.filter(e=>{
-    const k=e.totals?.kcal||0; const f=(e.totals?.fat||0)*9;
+    const k=e.totals?.kcal||0;
+    // Use recorded fat if present; back-calculate from kcal for pre-fat-tracking entries
+    const fatG = (e.totals?.fat && e.totals.fat > 0)
+      ? e.totals.fat
+      : Math.max(0, (k - (e.totals?.protein||0)*4 - (e.totals?.carbs||0)*4) / 9);
+    const f = fatG * 9;
     return k>200 && Math.round(f/k*100)>=65;
   }).length;
   el.innerHTML =
