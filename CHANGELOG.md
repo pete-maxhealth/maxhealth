@@ -1,157 +1,103 @@
-# MaxHealth — Changelog
+# MaxedHealth Changelog
 
-> Built by a GBM patient who needed it. Given freely to everyone who does.
-> YOUR DATA. YOUR HEALTH. YOUR RULES.
+## v2.7.3 — Phase 8 (10 Jun 2026)
 
----
+### Added
+- Library split into **🍽 MEALS** and **📋 INGREDIENTS** sections with counts
+- Meals show ingredient list with portions in library view
+- Inline amount scaler on library LOG — type grams, macros update live
+- **Save as meal / Save ingredients / ✦ Save both** buttons post-log
+- Amount-first flow — type food name only, preview appears with amount field auto-focused
+- Macro ratio bar with target marker, status label and guidance line
+- Smart fat target in running totals line (e.g. `188/247g F`)
+- Two-line log entry format — name+amount on line 1, macros on line 2
+- Library delete confirm dialog
+- Truncation repair — salvages complete items if AI response is cut short
+- Sequential split requests (800ms delay) to prevent proxy rate limiting
+- `why-free.html` page added to repo
 
-## v1.9 — Phase 5 (May 2026)
+### Fixed
+- Long meal lists (10+ items) now correctly return all items via sequential split
+- Library crash (`renderItems is not a function`) fixed
+- Meals correctly detected in library (legacy entries via `portion: '1 serving'`)
+- Fat sanitiser no longer fires incorrectly for tablespoon/tsp amounts
+- Barcode portion scaling uses OFF `serving_size`/`serving_quantity`
+- History storage strips log arrays >30 days old to prevent ~90 day localStorage cap
+- Rollover abort caused by supplement log reset fixed
+- Tab bleeding fixed (overflow hidden on .view, .subview)
+- MCT oil tablespoon scaling bug fixed (parseFloat "1 tablespoon" → 1, not 14×)
+- Duplicate dashboard entries on log entry name edit
+- Library edit double-save guard added
+- Library search debounced for large libraries
 
-### Visual Theme System
-- **VITAL / PULSE / FORGE visual themes** — three complete design languages selectable from Settings → Appearance. Each changes colours, border radius, card styling, typography and animations. Stackable with existing Midnight/Aurora/Carbon/Slate/Light colour themes and custom accent colour picker.
-  - **VITAL** — clinical precision. Deep blue palette, monospace typography, thin ruled borders, data-forward aesthetic.
-  - **PULSE** — organic energy. Deep green palette, rounded everything (20px radius), gradient card fills, breathing animations.
-  - **FORGE** — athletic intensity. Dark amber palette, sharp corners (2-4px), bold typography, top-border card accents.
-- **Independent icon packs** — six icon sets selectable separately from visual theme: Classic (original emoji), Outline (thin-line SVG), Organic (rounded filled), Bold (solid chunky), Neon (accent-coloured glow), Mono (greyscale minimal). Visual themes auto-select their matching pack but any combination works.
-- **Per-theme tab bar icons** — 8 tab icons swap with the active icon pack.
-- **Per-theme input button icons** — camera, gallery, search, barcode buttons swap style and SVG per theme.
-- **Per-theme card styling** — dashboard progress cards, phase banner, ketosis badge, water card all adapt per theme.
-- **Macro colour preservation** — calories (blue), protein (green), carbs (yellow) maintained across all themes.
-- **Demo mode launches in Vital** — showcases the most striking theme. Restores previous theme on exit.
+### Removed
+- Fibre tile from dashboard (not used)
+- Fibre target from Settings
+- "Correct this" correction grid from post-log bubble (use Library edit instead)
 
-### New Features
-- **Carer & Clinician portal** — `carer.html` standalone read-only view. Generates a shareable 7-day link from Settings. Shows daily nutrition history, weekly summaries with adherence bars, sparkline trends, and colour-coded target compliance. Zero-day filtering so carers only see logged days.
-- **iOS / Safari support** — PWA installable from Safari. Apple touch icon, safe area insets for iPhone notch, input zoom prevention, overscroll-behavior on all scroll containers.
-- **Water target celebration** — Water card pulses with animated blue glow when daily target is reached.
-- **Chart lightbox** — tap any chart in Full Charts view to open full screen with period selector (30D/90D/All) and Deep Dive button.
-- **New PWA icon** — M lettermark above a heartbeat pulse line. Survives Android circular crop. 96px/192px/512px.
-- **Feedback link** — Settings → About links to GitHub Issues with pre-filled template.
-- **Unified button design** — all action buttons use tinted accent background + border. Eliminates clashing solid-filled buttons.
-- **Dedicated Carer & Clinician section in Settings** — own clearly labelled section.
-- **Nutrition input redesign** — icon buttons on own row, full-width textarea.
-- **New device onboarding improved** — Import tab Add New Device section explains requirements and AI mapping flow.
-
-### Bug Fixes
-- **Missing `</div>` in Nutrition view** — pre-existing bug causing all tabs except Dash and Nutrition to show black screens.
-- **App wrapper flex chain** — fixed Trends and all tab scrolling with `height: 100dvh` wrapper.
-- **Header sticky positioning** — removed sticky after moving header inside app-wrapper.
-- **AI food logging proxy fix** — Cloudflare proxy path inlines system prompt. Fixes "Failed to fetch" for no-key users.
-- **CSS brace imbalance** — orphaned `.drill-section-title` block causing stylesheet corruption.
-- **Drill-down overlay scroll** (Android Chrome) — Fixed.
-- **Daily view tappable rows** (Android Chrome) — Fixed.
-
-### Demo Mode
-- Launches in Vital theme. Restores previous theme on exit.
-- Full Phase 4/5 data: water_ml, fibre, fat, steps, heart_rate, hrv, spo2, sleep_hours, occasion days.
+### Changed
+- Dashboard tile values rounded to integers, font size reduced
+- Multi-item meal description shows "Chicken + Onions + 8 more" not full ingredient list
+- Save buttons restored: Save as meal / Save ingredients / Save both
 
 ---
 
-## v1.8 — Phase 4 (April–May 2026)
-
-### New Features
-- **Barcode scanner** — Scan product barcodes directly from the Nutrition tab. Looks up Open Food Facts database. Logs with exact nutritional values.
-- **Fibre tracking** — Daily fibre target (default 25g, configurable in Settings). Tracked from food database and barcode scans. Shown on dashboard and in history.
-- **Water tracking** — Dashboard water card with one-tap logging (Glass 250ml, Can 330ml, Bottle 500ml, Custom). Daily target configurable in Settings. Resets at midnight.
-- **Recipe builder** — Create multi-ingredient recipes, save to library, log as single entries. Barcode scanning supported within recipe builder.
-- **History editing** — Tap any entry in Today's Log to edit calories, protein or carbs inline. 5-second undo on deletion. Previous days editable via History tab.
-- **Missed day logging** — Log a day you forgot via AI (describe what you ate) or enter macros directly. Accessible from History tab.
-- **Nutrient deep-dive** — Expanded macro tracking including fat and fibre alongside existing kcal/protein/carbs.
-- **Carer view link generator** — Generates shareable read-only snapshot URL (carer.html — completed in Phase 5).
-- **One-tap pipeline sync** — Streamlined sync flow in Import tab.
-- **GBM guide timetable page** — Dedicated treatment schedule reference.
-- **Cloud mode banner** — Visible indicator when running from GitHub Pages vs localhost.
-- **GitHub → localhost auto-redirect** — Dev workflow improvement.
-- **Merged setup / user guide** — Single unified documentation page.
-
-### Pipeline (Python / Termux)
-- **Source precedence config** — Per-metric device priority (RingConn, Withings, Zepp/Amazfit). Downloadable config file. Applied on next sync.
-- **Universal device extractor** — Import tab AI column mapper handles non-standard CSV formats.
-- **mhstart alias** — Single command to start local server from Termux.
-
-### Bug Fixes
-- Contextual tips system — dismissable per-tab tips, reset via Settings.
-- Data integrity check on init — flags duplicate dates, missing dates, suspicious values.
-- Floating point rounding fixes across all macro displays.
+## v2.5.0 — Phase 8 start (10 Jun 2026)
+- Barcode portion scaling from OFF serving_size
+- History storage optimisation (strip old logs)
+- TECHNICAL.md rewritten
+- why-free.html created
+- Ketogenic ratio and avg fat back-calculated for pre-fat-tracking history
+- Fat column added to all master.csv write paths
+- server.py updated with fat column
+- Clear Today's Log button in Settings
+- Rollover abort fix
 
 ---
 
-## v1.7 — Phase 3 (Early 2026)
-
-### New Features
-- **Condition-specific onboarding** — 4 condition cards in setup wizard:
-  - 🧠 GBM / Therapeutic Ketosis → 50g carb ceiling, patient guide
-  - 🩸 Type 2 Diabetes → 100g carb ceiling
-  - ⚖️ Body Recomposition → protein focus
-  - ❤️ General Health → standard defaults
-- **Health context AI injection** — Free-text field in Settings injected into every AI system prompt. Enables context-aware responses (e.g. chemotherapy cycle, fatigue, water retention).
-- **Food library editing** — Tap any saved food to edit name or macros inline.
-- **GBM Patient Protocol Guide** — Linked from Reports, Settings and Story page.
-- **Body composition drill-downs** — Weight, HRV, SpO₂, sleep, steps — full chart overlays with stats.
-- **Contextual onboarding tips** — Dismissable first-visit tips on each tab.
-- **Push notifications** — EOD reminder, carb ceiling warning, permission flow.
-- **Day mode selector** — Standard / Occasion / Holiday with dynamic carb ceilings (50g / 75g / 100g).
-- **Phase logic** — Auto-switches Gain ↔ Maintenance at 92kg sustained.
-- **Seasonal compare** — Reports tab Period A vs Period B date comparison with AI analysis.
-- **Reports Query Builder** — Metric + operator + value selector runs against full history.
-- **Trends tab** — Today / 30 / 60 / All filters. Daily view with day navigation. Chart drill-downs.
-- **Import tab** — combined.csv import, device extractor UI, AI column mapper, pipeline commands.
-- **Count-up animation** — Dashboard macros animate on load.
-- **Demo mode** — Full 30-day sample data, read-only, enter/exit without affecting real data.
-
-### Pipeline
-- Withings extractor — body comp scale (weight, fat%, muscle%, water%, bone%, visceral fat, BMR).
-- RingConn extractor — smart ring (HRV RMSSD+SDNN, sleep staging, SpO₂, heart rate, steps).
-- merge.py — builds combined.csv from all tables, left-join on date.
-- utils.py — logging, CSV helpers, config, date normalisation.
-- setup.py — first-run wizard.
-- server.py — local HTTP server (Termux).
+## v2.2.2 — Phase 7 end (Jun 2026)
+- Library delete/edit index bug fix (_origIdx tagging)
+- Notifications interval fix (20-minute setInterval)
+- parseFood fallback intercept removed
+- Fat sanitiser (sanitiseFatValues) added
+- Save-to-library post-logging flow
+- Meal photo 3-step visual reasoning
+- mhstart as ~/bin/mhstart script
 
 ---
 
-## v1.6 — Phase 2 (Late 2025)
-
-### New Features
-- **Claude AI via Cloudflare proxy** — No user API key required. Meal logging and questions answered by Claude (Anthropic). Proxy at `maxhealth-ai.bogginsuk.workers.dev`.
-- **Photo meal logging** — Photograph a meal or nutrition label. Label mode: switch to 🏷, type product name and amount.
-- **Food library** — Save foods from AI responses. Edit, delete, duplicate prevention.
-- **Reports tab** — Date range selection, summary cards, GBM monthly brief, AI insights.
-- **End-of-day save to history** — Daily log saves automatically at midnight rollover.
-- **Onboarding wizard** — TDEE calculator with activity level and goal selection.
-- **Body comp chart overlays** — Weight chart with fat%, muscle%, hydration overlays.
-- **Nutrition/wearable correlation** — Cross-reference nutrition with wearable metrics in Reports.
-- **Data import/export** — JSON backup, nutrition CSV, combined CSV export.
-- **PWA + service worker** — Network-first caching, auto-updates, installable on Android.
-- **AI provider selector** — Claude (default), OpenAI, or Local only.
+## v2.0.0 — Phase 6 (29 May 2026)
+- 4-tab navigation (Today/Log/Insights/Settings)
+- Fat tracking everywhere
+- Supplement tracker (19 supplements, multi-period)
+- Midnight sync
+- Missed day conversational flow
+- Recipe builder
+- Barcode scanner with Open Food Facts
 
 ---
 
-## v1.0–v1.5 — Phase 1 (2025)
-
-### Foundation
-- Single-file mobile-first HTML app. All CSS and JS inline. Zero build tools.
-- GitHub Pages hosting. `localStorage` persistence.
-- Dashboard tab — weight card, phase banner, macro progress bars, ketosis badge.
-- Nutrition tab (originally "Log Meal") — free-text AI meal logging.
-- History tab — week/month/all filter, expandable day entries.
-- Strict low-carb protocol — 50g standard, 75g occasion, 100g holiday.
-- Therapeutic ketosis tracking for GBM management.
-- Dark theme — deliberate, permanent.
-- Chart.js integration (cdnjs, no npm).
-- Multiple themes — Midnight, Aurora, Carbon, Slate, Light.
-- Custom accent colour picker.
+## v1.9.0 — Phase 5 (late May 2026)
+- Editable correction grid
+- Long meal parallel AI requests
+- History index fix
+- Log/Query mode toggle
+- Imperial/metric/stones weight toggles
 
 ---
 
-## Roadmap (Phase 6+)
-
-- Supplement tracker (omega-3, Vitamin D, magnesium)
-- Carer portal expansion — live sync, PIN access, notification alerts
-- Meal templates — one-tap logging for frequent meals
-- Native wearable sync APIs
-- Zepp/Amazfit Python extractor
-- Pipeline rolling backups
+## v1.8.0 — Phase 4 (mid-May 2026)
+- Barcode scanner (BarcodeDetector API + AI fallback)
+- Open Food Facts integration
+- Recipe builder
+- Comprehensive nutrient tracking
+- Water tracking
+- History entry editing
 
 ---
 
-*MaxHealth is built and maintained by Pete — software architect, retired Oracle DBA and RPA developer, GBM patient in remission.*
-*Developed with Claude (Anthropic). May it be useful to someone else too.*
+## v1.0.0 — Initial build (May 2026)
+- Dashboard, AI meal logging, localStorage
+- Cloudflare Worker proxy
+- Python data pipeline (Withings, RingConn, Amazfit)
+- combined.csv / master.csv
