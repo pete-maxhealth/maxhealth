@@ -3289,7 +3289,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.5.3</div>
+        <div class="settings-value">MaxedHealth v2.5.5</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4084,6 +4084,10 @@ const FOOD_DB = {
   // Protein shakes/supplements
   'protein shake': { per: 1, kcal: 120, protein: 25, carbs: 3, unit: 'scoop' },
   'whey': { per: 30, kcal: 120, protein: 25, carbs: 3 },
+  // Condiments/sweeteners
+  'honey': { per: 100, kcal: 304, protein: 0.3, fat: 0, carbs: 82 },
+  'jam': { per: 100, kcal: 250, protein: 0.4, fat: 0.1, carbs: 65 },
+  'peanut butter': { per: 100, kcal: 588, protein: 25, fat: 50, carbs: 20 },
 };
 
 // ─── PARSING ─────────────────────────────────────────────
@@ -4114,7 +4118,9 @@ function parseFood(input) {
         name: `${qty}g ${m[2].trim()}`,
         kcal: Math.round(food.kcal * ratio),
         protein: Math.round(food.protein * ratio * 10) / 10,
-        carbs: Math.round(food.carbs * ratio * 10) / 10
+        fat: Math.round((food.fat||0) * ratio * 10) / 10,
+        carbs: Math.round(food.carbs * ratio * 10) / 10,
+        amount: qty + 'g'
       });
       matched = true;
     }
@@ -4131,13 +4137,19 @@ function parseFood(input) {
         name: `${qty} ${m[2].trim()}`,
         kcal: Math.round(food.kcal * qty),
         protein: Math.round(food.protein * qty * 10) / 10,
-        carbs: Math.round(food.carbs * qty * 10) / 10
+        fat: Math.round((food.fat||0) * qty * 10) / 10,
+        carbs: Math.round(food.carbs * qty * 10) / 10,
+        amount: qty + (food.unit ? ' ' + food.unit : 'g')
       });
       matched = true;
     }
   }
 
-  // No fallback name scanning — if no quantities found, return empty so AI handles it
+  // If no quantity found, check if bare name matches FOOD_DB — return flag for amount prompt
+  if (!matched) {
+    const food = findFood(lower);
+    if (food) return [{ _needsAmount: true, name: lower, _food: food }];
+  }
   return results;
 }
 
@@ -6222,8 +6234,14 @@ async function processMessage(text, imageBase64, imageMime) {
     || text.trim().split(/\s+/).length > 6;
   const libMatch = !hasPhoto && !isMultiComponent ? findInLibrary(text) : null;
   if (libMatch) {
-    logFoods([{ name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs }], libMatch.name);
-    addBubble(`📚 Logged from library — values locked`, 'system', 'success');
+    // Show preview so user can adjust portion before logging
+    const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
+    food._per100g = libMatch.per100g === true;
+    food._portionG = parseFloat(libMatch.portion) || 0;
+    window._pendingMealFoods = [food];
+    window._pendingMealText = libMatch.name;
+    window._pendingMealMessage = 'From library — values locked. Adjust amount if needed.';
+    showMealPreview([food], libMatch.name, 'From library — values locked. Adjust amount if needed.');
     return;
   }
 
@@ -6231,6 +6249,32 @@ async function processMessage(text, imageBase64, imageMime) {
   // Skip for photos, multi-component meals — let AI handle them properly
   const foods = !hasPhoto && !isMultiComponent ? parseFood(text) : [];
   if (foods.length > 0) {
+    // Single food matched but no amount specified — show preview with blank amount for user to fill
+    if (foods.length === 1 && foods[0]._needsAmount) {
+      const fd = foods[0]._food;
+      const displayName = foods[0].name.replace(/\b\w/g, c => c.toUpperCase());
+      // Show preview with 100g as default, amount input pre-focused
+      const food = {
+        name: displayName,
+        kcal: Math.round(fd.kcal),
+        protein: Math.round(fd.protein * 10) / 10,
+        fat: Math.round((fd.fat||0) * 10) / 10,
+        carbs: Math.round(fd.carbs * 10) / 10,
+        amount: fd.per + 'g',
+        _per100gBase: { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, per: fd.per }
+      };
+      food._base = { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, baseG: fd.per };
+      window._pendingMealFoods = [food];
+      window._pendingMealText = displayName;
+      window._pendingMealMessage = `Values per ${fd.per}${fd.unit ? ' ' + fd.unit : 'g'} — adjust amount below.`;
+      showMealPreview([food], displayName, `Values per ${fd.per}${fd.unit ? ' ' + fd.unit : 'g'} — adjust amount below.`);
+      // Auto-focus the amount input after render
+      setTimeout(() => {
+        const inp = document.getElementById('previewPortionInput');
+        if (inp) { inp.select(); inp.focus(); }
+      }, 100);
+      return;
+    }
     showMealPreview(foods, text, null);
     return;
   }
