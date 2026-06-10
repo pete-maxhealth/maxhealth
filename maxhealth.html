@@ -3286,7 +3286,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.7.6</div>
+        <div class="settings-value">MaxedHealth v2.7.7</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -8569,7 +8569,16 @@ function addLibItemToRecipe(idx) {
   const lib = loadLibrary();
   const f = lib[idx];
   if (!f) return;
-  _recipeIngredients.push({ name: f.name, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fibre: f.fibre || 0 });
+  // Get base portion from library entry
+  const _ps = (f.portion || '').toLowerCase();
+  const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
+  const baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
+  _recipeIngredients.push({
+    name: f.name,
+    amount: baseG,
+    kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0,
+    _base: { kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0, baseG }
+  });
   closeRecipeLibPicker();
   renderRecipeIngredients();
   updateRecipeTotals();
@@ -8600,6 +8609,25 @@ async function handleRecipeBarcode(input) {
   await handleBarcodeCapture(input);
 }
 
+function scaleRecipeIngredient(idx, gramsStr) {
+  const ing = _recipeIngredients[idx];
+  if (!ing) return;
+  const grams = parseFloat(gramsStr) || 0;
+  if (grams <= 0) return;
+  const base = ing._base || { kcal: ing.kcal, protein: ing.protein, fat: ing.fat||0, carbs: ing.carbs, fibre: ing.fibre||0, baseG: ing.amount || 100 };
+  const factor = grams / base.baseG;
+  ing.amount  = grams;
+  ing.kcal    = Math.round(base.kcal    * factor);
+  ing.protein = Math.round(base.protein * factor * 10) / 10;
+  ing.fat     = Math.round(base.fat     * factor * 10) / 10;
+  ing.carbs   = Math.round(base.carbs   * factor * 10) / 10;
+  ing.fibre   = Math.round((base.fibre||0) * factor * 10) / 10;
+  // Update macros display inline without full re-render
+  const macrosEl = document.getElementById('recipe-ing-macros-' + idx);
+  if (macrosEl) macrosEl.textContent = `${ing.kcal}kcal · ${ing.protein}g P · ${ing.fat}g F · ${ing.carbs}g C`;
+  updateRecipeTotals();
+}
+
 function removeRecipeIngredient(idx) {
   _recipeIngredients.splice(idx, 1);
   renderRecipeIngredients();
@@ -8613,12 +8641,20 @@ function renderRecipeIngredients() {
     return;
   }
   el.innerHTML = _recipeIngredients.map((ing, i) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="flex:1;">
-        <div style="font-size:13px;color:var(--text);">${ing.name}</div>
-        <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;">${ing.kcal}kcal · ${ing.protein}g P · ${ing.carbs}g C${ing.fibre ? ' · ' + ing.fibre + 'g F' : ''}</div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;">
+          <div style="font-size:13px;color:var(--text);">${ing.name}</div>
+          <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;" id="recipe-ing-macros-${i}">${Math.round(ing.kcal)}kcal · ${Math.round(ing.protein*10)/10}g P · ${Math.round((ing.fat||0)*10)/10}g F · ${Math.round(ing.carbs*10)/10}g C</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;">
+          <input type="number" value="${ing.amount || 100}" min="1" max="5000"
+            style="width:55px;background:transparent;border:none;outline:none;color:var(--text);font-size:14px;font-weight:700;text-align:center;"
+            oninput="scaleRecipeIngredient(${i}, this.value)">
+          <span style="font-size:10px;color:var(--text3);">g</span>
+        </div>
+        <span style="color:var(--text3);cursor:pointer;padding:4px 8px;font-size:16px;" onclick="removeRecipeIngredient(${i})">×</span>
       </div>
-      <span style="color:var(--text3);cursor:pointer;padding:4px 8px;font-size:16px;" onclick="removeRecipeIngredient(${i})">×</span>
     </div>
   `).join('');
 }
@@ -8633,9 +8669,9 @@ function updateRecipeTotals() {
   const total = _recipeIngredients.reduce((acc, ing) => ({
     kcal:    acc.kcal    + (ing.kcal    || 0),
     protein: acc.protein + (ing.protein || 0),
+    fat:     acc.fat     + (ing.fat     || 0),
     carbs:   acc.carbs   + (ing.carbs   || 0),
-    fibre:   acc.fibre   + (ing.fibre   || 0),
-  }), { kcal: 0, protein: 0, carbs: 0, fibre: 0 });
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const per = {
     kcal:    Math.round(total.kcal    / servings),
@@ -8658,9 +8694,9 @@ function saveRecipe() {
   const total = _recipeIngredients.reduce((acc, ing) => ({
     kcal:    acc.kcal    + (ing.kcal    || 0),
     protein: acc.protein + (ing.protein || 0),
+    fat:     acc.fat     + (ing.fat     || 0),
     carbs:   acc.carbs   + (ing.carbs   || 0),
-    fibre:   acc.fibre   + (ing.fibre   || 0),
-  }), { kcal: 0, protein: 0, carbs: 0, fibre: 0 });
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
 
   const recipes = loadRecipes();
   if (_editingRecipeId) {
