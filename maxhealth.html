@@ -183,13 +183,13 @@
     font-size: 16px;
     background: var(--bg);
     color: var(--text);
-    height: 100dvh;
+    min-height: 100vh;
     max-width: 480px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
   }
 
   /* Subtle noise texture overlay for depth */
@@ -268,17 +268,17 @@
     cursor: pointer;
   }
   .sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .view { display: none; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+  .view { display: none; flex: 1; min-height: 0; flex-direction: column; }
   .view.active { display: flex; animation: viewFadeIn 0.2s ease; }
   #view-today, #view-log, #view-insights, #view-settings-group { overflow: hidden; }
   .sub-tab-row { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; height: 41px; box-sizing: border-box; }
-  .subview { display: none; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+  .subview { display: none; flex: 1; min-height: 0; flex-direction: column; }
   .subview.active { display: flex; }
   .subview > .dash-scroll,
   .subview > .hist-scroll,
   .subview > .import-scroll,
   .subview > .trends-scroll { flex: 1; min-height: 0; overflow-y: auto; }
-  #view-chat { overflow: hidden; flex-direction: column; }
+
   @keyframes viewFadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
   /* ── DASHBOARD ── */
@@ -3289,7 +3289,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.4.7</div>
+        <div class="settings-value">MaxedHealth v2.5.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4426,7 +4426,8 @@ function logLibraryViaChat(index) {
 function deleteFromLibrary(index) {
   const lib = loadLibrary();
   const f = lib[index];
-  // All items deletable
+  if (!f) { console.warn('[library] deleteFromLibrary: index', index, 'not found in lib of length', lib.length); return; }
+  if (!confirm(`Delete "${f.name}" from library?`)) return;
   lib.splice(index, 1);
   saveLibrary(lib);
   renderLibrary();
@@ -4459,6 +4460,10 @@ function cancelLibraryEdit(index) {
 function saveLibraryEdit(index) {
   const lib = loadLibrary();
   if (!lib[index]) return;
+  // Guard against double-tap
+  const btn = document.querySelector(`#lib-edit-form-${index} .library-edit-save`);
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
   const name    = document.getElementById('lib-edit-name-' + index).value.trim();
   const kcal    = parseFloat(document.getElementById('lib-edit-kcal-' + index).value);
   const prot    = parseFloat(document.getElementById('lib-edit-prot-' + index).value);
@@ -6826,8 +6831,9 @@ function _libDupeCheck(name) {
   return lib.find(item => _libNormName(item.name) === key);
 }
 
-function showSaveMealDialog(foods, saveBar) {
+function showSaveMealDialog(foods, saveBar, saveAll=false) {
   saveBar._saveFoods = foods;
+  saveBar._saveAll = saveAll;
   saveBar.setAttribute('data-savebar','1');
   saveBar.innerHTML = `
     <div style="width:100%;margin-top:4px;">
@@ -6874,8 +6880,22 @@ function confirmSaveMeal(btn) {
   const lib = loadLibrary() || [];
   lib.push(entry);
   saveLibrary(lib);
-  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ "${name}" saved to library</span>`;
-  showToast(`"${name}" saved to library`);
+  if (saveBar._saveAll) {
+    const lib2 = loadLibrary() || [];
+    let added = 0;
+    foods.forEach(f => {
+      if (!_libDupeCheck(f.name)) {
+        lib2.push({ name: f.name, kcal: Math.round(f.kcal*100)/100, protein: Math.round(f.protein*100)/100, fat: Math.round((f.fat||0)*100)/100, carbs: Math.round(f.carbs*100)/100, portion: f.amount || '100g', locked: false });
+        added++;
+      }
+    });
+    if (added > 0) saveLibrary(lib2);
+    saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ "${name}" + ${added} ingredient${added!==1?'s':''} saved</span>`;
+    showToast(`Saved "${name}" and ${added} ingredients`);
+  } else {
+    saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ "${name}" saved to library</span>`;
+    showToast(`"${name}" saved to library`);
+  }
 }
 
 function showSaveIngredientsDialog(foods, saveBar) {
@@ -7023,7 +7043,8 @@ function logFoods(foods, originalText, aiMessage = null) {
   const macrosDiv = document.createElement('div');
   macrosDiv.className = 'bubble-macros';
   const fibreLogged = Math.round((newTotals.fibre||0) * 10) / 10;
-  macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}g F</span>` : ''}<span class="k">${newTotals.carbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}`;
+  const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}/${fatTgt}g F</span>` : ''}<span class="k">${newTotals.carbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}`;
   bubbleDiv.appendChild(macrosDiv);
 
   // ── Save to Library options (multi-item meals) ──
@@ -7031,19 +7052,17 @@ function logFoods(foods, originalText, aiMessage = null) {
     const saveBar = document.createElement('div');
     saveBar.style.cssText = 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;';
 
-    if (foods.length > 1) {
-      const saveMealBtn = document.createElement('button');
-      saveMealBtn.style.cssText = 'padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:"Space Mono",monospace;';
-      saveMealBtn.textContent = '📚 Save as meal';
-      saveMealBtn.onclick = () => showSaveMealDialog(foods, saveBar);
-      saveBar.appendChild(saveMealBtn);
-    }
-
-    const saveItemsBtn = document.createElement('button');
-    saveItemsBtn.style.cssText = 'padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:"Space Mono",monospace;';
-    saveItemsBtn.textContent = foods.length === 1 ? '📚 Save to library' : '📚 Save ingredients';
-    saveItemsBtn.onclick = () => showSaveIngredientsDialog(foods, saveBar);
-    saveBar.appendChild(saveItemsBtn);
+    const saveAllBtn = document.createElement('button');
+    saveAllBtn.style.cssText = 'padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;cursor:pointer;font-family:"Space Mono",monospace;';
+    saveAllBtn.textContent = foods.length === 1 ? '📚 Save to library' : '📚 Save all to library';
+    saveAllBtn.onclick = () => {
+      if (foods.length === 1) {
+        showSaveIngredientsDialog(foods, saveBar);
+      } else {
+        showSaveMealDialog(foods, saveBar, true);
+      }
+    };
+    saveBar.appendChild(saveAllBtn);
 
     bubbleDiv.appendChild(saveBar);
   }
@@ -7395,19 +7414,24 @@ function updateDashboard() {
   if (state.todayLog.length === 0) {
     logEl.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:20px 0;">No meals logged yet</div>';
   } else {
-    logEl.innerHTML = state.todayLog.map(e => `
-      <div class="log-entry" id="log-entry-${e.id}">
-        <div class="log-time">${e.time}</div>
-        <div class="log-food" style="cursor:pointer;" onclick="editLogEntry(${e.id})" title="Tap to edit">${e.description.length > 40 ? e.description.slice(0,40)+'…' : e.description}${(e.amount || (e.items && e.items.length===1 && e.items[0].amount)) ? `<span style="color:var(--text3);font-size:11px;font-family:'Space Mono',monospace;margin-left:5px;">(${e.amount || e.items[0].amount})</span>` : ''}</div>
-        <div class="log-macros">
-          <span class="c">${e.kcal}</span>
-          <span class="p">${e.protein}p</span>
-          ${e.fat !== undefined ? `<span style="color:#a78bfa;font-size:11px;">${e.fat}f</span>` : ''}
-          <span class="k">${e.carbs}c</span>
+    logEl.innerHTML = state.todayLog.map(e => {
+      const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
+      const name = e.description.length > 45 ? e.description.slice(0,45)+'…' : e.description;
+      return `
+      <div class="log-entry" id="log-entry-${e.id}" style="flex-wrap:wrap;align-items:flex-start;padding:8px 10px;">
+        <div class="log-time" style="padding-top:2px;">${e.time}</div>
+        <div style="flex:1;min-width:0;cursor:pointer;" onclick="editLogEntry(${e.id})">
+          <div style="font-size:14px;color:var(--text);line-height:1.3;">${name}${amt ? `<span style="color:var(--text3);font-size:11px;font-family:'Space Mono',monospace;margin-left:5px;">(${amt})</span>` : ''}</div>
+          <div style="font-size:12px;margin-top:3px;font-family:'Space Mono',monospace;">
+            <span style="color:var(--blue);">${e.kcal}kcal</span>
+            <span style="color:var(--green);margin-left:8px;">${e.protein}g P</span>
+            <span style="color:#a78bfa;margin-left:8px;">${e.fat !== undefined ? e.fat : '—'}g F</span>
+            <span style="color:var(--yellow);margin-left:8px;">${e.carbs}g C</span>
+          </div>
         </div>
-        <div class="log-del" onclick="deleteLogEntry(${e.id})">×</div>
-      </div>
-    `).join('');
+        <div class="log-del" onclick="deleteLogEntry(${e.id})" style="padding-top:2px;">×</div>
+      </div>`;
+    }).join('');
   }
 
   // CSV row (element removed — auto-saves to server on close-out)
@@ -8884,25 +8908,25 @@ function confirmWeight() {
 function switchTab(tab, el) {
   try {
     document.querySelectorAll('#mainTabRow .tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => { v.classList.remove('active'); v.style.display='none'; });
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     // Hide ALL subviews — the active group will re-show the right one via switchSubTab
     document.querySelectorAll('.subview').forEach(v => v.classList.remove('active'));
 
     if (tab === 'today') {
       document.getElementById('maintab-today').classList.add('active');
-      document.getElementById('view-today').classList.add('active'); document.getElementById('view-today').style.display='flex';
+      document.getElementById('view-today').classList.add('active');
       switchSubTab('today', _activeSubTab.today || 'dash');
     } else if (tab === 'log') {
       document.getElementById('maintab-log').classList.add('active');
-      document.getElementById('view-log').classList.add('active'); document.getElementById('view-log').style.display='flex';
+      document.getElementById('view-log').classList.add('active');
       switchSubTab('log', _activeSubTab.log || 'log');
     } else if (tab === 'insights') {
       document.getElementById('maintab-insights').classList.add('active');
-      document.getElementById('view-insights').classList.add('active'); document.getElementById('view-insights').style.display='flex';
+      document.getElementById('view-insights').classList.add('active');
       switchSubTab('insights', _activeSubTab.insights || 'trends');
     } else if (tab === 'settings') {
       document.getElementById('maintab-settings').classList.add('active');
-      document.getElementById('view-settings-group').classList.add('active'); document.getElementById('view-settings-group').style.display='flex';
+      document.getElementById('view-settings-group').classList.add('active');
       switchSubTab('settings', _activeSubTab.settings || 'manage');
     } else {
       const mapped = NAV_MAP[tab];
@@ -8922,18 +8946,18 @@ function switchSubTab(parent, tab, el) {
     if (btn) btn.classList.add('active');
   }
   if (parent === 'today') {
-    ['view-dash','view-supplements'].forEach(id => { const v=document.getElementById(id); if(v) { v.classList.remove('active'); v.style.display='none'; } });
+    ['view-dash','view-supplements'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
     const target = document.getElementById(tab === 'dash' ? 'view-dash' : 'view-supplements');
-    if (target) { target.classList.add('active'); target.style.display='flex'; }
+    if (target) target.classList.add('active');
     if (tab === 'dash') updateDashboard();
     if (tab === 'supplements') renderSupplements();
 
   // For log group
   } else if (parent === 'log') {
-    ['view-chat','view-hist','view-library'].forEach(id => { const v=document.getElementById(id); if(v) { v.classList.remove('active'); v.style.display='none'; } });
+    ['view-chat','view-hist','view-library'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
     const target = { log:'view-chat', hist:'view-hist', library:'view-library' }[tab];
     const el2 = document.getElementById(target);
-    if (el2) { el2.classList.add('active'); el2.style.display='flex'; }
+    if (el2) el2.classList.add('active');
     if (tab === 'hist') renderHistory();
     if (tab === 'library') renderLibrary();
   } else if (parent === 'insights') {
@@ -8943,9 +8967,9 @@ function switchSubTab(parent, tab, el) {
     if (tab === 'trends') { const dayNav=document.getElementById('trendsDayNav'); if(typeof trendsWindow!=='undefined'&&trendsWindow==='today'&&dayNav) dayNav.style.display='flex'; updateTrendsDayLabel(); renderTrends(); }
     if (tab === 'reports') renderReports();
   } else if (parent === 'settings') {
-    ['view-manage','view-customise','view-import'].forEach(id => { const v=document.getElementById(id); if(v) { v.classList.remove('active'); v.style.display='none'; } });
+    ['view-manage','view-customise','view-import'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
     const el2 = document.getElementById('view-' + tab);
-    if (el2) { el2.classList.add('active'); el2.style.display='flex'; }
+    if (el2) el2.classList.add('active');
     if (tab === 'manage' || tab === 'customise') { initSettings(); renderPrecedenceEditor(); }
     if (tab === 'import') { renderSavedDevices(); updateImportStatus(); initSyncUI(); }
   }
