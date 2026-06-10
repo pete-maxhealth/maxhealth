@@ -2535,6 +2535,7 @@
       </div>
     </div>
 
+    <div id="libraryAlphaNav" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px;padding:6px 0;border-bottom:1px solid var(--border);"></div>
     <div id="libraryList">
       <div style="font-size:13px; color:var(--text3); text-align:center; padding:30px 0;">Loading library…</div>
     </div>
@@ -3285,7 +3286,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.7.5</div>
+        <div class="settings-value">MaxedHealth v2.7.6</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4261,6 +4262,20 @@ function findInLibrary(name) {
   return lib.find(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().split(' ').slice(0,3).join(' ')));
 }
 
+function jumpToLibraryLetter(letter) {
+  // Find first library item starting with this letter and scroll to it
+  const items = document.querySelectorAll('#libraryList .library-item');
+  for (const item of items) {
+    const nameEl = item.querySelector('.library-item-name');
+    if (nameEl && nameEl.textContent.trim().toUpperCase().startsWith(letter)) {
+      item.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      item.style.background = 'var(--accent-dim)';
+      setTimeout(() => item.style.background = '', 800);
+      break;
+    }
+  }
+}
+
 function filterLibrary(query) {
   // Debounce for performance with large libraries
   clearTimeout(filterLibrary._timer);
@@ -4323,9 +4338,9 @@ function renderLibrary() {
     const portionLabel = f.portion ? `${f.portion}${f.per100g ? ' · per 100g' : ''}` : f.per100g ? 'per 100g' : '';
     const macrosLine = `${f.kcal||0}kcal · ${f.protein||0}g P · ${f.carbs||0}g C${f.fat ? ' · ' + f.fat + 'g F' : ''}${portionLabel ? ' <span style="color:var(--text3);font-size:10px;">(' + portionLabel + ')</span>' : ''}`;
     // For meals, show ingredient list if stored
-    const ingredientsList = (f.isMeal && f.items && f.items.length > 0)
-      ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.6;">' +
-        f.items.map(i => `${i.name}${i.amount ? ' <span style="color:var(--text3);">(${i.amount})</span>' : ''}`).join(' · ') +
+    const ingredientsList = (isMealEntry(f) && f.items && f.items.length > 0)
+      ? '<div style="font-size:11px;color:var(--text3);margin-top:5px;line-height:1.7;border-top:1px solid var(--border);padding-top:5px;">' +
+        f.items.map(i => `<span style="color:var(--text2);">${i.name}</span>${i.amount ? ' <span style="color:var(--text3);font-size:10px;">(${i.amount})</span>' : ''}`).join(' &nbsp;·&nbsp; ') +
         '</div>'
       : '';
     const deleteBtn = `<button class="library-edit-cancel" style="color:var(--red);border-color:rgba(255,94,94,0.3);margin-right:auto;" onclick="deleteFromLibrary(${origIdx})">Delete</button>`;
@@ -4384,6 +4399,16 @@ function renderLibrary() {
     : '';
 
   el.innerHTML = (mealsHTML + ingredientsHTML) || '<div style="font-size:13px;color:var(--text3);text-align:center;padding:30px 0;">No items match.</div>';
+
+  // Build A-Z quick nav
+  const alphaNav = document.getElementById('libraryAlphaNav');
+  if (alphaNav) {
+    const letters = [...new Set(filteredLib.map(f => f.name[0]?.toUpperCase()).filter(Boolean))].sort();
+    alphaNav.innerHTML = letters.map(l =>
+      `<button onclick="jumpToLibraryLetter('${l}')"
+        style="min-width:24px;padding:3px 5px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-size:11px;font-family:'Space Mono',monospace;cursor:pointer;">${l}</button>`
+    ).join('');
+  }
   } catch(err) {
     console.error('[renderLibrary]', err);
     const el2 = document.getElementById('libraryList');
@@ -7170,7 +7195,10 @@ function logFoods(foods, originalText, aiMessage = null) {
     fat: Math.round(mealTotals.fat * 10) / 10,
     carbs: Math.round(mealTotals.carbs * 10) / 10
   };
-  state.todayLog.push(entry);
+  // Guard against duplicate entries from double-tap
+  if (!state.todayLog.some(e => e.id === entry.id)) {
+    state.todayLog.push(entry);
+  }
 
   // Auto-add water for low/zero calorie drinks
   const waterKeywords = /\b(water|squash|herbal tea|green tea|black tea|black coffee|sparkling water|mineral water|cordial|diluted|sugar free|zero cal|diet |tea|coffee)\b/i;
