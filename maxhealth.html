@@ -3292,7 +3292,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.8.5</div>
+        <div class="settings-value">MaxedHealth v2.8.7</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -7644,12 +7644,12 @@ function updateDashboard() {
       <div class="log-entry" id="log-entry-${e.id}" style="flex-wrap:wrap;align-items:flex-start;padding:8px 10px;">
         <div class="log-time" style="padding-top:2px;">${e.time}</div>
         <div style="flex:1;min-width:0;cursor:pointer;" onclick="editLogEntry(${e.id})">
-          <div style="font-size:14px;color:var(--text);line-height:1.3;">${name}${amt ? `<span style="color:var(--text3);font-size:11px;font-family:'Space Mono',monospace;margin-left:5px;">(${amt})</span>` : ''}</div>
-          <div style="font-size:12px;margin-top:3px;font-family:'Space Mono',monospace;">
+          <div style="font-size:14px;color:var(--text);line-height:1.3;">${name}${amt ? `<span style="color:var(--text3);font-size:11px;font-family:'Space Mono',monospace;margin-left:5px;">(${amt})</span>` : ''}${e._portionPct && e._portionPct !== 100 ? `<span style="font-size:10px;font-family:'Space Mono',monospace;margin-left:5px;padding:1px 5px;border-radius:4px;background:${e._portionPct > 100 ? 'rgba(45,235,143,0.15)' : 'rgba(245,197,66,0.15)'};color:${e._portionPct > 100 ? 'var(--accent)' : 'var(--yellow)'};">${e._portionPct > 100 ? '↑' : '↓'}${e._portionPct}%</span>` : ''}</div>
+          <div style="font-size:12px;margin-top:3px;font-family:'Space Mono',monospace;display:flex;flex-wrap:wrap;gap:6px;">
             <span style="color:var(--blue);">${e.kcal}kcal</span>
-            <span style="color:var(--green);margin-left:8px;">${e.protein}g P</span>
-            <span style="color:#a78bfa;margin-left:8px;">${e.fat !== undefined ? e.fat : '—'}g F</span>
-            <span style="color:var(--yellow);margin-left:8px;">${e.carbs}g C</span>
+            <span style="color:var(--green);">${e.protein}g P</span>
+            <span style="color:#a78bfa;">${e.fat !== undefined ? e.fat : '—'}g F</span>
+            <span style="color:var(--yellow);">${e.carbs}g C</span>
           </div>
         </div>
         <div class="log-del" onclick="deleteLogEntry(${e.id})" style="padding-top:2px;">×</div>
@@ -7712,6 +7712,13 @@ function scaleLogEdit(id, pct) {
 function editLogEntry(id) {
   const entry = state.todayLog.find(e => e.id === id);
   if (!entry) return;
+  // Store original values for portion detection if not already stored
+  if (!entry._origKcal) {
+    entry._origKcal = entry.kcal;
+    entry._origProtein = entry.protein;
+    entry._origFat = entry.fat || 0;
+    entry._origCarbs = entry.carbs;
+  }
 
   // Build inline edit form
   const entryEl = document.getElementById('log-entry-' + id);
@@ -7791,6 +7798,30 @@ function saveLogEdit(id) {
   entry.kcal = Math.round(kcal);
   entry.protein = Math.round(prot * 10) / 10;
   entry.carbs = Math.round(carb * 10) / 10;
+  // Store portion percentage if changed from 100%
+  // Detect portion change from original values
+  if (entry._origKcal && entry._origKcal > 0) {
+    const pct = Math.round(entry.kcal / entry._origKcal * 100);
+    if (pct !== 100) {
+      entry._portionPct = pct;
+      // Update amount string
+      const origAmt = parseFloat(entry.amount);
+      if (origAmt > 0) {
+        const scaledAmt = Math.round(origAmt * entry._origKcal / entry.kcal * pct / 100);
+        entry.amount = Math.round(origAmt * pct / 100) + 'g';
+      }
+    } else {
+      delete entry._portionPct;
+    }
+  } else {
+    const pctEl = document.getElementById('edit-pct-' + id);
+    const pct = pctEl ? parseFloat(pctEl.value) : 100;
+    if (pct && pct !== 100) {
+      entry._portionPct = Math.round(pct);
+    } else {
+      delete entry._portionPct;
+    }
+  }
   // Also update items array if present
   if (entry.items && entry.items.length === 1) {
     entry.items[0].kcal = entry.kcal;
