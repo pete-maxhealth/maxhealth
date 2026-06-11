@@ -4,15 +4,16 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)  
 **Local:** `http://localhost:5757` (via Termux + server.py)  
-**Version:** v2.7.3
+**Version:** v2.7.8
 
 ---
 
 ## What it does
 
 - **AI meal logging** — type a meal, paste an ingredient list, snap a photo, or scan a barcode. Claude identifies foods and calculates macros automatically.
-- **Food library** — save meals and ingredients for one-tap logging. Meals and ingredients in separate sections. Inline portion scaler adjusts macros live.
+- **Food library** — Meals and Ingredients in separate sections with A-Z nav, search, category filter and sort. Inline portion scaler on LOG. Meals show ingredient list.
 - **Dashboard** — calories, protein, carbs, fat tiles with progress bars. Macro ratio bar with ketogenic target marker. Remaining targets. Water tracker.
+- **Recipes** — templates with adjustable ingredient amounts. Live macro scaling per ingredient.
 - **Supplement tracker** — 19 supplements across morning/midday/evening/bedtime periods. Auto-resets at midnight.
 - **History** — daily nutrition log with fat back-calculation for pre-tracking entries.
 - **Reports** — query builder, ketogenic adherence, GBM monthly summary.

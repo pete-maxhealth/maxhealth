@@ -356,3 +356,6 @@ python3 ~/fix_name.py
 | v2.1.9 | 7D | Post-logging save-to-library (combined or individual), duplicate detection, 2dp macro rounding, `sanitiseFatValues`, TECHNICAL.md rewrite, user guide corrections |
 | v2.2.2 | 7E | mhstart as `~/bin/mhstart` proper script |
 | v2.2.3 | 8 | Barcode portion scaling from OFF `serving_size`/`serving_quantity`; history storage optimisation (strip old logs, prevent ~90-day localStorage cap) |
+| v2.5.x | 8 | Fat column in master.csv, clear today's log button, rollover abort fix, ketogenic ratio back-calculation |
+| v2.6.x | 8 | Library split Meals/Ingredients, sequential split requests, truncation repair, save as meal/ingredients/both, inline library LOG scaler |
+| v2.7.x | 8 | Recipe ingredient amounts with live scaling, A-Z library nav, category filter, meal ingredients in library, fibre removed, dashboard rounding, GBM fat back-calc |
