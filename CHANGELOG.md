@@ -1,103 +1,111 @@
 # MaxedHealth Changelog
 
-## v2.7.3 — Phase 8 (10 Jun 2026)
-
-### Added
-- Library split into **🍽 MEALS** and **📋 INGREDIENTS** sections with counts
-- Meals show ingredient list with portions in library view
-- Inline amount scaler on library LOG — type grams, macros update live
-- **Save as meal / Save ingredients / ✦ Save both** buttons post-log
-- Amount-first flow — type food name only, preview appears with amount field auto-focused
-- Macro ratio bar with target marker, status label and guidance line
-- Smart fat target in running totals line (e.g. `188/247g F`)
-- Two-line log entry format — name+amount on line 1, macros on line 2
-- Library delete confirm dialog
-- Truncation repair — salvages complete items if AI response is cut short
-- Sequential split requests (800ms delay) to prevent proxy rate limiting
-- `why-free.html` page added to repo
+## v2.9.3 — Phase 8 final (11 Jun 2026)
 
 ### Fixed
-- Long meal lists (10+ items) now correctly return all items via sequential split
-- Library crash (`renderItems is not a function`) fixed
-- Meals correctly detected in library (legacy entries via `portion: '1 serving'`)
-- Fat sanitiser no longer fires incorrectly for tablespoon/tsp amounts
-- Barcode portion scaling uses OFF `serving_size`/`serving_quantity`
-- History storage strips log arrays >30 days old to prevent ~90 day localStorage cap
-- Rollover abort caused by supplement log reset fixed
-- Tab bleeding fixed (overflow hidden on .view, .subview)
-- MCT oil tablespoon scaling bug fixed (parseFloat "1 tablespoon" → 1, not 14×)
-- Duplicate dashboard entries on log entry name edit
-- Library edit double-save guard added
+- History edit day totals — was using render index for DOM lookup, now correctly uses render index for DOM and array index for data
+- `undefinedg ceiling` / `undefinedg target` in Insights — `getTargets()` was returning whole object, fixed to `.standard`
+- GBM Monthly Summary date placeholder `[Month Day, Year]` — today's date now injected into prompt
+- Portion edit form — clearer hint text "use this OR edit values below", step 50, examples shown
+- Recipe save ingredients — dupe check now uses partial name matching so "Lurpak" matches "Lurpak Spreadable Slightly Salted (Lurpak)"
+- Dashboard tile font — reduced to `clamp(12px, 3vw, 16px)` so 4-digit calorie values don't clip
+- Save changes button — edit form now explicitly closed on save (renderDash was undefined)
+- GBM tile text cutoff — `overflow:hidden` on grid container
+- Save query layout — proper label, wider input, cleaner layout
+- Portion badge on library logging — badge set at log time when factor ≠ 1
+
+## v2.8.x — Phase 8 (11 Jun 2026)
+
+### Added
+- Portion percentage badge on today's log entries — green ↑200% or yellow ↓50% when portion differs from standard
+- Fat field added to Override Day Totals edit form (2×2 grid)
+- Midnight rollover check in updateDashboard — catches app left open past midnight
+
+### Fixed
+- History layout — macros nowrap, date flex-shrink:0, fat back-calculation in purple for old entries
+- Weight card target range — clamped font, overflow hidden
+- Weight target inputs — stacked From/To on separate lines, full width
+- Import/pipeline command box — word-break fix, paths on separate lines
+- GBM Monthly Summary — fat back-calculated for pre-tracking entries, avg fat and fat% now correct
+- AI Provider buttons — flex-wrap so OpenAI doesn't overflow
+- Duplicate log entries on midnight rollover — fixed
+
+## v2.7.x — Phase 8 (10–11 Jun 2026)
+
+### Added
+- Recipe ingredient amounts with live scaling — each ingredient shows base portion, change grams and macros update live
+- A-Z quick nav bar in library — tap letter to jump and highlight
+- Category filter in library (All / Meals only / Ingredients only)
+- Meal ingredients shown as text list in library view
 - Library search debounced for large libraries
 
-### Removed
-- Fibre tile from dashboard (not used)
-- Fibre target from Settings
-- "Correct this" correction grid from post-log bubble (use Library edit instead)
+### Fixed
+- All 10+ item lists now return correctly — sequential split requests with 800ms delay
+- Truncation repair — salvages complete items from cut-off AI response
+- Library crash (`renderItems is not a function`) — double join bug
+- Meals correctly detected in library (legacy entries via `portion: '1 serving'`)
+- Fat sanitiser false-positive for tablespoon/tsp amounts
+- Spurious protein scaling warnings for volume amounts
+- Duplicate dashboard entries guard
+- Library edit double-save guard
 
-### Changed
-- Dashboard tile values rounded to integers, font size reduced
-- Multi-item meal description shows "Chicken + Onions + 8 more" not full ingredient list
-- Save buttons restored: Save as meal / Save ingredients / Save both
+## v2.6.x — Phase 8 (10 Jun 2026)
 
----
+### Added
+- Library split into 🍽 MEALS and 📋 INGREDIENTS sections with counts
+- Inline amount scaler on library LOG — type grams, macros update live
+- Save as meal / Save ingredients / ✦ Save both buttons post-log
+- Amount-first logging flow — type food name only, preview with amount field auto-focused
+- Fat target in running totals line (e.g. 188/247g F)
+- Two-line log entry format — name+amount / macros
 
-## v2.5.0 — Phase 8 start (10 Jun 2026)
-- Barcode portion scaling from OFF serving_size
-- History storage optimisation (strip old logs)
-- TECHNICAL.md rewritten
-- why-free.html created
-- Ketogenic ratio and avg fat back-calculated for pre-fat-tracking history
-- Fat column added to all master.csv write paths
-- server.py updated with fat column
+### Fixed
+- Long meal split threshold — 7 items triggers split
+- Library delete confirm dialog
+- Library search with category filter and sort
+
+## v2.5.x — Phase 8 start (10 Jun 2026)
+
+### Added
+- Fat column in all master.csv write paths
 - Clear Today's Log button in Settings
-- Rollover abort fix
+- Ketogenic ratio back-calculation for pre-fat-tracking history
+- Fat back-calculation in Reports avg fat
 
----
+### Fixed
+- Rollover abort caused by supplement log reset
+- History storage optimisation (strip log arrays >30 days)
+- Barcode portion scaling from OFF serving_size/serving_quantity
+- Tab bleed CSS reverted to working state
 
-## v2.2.2 — Phase 7 end (Jun 2026)
-- Library delete/edit index bug fix (_origIdx tagging)
-- Notifications interval fix (20-minute setInterval)
+## v2.2.x — Phase 7 (Jun 2026)
+- Library delete/edit index bug (_origIdx tagging)
+- Notifications 20-minute setInterval
 - parseFood fallback intercept removed
-- Fat sanitiser (sanitiseFatValues) added
-- Save-to-library post-logging flow
-- Meal photo 3-step visual reasoning
-- mhstart as ~/bin/mhstart script
-
----
+- Fat sanitiser (sanitiseFatValues)
+- Save-to-library post-logging
+- Meal photo 3-step reasoning
 
 ## v2.0.0 — Phase 6 (29 May 2026)
 - 4-tab navigation (Today/Log/Insights/Settings)
-- Fat tracking everywhere
+- Fat tracking throughout
 - Supplement tracker (19 supplements, multi-period)
-- Midnight sync
-- Missed day conversational flow
-- Recipe builder
-- Barcode scanner with Open Food Facts
-
----
+- Midnight sync, missed day flow
+- Recipe builder, barcode scanner
 
 ## v1.9.0 — Phase 5 (late May 2026)
 - Editable correction grid
 - Long meal parallel AI requests
 - History index fix
 - Log/Query mode toggle
-- Imperial/metric/stones weight toggles
-
----
 
 ## v1.8.0 — Phase 4 (mid-May 2026)
 - Barcode scanner (BarcodeDetector API + AI fallback)
 - Open Food Facts integration
-- Recipe builder
-- Comprehensive nutrient tracking
-- Water tracking
+- Recipe builder, water tracking
 - History entry editing
-
----
 
 ## v1.0.0 — Initial build (May 2026)
 - Dashboard, AI meal logging, localStorage
 - Cloudflare Worker proxy
 - Python data pipeline (Withings, RingConn, Amazfit)
-- combined.csv / master.csv

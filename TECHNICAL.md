@@ -359,3 +359,5 @@ python3 ~/fix_name.py
 | v2.5.x | 8 | Fat column in master.csv, clear today's log button, rollover abort fix, ketogenic ratio back-calculation |
 | v2.6.x | 8 | Library split Meals/Ingredients, sequential split requests, truncation repair, save as meal/ingredients/both, inline library LOG scaler |
 | v2.7.x | 8 | Recipe ingredient amounts with live scaling, A-Z library nav, category filter, meal ingredients in library, fibre removed, dashboard rounding, GBM fat back-calc |
+| v2.8.x | 8 | Portion badges, fat in history edit, midnight rollover fix, history layout, weight card overflow |
+| v2.9.x | 8 | History edit index fix, undefined targets fix, GBM date in prompt, save changes fix, tile font clamp |
