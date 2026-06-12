@@ -452,21 +452,24 @@
       overflow: hidden;
     position: relative;
 }
-[data-theme="light"] {
-  --bg: #f0f2f7;
+body[data-theme="light"] {
+  --bg: #f5f6f8;
   --surface: #ffffff;
-  --surface2: #e8eaf0;
-  --border: #d0d4e0;
-  --text: #0a0c1a;
-  --text2: #2a2d3e;
-  --text3: #6b7280;
-  --blue: #0066cc;
-  --green: #16a34a;
+  --surface2: #f0f1f4;
+  --surface3: #e8eaee;
+  --border: #dde0e8;
+  --text: #1a1d24;
+  --text2: #4a5068;
+  --text3: #8a90a8;
+  --accent: #0ea875;
+  --accent-dim: rgba(14,168,117,0.1);
+  --accent-glow: rgba(14,168,117,0.2);
+  --green: #0ea875;
   --yellow: #d97706;
   --red: #dc2626;
-  --accent: #0891b2;
-  --accent-dim: rgba(8,145,178,0.1);
-  --accent-glow: rgba(8,145,178,0.3);
+  --blue: #2563eb;
+  --glass-bg: rgba(0,0,0,0.02);
+  --glass-border: rgba(0,0,0,0.06);
 }
 
   .log-edit-form { width: 100%; }
@@ -3384,7 +3387,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.0.5</div>
+        <div class="settings-value">MaxedHealth v3.0.7</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -12042,9 +12045,9 @@ function generateWeeklySummary() {
   const dayRows = allDays.map(d => {
     const tags = (d.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !['standard','occasion','holiday','missed day entry','missed day'].includes(t.toLowerCase()));
     const isChemo = treatmentKeywords.some(k => (d.notes||'').toLowerCase().includes(k));
-    const kcalW = Math.min(Math.round((d.totals?.kcal||0) / t.kcal * 100), 100);
-    const protW = Math.min(Math.round((d.totals?.protein||0) / t.protein * 100), 100);
-    const carbW = Math.min(Math.round((d.totals?.carbs||0) / t.carbs * 150), 100);
+    const kcalW = Math.min(Math.round((d.totals?.kcal||0) / (t.kcal||3300) * 100), 100);
+    const protW = Math.min(Math.round((d.totals?.protein||0) / (t.protein||165) * 100), 100);
+    const carbW = Math.min(Math.round((d.totals?.carbs||0) / (t.carbs||50) * 150), 100);
     return `
       <div style="padding:8px 0;border-bottom:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -12104,10 +12107,41 @@ function generateWeeklySummary() {
 function printWeeklySummary() {
   const out = document.getElementById('weeklyExportOutput');
   if (!out) return;
+  // Clean up the HTML for print — replace CSS vars with actual colours
+  let printHTML = out.innerHTML
+    .replace(/var\(--bg\)/g, '#ffffff')
+    .replace(/var\(--surface\)/g, '#f8f9fa')
+    .replace(/var\(--surface2\)/g, '#f0f2f5')
+    .replace(/var\(--border\)/g, '#dee2e6')
+    .replace(/var\(--text\)/g, '#0a0c1a')
+    .replace(/var\(--text2\)/g, '#2a2d3e')
+    .replace(/var\(--text3\)/g, '#6b7280')
+    .replace(/var\(--blue\)/g, '#0066cc')
+    .replace(/var\(--green\)/g, '#16a34a')
+    .replace(/var\(--yellow\)/g, '#d97706')
+    .replace(/var\(--accent\)/g, '#0891b2')
+    .replace(/#a78bfa/g, '#7c3aed')
+    .replace(/#a855f7/g, '#7c3aed')
+    .replace(/#2deb8f/g, '#16a34a')
+    .replace(/#f5c542/g, '#d97706')
+    .replace(/#ff5e5e/g, '#dc2626')
+    .replace(/#080a0d/g, '#ffffff');
+
   const w = window.open('', '_blank');
-  w.document.write(`<html><head><title>Weekly Summary</title><style>body{font-family:sans-serif;background:#080a0d;color:#f0f2f7;padding:20px;} @media print{body{background:white;color:black;}}</style></head><body>${out.innerHTML}</body></html>`);
+  w.document.write(`<!DOCTYPE html>
+<html><head>
+<title>MaxedHealth Weekly Summary</title>
+<style>
+  @page { size: A4 portrait; margin: 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fff; color: #0a0c1a; padding: 0; margin: 0; font-size: 13px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  /* Fix decimal points in mini bars */
+  div[style*="height:3px"] { display: block !important; }
+</style>
+</head><body>${printHTML}</body></html>`);
   w.document.close();
-  w.print();
+  setTimeout(() => w.print(), 300);
 }
 
 function copyWeeklySummary() {
@@ -13250,38 +13284,44 @@ function applyCustomAccent(hex) {
 }
 
 function setAppTheme(theme) {
-  localStorage.setItem('mh_theme', theme);
-  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
-  // Update button states
-  document.getElementById('themeDark')?.classList.toggle('active', theme === 'dark');
-  document.getElementById('themeLight')?.classList.toggle('active', theme === 'light');
-  // Style active button
-  ['themeDark','themeLight'].forEach(id => {
-    const btn = document.getElementById(id);
+  localStorage.setItem('mh_color_scheme', theme);
+  // Apply to body so it doesn't conflict with visual theme on documentElement
+  if (theme === 'light') {
+    document.body.setAttribute('data-theme', 'light');
+  } else if (theme === 'auto') {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (prefersDark) document.body.removeAttribute('data-theme');
+    else document.body.setAttribute('data-theme', 'light');
+  } else {
+    document.body.removeAttribute('data-theme');
+  }
+  // Update button styles
+  ['dark','light','auto'].forEach(t => {
+    const btn = document.getElementById('theme' + t.charAt(0).toUpperCase() + t.slice(1));
     if (!btn) return;
-    const isActive = (id === 'themeDark' && theme === 'dark') || (id === 'themeLight' && theme === 'light');
-    btn.style.background = isActive ? 'var(--accent)' : 'var(--surface2)';
-    btn.style.color = isActive ? '#fff' : 'var(--text2)';
+    const isActive = t === theme;
     btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
+    btn.style.background = isActive ? 'var(--accent-dim)' : 'var(--surface2)';
+    btn.style.color = isActive ? 'var(--accent)' : 'var(--text2)';
   });
-  showToast(theme === 'light' ? '☀️ Light theme' : '🌙 Dark theme');
+  showToast(theme === 'light' ? '☀️ Light theme active' : theme === 'auto' ? '🔄 Auto theme' : '🌙 Dark theme active');
 }
 
 function loadTheme() {
-  // Apply dark/light colour scheme
-  const appTheme = localStorage.getItem('mh_theme') || 'dark';
-  if (appTheme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else if (appTheme === 'auto') {
+  // Apply dark/light colour scheme (separate from visual theme)
+  const colorScheme = localStorage.getItem('mh_color_scheme') || 'dark';
+  if (colorScheme === 'light') {
+    document.body.setAttribute('data-theme', 'light');
+  } else if (colorScheme === 'auto') {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (!prefersDark) document.documentElement.setAttribute('data-theme', 'light');
+    if (!prefersDark) document.body.setAttribute('data-theme', 'light');
   }
   // Highlight active theme button
   setTimeout(() => {
     ['dark','light','auto'].forEach(t => {
       const btn = document.getElementById('theme' + t.charAt(0).toUpperCase() + t.slice(1));
       if (!btn) return;
-      const isActive = t === (appTheme || 'dark');
+      const isActive = t === colorScheme;
       btn.style.borderColor = isActive ? 'var(--accent)' : 'var(--border)';
       btn.style.background = isActive ? 'var(--accent-dim)' : 'var(--surface2)';
       btn.style.color = isActive ? 'var(--accent)' : 'var(--text2)';
