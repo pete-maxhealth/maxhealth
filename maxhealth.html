@@ -2221,14 +2221,16 @@
     <div class="occasion-picker" id="occasionPicker">
       <div style="font-size:10px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">WHAT'S THE OCCASION?</div>
       <div id="occasionTags">
-        <span class="occasion-tag chemo" onclick="setOccasion('Chemotherapy')">🧪 Chemotherapy</span>
-        <span class="occasion-tag" onclick="setOccasion('Hospital day')">🏥 Hospital day</span>
-        <span class="occasion-tag" onclick="setOccasion('Illness')">🤒 Illness</span>
-        <span class="occasion-tag" onclick="setOccasion('Social event')">🥂 Social event</span>
-        <span class="occasion-tag" onclick="setOccasion('Travel')">✈️ Travel</span>
-        <span class="occasion-tag" onclick="setOccasion('Fasting')">⏱ Fasting</span>
-        <span class="occasion-tag" onclick="setOccasion('Exercise')">🏋️ Exercise</span>
-        <span class="occasion-tag" onclick="setOccasion('Birthday')">🎂 Birthday</span>
+        <span class="occasion-tag chemo" onclick="toggleOccasionTag('Chemotherapy')">🧪 Chemotherapy</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Hospital day')">🏥 Hospital day</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Illness')">🤒 Illness</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Social event')">🥂 Social event</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Travel')">✈️ Travel</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Fasting')">⏱ Fasting</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Exercise')">🏋️ Exercise</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Resistance bands')">💪 Resistance bands</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Walking')">🚶 Walking</span>
+        <span class="occasion-tag" onclick="toggleOccasionTag('Birthday')">🎂 Birthday</span>
       </div>
       <div style="display:flex;gap:6px;margin-top:8px;">
         <input id="customOccasionInput" class="modal-input" placeholder="Custom occasion…" style="flex:1;font-size:12px;padding:6px 10px;">
@@ -3323,7 +3325,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v2.9.4</div>
+        <div class="settings-value">MaxedHealth v2.9.5</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -9199,6 +9201,17 @@ function setHistFilter(f, btn) {
 // ─── DAY MODE ────────────────────────────────────────────
 const OCCASION_TAGS = ['Chemotherapy','Hospital day','Illness','Social event','Travel','Fasting','Exercise','Birthday'];
 
+// Multi-tag occasion system — tags stored as comma-separated string in state.notes
+function _getOccasionTags() {
+  if (!state.notes || state.notes === 'occasion' || state.notes === 'standard' || state.notes === 'holiday') return [];
+  return state.notes.split(',').map(t => t.trim()).filter(Boolean);
+}
+
+function _setOccasionTags(tags) {
+  state.notes = tags.join(', ');
+  state.dayMode = tags.length > 0 ? 'occasion' : 'standard';
+}
+
 function toggleOccasionPicker() {
   const picker = document.getElementById('occasionPicker');
   if (!picker) return;
@@ -9206,54 +9219,69 @@ function toggleOccasionPicker() {
   if (isOpen) {
     picker.classList.remove('open');
   } else {
-    setDayMode('occasion');
+    if (state.dayMode !== 'occasion') setDayMode('occasion');
     picker.classList.add('open');
     renderOccasionTags();
   }
 }
 
 function renderOccasionTags() {
-  const current = state.notes || '';
+  const active = _getOccasionTags().map(t => t.toLowerCase());
   document.querySelectorAll('.occasion-tag').forEach(tag => {
-    tag.classList.toggle('active', tag.textContent.trim().replace(/^[^\w]*/,'').toLowerCase() === current.toLowerCase() ||
-      tag.getAttribute('onclick')?.includes(`'${current}'`));
+    const label = tag.textContent.trim().replace(/^\S+\s*/,'').toLowerCase().trim();
+    tag.classList.toggle('active', active.includes(label));
   });
   const display = document.getElementById('occasionDisplay');
-  if (display && current && current !== 'occasion') {
-    display.style.display = 'block';
-    display.textContent = '📌 ' + current;
+  if (display) {
+    const tags = _getOccasionTags();
+    if (tags.length > 0) {
+      display.style.display = 'block';
+      display.textContent = '📌 ' + tags.join(' · ');
+    } else {
+      display.style.display = 'none';
+    }
   }
 }
 
-function setOccasion(tag) {
-  state.dayMode = 'occasion';
-  state.notes = tag;
+function toggleOccasionTag(tag) {
+  const tags = _getOccasionTags();
+  const idx = tags.findIndex(t => t.toLowerCase() === tag.toLowerCase());
+  if (idx >= 0) {
+    tags.splice(idx, 1);
+  } else {
+    tags.push(tag);
+  }
+  _setOccasionTags(tags);
   saveState();
   renderOccasionTags();
   updateDashboard();
   updateOccasionBanner();
-  document.getElementById('occasionPicker')?.classList.remove('open');
+  // Update day mode button active state
   document.querySelectorAll('.day-mode-btn').forEach(b => {
     b.classList.remove('active');
-    if (b.textContent.toLowerCase().includes('occasion')) b.classList.add('active');
+    if (tags.length > 0 && b.textContent.toLowerCase().includes('occasion')) b.classList.add('active');
+    if (tags.length === 0 && b.textContent.toLowerCase().includes('standard')) b.classList.add('active');
   });
-  showToast('📌 ' + tag);
+  if (tags.length > 0) showToast('📌 ' + tags.join(' · '));
 }
+
+function setOccasion(tag) { toggleOccasionTag(tag); }
 
 function setCustomOccasion() {
   const input = document.getElementById('customOccasionInput');
   const val = input?.value.trim();
   if (!val) return;
-  setOccasion(val);
+  toggleOccasionTag(val);
   input.value = '';
 }
 
 function updateOccasionBanner() {
   const banner = document.getElementById('occasionBanner');
   if (!banner) return;
-  if (state.dayMode === 'occasion' && state.notes && state.notes !== 'occasion') {
+  const tags = _getOccasionTags();
+  if (tags.length > 0) {
     banner.style.display = 'block';
-    banner.textContent = '📌 ' + state.notes;
+    banner.textContent = '📌 ' + tags.join(' · ');
   } else {
     banner.style.display = 'none';
   }
