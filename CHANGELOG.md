@@ -1,95 +1,138 @@
 # MaxedHealth Changelog
 
-## v2.9.3 — Phase 8 final (11 Jun 2026)
+## v3.1.0 — Phase 8/9 (12 Jun 2026)
+- Removable tag pills in history edit — × button on each active tag
 
+## v3.0.9 — Phase 9 (12 Jun 2026)
+### Added
+- 🎤 Voice input — microphone button next to barcode, speak your meal
+- 📷 Recently scanned — last 10 barcode/database items shown for quick re-log
+- 📋 Oncology Team View — clean clinical PDF/text report for medical team
+- 🐛 Custom occasion tag Add button fixed
+
+## v3.0.8 — Phase 9 (12 Jun 2026)
+- Carb ceilings editable per day mode (Standard / Occasion / Holiday)
+- Custom ceilings saved to localStorage, used in all adherence calculations
+
+## v3.0.7 — Phase 9 (12 Jun 2026)
+- Dark/Light/Auto theme fixed — uses body attribute, separate from visual theme
+- Light theme now correctly overrides all colour variables
+
+## v3.0.6 — Phase 9 (12 Jun 2026)
+- Weekly summary print — portrait A4, CSS variables resolved for PDF
+
+## v3.0.5 — Phase 9 (12 Jun 2026)
+- Carb target Save button added
+- Dark/Light/Auto theme toggle in Settings → Customise → Appearance
+- Weekly summary try/catch for error visibility
+
+## v3.0.4 — Phase 9 (12 Jun 2026)
+### Added
+- 📊 Weekly Summary export — select any week, generate day-by-day breakdown
+- Print to PDF (portrait A4) or copy as plain text
+- Chemo days highlighted in purple, treatment days called out
+
+## v3.0.3 — Phase 9 (12 Jun 2026)
+- Treatment Analysis in Reports — auto-detects chemo/treatment tags
+- Compares avg calories, protein, fat, carbs on treatment vs standard days
+- Lists all treatment days with nutrition and tags
+- Visible only when treatment tags exist in history
+
+## v3.0.2 — Phase 9 (11 Jun 2026)
+- Long-press library card for instant log at default portion (0.6s hold, vibrate)
+- "hold card" hint under LOG button
+
+## v3.0.1 — Phase 9 (11 Jun 2026)
+- Long-press rebuilt — reads index from onclick, prevents browser context menu
+
+## v3.0.0 — Phase 9 milestone (11 Jun 2026)
+- Legacy notes filtered from tag display (missed day entry, standard, occasion etc)
+- History tag display shows only real occasion tags
+
+## v2.9.9 — Phase 8 (11 Jun 2026)
+- History edit auto-opens day body when Edit day totals tapped
+
+## v2.9.8 — Phase 8 (11 Jun 2026)
+- Occasion tags in history edit — retrospectively tag past days
+- Full tag picker with × to remove, custom tag input, saves to day.notes
+
+## v2.9.7 — Phase 8 (11 Jun 2026)
+- Removable tag pills in occasion banner — × button per tag
+- Active tags shown in picker when open
+
+## v2.9.6 — Phase 8 (11 Jun 2026)
+### Added
+- 🔥 Ketosis streak counter in badge (consecutive days within ceiling)
+- 📈 Weight trend prediction below weight card (avg daily change, days to target)
+- 👈 Swipe left to delete log entries with smooth animation
+- 📚 Long-press library LOG button for instant log at default portion
+
+## v2.9.5 — Phase 8 (11 Jun 2026)
+- Multi-tag occasion system — tap to toggle, multiple tags combine
+- Added 💪 Resistance bands and 🚶 Walking tags
+
+## v2.9.4 — Phase 8 (11 Jun 2026)
+### Added
+- 🟡 Occasion picker — predefined tags with custom input
+- Tags: Chemotherapy (purple), Hospital day, Illness, Social event, Travel, Fasting, Exercise, Birthday
+- 📌 Banner on dashboard showing active tags
+- Tags saved to state.notes, shown in history
+
+## v2.9.3 — Phase 8 final (11 Jun 2026)
 ### Fixed
-- History edit day totals — was using render index for DOM lookup, now correctly uses render index for DOM and array index for data
-- `undefinedg ceiling` / `undefinedg target` in Insights — `getTargets()` was returning whole object, fixed to `.standard`
-- GBM Monthly Summary date placeholder `[Month Day, Year]` — today's date now injected into prompt
-- Portion edit form — clearer hint text "use this OR edit values below", step 50, examples shown
-- Recipe save ingredients — dupe check now uses partial name matching so "Lurpak" matches "Lurpak Spreadable Slightly Salted (Lurpak)"
-- Dashboard tile font — reduced to `clamp(12px, 3vw, 16px)` so 4-digit calorie values don't clip
-- Save changes button — edit form now explicitly closed on save (renderDash was undefined)
-- GBM tile text cutoff — `overflow:hidden` on grid container
-- Save query layout — proper label, wider input, cleaner layout
-- Portion badge on library logging — badge set at log time when factor ≠ 1
+- History edit day totals — render index vs array index mismatch
+- undefinedg ceiling/target — getTargets().standard fix
+- GBM Monthly Summary date placeholder — today's date in prompt
+- Save changes form close — renderDash was undefined
+- Recipe dupe check — partial name matching
+- Dashboard tile font clamp — 4-digit values no longer clip
+- Portion edit hint text
+
+## v2.9.x — Phase 8 (10–11 Jun 2026)
+- Save changes button now closes form
+- GBM tile text cutoff fixed
+- Save query layout improved
+- Portion badge on library logging
 
 ## v2.8.x — Phase 8 (11 Jun 2026)
-
-### Added
-- Portion percentage badge on today's log entries — green ↑200% or yellow ↓50% when portion differs from standard
-- Fat field added to Override Day Totals edit form (2×2 grid)
-- Midnight rollover check in updateDashboard — catches app left open past midnight
-
-### Fixed
-- History layout — macros nowrap, date flex-shrink:0, fat back-calculation in purple for old entries
-- Weight card target range — clamped font, overflow hidden
-- Weight target inputs — stacked From/To on separate lines, full width
-- Import/pipeline command box — word-break fix, paths on separate lines
-- GBM Monthly Summary — fat back-calculated for pre-tracking entries, avg fat and fat% now correct
-- AI Provider buttons — flex-wrap so OpenAI doesn't overflow
-- Duplicate log entries on midnight rollover — fixed
+- Portion percentage badge (↑200% / ↓50%) on log entries
+- Fat field in Override Day Totals
+- Midnight rollover check in updateDashboard
+- History layout fix, fat back-calculation in history
+- Weight card clamp, settings inputs stacked
 
 ## v2.7.x — Phase 8 (10–11 Jun 2026)
-
-### Added
-- Recipe ingredient amounts with live scaling — each ingredient shows base portion, change grams and macros update live
-- A-Z quick nav bar in library — tap letter to jump and highlight
-- Category filter in library (All / Meals only / Ingredients only)
-- Meal ingredients shown as text list in library view
-- Library search debounced for large libraries
-
-### Fixed
-- All 10+ item lists now return correctly — sequential split requests with 800ms delay
-- Truncation repair — salvages complete items from cut-off AI response
-- Library crash (`renderItems is not a function`) — double join bug
-- Meals correctly detected in library (legacy entries via `portion: '1 serving'`)
-- Fat sanitiser false-positive for tablespoon/tsp amounts
-- Spurious protein scaling warnings for volume amounts
-- Duplicate dashboard entries guard
-- Library edit double-save guard
+- Recipe ingredient amounts with live scaling
+- A-Z quick nav in library
+- Category filter (All/Meals/Ingredients)
+- Meal ingredients shown in library
+- Library search debounced
+- All 10+ item lists return correctly (sequential split)
+- Truncation repair
 
 ## v2.6.x — Phase 8 (10 Jun 2026)
+- Library split Meals/Ingredients
+- Inline amount scaler on LOG
+- Save as meal / ingredients / both
+- Amount-first logging flow
+- Fat in running totals line
 
-### Added
-- Library split into 🍽 MEALS and 📋 INGREDIENTS sections with counts
-- Inline amount scaler on library LOG — type grams, macros update live
-- Save as meal / Save ingredients / ✦ Save both buttons post-log
-- Amount-first logging flow — type food name only, preview with amount field auto-focused
-- Fat target in running totals line (e.g. 188/247g F)
-- Two-line log entry format — name+amount / macros
-
-### Fixed
-- Long meal split threshold — 7 items triggers split
-- Library delete confirm dialog
-- Library search with category filter and sort
-
-## v2.5.x — Phase 8 start (10 Jun 2026)
-
-### Added
-- Fat column in all master.csv write paths
-- Clear Today's Log button in Settings
-- Ketogenic ratio back-calculation for pre-fat-tracking history
-- Fat back-calculation in Reports avg fat
-
-### Fixed
-- Rollover abort caused by supplement log reset
-- History storage optimisation (strip log arrays >30 days)
-- Barcode portion scaling from OFF serving_size/serving_quantity
-- Tab bleed CSS reverted to working state
+## v2.5.x — Phase 8 (10 Jun 2026)
+- Fat column in master.csv
+- Barcode portion scaling from OFF serving_size
+- History storage optimisation
 
 ## v2.2.x — Phase 7 (Jun 2026)
-- Library delete/edit index bug (_origIdx tagging)
-- Notifications 20-minute setInterval
-- parseFood fallback intercept removed
-- Fat sanitiser (sanitiseFatValues)
+- Library delete/edit index fix
+- Notifications 20-minute interval
+- Fat sanitiser
 - Save-to-library post-logging
-- Meal photo 3-step reasoning
+- Meal photo reasoning
 
 ## v2.0.0 — Phase 6 (29 May 2026)
-- 4-tab navigation (Today/Log/Insights/Settings)
-- Fat tracking throughout
-- Supplement tracker (19 supplements, multi-period)
+- 4-tab navigation
+- Fat tracking
+- Supplement tracker
 - Midnight sync, missed day flow
 - Recipe builder, barcode scanner
 
@@ -97,13 +140,6 @@
 - Editable correction grid
 - Long meal parallel AI requests
 - History index fix
-- Log/Query mode toggle
-
-## v1.8.0 — Phase 4 (mid-May 2026)
-- Barcode scanner (BarcodeDetector API + AI fallback)
-- Open Food Facts integration
-- Recipe builder, water tracking
-- History entry editing
 
 ## v1.0.0 — Initial build (May 2026)
 - Dashboard, AI meal logging, localStorage
