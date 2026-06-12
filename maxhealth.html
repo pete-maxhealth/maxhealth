@@ -3097,6 +3097,19 @@
 
 
 
+    <!-- Treatment Analysis — shows when chemo/treatment tags exist in history -->
+    <div id="treatment-analysis-section" style="display:none;margin-bottom:20px;">
+      <div class="section-title" style="color:#a855f7;">Treatment Analysis</div>
+      <div class="settings-card" style="padding:14px 16px;border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.04);">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">
+          Comparing nutrition on <span style="color:#a855f7;">🧪 treatment days</span> vs standard days. Based on occasion tags in your history.
+        </div>
+        <div id="treatment-stats-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;"></div>
+        <div id="treatment-comparison" style="margin-bottom:12px;"></div>
+        <div id="treatment-days-list" style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;line-height:1.8;"></div>
+      </div>
+    </div>
+
     <!-- GBM Monthly Summary — only shown for GBM condition -->
     <div id="gbm-summary-section" style="display:none;">
       <div class="section-title" style="color:#a78bfa;">GBM Monthly Summary</div>
@@ -3328,7 +3341,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.0.2</div>
+        <div class="settings-value">MaxedHealth v3.0.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -11906,6 +11919,78 @@ function parseDateStr(str) {
   return null;
 }
 
+function renderTreatmentAnalysis() {
+  const section = document.getElementById('treatment-analysis-section');
+  if (!section) return;
+
+  const h = state.history || [];
+  const treatmentKeywords = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital day','infusion'];
+
+  // Find treatment days and non-treatment days (with nutrition data)
+  const treatmentDays = h.filter(d => {
+    const notes = (d.notes || '').toLowerCase();
+    return treatmentKeywords.some(k => notes.includes(k)) && d.totals?.kcal > 0;
+  });
+  const standardDays = h.filter(d => {
+    const notes = (d.notes || '').toLowerCase();
+    return !treatmentKeywords.some(k => notes.includes(k)) && d.totals?.kcal > 0;
+  });
+
+  if (treatmentDays.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = 'block';
+
+  const avg = (arr, key) => arr.length ? Math.round(arr.reduce((a,d) => a + (d.totals?.[key]||0), 0) / arr.length * 10) / 10 : 0;
+
+  const tKcal   = avg(treatmentDays, 'kcal');
+  const sKcal   = avg(standardDays, 'kcal');
+  const tProt   = avg(treatmentDays, 'protein');
+  const sProt   = avg(standardDays, 'protein');
+  const tCarbs  = avg(treatmentDays, 'carbs');
+  const sCarbs  = avg(standardDays, 'carbs');
+  const tFat    = avg(treatmentDays, 'fat');
+  const sFat    = avg(standardDays, 'fat');
+
+  const diff = (t, s) => {
+    if (!s) return '';
+    const d = Math.round((t - s) * 10) / 10;
+    const pct = Math.round((t - s) / s * 100);
+    const col = d < 0 ? 'var(--yellow)' : 'var(--green)';
+    return `<span style="font-size:10px;color:${col};margin-left:4px;">${d > 0 ? '+' : ''}${d} (${pct > 0 ? '+' : ''}${pct}%)</span>`;
+  };
+
+  const card = (label, tVal, sVal, unit='', color='var(--blue)') => `
+    <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;">
+      <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:6px;">${label}</div>
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <div>
+          <div style="font-size:9px;color:#a855f7;font-family:'Space Mono',monospace;">TREATMENT</div>
+          <div style="font-size:18px;font-weight:800;font-family:'Syne',sans-serif;color:#a855f7;">${tVal}<span style="font-size:11px;">${unit}</span>${diff(parseFloat(tVal), parseFloat(sVal))}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">vs <span style="color:${color};">${sVal}${unit}</span> on standard days</div>
+    </div>`;
+
+  const grid = document.getElementById('treatment-stats-grid');
+  if (grid) grid.innerHTML =
+    card('Avg calories', Math.round(tKcal), Math.round(sKcal), 'kcal', 'var(--blue)') +
+    card('Avg protein', tProt, sProt, 'g', 'var(--green)') +
+    card('Avg fat', tFat, sFat, 'g', '#a78bfa') +
+    card('Avg carbs', tCarbs, sCarbs, 'g', 'var(--yellow)');
+
+  // List treatment days
+  const list = document.getElementById('treatment-days-list');
+  if (list) {
+    list.innerHTML = `<div style="font-size:10px;color:#a855f7;margin-bottom:6px;">${treatmentDays.length} TREATMENT DAY${treatmentDays.length !== 1 ? 'S' : ''} FOUND</div>` +
+      treatmentDays.map(d => {
+        const tags = (d.notes||'').split(',').map(t=>t.trim()).filter(Boolean);
+        return `<div>${d.date} &nbsp;·&nbsp; ${Math.round(d.totals.kcal)}kcal ${Math.round(d.totals.protein||0)}g P &nbsp;·&nbsp; <span style="color:#a855f7;">${tags.join(', ')}</span></div>`;
+      }).join('');
+  }
+}
+
 function renderReportSummary() {
   const el = document.getElementById('rpt-summary-cards');
   if (!el) return;
@@ -12470,6 +12555,7 @@ function sendToAssistant(query) {
 }
 
 function renderReports() {
+  renderTreatmentAnalysis();
   renderReportSummary();
   renderSavedQueries();
   onQueryOpChange();
