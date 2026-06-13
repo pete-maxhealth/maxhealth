@@ -2256,7 +2256,7 @@ body[data-theme="light"] {
         <span class="occasion-tag" onclick="toggleOccasionTag('Birthday')">🎂 Birthday</span>
         <span class="occasion-tag" onclick="toggleOccasionTag('Rest day')">😴 Rest day</span>
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px;">
+      <div style="display:flex;gap:6px;margin-top:6px;">
         <input id="customOccasionInput" class="settings-input" placeholder="Custom occasion…" style="flex:1;font-size:13px;padding:7px 10px;">
         <button onclick="setCustomOccasion()" style="padding:6px 12px;background:var(--yellow);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Add</button>
       </div>
@@ -2328,6 +2328,18 @@ body[data-theme="light"] {
       <div class="remaining-row">
         <div class="rem-name">Water</div>
         <div class="rem-val" id="remWater" style="color:#38bdf8;">0ml</div>
+      </div>
+      <div class="rem-row" style="align-items:center;">
+        <div>
+          <div class="rem-name">👟 Est. steps</div>
+          <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;">for calorie nudge · wearable takes precedence</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input id="stepsInput" type="number" placeholder="—"
+            style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;text-align:center;font-family:'Space Mono',monospace;"
+            oninput="updateStepsTag(this.value)">
+          <span style="font-size:11px;color:var(--text3);">steps</span>
+        </div>
       </div>
     </div>
 
@@ -3430,7 +3442,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.1.4</div>
+        <div class="settings-value">MaxedHealth v3.1.7</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -7749,6 +7761,22 @@ function autoResize(el) {
 // ─── DASHBOARD ───────────────────────────────────────────
 function updateDashboard() {
   updateOccasionBanner();
+  // Populate steps input from current tags
+  const stepsEl = document.getElementById('stepsInput');
+  if (stepsEl && !stepsEl.matches(':focus')) {
+    const stepsTag = _getOccasionTags().find(t => t.match(/steps/i));
+    if (stepsTag) {
+      const n = parseFloat(stepsTag) * (stepsTag.toLowerCase().includes('k') ? 1000 : 1);
+      stepsEl.value = n || '';
+    } else {
+      stepsEl.value = '';
+    }
+  }
+  // Sync day mode buttons from state
+  document.querySelectorAll('.day-mode-btn').forEach(b => {
+    b.classList.remove('active');
+    if (b.classList.contains(state.dayMode || 'standard')) b.classList.add('active');
+  });
   setTimeout(initSwipeDelete, 100);
   // Midnight rollover check — catches cases where app stayed open past midnight
   if (state.lastDate && state.lastDate !== todayStr()) {
@@ -9754,12 +9782,51 @@ function toggleOccasionTag(tag) {
 
 function setOccasion(tag) { toggleOccasionTag(tag); }
 
+function updateStepsTag(val) {
+  const steps = parseInt(val);
+  // Remove any existing steps tag
+  const tags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
+  if (steps > 0) {
+    const label = steps >= 1000 ? `${Math.round(steps/1000*10)/10}k steps` : `${steps} steps`;
+    tags.push(label);
+  }
+  _setOccasionTags(tags);
+  saveState();
+  renderOccasionTags();
+  updateOccasionBanner();
+  updateDashboard();
+}
+
 function setCustomOccasion() {
   const input = document.getElementById('customOccasionInput');
   const val = input?.value.trim();
   if (!val) return;
   toggleOccasionTag(val);
   input.value = '';
+}
+
+function getActivityNudge() {
+  const tags = _getOccasionTags().map(t => t.toLowerCase());
+  const hasResistance = tags.some(t => t.includes('resistance') || t.includes('weights') || t.includes('gym'));
+  const hasCardio = tags.some(t => t.includes('walking') || t.includes('run') || t.includes('cardio') || t.includes('cycle') || t.includes('swim'));
+  const hasExercise = tags.some(t => t.includes('exercise'));
+  const steps = tags.find(t => t.match(/\d+k? steps/));
+  const stepCount = steps ? parseFloat(steps) * (steps.includes('k') ? 1000 : 1) : 0;
+
+  if (!hasResistance && !hasCardio && !hasExercise && stepCount === 0) return null;
+
+  let extra = 0;
+  let reasons = [];
+  if (hasResistance) { extra += 200; reasons.push('resistance training'); }
+  if (hasCardio) { extra += 150; reasons.push('cardio'); }
+  if (hasExercise && !hasResistance && !hasCardio) { extra += 150; reasons.push('exercise'); }
+  if (stepCount >= 10000) { extra += 200; reasons.push(`${steps}`); }
+  else if (stepCount >= 7000) { extra += 130; reasons.push(`${steps}`); }
+  else if (stepCount >= 5000) { extra += 80; reasons.push(`${steps}`); }
+
+  if (extra === 0) return null;
+  const t = getTargets().standard;
+  return { extra, message: `+~${extra}kcal from ${reasons.join(' & ')} — consider targeting ${t.kcal + extra}kcal today` };
 }
 
 function updateOccasionBanner() {
@@ -9771,11 +9838,12 @@ function updateOccasionBanner() {
     banner.style.flexWrap = 'wrap';
     banner.style.gap = '6px';
     banner.style.alignItems = 'center';
-    banner.innerHTML = '<span style="font-size:11px;color:var(--yellow);opacity:0.7;">📌</span>' +
-      tags.map(t => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);">
-        ${t}
-        <span onclick="toggleOccasionTag('${t.replace(/'/g,"\'")}')" style="cursor:pointer;opacity:0.6;font-size:13px;line-height:1;margin-left:2px;" title="Remove">×</span>
-      </span>`).join('');
+    banner.style.flexDirection = 'column';
+    const nudge = getActivityNudge();
+    const tagPills = '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;"><span style="font-size:11px;color:var(--yellow);opacity:0.7;">📌</span>' +
+      tags.map(t => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);">${t}<span onclick="toggleOccasionTag('${t.replace(/'/g,"\'")}'')" style="cursor:pointer;opacity:0.6;font-size:13px;line-height:1;margin-left:2px;">×</span></span>`).join('') + '</div>';
+    const nudgeHTML = nudge ? `<div style="font-size:11px;color:var(--accent);font-family:Space Mono,monospace;margin-top:2px;">⚡ ${nudge.message}</div>` : '';
+    banner.innerHTML = tagPills + nudgeHTML;
   } else {
     banner.style.display = 'none';
     banner.innerHTML = '';
