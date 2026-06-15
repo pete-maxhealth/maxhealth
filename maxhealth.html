@@ -3432,7 +3432,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.3.6</div>
+        <div class="settings-value">MaxedHealth v3.3.8</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -7912,13 +7912,31 @@ function updateDashboard() {
   setTimeout(initSwipeDelete, 100);
   // Midnight rollover check — catches cases where app stayed open past midnight
   if (state.lastDate && state.lastDate !== todayStr()) {
-    if (state.todayLog && state.todayLog.length > 0) {
+    // Guard against double rollover — check if already processed this date
+    const _rolloverGuardKey = 'mh_rolled_' + state.lastDate;
+    const _alreadyRolled = localStorage.getItem(_rolloverGuardKey);
+    if (!_alreadyRolled) {
+      localStorage.setItem(_rolloverGuardKey, '1');
+      // Clean up old guard keys (keep only last 3 days)
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('mh_rolled_') && k !== _rolloverGuardKey) {
+          localStorage.removeItem(k); i--;
+        }
+      }
+    }
+    if (state.todayLog && state.todayLog.length > 0 && !_alreadyRolled) {
       const rt = calcTotals(state.todayLog);
       state.history = (state.history || []).filter(h => h.date !== state.lastDate);
       state.history.unshift({ date: state.lastDate, log: state.todayLog, totals: rt, mode: state.dayMode, notes: state.notes, weight: state.weight, water_ml: state.waterToday || 0 });
       const _midLegacy = ['standard','occasion','holiday','missed day entry','missed day'];
-      const _midTags = (state.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !_midLegacy.includes(t.toLowerCase()));
-      const _midNotes = _midTags.length > 0 ? _midTags.join(', ') : state.dayMode;
+      // Rebuild full notes — occasion tags + activity summary
+      const _midOccasionTags = (state.notes||'').split(',').map(t=>t.trim())
+        .filter(t=>t && !_midLegacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
+      const _midActivityTags = getActivities().filter(a=>a.enabled&&a.duration)
+        .map(a=>`${a.duration}min ${a.name.replace(/^[^\w]*/,'').trim()}`);
+      const _midAllTags = [..._midOccasionTags, ..._midActivityTags];
+      const _midNotes = _midAllTags.length > 0 ? _midAllTags.join(', ') : state.dayMode;
       const _rolloverDate = state.lastDate; // capture before it changes
       setTimeout(() => saveNutritionToServer(_rolloverDate, Math.round(rt.kcal), Math.round(rt.protein), Math.round(rt.carbs), _midNotes, Math.round((rt.fat||0)*10)/10), 1000);
     }
