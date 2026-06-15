@@ -3193,6 +3193,30 @@ body[data-theme="light"] {
       </div>
     </div>
 
+    <!-- Chemo Cycle Analysis -->
+    <div id="chemo-cycle-section" style="display:none;margin-bottom:20px;">
+      <div class="section-title" style="color:#a855f7;">Chemo Cycle Analysis</div>
+      <div class="settings-card" style="padding:14px 16px;border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.04);">
+        <div id="chemo-cycle-content"></div>
+      </div>
+    </div>
+
+    <!-- Sleep & Ketosis Correlation -->
+    <div id="sleep-ketosis-section" style="display:none;margin-bottom:20px;">
+      <div class="section-title" style="color:var(--blue);">Sleep & Ketosis</div>
+      <div class="settings-card" style="padding:14px 16px;">
+        <div id="sleep-ketosis-content"></div>
+      </div>
+    </div>
+
+    <!-- Weight Trend vs Protocol -->
+    <div id="weight-protocol-section" style="display:none;margin-bottom:20px;">
+      <div class="section-title" style="color:var(--accent);">Weight vs Protocol</div>
+      <div class="settings-card" style="padding:14px 16px;">
+        <div id="weight-protocol-content"></div>
+      </div>
+    </div>
+
     <!-- Treatment Analysis — shows when chemo/treatment tags exist in history -->
     <div id="treatment-analysis-section" style="display:none;margin-bottom:20px;">
       <div class="section-title" style="color:#a855f7;">Treatment Analysis</div>
@@ -3445,7 +3469,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.4.2</div>
+        <div class="settings-value">MaxedHealth v3.4.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -12757,6 +12781,192 @@ function copyOncologySummary() {
   navigator.clipboard.writeText(window._oncologyText || '').then(() => showToast('Report copied ✓')).catch(() => showToast('Copy failed'));
 }
 
+function renderChemoCycleAnalysis() {
+  const section = document.getElementById('chemo-cycle-section');
+  const el = document.getElementById('chemo-cycle-content');
+  if (!section || !el) return;
+
+  const h = state.history || [];
+  const treatKw = ['chemotherapy','chemo','treatment','infusion'];
+  const chemoDays = h.filter(d => treatKw.some(k => (d.notes||'').toLowerCase().includes(k)))
+    .sort((a,b) => {
+      const [ad,am,ay]=a.date.split('/'); const [bd,bm,by]=b.date.split('/');
+      return new Date(`20${ay}-${am}-${ad}`) - new Date(`20${by}-${bm}-${bd}`);
+    });
+
+  if (chemoDays.length < 2) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  // Group into cycles — gap > 14 days = new cycle
+  const cycles = [];
+  let current = [chemoDays[0]];
+  for (let i = 1; i < chemoDays.length; i++) {
+    const [pd,pm,py] = chemoDays[i-1].date.split('/');
+    const [cd,cm,cy] = chemoDays[i].date.split('/');
+    const diff = (new Date(`20${cy}-${cm}-${cd}`) - new Date(`20${py}-${pm}-${pd}`)) / 86400000;
+    if (diff > 14) { cycles.push(current); current = [chemoDays[i]]; }
+    else current.push(chemoDays[i]);
+  }
+  cycles.push(current);
+
+  const avg = (arr, key) => arr.length ? Math.round(arr.reduce((a,d)=>a+(d.totals?.[key]||0),0)/arr.length) : 0;
+
+  // Compare chemo days vs recovery (non-chemo days within 7 days after cycle)
+  const allDays = h.filter(d => d.totals?.kcal > 0);
+  const chemoSet = new Set(chemoDays.map(d => d.date));
+  const recoveryDays = allDays.filter(d => {
+    if (chemoSet.has(d.date)) return false;
+    const [dd,dm,dy] = d.date.split('/');
+    const dDate = new Date(`20${dy}-${dm}-${dd}`);
+    return chemoDays.some(c => {
+      const [cd,cm,cy] = c.date.split('/');
+      const diff = (dDate - new Date(`20${cy}-${cm}-${cd}`)) / 86400000;
+      return diff > 0 && diff <= 7;
+    });
+  });
+
+  const chemoKcal = avg(chemoDays, 'kcal');
+  const recovKcal = avg(recoveryDays, 'kcal');
+  const chemoProt = avg(chemoDays, 'protein');
+  const recovProt = avg(recoveryDays, 'protein');
+  const chemoCarbs = avg(chemoDays, 'carbs');
+  const recovCarbs = avg(recoveryDays, 'carbs');
+
+  const diffPct = (a, b) => b > 0 ? Math.round((a-b)/b*100) : 0;
+  const diffStr = (a, b) => { const d = diffPct(a,b); return `<span style="color:${d<0?'var(--yellow)':'var(--green)'};font-size:10px;"> (${d>0?'+':''}${d}%)</span>`; };
+
+  el.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">${cycles.length} chemo cycle${cycles.length>1?'s':''} detected · ${chemoDays.length} treatment days · ${recoveryDays.length} recovery days tracked</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;">
+        <div style="font-size:9px;color:#a855f7;font-family:'Space Mono',monospace;margin-bottom:6px;">TREATMENT DAYS</div>
+        <div style="font-size:13px;color:var(--text2);">${chemoKcal}kcal avg${diffStr(chemoKcal,recovKcal)}</div>
+        <div style="font-size:13px;color:var(--text2);">${chemoProt}g protein${diffStr(chemoProt,recovProt)}</div>
+        <div style="font-size:13px;color:var(--text2);">${chemoCarbs}g carbs${diffStr(chemoCarbs,recovCarbs)}</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;">
+        <div style="font-size:9px;color:var(--accent);font-family:'Space Mono',monospace;margin-bottom:6px;">RECOVERY DAYS</div>
+        <div style="font-size:13px;color:var(--text2);">${recovKcal}kcal avg</div>
+        <div style="font-size:13px;color:var(--text2);">${recovProt}g protein</div>
+        <div style="font-size:13px;color:var(--text2);">${recovCarbs}g carbs</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);border-top:1px solid var(--border);padding-top:10px;">
+      ${cycles.map((c,i) => `Cycle ${i+1}: ${c[0].date}${c.length>1?' → '+c[c.length-1].date:''} (${c.length} day${c.length>1?'s':''})`).join(' &nbsp;·&nbsp; ')}
+    </div>`;
+}
+
+function renderSleepKetosisCorrelation() {
+  const section = document.getElementById('sleep-ketosis-section');
+  const el = document.getElementById('sleep-ketosis-content');
+  if (!section || !el) return;
+
+  const h = state.history || [];
+  const t = getTargets().standard;
+  const daysWithBoth = h.filter(d => d.totals?.carbs >= 0 && d.sleep_hours > 0);
+  if (daysWithBoth.length < 7) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const goodSleep = daysWithBoth.filter(d => d.sleep_hours >= 7);
+  const poorSleep = daysWithBoth.filter(d => d.sleep_hours < 7);
+  const ketoDaysGood = goodSleep.filter(d => (d.totals?.carbs||0) <= t.carbs);
+  const ketoDaysPoor = poorSleep.filter(d => (d.totals?.carbs||0) <= t.carbs);
+  const goodAdh = goodSleep.length ? Math.round(ketoDaysGood.length/goodSleep.length*100) : 0;
+  const poorAdh = poorSleep.length ? Math.round(ketoDaysPoor.length/poorSleep.length*100) : 0;
+  const avgSleepKeto = goodSleep.length ? Math.round(goodSleep.reduce((a,d)=>a+(d.totals?.carbs||0),0)/goodSleep.length*10)/10 : 0;
+  const avgSleepPoor = poorSleep.length ? Math.round(poorSleep.reduce((a,d)=>a+(d.totals?.carbs||0),0)/poorSleep.length*10)/10 : 0;
+  const avgHRVGood = goodSleep.filter(d=>d.hrv>0).length ? Math.round(goodSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/goodSleep.filter(d=>d.hrv>0).length) : null;
+  const avgHRVPoor = poorSleep.filter(d=>d.hrv>0).length ? Math.round(poorSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/poorSleep.filter(d=>d.hrv>0).length) : null;
+
+  el.innerHTML = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">${daysWithBoth.length} days with both sleep and nutrition data · threshold: 7h sleep</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;">
+        <div style="font-size:9px;color:var(--accent);font-family:'Space Mono',monospace;margin-bottom:6px;">😴 GOOD SLEEP (≥7h)</div>
+        <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:var(--accent);">${goodAdh}%</div>
+        <div style="font-size:10px;color:var(--text3);">ketosis adherence</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">${avgSleepKeto}g avg carbs</div>
+        ${avgHRVGood ? `<div style="font-size:12px;color:var(--text2);">${avgHRVGood}ms avg HRV</div>` : ''}
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;">
+        <div style="font-size:9px;color:var(--yellow);font-family:'Space Mono',monospace;margin-bottom:6px;">⚠️ POOR SLEEP (<7h)</div>
+        <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:var(--yellow);">${poorAdh}%</div>
+        <div style="font-size:10px;color:var(--text3);">ketosis adherence</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">${avgSleepPoor}g avg carbs</div>
+        ${avgHRVPoor ? `<div style="font-size:12px;color:var(--text2);">${avgHRVPoor}ms avg HRV</div>` : ''}
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);">
+      ${goodAdh > poorAdh ? `Sleep quality correlates with ketosis — ${goodAdh-poorAdh}% better adherence on good sleep days.` : poorAdh > goodAdh ? `Adherence is maintained even on poor sleep days — strong protocol discipline.` : `No significant correlation between sleep quality and ketosis adherence.`}
+    </div>`;
+}
+
+function renderWeightProtocol() {
+  const section = document.getElementById('weight-protocol-section');
+  const el = document.getElementById('weight-protocol-content');
+  if (!section || !el) return;
+
+  const h = state.history || [];
+  const weightDays = h.filter(d => d.weight > 0).sort((a,b) => {
+    const [ad,am,ay]=a.date.split('/'); const [bd,bm,by]=b.date.split('/');
+    return new Date(`20${ay}-${am}-${ad}`) - new Date(`20${by}-${bm}-${bd}`);
+  });
+
+  if (weightDays.length < 7) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+
+  const wtLow = getWeightTargetLow();
+  const wtHigh = getWeightTargetHigh();
+  const current = state.weight || weightDays[weightDays.length-1].weight;
+  const oldest = weightDays[0].weight;
+  const totalChange = Math.round((current - oldest) * 10) / 10;
+  const weeks = Math.max(1, Math.round(weightDays.length / 7));
+  const weeklyChange = Math.round(totalChange / weeks * 10) / 10;
+
+  // Split into 4-week blocks
+  const blockSize = Math.max(1, Math.floor(weightDays.length / 4));
+  const blocks = [];
+  for (let i = 0; i < weightDays.length; i += blockSize) {
+    const block = weightDays.slice(i, i + blockSize);
+    blocks.push({
+      start: block[0].date,
+      end: block[block.length-1].date,
+      avgWeight: Math.round(block.reduce((a,d)=>a+d.weight,0)/block.length * 10) / 10,
+      avgKcal: block.filter(d=>d.totals?.kcal>0).length ?
+        Math.round(block.filter(d=>d.totals?.kcal>0).reduce((a,d)=>a+(d.totals?.kcal||0),0)/block.filter(d=>d.totals?.kcal>0).length) : null
+    });
+  }
+
+  const inRange = current >= wtLow && current <= wtHigh;
+  const trend = totalChange > 0.5 ? '↑ gaining' : totalChange < -0.5 ? '↓ losing' : '→ stable';
+  const trendColor = inRange ? 'var(--accent)' : (wtLow > 0 && current < wtLow ? 'var(--yellow)' : 'var(--text2)');
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:${trendColor};">${current}kg</div>
+        <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;">CURRENT</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:${totalChange>0?'var(--accent)':'var(--yellow)'};">${totalChange>0?'+':''}${totalChange}kg</div>
+        <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;">TOTAL CHANGE</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);">${weeklyChange>0?'+':''}${weeklyChange}kg</div>
+        <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;">PER WEEK</div>
+      </div>
+    </div>
+    ${wtLow > 0 ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Target range: ${wtLow}–${wtHigh}kg · Currently <span style="color:${inRange?'var(--accent)':'var(--yellow)'};">${inRange?'✓ in range':current<wtLow?`${(wtLow-current).toFixed(1)}kg below target`:`${(current-wtHigh).toFixed(1)}kg above target`}</span></div>` : ''}
+    <div style="border-top:1px solid var(--border);padding-top:10px;">
+      <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">TREND BY PERIOD</div>
+      ${blocks.slice(0,4).map(b => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
+          <span style="color:var(--text3);font-family:'Space Mono',monospace;font-size:10px;">${b.start} → ${b.end}</span>
+          <span style="color:var(--text2);">${b.avgWeight}kg avg${b.avgKcal?` · ${b.avgKcal}kcal`:''}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
 function renderTreatmentAnalysis() {
   const section = document.getElementById('treatment-analysis-section');
   if (!section) return;
@@ -13416,6 +13626,9 @@ function sendToAssistant(query) {
 }
 
 function renderReports() {
+  renderChemoCycleAnalysis();
+  renderSleepKetosisCorrelation();
+  renderWeightProtocol();
   renderTreatmentAnalysis();
   renderReportSummary();
   renderSavedQueries();
