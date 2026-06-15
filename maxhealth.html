@@ -3445,7 +3445,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.4.0</div>
+        <div class="settings-value">MaxedHealth v3.4.1</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -13758,28 +13758,46 @@ function exitDemoMode() {
 // ─── CARER VIEW (P12) ────────────────────────────────────
 
 function generateCarerLink() {
-  const h=state.history||[];
-  if (h.length===0) { showToast('No history data to share yet'); return; }
-  const snapshot={
-    name:      localStorage.getItem('mh_name')||'MaxedHealth User',
-    generated: new Date().toISOString(),
-    expires:   new Date(Date.now()+7*24*60*60*1000).toISOString(),
-    targets:   getTargets(),
-    history:   h.slice(0,30).map(e=>({date:e.date,totals:e.totals,weight:e.weight,mode:e.mode})),
-  };
-  const encoded=btoa(unescape(encodeURIComponent(JSON.stringify(snapshot))));
-  // Use relative URL — works on any hosting path
-  const base=window.location.href.replace(/maxhealth\.html.*$/,'');
-  const url=`${base}carer.html#${encoded}`;
-  const out=document.getElementById('carerLinkOutput');
-  if (out) {
-    out.style.display='block';
-    out.innerHTML=`
-      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;">Read-only link — valid 7 days</div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:11px;color:var(--green);font-family:Space Mono,monospace;word-break:break-all;line-height:1.6;">${url}</div>
-      <button class="copy-btn" style="margin-top:8px;width:100%;" onclick="navigator.clipboard.writeText(${JSON.stringify(url)}).then(()=>showToast('Link copied!'))">📋 COPY LINK</button>
-      <div class="settings-hint" style="margin-top:6px;">Contains nutrition totals and weights only. No food log entries, no personal notes.</div>`;
-  }
+  const h = state.history || [];
+  if (h.length === 0) { showToast('No history data to share yet'); return; }
+  const out = document.getElementById('carerLinkOutput');
+  if (!out) return;
+
+  const name = localStorage.getItem('mh_name') || 'Patient';
+  const t = getTargets().standard;
+  const h30 = h.slice(0, 30);
+  const avg = key => Math.round(h30.reduce((a,d)=>a+(d.totals?.[key]||0),0)/Math.max(h30.length,1));
+  const ketoAdh = Math.round(h30.filter(d=>(d.totals?.carbs||0)<=t.carbs).length/Math.max(h30.length,1)*100);
+  const dayRows = h30.map(d => {
+    const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+    const tags = (d.notes||'').split(',').map(x=>x.trim()).filter(x=>x&&!legacy.includes(x.toLowerCase()));
+    const isChemo = tags.some(x=>x.toLowerCase().includes('chemo'));
+    return '<tr style="background:'+(isChemo?'#f9f0ff':'')+'"><td style="padding:4px 8px;font-size:11px;">'+d.date+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.kcal||0)+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.protein||0)+'g</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.fat||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(( d.totals?.carbs||0)<=t.carbs?'#16a34a':'#dc2626')+'">'+Math.round(d.totals?.carbs||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(isChemo?'#7c3aed':'#666')+'">'+tags.join(', ')+'</td></tr>';
+  }).join('');
+
+  const pageHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+name+' — Health Summary</title>'
+    + '<style>body{font-family:sans-serif;max-width:640px;margin:20px auto;padding:0 16px;color:#111;}h1{font-size:18px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px;}'
+    + 'h2{font-size:12px;color:#555;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 8px;}.stat{display:inline-block;margin:0 16px 8px 0;}.stat-val{font-size:22px;font-weight:800;}.stat-lbl{font-size:10px;color:#666;}'
+    + 'table{width:100%;border-collapse:collapse;font-size:12px;}th{text-align:left;padding:5px 8px;background:#f5f5f5;border-bottom:2px solid #ddd;}td{border-bottom:1px solid #eee;}'
+    + 'footer{font-size:9px;color:#999;margin-top:16px;padding-top:8px;border-top:1px solid #eee;}</style></head><body>'
+    + '<h1>'+name+' — Nutrition Summary</h1>'
+    + '<p style="font-size:11px;color:#666;margin-bottom:12px;">Last 30 days · Generated '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+' · Expires 7 days</p>'
+    + '<h2>Key Metrics</h2>'
+    + '<div class="stat"><div class="stat-val">'+avg('kcal')+'<span style="font-size:13px;">kcal</span></div><div class="stat-lbl">AVG CALORIES</div></div>'
+    + '<div class="stat"><div class="stat-val">'+avg('protein')+'<span style="font-size:13px;">g</span></div><div class="stat-lbl">AVG PROTEIN</div></div>'
+    + '<div class="stat"><div class="stat-val" style="color:'+(ketoAdh>=80?'#16a34a':ketoAdh>=50?'#d97706':'#dc2626')+'">'+ketoAdh+'%</div><div class="stat-lbl">KETOSIS ADHERENCE</div></div>'
+    + (state.weight ? '<div class="stat"><div class="stat-val">'+state.weight+'<span style="font-size:13px;">kg</span></div><div class="stat-lbl">CURRENT WEIGHT</div></div>' : '')
+    + '<h2>Daily Log</h2><table><thead><tr><th>Date</th><th>Calories</th><th>Protein</th><th>Fat</th><th>Carbs</th><th>Notes</th></tr></thead><tbody>'+dayRows+'</tbody></table>'
+    + '<footer>MaxedHealth · Read-only · Nutrition totals only · No personal food log</footer></body></html>';
+
+  const blob = new Blob([pageHTML], {type:'text/html'});
+  const blobUrl = URL.createObjectURL(blob);
+  out.style.display = 'block';
+  out.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;font-family:Space Mono,monospace;">SUMMARY READY</div>'
+    + '<div style="display:flex;gap:8px;flex-direction:column;">'
+    + '<a href="'+blobUrl+'" target="_blank" class="run-btn" style="text-align:center;padding:10px;text-decoration:none;font-size:13px;display:block;">👁 Open summary</a>'
+    + '</div>'
+    + '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6;">Open → three dots → Share to send to your team.  Or Open → Print → Save as PDF.</div>';
 }
 
 // ─── NUTRITION CSV AUTO-EXPORT (P13) ─────────────────────
