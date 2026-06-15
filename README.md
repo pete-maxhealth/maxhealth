@@ -4,23 +4,21 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.1.0
+**Version:** v3.4.0
 
 ---
 
 ## What it does
 
-- **AI meal logging** — type, paste a list, snap a photo, scan a barcode, or speak your meal. Lists of 10+ items split automatically. Claude identifies foods and calculates macros.
-- **Food library** — Meals and Ingredients in separate sections. A-Z nav, search, filter, sort. Tap LOG for portion scaler. Long-press for instant log at default portion. Recently scanned items shown for quick re-log.
-- **Recipes** — templates with adjustable ingredient amounts. Live macro scaling per ingredient. Different from meals: recipes for variable dishes, meals for fixed snapshots.
-- **Dashboard** — calories, protein, carbs, fat tiles. Macro ratio bar. Ketosis streak counter. Weight trend prediction. Remaining targets. Water tracker.
-- **Occasion tags** — tag days with context (Chemotherapy, Hospital day, Illness, Exercise, custom). Multi-select, removable, retroactively editable in history. Shows as 📌 banner on dashboard and in history.
-- **Supplement tracker** — 19 supplements across morning/midday/evening/bedtime. Auto-resets at midnight.
-- **History** — daily log with fat back-calculation. Edit day totals and occasion tags retrospectively. Swipe left to delete entries.
-- **Insights** — carb adherence, protein, sleep, HRV, weight trend. All using real targets.
-- **Reports** — query builder, ketogenic adherence, Treatment Analysis (chemo vs standard days), Weekly Summary export, GBM Monthly Summary, Oncology Team View (clinical PDF).
-- **Themes** — Dark, Light, Auto in Settings → Customise → Appearance.
-- **Voice input** — tap the microphone button and speak your meal.
+- **AI meal logging** — type, paste, photo, barcode or voice. 10+ item lists split automatically.
+- **Food library** — Meals and Ingredients. A-Z nav, search, filter. Long-press for instant log. Recently scanned items for quick re-log.
+- **Activity card** — permanent on dashboard. Walking, Resistance + custom exercises. MET-based calorie calculation (Easy/Moderate/Hard effort). All macro targets adjust dynamically — calories, protein (+15g resistance), water (+500ml/hr).
+- **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, removable, retroactively editable. Writes to master.csv.
+- **Dashboard** — calories, protein, carbs, fat tiles. Ketosis streak. Weight trend prediction. Dynamic targets from activity.
+- **History** — daily log with fat back-calculation. Exercise minutes shown separately (🏃). Edit totals and tags retrospectively. Swipe left to delete.
+- **Reports** — query builder (all 39 columns + notes/tags text search), Treatment Analysis, Weekly Summary export, GBM Monthly Summary, Oncology Team View.
+- **Themes** — Dark, Light, Auto. Custom modals throughout.
+- **Voice input** — microphone button, Web Speech API.
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`.
 
 ---
@@ -35,7 +33,7 @@ mhstart
 # Open http://localhost:5757
 ```
 
-## Auto-start on boot
+## Auto-start on boot (Termux:Boot)
 
 ```bash
 mkdir -p ~/.termux/boot
@@ -67,7 +65,8 @@ zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/m
 
 ```
 maxhealth/
-├── maxhealth.html      # Complete PWA (~800KB)
+├── maxhealth.html      # Complete PWA (~900KB)
+├── worker.js           # Cloudflare Worker proxy
 ├── why-free.html       # Why MaxedHealth is free
 ├── user-guide.html     # User guide
 ├── server.py           # Local HTTP server (Termux)
@@ -76,11 +75,31 @@ maxhealth/
 ├── TECHNICAL.md        # Technical reference
 ├── CHANGELOG.md        # Version history
 └── data/tables/
-    ├── master.csv      # Daily nutrition log
+    ├── master.csv      # Daily nutrition + tags (pipe-delimited)
     ├── combined.csv    # Wearable data
-    ├── library.csv     # Food library backup
-    └── supplements.csv # Supplement stack
+    └── library.csv     # Food library backup
 ```
+
+---
+
+## master.csv format
+
+```
+date|kcal|protein|carbs|fat|notes
+15/06/26|3506|188|18.4|265|Chemotherapy, 76min Walking, 45min Resistance
+```
+
+---
+
+## Activity MET values
+
+| Activity | Easy | Moderate | Hard |
+|----------|------|----------|------|
+| Walking | 2.8 | 3.5 | 4.5 |
+| Resistance | 3.0 | 5.0 | 6.0 |
+| Custom exercise | 3.5 | 5.0 | 7.0 |
+
+`kcal = MET × weight(kg) × duration(hours)`
 
 ---
 
@@ -88,16 +107,17 @@ maxhealth/
 
 | Metric | Target |
 |--------|--------|
-| Calories | 3,500 kcal |
-| Protein | 165g |
+| Calories | 3,500 kcal (+ activity) |
+| Protein | 165g (+ 15g resistance days) |
 | Carbs | ≤50g standard / ≤75g occasion |
 | Fat | ~247g |
+| Water | 2,000ml (+ 500ml/hr exercise) |
 
 ---
 
 ## Tech stack
 
-- Single-file HTML/CSS/JS PWA (~800KB)
+- Single-file HTML/CSS/JS PWA (~900KB)
 - Claude (Anthropic) via Cloudflare Worker proxy
 - Open Food Facts API (barcode)
 - Web Speech API (voice input)
@@ -108,4 +128,6 @@ maxhealth/
 
 ## Why it exists
 
-Built by Pete following a GBM diagnosis in April 2023. Therapeutic ketogenic protocol requires precise macro tracking — this makes that possible daily. See [why-free.html](why-free.html).
+Built by Pete following a GBM diagnosis. Therapeutic ketogenic protocol requires precise macro tracking — this makes that possible daily. See [why-free.html](why-free.html).
+
+*Built with Claude by Anthropic.*
