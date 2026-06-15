@@ -1078,6 +1078,19 @@ body[data-theme="light"] {
   @keyframes tipFadeIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
 
   /* Scrollbar */
+  /* ── CUSTOM CONFIRM/PROMPT MODALS ───────────────────────────── */
+  .app-modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;animation:viewFadeIn 0.15s ease; }
+  .app-modal { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:100%;max-width:340px;box-shadow:var(--shadow); }
+  .app-modal-title { font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px;font-family:'Syne',sans-serif; }
+  .app-modal-msg { font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px; }
+  .app-modal-input { width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:15px;font-family:'Space Mono',monospace;margin-bottom:16px;outline:none;box-sizing:border-box; }
+  .app-modal-input:focus { border-color:var(--accent); }
+  .app-modal-btns { display:flex;gap:8px; }
+  .app-modal-btn { flex:1;padding:10px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:'Space Mono',monospace;letter-spacing:0.03em; }
+  .app-modal-btn.cancel { background:var(--surface2);color:var(--text2);border:1px solid var(--border); }
+  .app-modal-btn.confirm { background:var(--accent);color:#fff; }
+  .app-modal-btn.danger { background:var(--red-dim);color:var(--red);border:1px solid rgba(255,94,94,0.3); }
+
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -3432,7 +3445,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.3.9</div>
+        <div class="settings-value">MaxedHealth v3.4.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4785,11 +4798,7 @@ function deleteFromLibrary(index) {
   const lib = loadLibrary();
   const f = lib[index];
   if (!f) { console.warn('[library] deleteFromLibrary: index', index, 'not found in lib of length', lib.length); return; }
-  if (!confirm(`Delete "${f.name}" from library?`)) return;
-  lib.splice(index, 1);
-  saveLibrary(lib);
-  renderLibrary();
-  showToast('Removed from library');
+  appConfirm(`Delete "${f.name}" from library?`, () => { _doDeleteLibraryItem(index); }, null, true);
 }
 
 function openLibraryEdit(index) {
@@ -5270,9 +5279,7 @@ function logWater(ml) {
 }
 
 function logWaterCustom() {
-  const val = prompt('How much water? (ml)');
-  const ml = parseInt(val);
-  if (!isNaN(ml) && ml > 0) logWater(ml);
+  appPrompt('Add water', 'Amount in ml', (val) => { const ml = parseInt(val); if (!isNaN(ml) && ml > 0) { state.waterToday = (state.waterToday||0) + ml; saveState(); updateDashboard(); showToast(`+${ml}ml added`); } });
 }
 
 function resetWater() {
@@ -5836,23 +5843,11 @@ function saveActivityToNotes(acts) {
   saveState();
 }
 function addCustomActivity() {
-  const name = prompt('Exercise name (e.g. Swimming, Cycling):');
-  if (!name) return;
-  const acts = getActivities();
-  const nameLower = name.toLowerCase();
-  const emoji = nameLower.includes('swim') ? '🏊' : nameLower.includes('cycl')||nameLower.includes('bike') ? '🚴' : nameLower.includes('run')||nameLower.includes('jog') ? '🏃' : nameLower.includes('yoga')||nameLower.includes('stretch') ? '🧘' : nameLower.includes('row') ? '🚣' : nameLower.includes('climb') ? '🧗' : '🏋️';
-  acts.push({ id: 'custom_'+Date.now(), name: emoji+' '+name, type: 'exercise', duration: '', effort: 'Moderate', enabled: true });
-  saveActivities(acts);
-  renderActivityCard();
+  appPrompt('Add exercise', 'e.g. Swimming, Cycling', (name) => { _doAddCustomActivity(name); });
 }
 
 function removeCustomActivity(idx) {
-  if (!confirm('Remove this activity?')) return;
-  const acts = getActivities();
-  acts.splice(idx, 1);
-  saveActivities(acts);
-  renderActivityCard();
-  updateDashboard();
+  appConfirm('Remove this activity?', () => _doRemoveActivity(idx), null, true);
 }
 
 function updateActivityNudge(acts) {
@@ -8774,10 +8769,7 @@ function toggleSupplementActive(id) {
 }
 
 function deleteSupplement(id) {
-  if (!confirm('Remove this supplement?')) return;
-  const defs = loadSupplementDefs().filter(d => d.id !== id);
-  saveSupplementDefs(defs);
-  renderSupplementSettings();
+  appConfirm('Remove this supplement?', () => _doRemoveSupplement(index), null, true);
 }
 
 function addSupplement(period) {
@@ -8884,13 +8876,7 @@ function saveSupplementEdit() {
 
 // Reset supplement log at midnight (called from rollover logic)
 function clearTodayLog() {
-  if (!confirm('Clear today\'s food log? This cannot be undone. History is not affected.')) return;
-  state.todayLog = [];
-  state.waterToday = 0;
-  state.lastDate = todayStr();
-  saveState();
-  renderDash();
-  showToast('Today\'s log cleared ✓');
+  appConfirm('Clear today\'s food log? This cannot be undone.', () => _doClearLog(), null, true);
 }
 
 
@@ -9537,9 +9523,7 @@ function logRecipe(id, servings) {
 function promptRecipeServings(id) {
   const recipe = loadRecipes().find(r => r.id === id);
   if (!recipe) return;
-  const s = prompt(`How many servings of "${recipe.name}"? (recipe makes ${recipe.servings})`);
-  const n = parseFloat(s);
-  if (!isNaN(n) && n > 0) logRecipe(id, n);
+  appPrompt(`Servings of "${recipe.name}"?`, `Recipe makes ${recipe.servings}`, (s) => { _doLogRecipe(recipe, s); });
 }
 
 // ─── MISSED DAY CONVERSATIONAL FLOW ─────────────────────
@@ -10349,6 +10333,98 @@ function checkDataIntegrity() {
 
 // ─── TOAST ───────────────────────────────────────────────
 let _toastTimer = null;
+// ─── MODAL HELPER IMPLEMENTATIONS ───────────────────────────────────────────
+function _doDeleteLibraryItem(index) {
+  const lib = loadLibrary() || [];
+  lib.splice(index, 1);
+  saveLibrary(lib);
+  renderLibrary();
+  showToast('Item deleted ✓');
+}
+function _doRemoveActivity(idx) {
+  const acts = getActivities();
+  acts.splice(idx, 1);
+  saveActivities(acts);
+  renderActivityCard();
+  updateDashboard();
+}
+function _doRemoveSupplement(index) {
+  const supps = loadSupplements();
+  supps.splice(index, 1);
+  saveSupplements(supps);
+  renderSupplements();
+  showToast('Supplement removed ✓');
+}
+function _doClearLog() {
+  state.todayLog = [];
+  saveState();
+  updateDashboard();
+  showToast('Log cleared ✓');
+}
+function _doAddCustomActivity(name) {
+  const nameLower = name.toLowerCase();
+  const emoji = nameLower.includes('swim') ? '🏊' : nameLower.includes('cycl')||nameLower.includes('bike') ? '🚴' : nameLower.includes('run')||nameLower.includes('jog') ? '🏃' : nameLower.includes('yoga')||nameLower.includes('stretch') ? '🧘' : nameLower.includes('row') ? '🚣' : nameLower.includes('climb') ? '🧗' : '🏋️';
+  const acts = getActivities();
+  acts.push({ id: 'custom_'+Date.now(), name: emoji+' '+name, type: 'exercise', duration: '', effort: 'Moderate', enabled: true });
+  saveActivities(acts);
+  renderActivityCard();
+}
+function _doLogRecipe(recipe, s) {
+  const servings = parseFloat(s);
+  if (isNaN(servings) || servings <= 0) { showToast('Invalid serving count'); return; }
+  const factor = servings / (recipe.servings || 1);
+  const foods = (recipe.ingredients || []).map(ing => ({
+    name: ing.name,
+    amount: Math.round((ing.amount || 100) * factor) + 'g',
+    kcal: Math.round((ing.kcal || 0) * factor),
+    protein: Math.round((ing.protein || 0) * factor * 10) / 10,
+    fat: Math.round((ing.fat || 0) * factor * 10) / 10,
+    carbs: Math.round((ing.carbs || 0) * factor * 10) / 10,
+  }));
+  logFoods(foods, recipe.name + ' (×' + servings + ')');
+  switchTabById('chat');
+}
+
+// ─── CUSTOM MODALS ───────────────────────────────────────────────────────────
+function appConfirm(message, onConfirm, onCancel, dangerMode=false) {
+  const overlay = document.createElement('div');
+  overlay.className = 'app-modal-overlay';
+  overlay.innerHTML = `
+    <div class="app-modal">
+      <div class="app-modal-title">${dangerMode ? '⚠️ Confirm' : 'Confirm'}</div>
+      <div class="app-modal-msg">${message}</div>
+      <div class="app-modal-btns">
+        <button class="app-modal-btn cancel" id="appModalCancel">Cancel</button>
+        <button class="app-modal-btn ${dangerMode ? 'danger' : 'confirm'}" id="appModalConfirm">${dangerMode ? 'Delete' : 'OK'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#appModalConfirm').onclick = () => { overlay.remove(); if (onConfirm) onConfirm(); };
+  overlay.querySelector('#appModalCancel').onclick = () => { overlay.remove(); if (onCancel) onCancel(); };
+  overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); if (onCancel) onCancel(); } };
+}
+
+function appPrompt(message, placeholder, onConfirm, defaultVal='') {
+  const overlay = document.createElement('div');
+  overlay.className = 'app-modal-overlay';
+  overlay.innerHTML = `
+    <div class="app-modal">
+      <div class="app-modal-title">${message}</div>
+      <input class="app-modal-input" id="appPromptInput" placeholder="${placeholder}" value="${defaultVal}">
+      <div class="app-modal-btns">
+        <button class="app-modal-btn cancel" id="appModalCancel">Cancel</button>
+        <button class="app-modal-btn confirm" id="appModalConfirm">OK</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const input = overlay.querySelector('#appPromptInput');
+  setTimeout(() => input.focus(), 100);
+  const doConfirm = () => { const v = input.value.trim(); overlay.remove(); if (onConfirm && v) onConfirm(v); };
+  overlay.querySelector('#appModalConfirm').onclick = doConfirm;
+  overlay.querySelector('#appModalCancel').onclick = () => overlay.remove();
+  input.onkeydown = e => { if (e.key === 'Enter') doConfirm(); };
+}
+
 function showToast(msg, actionLabel, actionFn, duration = 2000) {
   const t = document.getElementById('toast');
   if (!t) { console.warn('Toast:', msg); return; }
