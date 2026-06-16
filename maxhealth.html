@@ -2193,7 +2193,7 @@ body[data-theme="light"] {
 
 <div class="app-wrapper">
 <div class="header">
-  <div class="logo">MAXED<span>HEALTH</span></div>
+  <div class="logo" id="appLogo" onclick="triggerDailyInsight()" style="cursor:pointer;user-select:none;">MAXED<span>HEALTH</span></div>
   <div style="display:flex;align-items:center;gap:8px;">
     <div id="serverModeBadge" style="font-size:10px;font-family:Space Mono,monospace;padding:3px 8px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;" onclick="showServerStatus()" title="Tap for connection status">☁ CLOUD</div>
     <div class="date-badge" id="headerDate"></div>
@@ -3477,7 +3477,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.4.9</div>
+        <div class="settings-value">MaxedHealth v3.5.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -15028,6 +15028,99 @@ function closePreviewOnboarding() {
   }
   const btn = document.getElementById('previewCloseBtn');
   if (btn) btn.remove();
+}
+
+// ─── DAILY INSIGHT ───────────────────────────────────────────────────────────
+let _insightActive = false;
+
+function triggerDailyInsight() {
+  if (_insightActive) { dismissInsight(); return; }
+  _insightActive = true;
+
+  const logo = document.getElementById('appLogo');
+  if (logo) { logo.style.transform = 'scale(1.12)'; setTimeout(function(){ logo.style.transform = ''; }, 300); }
+
+  // Build overlay entirely in JS
+  var overlay = document.createElement('div');
+  overlay.id = 'insightOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,0.65);display:flex;align-items:flex-start;justify-content:center;padding:70px 20px 20px;';
+  overlay.onclick = dismissInsight;
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:#0f1318;border:1px solid #2deb8f;border-radius:16px;padding:20px 22px;width:100%;max-width:400px;box-shadow:0 0 40px rgba(45,235,143,0.2);transition:all 0.3s ease;cursor:pointer;';
+
+  var typeRow = document.createElement('div');
+  typeRow.style.cssText = 'font-size:9px;letter-spacing:0.12em;margin-bottom:10px;display:flex;align-items:center;gap:6px;';
+
+  var dot = document.createElement('div');
+  dot.id = 'insightDot';
+  dot.style.cssText = 'width:6px;height:6px;border-radius:50%;background:#2deb8f;flex-shrink:0;';
+
+  var typeLabel = document.createElement('span');
+  typeLabel.id = 'insightTypeLabel';
+  typeLabel.style.cssText = 'color:#5a6278;font-family:monospace;';
+  typeLabel.textContent = 'DAILY INSIGHT';
+
+  typeRow.appendChild(dot);
+  typeRow.appendChild(typeLabel);
+
+  var textEl = document.createElement('div');
+  textEl.id = 'insightText';
+  textEl.style.cssText = 'font-size:14px;color:#f0f2f7;line-height:1.6;margin-bottom:14px;';
+  textEl.textContent = 'Thinking...';
+
+  var dismiss = document.createElement('div');
+  dismiss.style.cssText = 'font-size:10px;color:#5a6278;text-align:center;font-family:monospace;';
+  dismiss.textContent = 'tap to dismiss';
+
+  card.appendChild(typeRow);
+  card.appendChild(textEl);
+  card.appendChild(dismiss);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  // Fetch insight
+  var h = state.history || [];
+  var t = getTargets().standard;
+  var name = localStorage.getItem('mh_name') || 'you';
+  var recentH = h.slice(0, 30);
+  var avgKcal = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.kcal||0);},0)/recentH.length) : 0;
+  var avgCarbs = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.carbs||0);},0)/recentH.length) : 0;
+  var avgProt = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.protein||0);},0)/recentH.length) : 0;
+  var ketoAdh = recentH.length ? Math.round(recentH.filter(function(d){return (d.totals&&d.totals.carbs||0)<=t.carbs;}).length/recentH.length*100) : 0;
+  var treatKw = ['chemotherapy','chemo','treatment'];
+  var chemoCount = recentH.filter(function(d){return treatKw.some(function(k){return (d.notes||'').toLowerCase().indexOf(k)>=0;});}).length;
+  var todayNotes = localStorage.getItem('mh_today_notes') || state.notes || '';
+  var isChemoDay = treatKw.some(function(k){return todayNotes.toLowerCase().indexOf(k)>=0;});
+  var todayTotals = calcTotals(state.todayLog);
+  var types = ['pattern','nudge','milestone'];
+  var insightType = types[Math.floor(Math.random() * types.length)];
+  var typeLabels = {pattern:'DATA PATTERN',nudge:"TODAY'S NUDGE",milestone:'MILESTONE'};
+  var typeColors = {pattern:'#2deb8f',nudge:'#38bdf8',milestone:'#f5c542'};
+  var typeIcons = {pattern:'⚡',nudge:'🎯',milestone:'🏆'};
+
+  var prompt = 'You are a witty warm health analyst for MaxedHealth. Generate a single short insight (max 50 words) for ' + name + '. Today: ' + new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) + '. ' + (isChemoDay ? 'Today is a chemotherapy day. ' : '') + 'Last 30 days: ' + avgKcal + 'kcal avg, ' + avgCarbs + 'g avg carbs, ' + avgProt + 'g avg protein, ' + ketoAdh + '% ketosis adherence. ' + (chemoCount > 0 ? chemoCount + ' chemo days logged. ' : '') + 'Today so far: ' + Math.round(todayTotals.kcal) + 'kcal, ' + Math.round(todayTotals.protein) + 'g protein, ' + Math.round(todayTotals.carbs) + 'g carbs. Insight type: ' + insightType + ' (pattern=data correlation, nudge=one action today, milestone=celebrate progress). Be direct specific occasionally witty. Use actual numbers. No bullet points.';
+
+  fetch('https://maxhealth-ai.bogginsuk.workers.dev', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({model:'claude-sonnet-4-6',max_tokens:120,messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var text = (data.content && data.content[0] && data.content[0].text) || 'No insight right now.';
+    textEl.textContent = text;
+    typeLabel.textContent = typeIcons[insightType] + ' ' + typeLabels[insightType];
+    typeLabel.style.color = typeColors[insightType];
+    dot.style.background = typeColors[insightType];
+  }).catch(function(){
+    textEl.textContent = 'Could not reach the server. Try again in a moment.';
+    _insightActive = false;
+  });
+}
+
+function dismissInsight() {
+  var overlay = document.getElementById('insightOverlay');
+  if (overlay) overlay.remove();
+  _insightActive = false;
 }
 
 </script>
