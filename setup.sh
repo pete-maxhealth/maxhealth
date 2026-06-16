@@ -62,30 +62,22 @@ echo ""
 # ── Step 4: Create mhstart command ───────────────────────────────────────────
 echo "━━━ Step 4/5: Configuring commands ━━━"
 
-cat > /data/data/com.termux/files/usr/bin/mhstart << 'MHEOF'
-#!/data/data/com.termux/files/usr/bin/bash
-if curl -sf http://localhost:5757/ping > /dev/null 2>&1; then
-  echo "MaxedHealth already running ✓"
-  exit 0
+# Create mhstart alias
+if ! grep -q "alias mhstart" "$BASHRC" 2>/dev/null; then
+  echo "" >> "$BASHRC"
+  echo "alias mhstart="mkdir -p /storage/emulated/0/maxhealth/data/tables /storage/emulated/0/maxhealth/data/inbox /storage/emulated/0/maxhealth/data/archive /storage/emulated/0/maxhealth/app/maxhealth; pkill -f server.py 2>/dev/null; sleep 1; cd /storage/emulated/0/maxhealth/app && python server.py &"" >> "$BASHRC"
 fi
-echo "Starting MaxedHealth server..."
-cd /storage/emulated/0/maxhealth/app
-python server.py &
-sleep 2
-if curl -sf http://localhost:5757/ping > /dev/null 2>&1; then
-  echo "MaxedHealth running ✓  →  Open Chrome: localhost:5757"
-else
-  echo "Server starting — open Chrome in a moment: localhost:5757"
-fi
-MHEOF
-chmod +x /data/data/com.termux/files/usr/bin/mhstart
 
 # Auto-start when Termux opens
-if ! grep -q "mhstart" "$BASHRC" 2>/dev/null; then
+if ! grep -q "mhstart > /dev/null" "$BASHRC" 2>/dev/null; then
   echo "" >> "$BASHRC"
   echo "# MaxedHealth — auto-start server" >> "$BASHRC"
   echo "mhstart > /dev/null 2>&1 &" >> "$BASHRC"
 fi
+
+# Make mhstart available immediately in this session
+alias mhstart="mkdir -p /storage/emulated/0/maxhealth/data/tables /storage/emulated/0/maxhealth/data/inbox /storage/emulated/0/maxhealth/data/archive /storage/emulated/0/maxhealth/app/maxhealth; pkill -f server.py 2>/dev/null; sleep 1; cd /storage/emulated/0/maxhealth/app && python server.py &"
+
 
 # Boot auto-start
 mkdir -p "$BOOT_DIR"
