@@ -3469,7 +3469,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.4.4</div>
+        <div class="settings-value">MaxedHealth v3.4.5</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -7941,30 +7941,47 @@ function updateDashboard() {
   setTimeout(initSwipeDelete, 100);
   // Midnight rollover check — catches cases where app stayed open past midnight
   if (state.lastDate && state.lastDate !== todayStr()) {
-    // Check if this date already in history (prevent ghost duplicate without blocking retries)
-    const _alreadyInHistory = (state.history||[]).some(h => h.date === state.lastDate);
-    if (state.todayLog && state.todayLog.length > 0 && !_alreadyInHistory) {
-      const rt = calcTotals(state.todayLog);
-      state.history = (state.history || []).filter(h => h.date !== state.lastDate);
-      state.history.unshift({ date: state.lastDate, log: state.todayLog, totals: rt, mode: state.dayMode, notes: state.notes, weight: state.weight, water_ml: state.waterToday || 0 });
+    const _rolloverDate = state.lastDate; // capture immediately before anything changes
+    const _capturedLog = state.todayLog ? [...state.todayLog] : [];
+    const _capturedNotes = localStorage.getItem('mh_today_notes') || state.notes || '';
+    const _capturedMode = state.dayMode || 'standard';
+    const _capturedWeight = state.weight;
+    const _capturedWater = state.waterToday || 0;
+    const _alreadyInHistory = (state.history||[]).some(h => h.date === _rolloverDate);
+    const _hasLog = _capturedLog.length > 0;
+
+    // Update lastDate FIRST — prevents any repeat rollover on next updateDashboard
+    state.lastDate = todayStr();
+    state.todayLog = [];
+    state.notes = '';
+    state.dayMode = 'standard';
+    state.waterToday = 0;
+    localStorage.removeItem('mh_steps_today');
+    localStorage.removeItem('mh_today_notes');
+    saveActivities(getActivities().map(a => ({...a, enabled:false, duration:'', effort: a.effort || 'Moderate'})));
+    try { resetSupplementLog(); } catch(e) { localStorage.setItem('mh_supplement_log', JSON.stringify({ date: todayStr() })); }
+    saveState(); // persists today's date immediately
+
+    // Write history entry using captured data
+    if (_hasLog && !_alreadyInHistory) {
+      const _rt = calcTotals(_capturedLog);
+      state.history = (state.history || []).filter(h => h.date !== _rolloverDate);
+      state.history.unshift({
+        date: _rolloverDate, log: _capturedLog, totals: _rt,
+        mode: _capturedMode, notes: _capturedNotes,
+        weight: _capturedWeight, water_ml: _capturedWater
+      });
+      // Build clean notes for master.csv
       const _midLegacy = ['standard','occasion','holiday','missed day entry','missed day'];
-      // Rebuild full notes — occasion tags + activity summary
-      const _midOccasionTags = (state.notes||'').split(',').map(t=>t.trim())
+      const _midOccasionTags = _capturedNotes.split(',').map(t=>t.trim())
         .filter(t=>t && !_midLegacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
       const _midActivityTags = getActivities().filter(a=>a.enabled&&a.duration)
         .map(a=>`${a.duration}min ${a.name.replace(/^[^\w]*/,'').trim()}`);
       const _midAllTags = [..._midOccasionTags, ..._midActivityTags];
-      const _midNotes = _midAllTags.length > 0 ? _midAllTags.join(', ') : state.dayMode;
-      const _rolloverDate = state.lastDate; // capture before it changes
-      setTimeout(() => saveNutritionToServer(_rolloverDate, Math.round(rt.kcal), Math.round(rt.protein), Math.round(rt.carbs), _midNotes, Math.round((rt.fat||0)*10)/10), 1000);
+      const _midNotes = _midAllTags.length > 0 ? _midAllTags.join(', ') : 'standard';
+      setTimeout(() => saveNutritionToServer(_rolloverDate, Math.round(_rt.kcal), Math.round(_rt.protein), Math.round(_rt.carbs), _midNotes, Math.round((_rt.fat||0)*10)/10), 1000);
+      saveState();
     }
-    state.todayLog = []; state.notes = ''; state.dayMode = 'standard';
-    localStorage.removeItem('mh_steps_today');
-    localStorage.removeItem('mh_today_notes');
-    saveActivities(getActivities().map(a => ({...a, enabled:false, duration:'', effort: a.effort || 'Moderate'})));
-    state.lastDate = todayStr(); state.waterToday = 0;
-    try { resetSupplementLog(); } catch(e) { localStorage.setItem('mh_supplement_log', JSON.stringify({ date: todayStr() })); }
-    saveState();
   }
   const totals = calcTotals(state.todayLog);
   const targets = TARGETS[state.dayMode];
