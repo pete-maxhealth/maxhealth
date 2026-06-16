@@ -3469,7 +3469,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.4.3</div>
+        <div class="settings-value">MaxedHealth v3.4.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5865,6 +5865,7 @@ function saveActivityToNotes(acts) {
   const allNotes = [...existingTags];
   if (actSummary) allNotes.push(actSummary);
   state.notes = allNotes.join(', ');
+  localStorage.setItem('mh_today_notes', state.notes); // persist across restarts
   if (allNotes.length > 0) state.dayMode = 'occasion';
   saveState();
 }
@@ -7918,6 +7919,11 @@ function autoResize(el) {
 
 // ─── DASHBOARD ───────────────────────────────────────────
 function updateDashboard() {
+  // Restore today's notes from localStorage if state.notes is empty
+  if (!state.notes || state.notes === 'standard') {
+    const savedNotes = localStorage.getItem('mh_today_notes');
+    if (savedNotes) state.notes = savedNotes;
+  }
   updateOccasionBanner();
   renderActivityCard();
   // Dynamic protein target
@@ -7935,20 +7941,9 @@ function updateDashboard() {
   setTimeout(initSwipeDelete, 100);
   // Midnight rollover check — catches cases where app stayed open past midnight
   if (state.lastDate && state.lastDate !== todayStr()) {
-    // Guard against double rollover — check if already processed this date
-    const _rolloverGuardKey = 'mh_rolled_' + state.lastDate;
-    const _alreadyRolled = localStorage.getItem(_rolloverGuardKey);
-    if (!_alreadyRolled) {
-      localStorage.setItem(_rolloverGuardKey, '1');
-      // Clean up old guard keys (keep only last 3 days)
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('mh_rolled_') && k !== _rolloverGuardKey) {
-          localStorage.removeItem(k); i--;
-        }
-      }
-    }
-    if (state.todayLog && state.todayLog.length > 0 && !_alreadyRolled) {
+    // Check if this date already in history (prevent ghost duplicate without blocking retries)
+    const _alreadyInHistory = (state.history||[]).some(h => h.date === state.lastDate);
+    if (state.todayLog && state.todayLog.length > 0 && !_alreadyInHistory) {
       const rt = calcTotals(state.todayLog);
       state.history = (state.history || []).filter(h => h.date !== state.lastDate);
       state.history.unshift({ date: state.lastDate, log: state.todayLog, totals: rt, mode: state.dayMode, notes: state.notes, weight: state.weight, water_ml: state.waterToday || 0 });
@@ -7965,7 +7960,8 @@ function updateDashboard() {
     }
     state.todayLog = []; state.notes = ''; state.dayMode = 'standard';
     localStorage.removeItem('mh_steps_today');
-    saveActivities(getActivities().map(a => ({...a, enabled:false, duration:''})));
+    localStorage.removeItem('mh_today_notes');
+    saveActivities(getActivities().map(a => ({...a, enabled:false, duration:'', effort: a.effort || 'Moderate'})));
     state.lastDate = todayStr(); state.waterToday = 0;
     try { resetSupplementLog(); } catch(e) { localStorage.setItem('mh_supplement_log', JSON.stringify({ date: todayStr() })); }
     saveState();
@@ -9946,6 +9942,7 @@ function toggleOccasionTag(tag) {
     tags.push(tag);
   }
   _setOccasionTags(tags);
+  localStorage.setItem('mh_today_notes', state.notes); // persist across restarts
   saveState();
   renderOccasionTags();
   updateDashboard();
@@ -10034,9 +10031,13 @@ function setDayMode(mode) {
   state.dayMode = mode;
   if (mode === 'standard') {
     const tags = _getOccasionTags();
-    if (tags.length === 0) state.notes = '';
+    if (tags.length === 0) {
+      state.notes = '';
+      localStorage.removeItem('mh_today_notes');
+    }
   } else if (mode === 'holiday') {
     state.notes = 'holiday';
+    localStorage.setItem('mh_today_notes', 'holiday');
   }
   // For occasion, notes managed by toggleOccasionTag
   saveState();
