@@ -3485,7 +3485,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.5.3</div>
+        <div class="settings-value">MaxedHealth v3.5.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -11253,6 +11253,58 @@ const DRILL_CONFIG = {
   carbs:    { title: 'Carbohydrates',      unit: 'g',     color: '#f5c542', icon: '🌾', field: 'totals.carbs',    ref: null,     refLabel: '' },
 };
 
+function getFullBodyCompositionHistory() {
+  // Reads the FULL combined.csv cache (every Withings day, not just nutrition-logged days)
+  // and returns a clean, date-sorted array of {date, muscle_mass_kg, fat_mass_kg, muscle_pct, fat_pct}
+  // for every row that has real body composition data. Used by the weight drill-down so the
+  // "trend" comparison spans your genuine first-to-latest readings, not an accidental
+  // pair of dates that happened to also have nutrition logged that day.
+  try {
+    const text = localStorage.getItem('mh_combined_csv_cache');
+    if (!text) return [];
+    const lines = text.replace(/\r/g,'').trim().split('\n').filter(Boolean);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].replace(/\r/g,'').split(',').map(h => h.trim());
+    const idx = h => headers.indexOf(h);
+    const iDate = idx('date');
+    const iMuscleKg = idx('muscle_mass_kg');
+    const iFatKg = idx('fat_mass_kg');
+    const iMusclePct = idx('muscle_pct');
+    const iFatPct = idx('fat_pct');
+    const iBoneKg = idx('bone_mass_kg');
+    const iHydrationKg = idx('hydration_kg');
+    if (iDate < 0 || (iMuscleKg < 0 && iFatKg < 0)) return [];
+
+    const out = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      const dateIso = (cols[iDate] || '').trim();
+      const muscleKg = iMuscleKg >= 0 ? parseFloat(cols[iMuscleKg]) : NaN;
+      const fatKg = iFatKg >= 0 ? parseFloat(cols[iFatKg]) : NaN;
+      if (!dateIso || (isNaN(muscleKg) && isNaN(fatKg))) continue;
+      // Convert YYYY-MM-DD to DD/MM/YY to match the app's display format elsewhere
+      const parts = dateIso.split('-');
+      const ddmmyy = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0].slice(2)}` : dateIso;
+      out.push({
+        date: ddmmyy,
+        isoDate: dateIso,
+        muscle_mass_kg: isNaN(muscleKg) ? null : muscleKg,
+        fat_mass_kg: isNaN(fatKg) ? null : fatKg,
+        muscle_pct: iMusclePct >= 0 ? cols[iMusclePct]?.trim() : null,
+        fat_pct: iFatPct >= 0 ? cols[iFatPct]?.trim() : null,
+        bone_mass_kg: iBoneKg >= 0 ? cols[iBoneKg]?.trim() : null,
+        hydration_kg: iHydrationKg >= 0 ? cols[iHydrationKg]?.trim() : null,
+      });
+    }
+    out.sort((a,b) => a.isoDate < b.isoDate ? -1 : 1); // chronological — earliest first
+    return out;
+  } catch(e) {
+    console.warn('[getFullBodyCompositionHistory] failed:', e);
+    return [];
+  }
+}
+
 function getDrillData(metric, period) {
   const cfg   = DRILL_CONFIG[metric];
   if (!cfg) return [];
@@ -11707,7 +11759,15 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
 
   else if (metric === 'weight') {
     const wtLow = WEIGHT_TARGET_LOW(), wtHigh = WEIGHT_TARGET_HIGH();
-    const bodyData = state.history.filter(h => h.muscle_mass_kg||h.fat_mass_kg).sort((a,b)=>a.date<b.date?-1:1);
+    // Body composition trend reads directly from the full combined.csv cache —
+    // NOT from state.history, which only contains nutrition-logged days (a small
+    // subset of all wearable days) and previously produced a near-meaningless
+    // trend comparing two almost-arbitrary dates. This reads every day Withings
+    // ever recorded, so "earliest" and "latest" are genuinely the first and most
+    // recent real body composition readings.
+    const bodyDataFull = getFullBodyCompositionHistory();
+    const bodyData = bodyDataFull.length > 0 ? bodyDataFull
+      : state.history.filter(h => h.muscle_mass_kg||h.fat_mass_kg).sort((a,b)=>a.date<b.date?-1:1); // fallback only if no combined.csv cache exists yet
     const latest = bodyData[bodyData.length-1]||{};
     const earliest = bodyData[0]||{};
     const mc = (latest.muscle_mass_kg&&earliest.muscle_mass_kg)?(parseFloat(latest.muscle_mass_kg)-parseFloat(earliest.muscle_mass_kg)).toFixed(1):null;
