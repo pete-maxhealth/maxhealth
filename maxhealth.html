@@ -3485,7 +3485,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.5.1</div>
+        <div class="settings-value">MaxedHealth v3.5.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4998,7 +4998,7 @@ function processNutritionCSV(text, outEl) {
     // Build existing date set in DD/MM/YY format
     const existing = new Set(state.history.map(d => d.date));
 
-    let imported = 0, skipped = 0, flagged = 0;
+    let imported = 0, updated = 0, skipped = 0, flagged = 0;
     const newEntries = [];
     const flaggedRows = [];
 
@@ -5012,28 +5012,38 @@ function processNutritionCSV(text, outEl) {
       const parts = line.split('|').map(p => p.trim());
       if (parts.length < 4) { flagged++; flaggedRows.push(`Row ${i+1}: too few columns`); continue; }
 
-      const [dateRaw, calRaw, protRaw, carbRaw, ...noteParts] = parts;
+      // Format is: date|kcal|protein|carbs|fat|notes
+      // fat is its own column — only treat remaining parts beyond fat as notes
+      const dateRaw = parts[0];
+      const calRaw = parts[1];
+      const protRaw = parts[2];
+      const carbRaw = parts[3];
+      const fatRaw = parts.length >= 5 ? parts[4] : null;
+      const noteParts = parts.length >= 5 ? parts.slice(5) : parts.slice(4);
+
       const dateStr = dateRaw.trim();
       const kcal = parseInt(calRaw.trim());
       const protein = parseFloat(protRaw.trim());
       const carbs = parseFloat(carbRaw.trim());
+      const fat = fatRaw !== null && fatRaw !== '' && !isNaN(parseFloat(fatRaw)) ? parseFloat(fatRaw) : null;
       const notes = noteParts.join('|').trim();
 
       // Validate date DD/MM/YY
       if (!/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) { flagged++; flaggedRows.push(`Row ${i+1}: invalid date "${dateStr}"`); continue; }
       if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) { flagged++; flaggedRows.push(`Row ${i+1}: invalid numbers`); continue; }
 
-      // If date already exists, update nutrition totals if missing
+      // If date already exists, ALWAYS overwrite with CSV data — master.csv is the source of truth
       if (existing.has(dateStr)) {
         const existingEntry = state.history.find(h => h.date === dateStr);
-        if (existingEntry && (!existingEntry.totals?.kcal || existingEntry.totals.kcal === 0)) {
-          // Fill in missing nutrition data
-          existingEntry.totals = { kcal, protein, carbs };
-          existingEntry.notes = existingEntry.notes || notes;
+        if (existingEntry) {
+          const before = existingEntry.totals || {};
+          const changed = before.kcal !== kcal || before.protein !== protein || before.carbs !== carbs || (fat !== null && before.fat !== fat);
+          existingEntry.totals = { kcal, protein, carbs, fat: fat !== null ? fat : (before.fat || 0) };
+          existingEntry.notes = notes || existingEntry.notes;
           if (!existingEntry.log || existingEntry.log.length === 0) {
-            existingEntry.log = [{ id: i+1, time: '23:59', description: notes || 'imported', kcal, protein, carbs }];
+            existingEntry.log = [{ id: i+1, time: '23:59', description: notes || 'imported', kcal, protein, carbs, fat: fat || 0 }];
           }
-          imported++;
+          if (changed) updated++; else skipped++;
         } else {
           skipped++;
         }
@@ -5042,8 +5052,8 @@ function processNutritionCSV(text, outEl) {
 
       newEntries.push({
         date: dateStr,
-        log: [{ id: i+1, time: '23:59', description: notes || 'imported', kcal, protein, carbs }],
-        totals: { kcal, protein, carbs },
+        log: [{ id: i+1, time: '23:59', description: notes || 'imported', kcal, protein, carbs, fat: fat || 0 }],
+        totals: { kcal, protein, carbs, fat: fat || 0 },
         mode: 'standard',
         notes: notes || '',
         weight: null,
@@ -5054,23 +5064,25 @@ function processNutritionCSV(text, outEl) {
 
     if (newEntries.length > 0) {
       state.history = [...state.history, ...newEntries];
-      state.history.sort((a, b) => {
-        const parse = d => {
-          const p = d.date.split('/');
-          return p.length === 3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0);
-        };
-        return parse(b) - parse(a);
-      });
-      saveState();
     }
+    state.history.sort((a, b) => {
+      const parse = d => {
+        const p = d.date.split('/');
+        return p.length === 3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0);
+      };
+      return parse(b) - parse(a);
+    });
+    saveState();
 
-    let summary = `✓ Import complete\n\n${imported} days imported\n${skipped} skipped (already in history)\n${flagged} flagged (invalid)`;
+    let summary = `✓ Import complete\n\n${imported} new days added\n${updated} existing days corrected\n${skipped} unchanged\n${flagged} flagged (invalid)`;
     if (flaggedRows.length > 0) summary += '\n\nFlagged rows:\n' + flaggedRows.slice(0,5).join('\n');
     if (flaggedRows.length > 5) summary += `\n…and ${flaggedRows.length - 5} more`;
 
-    out.className = imported > 0 ? 'output-box success' : 'output-box';
+    out.className = (imported > 0 || updated > 0) ? 'output-box success' : 'output-box';
     out.textContent = summary;
-    showToast(`${imported} days imported ✓`);
+    showToast(`${imported} added, ${updated} corrected ✓`);
+    updateDashboard();
+    renderHistory();
 
   } catch(err) {
     out.className = 'output-box error';
@@ -7934,9 +7946,17 @@ function updateDashboard() {
     const _capturedMode = state.dayMode || 'standard';
     const _capturedWeight = state.weight;
     const _capturedWater = state.waterToday || 0;
-    const _alreadyInHistory = (state.history||[]).some(h => h.date === _rolloverDate);
+    const _existingEntry = (state.history||[]).find(h => h.date === _rolloverDate);
     const _hasLog = _capturedLog.length > 0;
     const _rt = calcTotals(_capturedLog);
+    // Only treat as "already in history" if the existing entry's totals actually MATCH
+    // what we're about to write. If they differ, the existing entry is stale (e.g. from
+    // a bug, or written before this day's log was fully captured) and must be overwritten
+    // with the correct freshly-captured totals — never silently skip real data.
+    const _alreadyInHistory = !!_existingEntry &&
+      Math.round(_existingEntry.totals?.kcal||0) === Math.round(_rt.kcal) &&
+      Math.round(_existingEntry.totals?.protein||0) === Math.round(_rt.protein) &&
+      Math.round(_existingEntry.totals?.carbs||0) === Math.round(_rt.carbs);
 
     // ── DIAGNOSTIC LOGGING ──────────────────────────────────────────────────
     const _rollLog = {
