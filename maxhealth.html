@@ -3412,6 +3412,14 @@ body[data-theme="light"] {
       <button class="copy-btn" onclick="savePrecedence()" style="margin-top:12px;width:100%;">💾 SAVE PRECEDENCE</button>
       <div class="settings-hint" style="margin-top:8px;">Changes take effect on next sync. Re-import combined.csv after syncing.</div>
     </div>
+    <div class="section-title">Rollover Debug Log</div>
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;">Records exactly what happens each time the midnight rollover fires — for diagnosing date/data mismatches. Last 20 events.</div>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderRolloverDebugLog()">🔍 View rollover log</button>
+      <div id="rolloverDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearRolloverDebugLog()">Clear log</button>
+    </div>
+
     <div class="section-title">Data &amp; Backup</div>
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage</div>
@@ -3477,7 +3485,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.5.0</div>
+        <div class="settings-value">MaxedHealth v3.5.1</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4118,39 +4126,10 @@ function loadState() {
     const s = localStorage.getItem('maxhealth_v1');
     if (s) {
       const parsed = JSON.parse(s);
-      // Roll over if new day
-      if (parsed.lastDate !== todayStr()) {
-        if (parsed.todayLog.length > 0) {
-          const rolledTotals = calcTotals(parsed.todayLog);
-          // Remove any existing entry for this date before adding
-          parsed.history = parsed.history.filter(h => h.date !== parsed.lastDate);
-          parsed.history.unshift({
-            date: parsed.lastDate,
-            log: parsed.todayLog,
-            totals: rolledTotals,
-            mode: parsed.dayMode,
-            notes: parsed.notes,
-            weight: parsed.weight,
-            water_ml: parsed.waterToday || 0
-          });
-          // Auto-sync rolled day to master.csv
-          setTimeout(() => saveNutritionToServer(
-            parsed.lastDate,
-            Math.round(rolledTotals.kcal),
-            Math.round(rolledTotals.protein),
-            Math.round(rolledTotals.carbs),
-            parsed.notes || parsed.dayMode,
-            Math.round((rolledTotals.fat || 0) * 10) / 10
-          ), 1000);
-        }
-        parsed.todayLog = [];
-        parsed.notes = '';
-        parsed.dayMode = 'standard';
-        parsed.lastDate = todayStr();
-        parsed.waterToday = 0;
-        // Reset supplement log for new day — wrapped so it can't abort the rollover
-        try { resetSupplementLog(); } catch(e) { localStorage.setItem('mh_supplement_log', JSON.stringify({ date: todayStr() })); }
-      }
+      // NOTE: Rollover logic lives ONLY in updateDashboard() now.
+      // This used to also roll over here, causing a race condition that
+      // produced duplicate/incorrect history entries (two rollover systems
+      // firing independently). Do not re-add rollover logic here.
       return parsed;
     }
   } catch(e) {}
@@ -7947,7 +7926,7 @@ function updateDashboard() {
     if (b.classList.contains(mode)) b.classList.add('active');
   });
   setTimeout(initSwipeDelete, 100);
-  // Midnight rollover check — catches cases where app stayed open past midnight
+  // Midnight rollover check — SINGLE source of truth for rollover (do not duplicate elsewhere)
   if (state.lastDate && state.lastDate !== todayStr()) {
     const _rolloverDate = state.lastDate; // capture immediately before anything changes
     const _capturedLog = state.todayLog ? [...state.todayLog] : [];
@@ -7957,6 +7936,27 @@ function updateDashboard() {
     const _capturedWater = state.waterToday || 0;
     const _alreadyInHistory = (state.history||[]).some(h => h.date === _rolloverDate);
     const _hasLog = _capturedLog.length > 0;
+    const _rt = calcTotals(_capturedLog);
+
+    // ── DIAGNOSTIC LOGGING ──────────────────────────────────────────────────
+    const _rollLog = {
+      timestamp: new Date().toISOString(),
+      browserTodayStr: todayStr(),
+      rolloverDate: _rolloverDate,
+      capturedLogLength: _capturedLog.length,
+      capturedTotals: _rt,
+      capturedNotes: _capturedNotes,
+      alreadyInHistory: _alreadyInHistory,
+      hasLog: _hasLog,
+      willWrite: _hasLog && !_alreadyInHistory
+    };
+    console.warn('[ROLLOVER]', JSON.stringify(_rollLog, null, 2));
+    try {
+      const _rollHistory = JSON.parse(localStorage.getItem('mh_rollover_debug_log') || '[]');
+      _rollHistory.unshift(_rollLog);
+      localStorage.setItem('mh_rollover_debug_log', JSON.stringify(_rollHistory.slice(0, 20)));
+    } catch(e) {}
+    // ── END DIAGNOSTIC LOGGING ──────────────────────────────────────────────
 
     // Update lastDate FIRST — prevents any repeat rollover on next updateDashboard
     state.lastDate = todayStr();
@@ -7972,7 +7972,6 @@ function updateDashboard() {
 
     // Write history entry using captured data
     if (_hasLog && !_alreadyInHistory) {
-      const _rt = calcTotals(_capturedLog);
       state.history = (state.history || []).filter(h => h.date !== _rolloverDate);
       state.history.unshift({
         date: _rolloverDate, log: _capturedLog, totals: _rt,
@@ -15028,6 +15027,37 @@ function closePreviewOnboarding() {
   }
   const btn = document.getElementById('previewCloseBtn');
   if (btn) btn.remove();
+}
+
+// ─── ROLLOVER DEBUG LOG ──────────────────────────────────────────────────────
+function renderRolloverDebugLog() {
+  const out = document.getElementById('rolloverDebugOutput');
+  if (!out) return;
+  const log = JSON.parse(localStorage.getItem('mh_rollover_debug_log') || '[]');
+  if (log.length === 0) {
+    out.textContent = 'No rollover events recorded yet. This fires automatically once per day when the app is opened after midnight.';
+  } else {
+    out.textContent = log.map((e, i) =>
+      `#${i+1} — ${e.timestamp}\n` +
+      `  Browser today: ${e.browserTodayStr}\n` +
+      `  Rolling over date: ${e.rolloverDate}\n` +
+      `  Log entries captured: ${e.capturedLogLength}\n` +
+      `  Totals: ${e.capturedTotals.kcal}kcal, ${e.capturedTotals.protein}g P, ${e.capturedTotals.carbs}g C, ${e.capturedTotals.fat}g F\n` +
+      `  Notes captured: "${e.capturedNotes}"\n` +
+      `  Already in history: ${e.alreadyInHistory}\n` +
+      `  Will write to master.csv: ${e.willWrite}`
+    ).join('\n\n---\n\n');
+  }
+  out.style.display = 'block';
+}
+
+function clearRolloverDebugLog() {
+  appConfirm('Clear the rollover debug log?', () => {
+    localStorage.removeItem('mh_rollover_debug_log');
+    const out = document.getElementById('rolloverDebugOutput');
+    if (out) out.style.display = 'none';
+    showToast('Debug log cleared');
+  }, null, true);
 }
 
 // ─── DAILY INSIGHT ───────────────────────────────────────────────────────────
