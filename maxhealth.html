@@ -2588,9 +2588,12 @@ body[data-theme="light"] {
     </div>
 
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
-      <input id="librarySearch" class="modal-input" placeholder="🔍 Search library…"
-        style="flex:1;font-size:13px;padding:8px 12px;"
-        oninput="filterLibrary(this.value)">
+      <div style="position:relative;">
+        <input id="librarySearch" class="modal-input" placeholder="🔍 Search library…"
+          style="flex:1;font-size:13px;padding:8px 70px 8px 12px;width:100%;box-sizing:border-box;"
+          oninput="filterLibrary(this.value)">
+        <span id="librarySearchCount" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;pointer-events:none;"></span>
+      </div>
       <div style="display:flex;gap:6px;">
         <select id="libraryFilter" onchange="renderLibrary()"
           style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;cursor:pointer;flex:1;">
@@ -3496,7 +3499,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.6.0</div>
+        <div class="settings-value">MaxedHealth v3.6.1</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4483,21 +4486,7 @@ function jumpToLibraryLetter(letter) {
 function filterLibrary(query) {
   // Debounce for performance with large libraries
   clearTimeout(filterLibrary._timer);
-  filterLibrary._timer = setTimeout(() => _doFilterLibrary(query), 150);
-}
-function _doFilterLibrary(query) {
-  const searchVal = query || document.getElementById('librarySearch')?.value || '';
-  const q = searchVal.toLowerCase().trim();
-  const items = document.querySelectorAll('#libraryList .library-item, #libraryList .library-edit-form');
-  // Show/hide pairs (edit form + item)
-  const lib = loadLibrary();
-  lib.forEach((f, i) => {
-    const matches = !q || f.name.toLowerCase().includes(q);
-    const item = document.getElementById('lib-item-' + i);
-    const form = document.getElementById('lib-edit-form-' + i);
-    if (item) item.style.display = matches ? 'flex' : 'none';
-    if (form) form.style.display = matches && form.classList.contains('open') ? 'flex' : 'none';
-  });
+  filterLibrary._timer = setTimeout(() => renderLibrary(), 120);
 }
 
 function renderLibrary() {
@@ -4525,17 +4514,28 @@ function renderLibrary() {
     if (sort === 'recent')  return 0; // keep insertion order (most recent last)
     return 0;
   });
+  // Apply search query — filters both meals and ingredients identically, since this
+  // runs before the meals/ingredients split below. Matches against the food name only.
+  const searchQuery = (document.getElementById('librarySearch')?.value || '').toLowerCase().trim();
+  const searchedLib = searchQuery ? libWithIdx.filter(f => f.name.toLowerCase().includes(searchQuery)) : libWithIdx;
+
   // Split into meals and ingredients
   // isMeal: true = explicitly tagged as meal
   // isMeal: undefined = legacy entry — detect by portion '1 serving'
   // isMeal: false = explicitly tagged as ingredient
   const isMealEntry = f => f.isMeal === true || (f.isMeal === undefined && f.portion === '1 serving');
   const categoryFilter = document.getElementById('libraryFilter')?.value || 'all';
-  const filteredLib = categoryFilter === 'meals' ? libWithIdx.filter(f => isMealEntry(f))
-    : categoryFilter === 'ingredients' ? libWithIdx.filter(f => !isMealEntry(f))
-    : libWithIdx;
+  const filteredLib = categoryFilter === 'meals' ? searchedLib.filter(f => isMealEntry(f))
+    : categoryFilter === 'ingredients' ? searchedLib.filter(f => !isMealEntry(f))
+    : searchedLib;
   const meals = filteredLib.filter(f => isMealEntry(f));
   const ingredients = filteredLib.filter(f => !isMealEntry(f));
+
+  // Update the live match count next to the search box
+  const countEl = document.getElementById('librarySearchCount');
+  if (countEl) {
+    countEl.textContent = searchQuery ? `${filteredLib.length} match${filteredLib.length===1?'':'es'}` : '';
+  }
 
   const renderItems = (items) => items.filter(f => f && f.name).map((f, i) => {
     const origIdx = f._origIdx;
@@ -5886,13 +5886,15 @@ function renderActivityCard() {
       <div class="activity-row-bottom" style="flex-wrap:wrap;">
         <input type="number" class="activity-dur" placeholder="min" value="${act.duration||''}"
           ${!act.enabled ? 'disabled style="opacity:0.4;"' : ''}
-          onchange="updateActivity(${i}, 'duration', this.value)"
-          onblur="updateActivity(${i}, 'duration', this.value)" min="1" max="300">
+          oninput="updateActivity(${i}, 'duration', this.value, true)"
+          onchange="updateActivity(${i}, 'duration', this.value, false)"
+          onblur="updateActivity(${i}, 'duration', this.value, false)" min="1" max="300">
         ${act.needsDistance ? `
         <input type="number" class="activity-dur" style="width:64px;" placeholder="${act.distanceUnit==='miles'?'mi':'km'}" value="${act.distance||''}"
           ${!act.enabled ? 'disabled style="opacity:0.4;"' : ''}
-          onchange="updateActivity(${i}, 'distance', this.value)"
-          onblur="updateActivity(${i}, 'distance', this.value)" min="0" step="0.1">
+          oninput="updateActivity(${i}, 'distance', this.value, true)"
+          onchange="updateActivity(${i}, 'distance', this.value, false)"
+          onblur="updateActivity(${i}, 'distance', this.value, false)" min="0" step="0.1">
         <div style="display:flex;gap:2px;${!act.enabled?'opacity:0.4;':''}">
           <span onclick="${act.enabled?`setActivityDistanceUnit(${i},'km')`:''}" style="cursor:pointer;font-size:10px;padding:4px 6px;border-radius:4px;font-family:'Space Mono',monospace;background:${(act.distanceUnit||'km')==='km'?'var(--accent)':'var(--surface2)'};color:${(act.distanceUnit||'km')==='km'?'#000':'var(--text2)'};">km</span>
           <span onclick="${act.enabled?`setActivityDistanceUnit(${i},'miles')`:''}" style="cursor:pointer;font-size:10px;padding:4px 6px;border-radius:4px;font-family:'Space Mono',monospace;background:${act.distanceUnit==='miles'?'var(--accent)':'var(--surface2)'};color:${act.distanceUnit==='miles'?'#000':'var(--text2)'};">mi</span>
@@ -5905,6 +5907,8 @@ function renderActivityCard() {
         </select>
       </div>
       ${act.needsDistance && suggestedEffort ? `<div style="font-size:10px;color:var(--text3);padding-left:2px;width:100%;">${act._manualEffort ? 'Manually set · ' : 'Auto-calculated from pace & distance · '}<span onclick="resetActivityEffort(${i})" style="cursor:pointer;color:var(--accent);text-decoration:underline;${act._manualEffort?'':'display:none;'}">use auto</span></div>` : ''}
+      ${act.needsDistance ? `<div style="font-size:9px;color:var(--yellow);padding-left:2px;width:100%;font-family:'Space Mono',monospace;">DEBUG dist=${act.distance||'·'} unit=${act.distanceUnit||'km'} dur=${act.duration||'·'} suggested=${suggestedEffort||'null'} manual=${!!act._manualEffort}</div>` : ''}
+      ${act.needsDistance ? `<div style="font-size:9px;color:var(--yellow);padding-left:2px;width:100%;font-family:'Space Mono',monospace;">DEBUG: dist=${act.distance||'—'} unit=${act.distanceUnit||'km'} dur=${act.duration||'—'} suggested=${suggestedEffort||'null'} manual=${!!act._manualEffort}</div>` : ''}
     </div>`;
   }).join('');
   updateActivityNudge(acts);
@@ -5921,21 +5925,52 @@ function toggleActivity(idx, enabled) {
   updateDashboard();
 }
 
-function updateActivity(idx, field, val) {
+function updateActivity(idx, field, val, isLive) {
   const acts = getActivities();
   acts[idx][field] = val;
   if (field === 'effort') {
-    // User has explicitly chosen an effort — remember this is a manual override
     acts[idx]._manualEffort = true;
   } else if (field === 'distance' || field === 'duration') {
-    // Inputs that feed the auto-calculation changed — clear any manual override
-    // so the suggestion takes over again, reflecting the new numbers
     acts[idx]._manualEffort = false;
   }
   saveActivities(acts);
-  saveActivityToNotes(acts);
-  renderActivityCard();
-  updateDashboard();
+  if (isLive) {
+    // Lightweight update while typing — refresh only the kcal/effort text for this
+    // row without re-rendering the input itself, so focus and cursor position survive.
+    updateActivityRowLive(idx, acts[idx]);
+    updateDashboardTargetsOnly();
+  } else {
+    saveActivityToNotes(acts);
+    renderActivityCard();
+    updateDashboard();
+  }
+}
+
+function updateActivityRowLive(idx, act) {
+  const row = document.querySelectorAll('.activity-row')[idx];
+  if (!row) return;
+  const kcalEl = row.querySelector('.activity-kcal');
+  if (kcalEl) kcalEl.textContent = act.enabled && act.duration ? '+'+calcActivityKcal(act)+'kcal' : '';
+  let suggested = null;
+  if (act.needsDistance) {
+    suggested = calcSuggestedEffort(act);
+    const effortSelect = row.querySelector('.activity-effort');
+    if (effortSelect && suggested && !act._manualEffort) effortSelect.value = suggested;
+  }
+  // TEMPORARY DEBUG — refresh the on-screen debug line live, while typing
+  const debugEls = row.querySelectorAll('div');
+  debugEls.forEach(d => {
+    if (d.textContent.startsWith('DEBUG ')) {
+      d.textContent = `DEBUG dist=${act.distance||'·'} unit=${act.distanceUnit||'km'} dur=${act.duration||'·'} suggested=${suggested||'null'} manual=${!!act._manualEffort} [LIVE]`;
+    }
+  });
+}
+
+function updateDashboardTargetsOnly() {
+  // Refreshes just the calorie/protein/water target text without touching the
+  // activity card itself — called while typing in a duration/distance field so
+  // those inputs don't lose focus from a full re-render mid-keystroke.
+  if (typeof updateDashboard === 'function') updateDashboard(true);
 }
 
 function setActivityDistanceUnit(idx, unit) {
@@ -8017,14 +8052,14 @@ function autoResize(el) {
 }
 
 // ─── DASHBOARD ───────────────────────────────────────────
-function updateDashboard() {
+function updateDashboard(skipActivityRender) {
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
     if (savedNotes) state.notes = savedNotes;
   }
   updateOccasionBanner();
-  renderActivityCard();
+  if (!skipActivityRender) renderActivityCard();
   // Dynamic protein target
   const protTargetEl2 = document.getElementById('protTarget');
   if (protTargetEl2) {
