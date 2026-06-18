@@ -3502,7 +3502,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.6.5</div>
+        <div class="settings-value">MaxedHealth v3.6.6</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -14073,6 +14073,27 @@ function updateGBMStats() {
   if (fatPctEl) fatPctEl.textContent = avgFatPct + '%';
 }
 
+// Converts the GBM summary's raw AI text into HTML: evidence tags ([Proven] etc.)
+// get coloured spans matching the on-page key, **bold** markdown is rendered properly,
+// and paragraph breaks are preserved. Built because the AI was correctly tagging
+// recommendations per the prompt, but the tags were displaying as literal asterisks
+// with no colour at all — this is the missing rendering step.
+function formatGBMSummary(text) {
+  let html = text
+    // Escape any stray HTML first so the AI's text can't inject markup
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Evidence tags — match [Proven], [Early Stage], [Speculative], with or without
+    // surrounding ** markdown bold, case-insensitive, since AI output isn't 100% consistent
+    .replace(/\*{0,2}\[Proven\]\*{0,2}/gi, '<strong style="color:var(--accent);">[Proven]</strong>')
+    .replace(/\*{0,2}\[Early Stage\]\*{0,2}/gi, '<strong style="color:var(--yellow);">[Early Stage]</strong>')
+    .replace(/\*{0,2}\[Speculative\]\*{0,2}/gi, '<strong style="color:var(--text3);">[Speculative]</strong>')
+    // Remaining **bold** markdown (section intros, emphasis) — rendered, not literal
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Section headers in caps followed by — or : (KETOSIS ADHERENCE —, etc.) get a touch of emphasis
+    .replace(/^([A-Z][A-Z &]{4,40})(\s*[—:])/gm, '<strong style="color:var(--text);">$1</strong>$2');
+  return html;
+}
+
 async function generateGBMSummary() {
   const h = getReportHistory();
   if (h.length < 3) { showToast('Need at least 3 days of data'); return; }
@@ -14134,7 +14155,7 @@ Prose only. No bullet points. No medical disclaimers (patient has acknowledged).
       if (gbmData.error) { text = 'API error: ' + (gbmData.error.message || JSON.stringify(gbmData.error)); }
       else { text = gbmData.content?.[0]?.text || 'No content returned.'; }
     }
-    txt.textContent = text;
+    txt.innerHTML = formatGBMSummary(text);
     out.style.display = 'block';
   } catch(e) {
     txt.textContent = 'Error generating summary — check your connection and try again.';
