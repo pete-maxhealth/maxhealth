@@ -3502,7 +3502,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.6.4</div>
+        <div class="settings-value">MaxedHealth v3.6.5</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5958,11 +5958,15 @@ function updateActivity(idx, field, val, isLive) {
     acts[idx]._manualEffort = false;
   }
   saveActivities(acts);
-  if (isLive) {
-    // Lightweight update while typing — refresh only the kcal/effort text for this
-    // row without re-rendering the input itself, so focus and cursor position survive.
+  if (isLive || field === 'distance' || field === 'duration') {
+    // Lightweight update for both typing AND leaving distance/duration fields.
+    // A full renderActivityCard() here would destroy and recreate every input in
+    // the row right as focus moves toward a sibling field (e.g. tabbing from
+    // distance to duration), eating the next tap — needs a second tap to register.
+    // The live patch keeps kcal/effort visually correct without touching inputs.
     updateActivityRowLive(idx, acts[idx]);
     updateDashboardTargetsOnly();
+    saveActivityToNotes(acts);
   } else {
     saveActivityToNotes(acts);
     renderActivityCard();
@@ -5981,6 +5985,17 @@ function updateActivityRowLive(idx, act) {
     const effortSelect = row.querySelector('.activity-effort');
     if (effortSelect && suggested && !act._manualEffort) effortSelect.value = suggested;
   }
+  // Refresh the "Auto-calculated / Manually set · use auto" label text without a full
+  // re-render — this previously only updated via renderActivityCard(), which is now
+  // skipped on distance/duration blur specifically to preserve focus between fields.
+  const labelEls = row.querySelectorAll('div');
+  labelEls.forEach(d => {
+    if (d.textContent.startsWith('Auto-calculated from pace') || d.textContent.startsWith('Manually set')) {
+      d.innerHTML = act._manualEffort
+        ? `Manually set · <span onclick="resetActivityEffort(${idx})" style="cursor:pointer;color:var(--accent);text-decoration:underline;">use auto</span>`
+        : `Auto-calculated from pace & distance · <span onclick="resetActivityEffort(${idx})" style="cursor:pointer;color:var(--accent);text-decoration:underline;display:none;">use auto</span>`;
+    }
+  });
 }
 
 function updateDashboardTargetsOnly() {
