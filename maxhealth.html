@@ -2369,6 +2369,21 @@ body[data-theme="light"] {
 
     <!-- KETOSIS SMART ALERT -->
     <div id="ketoSmartAlert" style="display:none;padding:10px 14px;border-radius:var(--radius-sm);margin-bottom:12px;font-size:12px;line-height:1.6;"></div>
+    <!-- DAILY STEPS — separate from deliberate exercise. Informational only, never
+         feeds into calorie/effort calculations. Covers incidental movement (around
+         the house, errands) that doesn't warrant logging as a real Walking entry. -->
+    <div class="activity-card" id="dailyStepsCard" style="margin-bottom:10px;">
+      <div class="activity-card-title" style="cursor:pointer;" onclick="toggleSection('dash-steps','dash-steps-wrap','dash-steps-icon')">DAILY STEPS <span id="dash-steps-icon" style="font-size:10px;color:var(--text3);float:right;">▾</span></div>
+      <div id="dash-steps-wrap">
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+          <input type="text" id="dailyStepsInput" placeholder="e.g. 5000 or 5k"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;font-family:'Space Mono',monospace;"
+            onblur="saveDailySteps(this.value)" onchange="saveDailySteps(this.value)">
+          <span style="font-size:11px;color:var(--text3);">total for the day — separate from any logged walk</span>
+        </div>
+      </div>
+    </div>
+
     <!-- ACTIVITY CARD -->
     <div class="activity-card" id="activityCard">
       <div class="activity-card-title" style="cursor:pointer;" onclick="toggleSection('dash-activity','dash-activity-wrap','dash-activity-icon')">TODAY'S ACTIVITY <span id="activityTotalKcal" style="color:var(--accent);float:right;"></span><span id="dash-activity-icon" style="font-size:10px;color:var(--text3);margin-left:6px;">▾</span></div>
@@ -3553,7 +3568,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.6.8</div>
+        <div class="settings-value">MaxedHealth v3.6.9</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -8170,6 +8185,13 @@ function updateDashboard(skipActivityRender) {
   }
   updateOccasionBanner();
   if (!skipActivityRender) renderActivityCard();
+  // Restore the Daily Steps input from its saved value, and apply its collapse state —
+  // this card lives outside renderActivityCard()'s re-render, so needs its own refresh
+  const stepsInputEl = document.getElementById('dailyStepsInput');
+  if (stepsInputEl && document.activeElement !== stepsInputEl) {
+    stepsInputEl.value = localStorage.getItem('mh_steps_today') || '';
+  }
+  applySectionState('dash-steps', 'dash-steps-wrap', 'dash-steps-icon', true);
   // Dynamic protein target
   const protTargetEl2 = document.getElementById('protTarget');
   if (protTargetEl2) {
@@ -10250,9 +10272,22 @@ function toggleOccasionTag(tag) {
 
 function setOccasion(tag) { toggleOccasionTag(tag); }
 
+function saveDailySteps(rawVal) {
+  // Accepts plain numbers (5000) or shorthand with a trailing 'k' (5k, 5.5k),
+  // normalizing to a plain integer before storing — "5k" becomes "5000".
+  const input = document.getElementById('dailyStepsInput');
+  const trimmed = (rawVal || '').trim();
+  if (!trimmed) { updateStepsTag(''); if (input) input.value = ''; return; }
+  const kMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s*k$/i);
+  const normalized = kMatch ? Math.round(parseFloat(kMatch[1]) * 1000) : parseInt(trimmed.replace(/[^\d]/g, ''));
+  if (isNaN(normalized) || normalized < 0) { showToast('Enter a number, e.g. 5000 or 5k'); return; }
+  if (input) input.value = normalized; // reflect the normalized value back into the box
+  updateStepsTag(String(normalized));
+}
+
 function updateStepsTag(val) {
   localStorage.setItem('mh_steps_today', val || '');  // persist separately
-  const steps = parseInt(val);
+  const steps = parseInt(val) || 0; // val is already normalized to a plain integer by saveDailySteps
   // Remove any existing steps tag
   const tags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
   if (steps > 0) {
