@@ -3568,7 +3568,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.6.9</div>
+        <div class="settings-value">MaxedHealth v3.7.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -9277,7 +9277,7 @@ function renderHistory() {
           <span class="c">${day.totals.kcal}kcal</span>
           <span class="p">${day.totals.protein}g P</span>
           <span class="k">${day.totals.carbs}g C</span>
-          <span style="color:#a78bfa;font-size:11px;">${(() => { const f = day.totals?.fat; if (f && f > 0) return Math.round(f*10)/10; const k = day.totals?.kcal||0; const calc = Math.max(0,(k-(day.totals?.protein||0)*4-(day.totals?.carbs||0)*4)/9); return calc > 0 ? Math.round(calc) : 0; })()}g F</span>
+          <span style="color:#a78bfa;font-size:11px;">${getEntryFat(day)}g F</span>
         </div>
       </div>
       <div class="hist-day-body" id="histBody${i}">
@@ -11596,6 +11596,21 @@ const DRILL_CONFIG = {
   carbs:    { title: 'Carbohydrates',      unit: 'g',     color: '#f5c542', icon: '🌾', field: 'totals.carbs',    ref: null,     refLabel: '' },
 };
 
+// Returns a history entry's fat grams — uses the genuinely recorded value if present,
+// otherwise back-calculates it from kcal/protein/carbs (calories must balance across
+// the three macros, so this is the only fat figure consistent with the rest of the day's
+// numbers). Used anywhere a day's fat is displayed or aggregated, so entries from before
+// fat tracking existed (or where it was lost to a data bug) still show a sensible figure
+// rather than a misleading 0.
+function getEntryFat(entry) {
+  const t = entry?.totals || entry; // accept either a history entry or a totals object directly
+  if (t?.fat && t.fat > 0) return t.fat;
+  const kcal = t?.kcal || 0;
+  const protein = t?.protein || 0;
+  const carbs = t?.carbs || 0;
+  return Math.round(Math.max(0, (kcal - protein*4 - carbs*4) / 9) * 10) / 10;
+}
+
 function getFullBodyCompositionHistory() {
   // Reads the FULL combined.csv cache (every Withings day, not just nutrition-logged days)
   // and returns a clean, date-sorted array of {date, muscle_mass_kg, fat_mass_kg, muscle_pct, fat_pct}
@@ -13593,21 +13608,14 @@ function renderReportSummary() {
     ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:4px;">${sub}</div>`:''}
   </div>`;
   // Back-calculate fat for entries logged before fat tracking was added
-  const fats  = h.map(e=>{
-    if (e.totals?.fat && e.totals.fat > 0) return e.totals.fat;
-    const k = e.totals?.kcal||0;
-    return Math.max(0, (k - (e.totals?.protein||0)*4 - (e.totals?.carbs||0)*4) / 9);
-  });
+  const fats  = h.map(e => getEntryFat(e));
   const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
   const avgFat = av(fats);
   const avgFatPct = av(kcals) > 0 ? Math.round(avgFat * 9 / av(kcals) * 100) : 0;
-  const fatMisses = h.filter(e=>(e.totals?.fat||0)<fatTgt*0.7).length;
+  const fatMisses = h.filter(e=>getEntryFat(e)<fatTgt*0.7).length;
   const ketoRatioDays = h.filter(e=>{
     const k=e.totals?.kcal||0;
-    // Use recorded fat if present; back-calculate from kcal for pre-fat-tracking entries
-    const fatG = (e.totals?.fat && e.totals.fat > 0)
-      ? e.totals.fat
-      : Math.max(0, (k - (e.totals?.protein||0)*4 - (e.totals?.carbs||0)*4) / 9);
+    const fatG = getEntryFat(e);
     const f = fatG * 9;
     return k>200 && Math.round(f/k*100)>=65;
   }).length;
@@ -14222,17 +14230,12 @@ function updateGBMStats() {
   const n = h.length;
   const carbs = h.map(e => e.totals?.carbs || 0);
   const prots = h.map(e => e.totals?.protein || 0);
-  const fats  = h.map(e => e.totals?.fat || 0);
   const kcals = h.map(e => e.totals?.kcal || 0);
   const on = carbs.filter(c => c <= t.carbs).length;
   const avgCarb = Math.round(carbs.reduce((a,b)=>a+b,0)/n);
   const avgProt = Math.round(prots.reduce((a,b)=>a+b,0)/n);
   // Back-calculate fat for entries without recorded fat
-  const fatsCalc = h.map(e => {
-    if (e.totals?.fat && e.totals.fat > 0) return e.totals.fat;
-    const k = e.totals?.kcal || 0;
-    return Math.max(0, (k - (e.totals?.protein||0)*4 - (e.totals?.carbs||0)*4) / 9);
-  });
+  const fatsCalc = h.map(e => getEntryFat(e));
   const avgFat  = Math.round(fatsCalc.reduce((a,b)=>a+b,0)/n);
   const avgKcal = Math.round(kcals.reduce((a,b)=>a+b,0)/n);
   const avgFatPct = avgKcal > 0 ? Math.round(avgFat * 9 / avgKcal * 100) : 0;
