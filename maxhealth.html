@@ -3568,7 +3568,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.7.1</div>
+        <div class="settings-value">MaxedHealth v3.7.2</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -9418,6 +9418,16 @@ function deleteHistEntry(dayIdx, entryIdx) {
 function editHistDayTotalsByDate(date, renderIdx) {
   const dayIdx = state.history.findIndex(d => d.date === date);
   if (dayIdx === -1) { showToast('Day not found: ' + date); return; }
+  if (renderIdx === undefined) {
+    // Find the actual rendered position for this date by reading the DOM directly —
+    // dayIdx (real position in state.history) and renderIdx (position in the
+    // sorted/filtered/deduplicated render) are NOT the same once history is sorted,
+    // so this must search rather than assume they match.
+    const dateEls = document.querySelectorAll('.hist-day-date');
+    for (let k = 0; k < dateEls.length; k++) {
+      if (dateEls[k].textContent.trim() === date) { renderIdx = k; break; }
+    }
+  }
   editHistDayTotals(dayIdx, renderIdx);
 }
 
@@ -9459,6 +9469,22 @@ function editHistDayTotals(dayIdx, renderIdx) {
       </div>
     </div>
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
+      <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">DAY TYPE</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;" id="histDayTypeButtons-${dayIdx}">
+        ${(() => {
+          const currentMode = day.mode || ((day.notes||'').toLowerCase().includes('holiday') ? 'holiday' : (day.notes ? 'occasion' : 'standard'));
+          const modes = [
+            ['standard', '🟢 Standard', 'var(--green)', 'rgba(45,235,143,0.12)'],
+            ['occasion', '🟡 Occasion', 'var(--yellow)', 'rgba(245,197,66,0.12)'],
+            ['holiday',  '🔴 Holiday',  'var(--red)',    'rgba(255,94,94,0.12)'],
+          ];
+          return modes.map(([m,label,color,bg]) =>
+            `<span onclick="setHistDayType(${dayIdx},'${m}')" style="flex:1;text-align:center;padding:6px 4px;border-radius:8px;font-size:11px;cursor:pointer;border:1px solid ${currentMode===m?color:'var(--border)'};background:${currentMode===m?bg:'var(--surface)'};color:${currentMode===m?color:'var(--text3)'};">${label}</span>`
+          ).join('');
+        })()}
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">OCCASION TAGS</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;" id="histTagPicker-${dayIdx}">
         ${['Chemotherapy','Hospital day','Illness','Rest day','Social event','Travel','Fasting','Exercise','Resistance bands','Walking','Birthday'].map(t => {
@@ -9485,6 +9511,33 @@ function editHistDayTotals(dayIdx, renderIdx) {
       <button class="modal-btn confirm-new" style="flex:2;font-size:12px;padding:7px;" onclick="saveHistDayTotals(${dayIdx})">Save totals</button>
     </div>`;
   bodyEl.appendChild(form);
+}
+
+function setHistDayType(dayIdx, mode) {
+  const day = state.history[dayIdx];
+  if (!day) return;
+  const _legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+  const existingTags = (day.notes || '').split(',').map(t => t.trim()).filter(t => t && !_legacy.includes(t.toLowerCase()));
+
+  day.mode = mode;
+  if (mode === 'standard') {
+    // Standard with no tags clears notes entirely; if tags exist, keep them but mode stays standard per user's explicit choice
+    day.notes = existingTags.join(', ');
+  } else if (mode === 'holiday') {
+    // Holiday is itself a distinct day type, not an occasion tag — matches how the
+    // live dashboard's setDayMode('holiday') sets notes directly rather than tagging
+    day.notes = existingTags.length > 0 ? ['holiday', ...existingTags].join(', ') : 'holiday';
+  } else { // occasion
+    day.notes = existingTags.join(', ');
+  }
+  saveState();
+  showToast(`Day type set to ${mode} ✓`);
+  const dateForReopen = day.date;
+  renderHistory();
+  // Re-open the edit form for this day after re-render — uses the date-based lookup
+  // since renderIdx (position in the rendered list) can differ from dayIdx (real
+  // position in state.history) once history is filtered/sorted for display.
+  setTimeout(() => editHistDayTotalsByDate(dateForReopen), 50);
 }
 
 function toggleHistTag(dayIdx, tag) {
