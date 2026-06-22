@@ -2379,7 +2379,7 @@ body[data-theme="light"] {
           <input type="text" id="dailyStepsInput" placeholder="e.g. 5000 or 5k"
             style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;font-family:'Space Mono',monospace;"
             onblur="saveDailySteps(this.value)" onchange="saveDailySteps(this.value)">
-          <span style="font-size:11px;color:var(--text3);">your real total — overrides any estimate below</span>
+          <span style="font-size:11px;color:var(--text3);">your real total — overrides any estimate</span>
         </div>
         <div id="estimatedStepsLine" style="display:none;font-size:11px;color:var(--text3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);"></div>
       </div>
@@ -3571,7 +3571,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.8.2</div>
+        <div class="settings-value">MaxedHealth v3.8.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6069,6 +6069,33 @@ function getEstimatedStepsToday() {
   return totalSteps;
 }
 
+function getNonWalkingStepsToday() {
+  // Daily Steps is the user's TRUE whole-day total — covering everything, including
+  // any steps taken during a logged walk. To avoid double-counting that walk's
+  // effort (once via its own MET calculation, again via the day's total step count
+  // sitting there inert), the steps attributable to logged walks are subtracted out.
+  // The remainder — movement with no associated deliberate exercise — still counts
+  // as genuine Easy-effort activity and contributes to active calories, since it's
+  // real movement regardless of whether it was logged as a "walk."
+  const realTotal = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+  if (realTotal <= 0) return { remainder: 0, walkingSteps: 0, hasRealTotal: false };
+  const walkingSteps = getEstimatedStepsToday();
+  const remainder = Math.max(0, realTotal - walkingSteps);
+  return { remainder, walkingSteps, hasRealTotal: true };
+}
+
+function calcNonWalkingStepsKcal(remainder) {
+  // Easy-effort calorie estimate for incidental steps not attributed to a logged
+  // walk. Uses the same MET-based approach as everything else, converting steps to
+  // an approximate distance at a gentle pace, rather than a separate ad-hoc formula.
+  if (!remainder || remainder <= 0) return 0;
+  const approxMiles = remainder / 2200; // inverse of the steps-per-mile estimate
+  const weight = state.weight || 90;
+  const easyMph = 2.3; // gentle, incidental-movement pace
+  const hours = approxMiles / easyMph;
+  return Math.round(MET.walking.Easy * weight * hours);
+}
+
 function appInfo(title, message) {
   const overlay = document.createElement('div');
   overlay.className = 'app-modal-overlay';
@@ -6086,9 +6113,10 @@ function appInfo(title, message) {
 }
 
 function showStepsEstimateInfo() {
-  appInfo('Estimated steps, explained',
-    `When you log a walk with real distance and duration, but haven't entered your watch's actual step count, MaxedHealth makes an educated guess based on your pace — roughly 2,000–2,250 steps per mile, adjusted slightly for how fast you're walking.<br><br>` +
-    `This counts as genuine movement (Easy effort) for the day — it's still real exercise, just measured by maths instead of a sensor. It's a backup, not a replacement: if you type in your watch's real total, that always wins.`
+  appInfo('How Daily Steps works',
+    `Daily Steps is your TRUE whole-day total — everything, including any steps taken during a logged walk.<br><br>` +
+    `To avoid counting a walk's effort twice (once as its own exercise entry, again as inert steps sitting in your day's total), MaxedHealth subtracts the steps estimated from any logged walk first. Whatever's left over — movement that wasn't part of a deliberate walk — still counts as genuine Easy-effort activity, since it's real movement either way, and contributes to your day's active calories.<br><br>` +
+    `If you haven't entered a real Daily Steps figure yet, you'll instead see an estimate based purely on today's logged walking — a backup for when the watch missed a sync or you forgot to check it. Your real watch total always takes priority once entered.`
   );
 }
 
@@ -8442,18 +8470,31 @@ function updateDashboard(skipActivityRender) {
     stepsInputEl.value = localStorage.getItem('mh_steps_today') || '';
   }
   applySectionState('dash-steps', 'dash-steps-wrap', 'dash-steps-icon', true);
-  // Estimated steps fallback — only shown when no real figure has been entered,
-  // and never overrides one that has. Backup method for when the watch missed a
-  // sync or you forgot to check it; sums every distance-based activity logged today.
+  // Steps display has two states:
+  // 1. No real Daily Steps entered — show the fallback estimate from logged walks alone
+  // 2. Real Daily Steps entered — show the breakdown: real total minus walking steps
+  //    (already counted via the walk's own MET calc) = remainder, which counts as
+  //    genuine Easy-effort movement in its own right.
   const estStepsEl = document.getElementById('estimatedStepsLine');
   if (estStepsEl) {
     const hasRealEntry = !!(localStorage.getItem('mh_steps_today') || '').trim();
-    const estimated = getEstimatedStepsToday();
-    if (!hasRealEntry && estimated > 0) {
-      estStepsEl.style.display = 'block';
-      estStepsEl.innerHTML = `≈ <strong style="color:var(--accent);">${estimated.toLocaleString()}</strong> steps estimated from today's logged walking — counts as Easy effort, since it's still real movement. <span onclick="showStepsEstimateInfo()" style="cursor:pointer;color:var(--accent);text-decoration:underline;">What's this?</span>`;
+    if (hasRealEntry) {
+      const breakdown = getNonWalkingStepsToday();
+      if (breakdown.walkingSteps > 0) {
+        estStepsEl.style.display = 'block';
+        const remainderKcal = calcNonWalkingStepsKcal(breakdown.remainder);
+        estStepsEl.innerHTML = `${breakdown.remainder.toLocaleString()} steps weren't part of a logged walk (${breakdown.walkingSteps.toLocaleString()} already counted there) — counted as <strong style="color:var(--accent);">Easy effort, +${remainderKcal}kcal</strong> <span onclick="showStepsEstimateInfo()" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;margin-left:2px;">!</span>`;
+      } else {
+        estStepsEl.style.display = 'none';
+      }
     } else {
-      estStepsEl.style.display = 'none';
+      const estimated = getEstimatedStepsToday();
+      if (estimated > 0) {
+        estStepsEl.style.display = 'block';
+        estStepsEl.innerHTML = `≈ <strong style="color:var(--accent);">${estimated.toLocaleString()}</strong> steps estimated from today's logged walking <span onclick="showStepsEstimateInfo()" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;margin-left:2px;">!</span>`;
+      } else {
+        estStepsEl.style.display = 'none';
+      }
     }
   }
   // Dynamic protein target
@@ -8722,7 +8763,8 @@ function updateDashboard(skipActivityRender) {
   }
 
   // Activity calorie adjustment
-  const activityExtra = getActivities().reduce((sum, a) => sum + calcActivityKcal(a), 0);
+  const activityExtra = getActivities().reduce((sum, a) => sum + calcActivityKcal(a), 0)
+    + calcNonWalkingStepsKcal(getNonWalkingStepsToday().remainder);
   const adjustedKcalTarget = targets.kcal + activityExtra;
   const calTargetEl = document.getElementById('calTarget');
   if (calTargetEl) calTargetEl.textContent = activityExtra > 0 ? `/ ${adjustedKcalTarget} kcal (+${activityExtra})` : `/ ${targets.kcal}`;
