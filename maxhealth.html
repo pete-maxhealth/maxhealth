@@ -3603,7 +3603,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.9.0</div>
+        <div class="settings-value">MaxedHealth v3.9.1</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6376,7 +6376,13 @@ function renderActivityCard() {
     const todayEntry = state.history.find(h => h.date === todayStr());
     const wearKcal = todayEntry?.calories_active;
     const metKcal = acts.reduce((sum, a) => sum + calcActivityKcalRaw(a), 0);
-    if (wearKcal && metKcal > 0) {
+    // Plausibility check: if the watch figure is far smaller than what's actually
+    // been logged today, that's almost certainly a stale or partial sync (e.g. the
+    // wearable data hasn't refreshed since earlier in the day), not a genuine
+    // disagreement worth showing or — worse — feeding into calibration, where a
+    // single bad point would poison the personal correction factor going forward.
+    const wearDataLooksStale = wearKcal && metKcal > 0 && wearKcal < metKcal * 0.4;
+    if (wearKcal && metKcal > 0 && !wearDataLooksStale) {
       recordCalibrationPoint(metKcal, wearKcal, todayStr());
       const diff = wearKcal - metKcal;
       const diffPct = Math.round(Math.abs(diff) / metKcal * 100);
@@ -6390,6 +6396,10 @@ function renderActivityCard() {
         html += ` ${cal.points} comparison days logged so far — personal calibration kicks in at 10 days.`;
       }
       activityDetailEl.innerHTML = html;
+    } else if (wearDataLooksStale) {
+      activityHeadlineEl.style.display = 'block';
+      activityHeadlineEl.innerHTML = `⌚ Watch data looks out of date <span style="color:var(--text3);float:right;">details ▾</span>`;
+      activityDetailEl.innerHTML = `Watch shows only ${wearKcal}kcal active today, but ${Math.round(metKcal)}kcal is already logged from real activity — that gap usually means today's sync hasn't caught up yet. Re-sync your wearable for an accurate comparison; this reading isn't being used for calibration.`;
     } else {
       activityHeadlineEl.style.display = 'none';
     }
