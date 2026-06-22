@@ -3610,7 +3610,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.9.3</div>
+        <div class="settings-value">MaxedHealth v3.9.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -10708,11 +10708,13 @@ function setHistFilter(f, btn) {
 const OCCASION_TAGS = ['Chemotherapy','Hospital day','Illness','Social event','Travel','Fasting','Exercise','Birthday'];
 
 // Multi-tag occasion system — tags stored as comma-separated string in state.notes
-function _getOccasionTags() {
+function _getOccasionTags(excludeActivitySummaries) {
   if (!state.notes || state.notes === 'occasion' || state.notes === 'standard' || state.notes === 'holiday') return [];
   const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
-  return state.notes.split(',').map(t => t.trim())
-    .filter(t => t && !legacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
+  let tags = state.notes.split(',').map(t => t.trim())
+    .filter(t => t && !legacy.includes(t.toLowerCase()));
+  if (excludeActivitySummaries) tags = tags.filter(t => !t.match(/^\d+min /i));
+  return tags;
 }
 
 function _setOccasionTags(tags) {
@@ -10749,7 +10751,7 @@ function toggleOccasionPicker() {
 }
 
 function renderOccasionTags() {
-  const active = _getOccasionTags().map(t => t.toLowerCase());
+  const active = _getOccasionTags(true).map(t => t.toLowerCase());
   document.querySelectorAll('.occasion-tag').forEach(tag => {
     const label = tag.textContent.trim().replace(/^\S+\s*/,'').toLowerCase().trim();
     tag.classList.toggle('active', active.includes(label));
@@ -10772,7 +10774,7 @@ function renderOccasionTags() {
 }
 
 function toggleOccasionTag(tag) {
-  const tags = _getOccasionTags();
+  const tags = _getOccasionTags(); // full list, including activity summaries — this writes back via _setOccasionTags, so anything excluded here would be permanently lost
   const idx = tags.findIndex(t => t.toLowerCase() === tag.toLowerCase());
   if (idx >= 0) {
     tags.splice(idx, 1);
@@ -10812,13 +10814,23 @@ function saveDailySteps(rawVal) {
 function updateStepsTag(val) {
   localStorage.setItem('mh_steps_today', val || '');  // persist separately
   const steps = parseInt(val) || 0; // val is already normalized to a plain integer by saveDailySteps
-  // Remove any existing steps tag
-  const tags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
+  // IMPORTANT: _getOccasionTags() deliberately excludes activity-derived summaries
+  // like "45min Resistance" (added so the Occasion tag-picker doesn't treat them as
+  // toggleable tags) — but that means using it as the sole source of truth here would
+  // silently discard exercise tags every time steps are edited, since _setOccasionTags
+  // writes back exactly what it's given with nothing else preserved. Activity summaries
+  // must be read and re-appended separately, the same way saveActivityToNotes builds them.
+  const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+  const allCurrentTags = (state.notes || '').split(',').map(t => t.trim()).filter(Boolean);
+  const activitySummaryTags = allCurrentTags.filter(t => t.match(/^\d+min /i));
+  const occasionTags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
+  const newTags = [...occasionTags];
   if (steps > 0) {
     const label = steps >= 1000 ? `${Math.round(steps/1000*10)/10}k steps` : `${steps} steps`;
-    tags.push(label);
+    newTags.push(label);
   }
-  _setOccasionTags(tags);
+  newTags.push(...activitySummaryTags); // re-append exercise tags that _getOccasionTags excluded
+  _setOccasionTags(newTags);
   saveState();
   renderOccasionTags();
   updateOccasionBanner();
