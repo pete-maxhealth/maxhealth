@@ -3567,11 +3567,23 @@ body[data-theme="light"] {
     </div>
     </div>
 
+    <div class="section-title" style="cursor:pointer;" onclick="toggleSection('set-stepsbaseline','set-stepsbaseline-wrap','set-stepsbaseline-icon')">Incidental Steps Baseline <span id="set-stepsbaseline-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-stepsbaseline-wrap">
+    <div class="settings-card" style="padding:14px 16px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">If your TDEE was calculated assuming a "Moderate" or more active lifestyle, that figure already includes an assumed amount of daily incidental movement. To avoid double-counting, Daily Steps only credits extra calories for non-walk steps <em>above</em> this baseline — a sedentary TDEE assumption would mean a lower baseline (or 0), while Moderate/Active assumes more is already covered.</div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input class="settings-input" type="number" id="settingStepsBaseline" placeholder="7500" style="flex:1;">
+        <span style="font-size:13px;color:var(--text3);">steps/day</span>
+        <button class="settings-save-btn" onclick="saveStepsBaseline()">Save</button>
+      </div>
+    </div>
+    </div>
+
     <div class="section-title">About</div>
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.8.3</div>
+        <div class="settings-value">MaxedHealth v3.8.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4697,10 +4709,13 @@ function renderLibrary() {
   applySectionState('lib-ingredients',  'lib-ingredients-wrap',  'lib-ingredients-icon',  true);
   applySectionState('lib-recipes',      'lib-recipes-wrap',      'lib-recipes-icon',      true);
 
-  // Build A-Z quick nav
+  // Build A-Z quick nav — uses the FULL library (libWithIdx), not the currently
+  // search/category-filtered subset, so letters don't disappear as you type a
+  // search query. The nav should answer "what letters exist in my whole library,"
+  // not "what letters exist among today's filtered results."
   const alphaNav = document.getElementById('libraryAlphaNav');
   if (alphaNav) {
-    const letters = [...new Set(filteredLib.map(f => f.name[0]?.toUpperCase()).filter(Boolean))].sort();
+    const letters = [...new Set(libWithIdx.map(f => f.name[0]?.toUpperCase()).filter(Boolean))].sort();
     alphaNav.innerHTML = letters.map(l =>
       `<button onclick="jumpToLibraryLetter('${l}')"
         style="min-width:24px;padding:3px 5px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text2);font-size:11px;font-family:Space Mono,monospace;cursor:pointer;">${l}</button>`
@@ -4713,7 +4728,6 @@ function renderLibrary() {
   }
 }
 
-  renderRecipeList();
 function quickLogDefaultPortion(index) {
   // Log immediately at the library's stored portion — no modal
   const lib = loadLibrary();
@@ -5309,6 +5323,8 @@ function initSettings() {
   // Fibre target
   const waterTargetInput = document.getElementById('settingWaterTarget');
   if (waterTargetInput) waterTargetInput.value = localStorage.getItem('mh_target_water') || 2000;
+  const stepsBaselineInput = document.getElementById('settingStepsBaseline');
+  if (stepsBaselineInput) stepsBaselineInput.value = localStorage.getItem('mh_steps_baseline') || 7500;
   // Render supplement settings
   renderSupplementSettings();
   // Apply saved collapse states for all Settings sections
@@ -5323,6 +5339,7 @@ function initSettings() {
     ['set-carer',         'set-carer-wrap',         'set-carer-icon',         true],
     ['set-notifications', 'set-notifications-wrap', 'set-notifications-icon', true],
     ['set-water',         'set-water-wrap',         'set-water-icon',         true],
+    ['set-stepsbaseline', 'set-stepsbaseline-wrap', 'set-stepsbaseline-icon', true],
     ['set-supplements',   'supplementSettingsContent', 'set-supplements-icon', true],
     ['set-appearance',    'set-appearance-wrap',    'set-appearance-icon',    true],
   ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
@@ -5470,6 +5487,15 @@ function saveWaterTarget() {
     localStorage.setItem('mh_target_water', val);
     updateDashboard();
     showToast(`Water target saved: ${val}ml/day`);
+  }
+}
+
+function saveStepsBaseline() {
+  const val = parseInt(document.getElementById('settingStepsBaseline')?.value);
+  if (!isNaN(val) && val >= 0) {
+    localStorage.setItem('mh_steps_baseline', val);
+    updateDashboard();
+    showToast(`Steps baseline saved: ${val.toLocaleString()}/day`);
   }
 }
 
@@ -6088,8 +6114,17 @@ function calcNonWalkingStepsKcal(remainder) {
   // Easy-effort calorie estimate for incidental steps not attributed to a logged
   // walk. Uses the same MET-based approach as everything else, converting steps to
   // an approximate distance at a gentle pace, rather than a separate ad-hoc formula.
-  if (!remainder || remainder <= 0) return 0;
-  const approxMiles = remainder / 2200; // inverse of the steps-per-mile estimate
+  //
+  // IMPORTANT: only steps ABOVE the baseline are credited. A "Moderate" TDEE
+  // activity multiplier already assumes a meaningful amount of daily incidental
+  // movement — crediting calories from the very first incidental step would
+  // double-count against that assumption. mh_steps_baseline represents "how many
+  // incidental steps does my TDEE setting already assume," editable in Settings
+  // since not everyone's TDEE was calculated the same way.
+  const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+  const aboveBaseline = Math.max(0, (remainder || 0) - baseline);
+  if (aboveBaseline <= 0) return 0;
+  const approxMiles = aboveBaseline / 2200;
   const weight = state.weight || 90;
   const easyMph = 2.3; // gentle, incidental-movement pace
   const hours = approxMiles / easyMph;
@@ -8480,10 +8515,15 @@ function updateDashboard(skipActivityRender) {
     const hasRealEntry = !!(localStorage.getItem('mh_steps_today') || '').trim();
     if (hasRealEntry) {
       const breakdown = getNonWalkingStepsToday();
-      if (breakdown.walkingSteps > 0) {
+      const remainderKcal = calcNonWalkingStepsKcal(breakdown.remainder);
+      const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+      const aboveBaseline = Math.max(0, breakdown.remainder - baseline);
+      if (breakdown.remainder > 0) {
         estStepsEl.style.display = 'block';
-        const remainderKcal = calcNonWalkingStepsKcal(breakdown.remainder);
-        estStepsEl.innerHTML = `${breakdown.remainder.toLocaleString()} steps weren't part of a logged walk (${breakdown.walkingSteps.toLocaleString()} already counted there) — counted as <strong style="color:var(--accent);">Easy effort, +${remainderKcal}kcal</strong> <span onclick="showStepsEstimateInfo()" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;margin-left:2px;">!</span>`;
+        const walkNote = breakdown.walkingSteps > 0 ? ` (${breakdown.walkingSteps.toLocaleString()} from logged walking already counted there)` : '';
+        estStepsEl.innerHTML = remainderKcal > 0
+          ? `${breakdown.remainder.toLocaleString()} non-walk steps today${walkNote}. First ${Math.min(breakdown.remainder,baseline).toLocaleString()} are within your usual baseline; the remaining ${aboveBaseline.toLocaleString()} count as <strong style="color:var(--accent);">Easy effort, +${remainderKcal}kcal</strong> <span onclick="showStepsEstimateInfo()" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;margin-left:2px;">!</span>`
+          : `${breakdown.remainder.toLocaleString()} non-walk steps today${walkNote} — within your usual baseline, no extra calories credited <span onclick="showStepsEstimateInfo()" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent-dim);color:var(--accent);font-size:11px;font-weight:700;margin-left:2px;">!</span>`;
       } else {
         estStepsEl.style.display = 'none';
       }
@@ -10569,7 +10609,9 @@ const OCCASION_TAGS = ['Chemotherapy','Hospital day','Illness','Social event','T
 // Multi-tag occasion system — tags stored as comma-separated string in state.notes
 function _getOccasionTags() {
   if (!state.notes || state.notes === 'occasion' || state.notes === 'standard' || state.notes === 'holiday') return [];
-  return state.notes.split(',').map(t => t.trim()).filter(Boolean);
+  const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+  return state.notes.split(',').map(t => t.trim())
+    .filter(t => t && !legacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
 }
 
 function _setOccasionTags(tags) {
@@ -10737,15 +10779,20 @@ function updateOccasionBanner() {
 
 function setDayMode(mode) {
   state.dayMode = mode;
+  const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+  // Preserve everything that isn't a legacy mode-word — occasion tags AND
+  // activity-derived summaries like "45min Resistance" both need to survive a
+  // day-type switch. Previously 'holiday' unconditionally overwrote state.notes
+  // with just the word 'holiday', silently discarding both.
+  const existingTags = (state.notes || '').split(',').map(t => t.trim())
+    .filter(t => t && !legacy.includes(t.toLowerCase()));
   if (mode === 'standard') {
-    const tags = _getOccasionTags();
-    if (tags.length === 0) {
-      state.notes = '';
-      localStorage.removeItem('mh_today_notes');
-    }
+    state.notes = existingTags.join(', ');
+    if (!state.notes) localStorage.removeItem('mh_today_notes');
+    else localStorage.setItem('mh_today_notes', state.notes);
   } else if (mode === 'holiday') {
-    state.notes = 'holiday';
-    localStorage.setItem('mh_today_notes', 'holiday');
+    state.notes = existingTags.length > 0 ? ['holiday', ...existingTags].join(', ') : 'holiday';
+    localStorage.setItem('mh_today_notes', state.notes);
   }
   // For occasion, notes managed by toggleOccasionTag
   saveState();
