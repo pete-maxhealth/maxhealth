@@ -2379,8 +2379,9 @@ body[data-theme="light"] {
           <input type="text" id="dailyStepsInput" placeholder="e.g. 5000 or 5k"
             style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;font-family:'Space Mono',monospace;"
             onblur="saveDailySteps(this.value)" onchange="saveDailySteps(this.value)">
-          <span style="font-size:11px;color:var(--text3);">total for the day — separate from any logged walk</span>
+          <span style="font-size:11px;color:var(--text3);">your real total — overrides any estimate below</span>
         </div>
+        <div id="estimatedStepsLine" style="display:none;font-size:11px;color:var(--text3);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);"></div>
       </div>
     </div>
 
@@ -3570,7 +3571,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.8.1</div>
+        <div class="settings-value">MaxedHealth v3.8.2</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6037,6 +6038,60 @@ function recordActivityHistoryPoint(act, date) {
   localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(log));
 }
 
+function estimateStepsForDistance(miles, mph) {
+  // Estimates steps from distance using a pace-adjusted steps-per-mile figure.
+  // Reasonable adult average sits around 2,000-2,250 steps/mile; faster walking
+  // tends to mean a longer stride and slightly FEWER steps per mile, not more —
+  // this is a deliberately simple linear adjustment, not a precise biomechanical
+  // model, since it's a fallback for missing watch data, not a replacement for it.
+  if (!miles || miles <= 0) return 0;
+  const baseStepsPerMile = 2200;
+  const paceAdjustment = mph ? Math.max(0.85, Math.min(1.1, 1 - (mph - 3) * 0.04)) : 1;
+  return Math.round(miles * baseStepsPerMile * paceAdjustment);
+}
+
+function getEstimatedStepsToday() {
+  // Sums estimated steps across EVERY distance-based activity logged today, not
+  // just one — covers the multi-walk-in-a-day case (e.g. a morning stroll and an
+  // evening proper walk both logged separately). Used only as a fallback display
+  // when no real Daily Steps figure has been entered for today; a genuine watch-
+  // sourced number always takes priority and this never overrides it.
+  const acts = getActivities();
+  let totalSteps = 0;
+  acts.forEach(act => {
+    if (!act.enabled || !act.needsDistance || !act.distance || !act.duration) return;
+    const miles = milesFromDistance(act.distance, act.distanceUnit || 'km');
+    const hours = parseFloat(act.duration) / 60;
+    if (!miles || !hours) return;
+    const mph = miles / hours;
+    totalSteps += estimateStepsForDistance(miles, mph);
+  });
+  return totalSteps;
+}
+
+function appInfo(title, message) {
+  const overlay = document.createElement('div');
+  overlay.className = 'app-modal-overlay';
+  overlay.innerHTML = `
+    <div class="app-modal">
+      <div class="app-modal-title">${title}</div>
+      <div class="app-modal-msg">${message}</div>
+      <div class="app-modal-btns">
+        <button class="app-modal-btn confirm" id="appInfoOk" style="width:100%;">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#appInfoOk').onclick = () => overlay.remove();
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+}
+
+function showStepsEstimateInfo() {
+  appInfo('Estimated steps, explained',
+    `When you log a walk with real distance and duration, but haven't entered your watch's actual step count, MaxedHealth makes an educated guess based on your pace — roughly 2,000–2,250 steps per mile, adjusted slightly for how fast you're walking.<br><br>` +
+    `This counts as genuine movement (Easy effort) for the day — it's still real exercise, just measured by maths instead of a sensor. It's a backup, not a replacement: if you type in your watch's real total, that always wins.`
+  );
+}
+
 function getUserTypicalPace(activityName) {
   // Average pace from recent matching entries in the activity history log, falling
   // back to the Moderate band's midpoint if there's no real history yet for this
@@ -8387,6 +8442,20 @@ function updateDashboard(skipActivityRender) {
     stepsInputEl.value = localStorage.getItem('mh_steps_today') || '';
   }
   applySectionState('dash-steps', 'dash-steps-wrap', 'dash-steps-icon', true);
+  // Estimated steps fallback — only shown when no real figure has been entered,
+  // and never overrides one that has. Backup method for when the watch missed a
+  // sync or you forgot to check it; sums every distance-based activity logged today.
+  const estStepsEl = document.getElementById('estimatedStepsLine');
+  if (estStepsEl) {
+    const hasRealEntry = !!(localStorage.getItem('mh_steps_today') || '').trim();
+    const estimated = getEstimatedStepsToday();
+    if (!hasRealEntry && estimated > 0) {
+      estStepsEl.style.display = 'block';
+      estStepsEl.innerHTML = `≈ <strong style="color:var(--accent);">${estimated.toLocaleString()}</strong> steps estimated from today's logged walking — counts as Easy effort, since it's still real movement. <span onclick="showStepsEstimateInfo()" style="cursor:pointer;color:var(--accent);text-decoration:underline;">What's this?</span>`;
+    } else {
+      estStepsEl.style.display = 'none';
+    }
+  }
   // Dynamic protein target
   const protTargetEl2 = document.getElementById('protTarget');
   if (protTargetEl2) {
