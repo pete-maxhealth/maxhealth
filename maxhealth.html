@@ -3568,7 +3568,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.7.2</div>
+        <div class="settings-value">MaxedHealth v3.7.3</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5327,11 +5327,29 @@ function initSettings() {
 
 function setGoal(goal) {
   localStorage.setItem('mh_goal', goal);
+  // Calorie targets per goal — uses Pete's own confirmed, weight-trend-validated
+  // figures rather than a generic TDEE±offset formula, since those didn't agree
+  // with his real numbers (gain target is 3670, not tdee+250 against the 3420 fallback).
   const tdee = parseInt(localStorage.getItem('mh_tdee') || '3420');
-  const kcalMap = { lose: tdee - 500, maintain: tdee, gain: tdee + 250 };
-  const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: '+250 kcal surplus' };
+  const kcalMap = {
+    lose:     tdee - 500,
+    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
+    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+  };
+  const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
   const kcal = kcalMap[goal] || tdee;
   localStorage.setItem('mh_target_kcal', kcal);
+
+  // Recalculate fat to genuinely fuel this goal's calorie target, rather than leaving
+  // it at whatever was set for a different goal. Protein stays fixed — it's there to
+  // preserve muscle regardless of calorie phase, that need doesn't shrink on maintenance.
+  // Carbs stay at the existing ceiling. Fat fills whatever's left, the same balance-of-
+  // macros principle used to fix the earlier 248g/3670kcal mismatch.
+  const protein = parseInt(localStorage.getItem('mh_target_protein')) || 165;
+  const carbCeiling = parseInt(localStorage.getItem('mh_ceil_standard')) || 50;
+  const newFat = Math.max(0, Math.round((kcal - protein*4 - carbCeiling*4) / 9));
+  localStorage.setItem('mh_target_fat', newFat);
+
   // Update UI
   ['lose','maintain','gain'].forEach(g => {
     const btn = document.getElementById('goalBtn' + g.charAt(0).toUpperCase() + g.slice(1));
@@ -5340,11 +5358,25 @@ function setGoal(goal) {
   const activeBtn = document.getElementById('goalBtn' + goal.charAt(0).toUpperCase() + goal.slice(1));
   if (activeBtn) { activeBtn.style.background = 'var(--accent-dim)'; activeBtn.style.color = 'var(--accent)'; activeBtn.style.borderColor = 'var(--accent)'; }
   const descEl = document.getElementById('goalDesc');
-  if (descEl) descEl.textContent = descMap[goal] + ' — ' + kcal + ' kcal/day';
+  if (descEl) descEl.textContent = descMap[goal] + ' — ' + kcal + ' kcal/day, ' + newFat + 'g fat';
   const kcalEl = document.getElementById('settingKcalTarget');
   if (kcalEl) kcalEl.value = kcal;
+  const fatSettingEl = document.getElementById('settingFatTarget');
+  if (fatSettingEl) fatSettingEl.value = newFat;
+  // Refresh the ketosis advice text and live % feedback, since both were calculated
+  // from the old kcal/fat values and would otherwise show stale guidance until
+  // Settings happens to be reloaded
+  const ketoFat65 = Math.round(kcal * 0.65 / 9);
+  const ketoFat70 = Math.round(kcal * 0.70 / 9);
+  const adviceEl = document.getElementById('fatTargetAdvice');
+  if (adviceEl) adviceEl.textContent = `For ketogenic ratio (65–70% of calories from fat) at ${kcal} kcal: ${ketoFat65}–${ketoFat70}g fat/day`;
+  const fatPct = Math.round(newFat * 9 / kcal * 100);
+  if (adviceEl) {
+    adviceEl.textContent += ` — this goal's ${newFat}g = ${fatPct}% of calories${fatPct >= 65 ? ' ✓ Ketogenic' : fatPct >= 50 ? ' — borderline' : ' — too low for therapeutic ketosis'}`;
+    adviceEl.style.color = fatPct >= 65 ? 'var(--accent)' : fatPct >= 50 ? 'var(--yellow)' : 'var(--red)';
+  }
   updateDashboard();
-  showToast('Goal updated: ' + goal + ' (' + kcal + ' kcal)');
+  showToast(`Goal updated: ${goal} (${kcal} kcal, ${newFat}g fat)`);
 }
 
 function saveCarbCeilings() {
