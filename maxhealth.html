@@ -3610,7 +3610,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.9.5</div>
+        <div class="settings-value">MaxedHealth v3.9.6</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4267,6 +4267,17 @@ function loadState() {
 }
 
 let state = loadState();
+
+// One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
+// fixed bug where exercise/steps tags were being appended repeatedly rather than
+// replacing the existing entry.
+if (state.notes && state.notes.includes(',')) {
+  const deduped = [...new Set(state.notes.split(',').map(t => t.trim()).filter(Boolean))];
+  if (deduped.length !== state.notes.split(',').length) {
+    state.notes = deduped.join(', ');
+    localStorage.setItem('mh_today_notes', state.notes);
+  }
+}
 
 function saveState() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return;
@@ -6516,8 +6527,10 @@ function saveActivityToNotes(acts) {
   const actSummary = (acts||getActivities()).filter(a=>a.enabled&&a.duration)
     .map(a=>`${a.duration}min ${a.name.replace(/^[^\w]*/,'').trim()}`).join(', ');
   const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
-  const existingTags = (state.notes||'').split(',').map(t=>t.trim())
-    .filter(t=>t && !legacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
+  const existingTags = [...new Set(
+    (state.notes||'').split(',').map(t=>t.trim())
+      .filter(t=>t && !legacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i))
+  )]; // de-duplicated — guards against any accumulation from earlier bugs
   const allNotes = [...existingTags];
   if (actSummary) allNotes.push(actSummary);
   state.notes = allNotes.join(', ');
@@ -10722,7 +10735,7 @@ function _getOccasionTags(excludeActivitySummaries) {
 }
 
 function _setOccasionTags(tags) {
-  state.notes = tags.join(', ');
+  state.notes = [...new Set(tags)].join(', '); // de-duplicated at the single choke point every write goes through
   state.dayMode = tags.length > 0 ? 'occasion' : 'standard';
 }
 
@@ -10818,23 +10831,18 @@ function saveDailySteps(rawVal) {
 function updateStepsTag(val) {
   localStorage.setItem('mh_steps_today', val || '');  // persist separately
   const steps = parseInt(val) || 0; // val is already normalized to a plain integer by saveDailySteps
-  // IMPORTANT: _getOccasionTags() deliberately excludes activity-derived summaries
-  // like "45min Resistance" (added so the Occasion tag-picker doesn't treat them as
-  // toggleable tags) — but that means using it as the sole source of truth here would
-  // silently discard exercise tags every time steps are edited, since _setOccasionTags
-  // writes back exactly what it's given with nothing else preserved. Activity summaries
-  // must be read and re-appended separately, the same way saveActivityToNotes builds them.
-  const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
-  const allCurrentTags = (state.notes || '').split(',').map(t => t.trim()).filter(Boolean);
-  const activitySummaryTags = allCurrentTags.filter(t => t.match(/^\d+min /i));
-  const occasionTags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
-  const newTags = [...occasionTags];
+  // _getOccasionTags() with no argument now returns the FULL tag list, including
+  // activity-derived summaries like "45min Resistance" — that's the default since
+  // the opt-in exclusion was added. Just strip out any existing steps tag and add
+  // the new one; activity summaries already come through correctly with no
+  // separate re-append needed (that was a leftover from before this default changed,
+  // and was causing tags to be added twice).
+  const tags = _getOccasionTags().filter(t => !t.match(/^\d+k? steps$/i) && !t.match(/^steps/i));
   if (steps > 0) {
     const label = steps >= 1000 ? `${Math.round(steps/1000*10)/10}k steps` : `${steps} steps`;
-    newTags.push(label);
+    tags.push(label);
   }
-  newTags.push(...activitySummaryTags); // re-append exercise tags that _getOccasionTags excluded
-  _setOccasionTags(newTags);
+  _setOccasionTags(tags);
   saveState();
   renderOccasionTags();
   updateOccasionBanner();
