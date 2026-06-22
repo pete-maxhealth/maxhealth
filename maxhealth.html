@@ -3383,6 +3383,25 @@ body[data-theme="light"] {
           onchange="saveProfile()">
       </div>
       <div class="settings-row">
+        <div class="settings-label">Height</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="settingsHeight" step="1" min="100" max="250" placeholder="178" class="settings-input" style="flex:1;" onchange="saveProfile()">
+          <span style="color:var(--text3);font-size:12px;">cm</span>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Age</div>
+        <input type="number" id="settingsAge" step="1" min="1" max="120" placeholder="56" class="settings-input" onchange="saveProfile()">
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">Sex</div>
+        <div style="display:flex;gap:6px;width:100%;">
+          <div id="sexBtnMale" onclick="setSex('male')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">Male</div>
+          <div id="sexBtnFemale" onclick="setSex('female')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">Female</div>
+        </div>
+      </div>
+      <div class="settings-hint" style="margin-top:-2px;">Used to personalize step/calorie estimates when no wearable data exists for a day — most relevant for cloud-only users with no device sync. Local users' real wearable data always takes priority over these regardless.</div>
+      <div class="settings-row">
         <div class="settings-label">Weight target</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -3584,7 +3603,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.8.5</div>
+        <div class="settings-value">MaxedHealth v3.9.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5266,6 +5285,20 @@ function saveApiKey() {
 function saveProfile() {
   const name = document.getElementById('settingsName').value.trim();
   if (name) localStorage.setItem('mh_name', name);
+  const height = parseInt(document.getElementById('settingsHeight')?.value);
+  if (!isNaN(height) && height >= 100 && height <= 250) localStorage.setItem('mh_height_cm', height);
+  const age = parseInt(document.getElementById('settingsAge')?.value);
+  if (!isNaN(age) && age >= 1 && age <= 120) localStorage.setItem('mh_age', age);
+}
+
+function setSex(sex) {
+  localStorage.setItem('mh_sex', sex);
+  ['male','female'].forEach(s => {
+    const btn = document.getElementById('sexBtn' + s.charAt(0).toUpperCase() + s.slice(1));
+    if (btn) { btn.style.background = ''; btn.style.color = 'var(--text3)'; btn.style.borderColor = 'var(--border)'; }
+  });
+  const activeBtn = document.getElementById('sexBtn' + sex.charAt(0).toUpperCase() + sex.slice(1));
+  if (activeBtn) { activeBtn.style.background = 'var(--accent-dim)'; activeBtn.style.color = 'var(--accent)'; activeBtn.style.borderColor = 'var(--accent)'; }
 }
 
 function initSettings() {
@@ -5311,6 +5344,12 @@ function initSettings() {
   setProvider(provider);
   const name = localStorage.getItem('mh_name') || '';
   document.getElementById('settingsName').value = name;
+  const heightEl = document.getElementById('settingsHeight');
+  if (heightEl) heightEl.value = localStorage.getItem('mh_height_cm') || '';
+  const ageEl = document.getElementById('settingsAge');
+  if (ageEl) ageEl.value = localStorage.getItem('mh_age') || '';
+  const savedSex = localStorage.getItem('mh_sex');
+  if (savedSex) setSex(savedSex);
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
@@ -6065,14 +6104,26 @@ function recordActivityHistoryPoint(act, date) {
   localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(log));
 }
 
+function getPersonalStepsPerMile() {
+  // Base steps-per-mile derived from height (stride length ≈ height × 0.415 for
+  // walking), since stride length — not weight, age, or sex — is what actually
+  // determines this. Falls back to 2,200 (the population-average result for ~178cm)
+  // if height isn't set. Shared by every estimate that needs a steps<->distance
+  // conversion, so a height update affects all of them consistently.
+  const heightCm = parseInt(localStorage.getItem('mh_height_cm'));
+  if (heightCm && heightCm >= 100 && heightCm <= 250) {
+    const strideCm = heightCm * 0.415;
+    return Math.round(160934 / strideCm); // 160934cm = 1 mile
+  }
+  return 2200;
+}
+
 function estimateStepsForDistance(miles, mph) {
   // Estimates steps from distance using a pace-adjusted steps-per-mile figure.
-  // Reasonable adult average sits around 2,000-2,250 steps/mile; faster walking
-  // tends to mean a longer stride and slightly FEWER steps per mile, not more —
-  // this is a deliberately simple linear adjustment, not a precise biomechanical
-  // model, since it's a fallback for missing watch data, not a replacement for it.
+  // This matters most for cloud-only users with no wearable data to override it;
+  // local users' real device data always takes priority over this estimate regardless.
   if (!miles || miles <= 0) return 0;
-  const baseStepsPerMile = 2200;
+  const baseStepsPerMile = getPersonalStepsPerMile();
   const paceAdjustment = mph ? Math.max(0.85, Math.min(1.1, 1 - (mph - 3) * 0.04)) : 1;
   return Math.round(miles * baseStepsPerMile * paceAdjustment);
 }
@@ -6125,7 +6176,7 @@ function calcNonWalkingStepsKcal(remainder) {
   const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
   const aboveBaseline = Math.max(0, (remainder || 0) - baseline);
   if (aboveBaseline <= 0) return 0;
-  const approxMiles = aboveBaseline / 2200;
+  const approxMiles = aboveBaseline / getPersonalStepsPerMile();
   const weight = state.weight || 90;
   const easyMph = 2.3; // gentle, incidental-movement pace
   const hours = approxMiles / easyMph;
@@ -8523,9 +8574,18 @@ function updateDashboard(skipActivityRender) {
       const remainderKcal = calcNonWalkingStepsKcal(breakdown.remainder);
       const aboveBaseline = Math.max(0, breakdown.remainder - baseline);
       const belowBaseline = breakdown.remainder < baseline;
+      const realTotal = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+      // A near-zero remainder can mean two very different things: genuinely low
+      // movement overall, OR a logged walk's estimated steps consumed almost the
+      // entire real total, leaving little "extra" to discuss — that's a normal,
+      // unremarkable outcome on a day with one substantial walk, not a sign of
+      // inactivity, so it needs different wording rather than a yellow warning.
+      const walkConsumedMost = breakdown.walkingSteps > 0 && breakdown.walkingSteps >= realTotal * 0.85;
       stepsHeadlineEl.style.display = 'block';
       if (remainderKcal > 0) {
         stepsHeadlineEl.innerHTML = `<strong style="color:var(--accent);">+${remainderKcal}kcal</strong> today from movement above your usual baseline <span style="color:var(--text3);float:right;">details ▾</span>`;
+      } else if (walkConsumedMost) {
+        stepsHeadlineEl.innerHTML = `Today's walk accounts for most of your ${realTotal.toLocaleString()} steps <span style="color:var(--text3);float:right;">details ▾</span>`;
       } else if (belowBaseline) {
         stepsHeadlineEl.innerHTML = `<span style="color:var(--yellow);">Below your usual ${baseline.toLocaleString()} baseline today</span> — no calorie change <span style="color:var(--text3);float:right;">details ▾</span>`;
       } else {
