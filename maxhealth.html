@@ -2393,6 +2393,8 @@ body[data-theme="light"] {
         <button onclick="addCustomActivity()" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Add exercise</button>
       </div>
       <div id="activityNudge" style="display:none;font-size:11px;color:var(--accent);font-family:'Space Mono',monospace;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);"></div>
+      <div id="wearableCalComparison" style="display:none;font-size:11px;color:var(--text2);line-height:1.6;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);"></div>
+      <div id="exercisePrediction" style="display:none;font-size:11px;color:var(--text2);line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);"></div>
       </div>
     </div>
 
@@ -3568,7 +3570,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.7.5</div>
+        <div class="settings-value">MaxedHealth v3.8.1</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6009,10 +6011,103 @@ function saveActivities(acts) {
   localStorage.setItem('mh_activities', JSON.stringify(acts));
 }
 
-function calcActivityKcal(act) {
+// Historical activity log — records completed distance-based activities (name,
+// distance, duration, pace, date) so future walks/runs/rides can be compared against
+// real past performance. This didn't exist before; only today's in-progress activity
+// state was ever stored, so "faster than last time" had nothing genuine to compare
+// against. Recorded once per activity per day, at the point it's saved with both
+// distance and duration filled in.
+const ACTIVITY_LOG_KEY = 'mh_activity_history_log';
+const ACTIVITY_LOG_MAX = 200;
+
+function recordActivityHistoryPoint(act, date) {
+  if (!act.needsDistance || !act.distance || !act.duration) return;
+  const miles = milesFromDistance(act.distance, act.distanceUnit || 'km');
+  if (!miles || miles <= 0) return;
+  const hours = parseFloat(act.duration) / 60;
+  if (!hours || hours <= 0) return;
+  let log;
+  try { log = JSON.parse(localStorage.getItem(ACTIVITY_LOG_KEY) || '[]'); } catch(e) { log = []; }
+  const baseName = (act.name || '').replace(/^[^\w]*/, '').trim();
+  const existing = log.findIndex(p => p.date === date && p.name === baseName);
+  const point = { date, name: baseName, miles: Math.round(miles*100)/100, durationMin: parseFloat(act.duration), pace: miles/hours };
+  if (existing >= 0) log[existing] = point; else log.push(point);
+  log.sort((a,b) => a.date < b.date ? -1 : 1);
+  if (log.length > ACTIVITY_LOG_MAX) log = log.slice(log.length - ACTIVITY_LOG_MAX);
+  localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(log));
+}
+
+function getUserTypicalPace(activityName) {
+  // Average pace from recent matching entries in the activity history log, falling
+  // back to the Moderate band's midpoint if there's no real history yet for this
+  // specific activity — predictions should use genuine personal data once it exists.
+  let log;
+  try { log = JSON.parse(localStorage.getItem(ACTIVITY_LOG_KEY) || '[]'); } catch(e) { log = []; }
+  const matching = log.filter(p => p.name === activityName).slice(-10); // last 10 sessions
+  if (matching.length > 0) {
+    return matching.reduce((sum, p) => sum + p.pace, 0) / matching.length;
+  }
+  const bands = PACE_BANDS.walking;
+  return (bands.easyMax + bands.moderateMax) / 2; // sensible default before any history exists
+}
+
+function getExercisePrediction(kcalNeeded) {
+  // Predicts how much Walking, at three effort levels, would close a calorie
+  // shortfall — using the calibrated formula (so it improves alongside real
+  // calibration data) and the user's own recent pace as the "usual" baseline.
+  // Returns null if there's no genuine shortfall to close.
+  if (!kcalNeeded || kcalNeeded <= 0) return null;
+  const weight = state.weight || 90;
+  const typicalPace = getUserTypicalPace('Walking');
+  const cal = getCalibrationFactor();
+  const calFactor = cal.confidence === 'none' ? 1 : cal.factor;
+
+  const effortLevels = [
+    { label: 'Easy',     met: MET.walking.Easy,     pace: Math.min(typicalPace, PACE_BANDS.walking.easyMax * 0.9) },
+    { label: 'Usual',    met: MET.walking.Moderate, pace: typicalPace },
+    { label: 'Hard',     met: MET.walking.Hard,     pace: Math.max(typicalPace, PACE_BANDS.walking.moderateMax * 1.1) },
+  ];
+
+  return effortLevels.map(lvl => {
+    // kcal = MET * weight * hours  =>  hours = kcal / (MET * weight), adjusted for calibration
+    const hoursNeeded = kcalNeeded / (lvl.met * weight * calFactor);
+    const minutesNeeded = Math.round(hoursNeeded * 60);
+    const milesNeeded = Math.round(lvl.pace * hoursNeeded * 10) / 10;
+    return { label: lvl.label, minutes: minutesNeeded, miles: milesNeeded, pace: Math.round(lvl.pace*10)/10 };
+  });
+}
+
+function getActivityPersonalBest(act) {
+  // Finds the most similar past activity by name and distance (within 15%), and
+  // returns a genuine comparison — pace difference, in seconds per mile — or null
+  // if there's nothing close enough in history to compare against honestly.
+  if (!act.needsDistance || !act.distance || !act.duration) return null;
+  const miles = milesFromDistance(act.distance, act.distanceUnit || 'km');
+  if (!miles || miles <= 0) return null;
+  const baseName = (act.name || '').replace(/^[^\w]*/, '').trim();
+  let log;
+  try { log = JSON.parse(localStorage.getItem(ACTIVITY_LOG_KEY) || '[]'); } catch(e) { log = []; }
+  const today = todayStr();
+  const similar = log.filter(p => p.name === baseName && p.date !== today && Math.abs(p.miles - miles) / miles <= 0.15);
+  if (similar.length === 0) return null;
+  // Compare against the most recent matching session, not the best ever — "faster
+  // than last time" is about recent comparison, not lifetime record-chasing
+  const last = similar.sort((a,b) => a.date < b.date ? 1 : -1)[0];
+  const hours = parseFloat(act.duration) / 60;
+  const currentPace = miles / hours;
+  const paceDiffPctPerMile = (currentPace - last.pace) / last.pace * 100;
+  const secPerMileNow = 3600 / currentPace;
+  const secPerMileLast = 3600 / last.pace;
+  const secDiff = Math.round(secPerMileLast - secPerMileNow); // positive = faster now
+  return { lastDate: last.date, lastMiles: last.miles, secDiff, paceDiffPctPerMile, faster: secDiff > 0 };
+}
+
+function calcActivityKcalRaw(act) {
+  // The pure MET-formula estimate, with no personal calibration applied. Kept
+  // separate from calcActivityKcal() so the calibration comparison always measures
+  // against the true, unadjusted formula — calibrating against an already-calibrated
+  // number would silently drift the correction factor over time.
   if (!act.enabled || !act.duration) return 0;
-  // Keep act.effort in sync with the auto-suggestion when not manually overridden,
-  // so the calorie figure always matches whatever effort is actually shown in the dropdown.
   if (act.needsDistance && !act._manualEffort) {
     const suggested = calcSuggestedEffort(act);
     if (suggested) act.effort = suggested;
@@ -6022,6 +6117,15 @@ function calcActivityKcal(act) {
   const weight = state.weight || 90;
   const hours = parseFloat(act.duration) / 60;
   return Math.round(effortMet * weight * hours);
+}
+
+function calcActivityKcal(act) {
+  // User-facing figure — applies the personal calibration factor once enough
+  // comparison data exists (see getCalibratedKcal). This is what shows on the
+  // dashboard and feeds the daily calorie target adjustment.
+  const raw = calcActivityKcalRaw(act);
+  if (raw === 0) return 0;
+  return getCalibratedKcal(raw);
 }
 
 function renderActivityCard() {
@@ -6076,11 +6180,48 @@ function renderActivityCard() {
         </div>
       </div>
       ${act.needsDistance && suggestedEffort ? `<div style="font-size:10px;color:var(--text3);padding-left:2px;width:100%;">${act._manualEffort ? 'Manually set · ' : 'Auto-calculated from pace & distance · '}<span onclick="resetActivityEffort(${i})" style="cursor:pointer;color:var(--accent);text-decoration:underline;${act._manualEffort?'':'display:none;'}">use auto</span></div>` : ''}
+      ${(() => {
+        if (!act.needsDistance || !act.distance || !act.duration) return '';
+        const pb = getActivityPersonalBest(act);
+        if (!pb) return '';
+        const minSec = Math.abs(pb.secDiff);
+        const timeStr = minSec >= 60 ? `${Math.floor(minSec/60)}m ${minSec%60}s` : `${minSec}s`;
+        const verb = pb.faster ? 'faster' : 'slower';
+        return `<div style="font-size:10px;color:${pb.faster?'var(--accent)':'var(--text3)'};padding-left:2px;width:100%;">${pb.faster?'🎉':'📊'} ${timeStr} ${verb} per mile than your last similar ${act.name.replace(/^[^\w]*/,'').trim()} (${pb.lastMiles}mi on ${pb.lastDate})</div>`;
+      })()}
     </div>`;
   }).join('');
   updateActivityNudge(acts);
   // Update steps tag from activities
   updateActivityStepsTag(acts);
+  // Show the wearable's actual measured active calories alongside the MET-based
+  // estimate, when available — heart-rate-derived figures reflect real physiological
+  // response (fitness, medication, chemo effects) that a generic MET table can't know
+  // about. Shown as a comparison, not a silent substitution, since calories_active is
+  // the WHOLE day's active burn while the MET total below is only logged activities —
+  // they're not strictly the same measurement, so it would be misleading to merge them.
+  const wearComparisonEl = document.getElementById('wearableCalComparison');
+  if (wearComparisonEl) {
+    const todayEntry = state.history.find(h => h.date === todayStr());
+    const wearKcal = todayEntry?.calories_active;
+    const metKcal = acts.reduce((sum, a) => sum + calcActivityKcalRaw(a), 0);
+    if (wearKcal && metKcal > 0) {
+      recordCalibrationPoint(metKcal, wearKcal, todayStr());
+      const diff = wearKcal - metKcal;
+      const diffPct = Math.round(Math.abs(diff) / metKcal * 100);
+      const cal = getCalibrationFactor();
+      wearComparisonEl.style.display = 'block';
+      let html = `⌚ Watch measured <strong style="color:var(--accent);">${wearKcal}kcal</strong> active today (heart-rate based) vs <strong>${Math.round(metKcal)}kcal</strong> from the formula above — ${diff > 0 ? `${diffPct}% more` : diffPct > 0 ? `${diffPct}% less` : 'matches closely'}. The watch reading reflects your real measured effort.`;
+      if (cal.confidence === 'good') {
+        html += `<br><span style="color:var(--text3);">Based on ${cal.points} days of comparison, future estimates are personally adjusted by ${cal.factor >= 1 ? '+' : ''}${Math.round((cal.factor-1)*100)}% to match your real measured response.</span>`;
+      } else if (cal.confidence === 'low') {
+        html += `<br><span style="color:var(--text3);">${cal.points} comparison days logged so far — personal calibration kicks in at 10 days.</span>`;
+      }
+      wearComparisonEl.innerHTML = html;
+    } else {
+      wearComparisonEl.style.display = 'none';
+    }
+  }
   // Restore collapse state — re-applied after every render since innerHTML replacement
   // resets the wrap's display style
   applySectionState('dash-activity', 'dash-activity-wrap', 'dash-activity-icon', true);
@@ -6115,6 +6256,7 @@ function updateActivity(idx, field, val, isLive) {
     saveActivityToNotes(acts);
   } else {
     saveActivityToNotes(acts);
+    if (acts[idx].needsDistance) recordActivityHistoryPoint(acts[idx], todayStr());
     renderActivityCard();
     updateDashboard();
   }
@@ -8517,6 +8659,28 @@ function updateDashboard(skipActivityRender) {
   if (calTargetEl) calTargetEl.textContent = activityExtra > 0 ? `/ ${adjustedKcalTarget} kcal (+${activityExtra})` : `/ ${targets.kcal}`;
   // Remaining
   const remCal = adjustedKcalTarget - totals.kcal;
+
+  // Predicted exercise needed to close today's remaining gap. Uses the food-only
+  // shortfall (target minus activity already counted, minus food eaten) — NOT
+  // remCal itself, since remCal already includes today's logged activity and using
+  // it here would double-count effort that's already real rather than predicted.
+  const predictionEl = document.getElementById('exercisePrediction');
+  if (predictionEl) {
+    const foodOnlyShortfall = targets.kcal - totals.kcal;
+    const prediction = getExercisePrediction(foodOnlyShortfall);
+    if (prediction && activityExtra === 0) {
+      // Only show the prediction while no real activity has been logged yet today —
+      // once you log something real, that's the "actual exercise" half taking over,
+      // exactly the predicted->real handoff Pete asked for.
+      predictionEl.style.display = 'block';
+      predictionEl.innerHTML = `🚶 To close today's ${Math.round(foodOnlyShortfall)}kcal gap with walking: ` +
+        prediction.map(p => `<strong style="color:var(--accent);">${p.label}</strong> ~${p.minutes}min (${p.miles}mi @ ${p.pace}mph)`).join(' · ') +
+        `<br><span style="color:var(--text3);">This is a prediction — log a real walk above and it'll use your actual numbers instead.</span>`;
+    } else {
+      // Real activity exists today — the prediction has been superseded by actual logged effort
+      predictionEl.style.display = 'none';
+    }
+  }
   const _hasRes = getActivities().some(a => a.enabled && a.duration && a.type === 'resistance');
   const _adjProt = targets.protein + (_hasRes ? 15 : 0);
   const remProt = _adjProt - totals.protein;
@@ -11709,6 +11873,48 @@ const DRILL_CONFIG = {
 // numbers). Used anywhere a day's fat is displayed or aggregated, so entries from before
 // fat tracking existed (or where it was lost to a data bug) still show a sensible figure
 // rather than a misleading 0.
+// Self-calibration: every day with both a logged activity AND wearable active-calorie
+// data, records the ratio between what the watch measured and what the generic MET
+// formula predicted. Over time this produces a personal correction factor that
+// reflects Pete's actual metabolic response (chemo, medication, fitness — none of
+// which a population-average MET table can know about) rather than a guess.
+// No manual calibration screen needed — it learns silently from data that already exists.
+const CALIBRATION_KEY = 'mh_calibration_log';
+const CALIBRATION_MAX_POINTS = 60; // roughly 2 months of data points is plenty
+
+function recordCalibrationPoint(metKcal, wearKcal, date) {
+  if (!metKcal || !wearKcal || metKcal <= 0) return;
+  let log;
+  try { log = JSON.parse(localStorage.getItem(CALIBRATION_KEY) || '[]'); } catch(e) { log = []; }
+  // One point per day — if today's already recorded, update it rather than duplicate
+  const existing = log.findIndex(p => p.date === date);
+  const point = { date, metKcal: Math.round(metKcal), wearKcal: Math.round(wearKcal), ratio: wearKcal / metKcal };
+  if (existing >= 0) log[existing] = point; else log.push(point);
+  // Keep only the most recent N points
+  log.sort((a,b) => a.date < b.date ? -1 : 1);
+  if (log.length > CALIBRATION_MAX_POINTS) log = log.slice(log.length - CALIBRATION_MAX_POINTS);
+  localStorage.setItem(CALIBRATION_KEY, JSON.stringify(log));
+}
+
+function getCalibrationFactor() {
+  // Returns { factor, points, confidence } — factor is the personal correction
+  // multiplier to apply to MET estimates. confidence is 'none'|'low'|'good' based on
+  // how many data points exist, since a factor from 2 days shouldn't be trusted the
+  // same as one from 20.
+  let log;
+  try { log = JSON.parse(localStorage.getItem(CALIBRATION_KEY) || '[]'); } catch(e) { log = []; }
+  if (log.length === 0) return { factor: 1, points: 0, confidence: 'none' };
+  const avgRatio = log.reduce((sum, p) => sum + p.ratio, 0) / log.length;
+  const confidence = log.length >= 10 ? 'good' : log.length >= 4 ? 'low' : 'none';
+  return { factor: avgRatio, points: log.length, confidence };
+}
+
+function getCalibratedKcal(rawMetKcal) {
+  const cal = getCalibrationFactor();
+  if (cal.confidence === 'none') return rawMetKcal; // not enough data yet — use the formula as-is
+  return Math.round(rawMetKcal * cal.factor);
+}
+
 function getEntryFat(entry) {
   const t = entry?.totals || entry; // accept either a history entry or a totals object directly
   if (t?.fat && t.fat > 0) return t.fat;
