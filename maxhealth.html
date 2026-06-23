@@ -3423,8 +3423,13 @@ body[data-theme="light"] {
       </div>
       <div class="settings-row">
         <div class="settings-label">TDEE</div>
-        <div class="settings-value">3,420 kcal</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="settings-input" type="number" id="settingTdee" placeholder="3420" style="width:90px;text-align:right;">
+          <span style="font-size:13px;color:var(--text3);">kcal</span>
+          <button class="settings-save-btn" onclick="saveTdee()">Save</button>
+        </div>
       </div>
+      <div class="settings-hint" style="margin-top:-2px;">Only used for the Lose goal (TDEE − 500). Maintain and Gain use your own confirmed figures below, not this.</div>
       <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
         <div class="settings-label">Goal / Phase</div>
         <div style="display:flex;gap:6px;width:100%;">
@@ -3610,7 +3615,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.9.7</div>
+        <div class="settings-value">MaxedHealth v3.9.8</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5324,15 +5329,26 @@ function initSettings() {
   if (localStorage.getItem('mh_target_kcal') === '3063') localStorage.setItem('mh_target_kcal', '3670');
   const kcalEl = document.getElementById('settingKcalTarget');
   if (kcalEl) kcalEl.value = localStorage.getItem('mh_target_kcal') || '3670';
+  const tdeeInput = document.getElementById('settingTdee');
+  if (tdeeInput) tdeeInput.value = localStorage.getItem('mh_tdee') || '3420';
   // Highlight current goal
   const currentGoal = localStorage.getItem('mh_goal') || 'gain';
   const activeGoalBtn = document.getElementById('goalBtn' + currentGoal.charAt(0).toUpperCase() + currentGoal.slice(1));
   if (activeGoalBtn) { activeGoalBtn.style.background = 'var(--accent-dim)'; activeGoalBtn.style.color = 'var(--accent)'; activeGoalBtn.style.borderColor = 'var(--accent)'; }
   const tdee = parseInt(localStorage.getItem('mh_tdee') || '3420');
-  const kcalMap = { lose: tdee - 500, maintain: tdee, gain: tdee + 250 };
-  const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: '+250 kcal surplus' };
+  // Mirrors the real figures setGoal() uses — Pete's own confirmed, weight-trend-
+  // validated numbers, not a generic TDEE±offset formula. initSettings() previously
+  // had its own separate, never-updated copy of this map, so opening Settings would
+  // silently overwrite goalDesc with stale wording even after setGoal() itself was
+  // fixed — this was the actual source of the "+250 kcal surplus" text Pete saw.
+  const kcalMap = {
+    lose:     tdee - 500,
+    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
+    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+  };
+  const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
   const descEl = document.getElementById('goalDesc');
-  if (descEl) descEl.textContent = descMap[currentGoal] + ' — ' + (kcalMap[currentGoal] || tdee + 250) + ' kcal/day';
+  if (descEl) descEl.textContent = descMap[currentGoal] + ' — ' + (kcalMap[currentGoal] || tdee) + ' kcal/day';
   const protEl = document.getElementById('settingProteinTarget');
   if (protEl) protEl.value = localStorage.getItem('mh_target_protein') || '165';
   const fatSettingEl = document.getElementById('settingFatTarget');
@@ -5545,6 +5561,26 @@ function saveWaterTarget() {
     localStorage.setItem('mh_target_water', val);
     updateDashboard();
     showToast(`Water target saved: ${val}ml/day`);
+  }
+}
+
+function saveTdee() {
+  const val = parseInt(document.getElementById('settingTdee')?.value);
+  if (!isNaN(val) && val > 0) {
+    localStorage.setItem('mh_tdee', val);
+    // Refresh just goalDesc (the only thing that depends on TDEE) rather than
+    // calling the whole initSettings() again, which would stack a duplicate
+    // input-event-listener on the fat target field each time it's called.
+    const currentGoal = localStorage.getItem('mh_goal') || 'gain';
+    const kcalMap = {
+      lose:     val - 500,
+      maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
+      gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+    };
+    const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
+    const descEl = document.getElementById('goalDesc');
+    if (descEl) descEl.textContent = descMap[currentGoal] + ' — ' + (kcalMap[currentGoal] || val) + ' kcal/day';
+    showToast(`TDEE saved: ${val.toLocaleString()} kcal`);
   }
 }
 
@@ -7506,7 +7542,10 @@ async function processMessage(text, imageBase64, imageMime) {
   }
   if (lower.includes('weight') && !lower.includes('g ') && lower.split(' ').length < 6) {
     const gap = (WEIGHT_TARGET_LOW() - state.weight).toFixed(1);
-    addBubble(`Current weight: ${state.weight}kg\nTarget: 92–93kg\nGap: +${gap}kg\n\nGain phase (+250 kcal/day). ~5–6 weeks to target at this rate.`, 'system');
+    const currentGoal = localStorage.getItem('mh_goal') || 'gain';
+    const goalKcal = parseInt(localStorage.getItem('mh_target_kcal')) || 3670;
+    const goalLabel = currentGoal === 'gain' ? `Gain phase (${goalKcal} kcal/day)` : currentGoal === 'lose' ? `Loss phase (${goalKcal} kcal/day)` : `Maintenance (${goalKcal} kcal/day)`;
+    addBubble(`Current weight: ${state.weight}kg\nTarget: ${WEIGHT_TARGET_LOW()}–${WEIGHT_TARGET_HIGH()}kg\nGap: +${gap}kg\n\n${goalLabel}.`, 'system');
     return;
   }
 
