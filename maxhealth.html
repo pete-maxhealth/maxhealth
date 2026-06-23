@@ -2559,7 +2559,7 @@ body[data-theme="light"] {
       <button id="voiceBtn" onclick="toggleVoiceInput()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Voice input">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
       </button>
-      <button id="barcodeBtn" onclick="document.getElementById('barcodeInput').click()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Scan barcode">
+      <button id="barcodeBtn" onclick="openLiveBarcodeScanner()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Scan barcode">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 9V5a2 2 0 0 1 2-2h4M3 15v4a2 2 0 0 0 2 2h4M21 9V5a2 2 0 0 0-2-2h-4M21 15v4a2 2 0 0 1-2 2h-4"/>
           <line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/>
@@ -2567,6 +2567,19 @@ body[data-theme="light"] {
         </svg>
       </button>
       </div>
+    </div>
+
+    <!-- LIVE BARCODE SCANNER — point-and-scan, no manual photo needed.
+         Falls back to the existing file-capture flow (barcodeInput) automatically
+         if BarcodeDetector or camera access isn't available. -->
+    <div id="liveScannerOverlay" style="display:none;position:fixed;inset:0;background:#000;z-index:9000;flex-direction:column;">
+      <video id="liveScannerVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">
+        <div style="width:78%;max-width:340px;aspect-ratio:5/3;border:3px solid var(--accent);border-radius:16px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);"></div>
+        <div style="margin-top:18px;color:#fff;font-size:13px;font-family:'Space Mono',monospace;background:rgba(0,0,0,0.5);padding:6px 14px;border-radius:20px;">Point at a barcode</div>
+      </div>
+      <button onclick="closeLiveBarcodeScanner()" style="position:absolute;top:max(16px,env(safe-area-inset-top));right:16px;width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,0.5);border:none;color:#fff;font-size:20px;z-index:1;">✕</button>
+      <button onclick="closeLiveBarcodeScanner();document.getElementById('barcodeInput').click();" style="position:absolute;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.3);color:#fff;font-size:12px;font-family:'Space Mono',monospace;padding:8px 16px;border-radius:20px;">Use photo instead</button>
     </div>
   </div>
 </div>
@@ -3615,7 +3628,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.9.8</div>
+        <div class="settings-value">MaxedHealth v3.10.0</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6661,6 +6674,82 @@ function quickLogRecentScan(name) {
   document.getElementById('foodAmountGrams').value = '';
   setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 }
+
+let _liveScannerStream = null;
+let _liveScannerActive = false;
+
+async function openLiveBarcodeScanner() {
+  // BarcodeDetector is required for live scanning (Chrome/Android; not Safari).
+  // If it's missing, or camera access fails for any reason, fall straight back
+  // to the existing photo-capture flow rather than showing a broken scanner.
+  if (!('BarcodeDetector' in window)) {
+    document.getElementById('barcodeInput').click();
+    return;
+  }
+  const overlay = document.getElementById('liveScannerOverlay');
+  const video = document.getElementById('liveScannerVideo');
+  if (!overlay || !video) { document.getElementById('barcodeInput').click(); return; }
+
+  try {
+    _liveScannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }, audio: false
+    });
+    video.srcObject = _liveScannerStream;
+    await video.play();
+    overlay.style.display = 'flex';
+    _liveScannerActive = true;
+    _runLiveBarcodeDetectionLoop(video);
+  } catch(e) {
+    // Camera permission denied or unavailable — fall back to photo capture
+    console.warn('[liveBarcodeScanner] camera access failed, falling back:', e);
+    closeLiveBarcodeScanner();
+    document.getElementById('barcodeInput').click();
+  }
+}
+
+async function _runLiveBarcodeDetectionLoop(video) {
+  const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
+  const scanFrame = async () => {
+    if (!_liveScannerActive) return; // stopped — don't schedule another frame
+    try {
+      const barcodes = await detector.detect(video);
+      if (barcodes.length > 0) {
+        const barcode = barcodes[0].rawValue;
+        closeLiveBarcodeScanner();
+        const thinkingMsg = addBubble(`🔍 Found barcode: ${barcode} — looking up…`, 'system');
+        await lookupBarcode(barcode, thinkingMsg);
+        return; // found one — stop the loop, don't schedule another frame
+      }
+    } catch(e) {
+      // A single failed detect() shouldn't kill the whole scanning session —
+      // log and keep trying on the next frame
+      console.warn('[liveBarcodeScanner] detect() error on this frame:', e);
+    }
+    if (_liveScannerActive) requestAnimationFrame(scanFrame);
+  };
+  requestAnimationFrame(scanFrame);
+}
+
+function closeLiveBarcodeScanner() {
+  _liveScannerActive = false;
+  const overlay = document.getElementById('liveScannerOverlay');
+  if (overlay) overlay.style.display = 'none';
+  // Always release the camera stream — leaving it open after closing would be
+  // both a battery drain and a privacy issue (camera indicator stays lit)
+  if (_liveScannerStream) {
+    _liveScannerStream.getTracks().forEach(track => track.stop());
+    _liveScannerStream = null;
+  }
+  const video = document.getElementById('liveScannerVideo');
+  if (video) video.srcObject = null;
+}
+
+// Safety net: if the page is backgrounded/hidden while the scanner is open
+// (app switch, screen lock, browser tab change), release the camera immediately
+// rather than leaving it running unattended.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && _liveScannerActive) closeLiveBarcodeScanner();
+});
 
 async function handleBarcodeCapture(input) {
   const file = input.files[0];
