@@ -3628,7 +3628,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.3</div>
+        <div class="settings-value">MaxedHealth v3.10.4</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4628,24 +4628,32 @@ function findInLibrary(name) {
 }
 
 function jumpToLibraryLetter(letter) {
-  // Find first library item starting with this letter and scroll to it
+  // Find first library item starting with this letter and scroll to it.
+  // IMPORTANT: items inside a collapsed Meals/Ingredients section still exist in
+  // the DOM (querySelectorAll finds them), but scrollIntoView on a hidden element
+  // does nothing visible — exactly the bug that made this look broken for whichever
+  // letters happened to only exist inside a currently-collapsed section. Expand the
+  // relevant wrap first, then scroll, every time.
   const items = document.querySelectorAll('#libraryList .library-item');
-  let found = false;
-  let sample = [];
   for (const item of items) {
     const nameEl = item.querySelector('.library-item-name');
-    if (nameEl && sample.length < 5) sample.push(nameEl.textContent.trim());
     if (nameEl && nameEl.textContent.trim().toUpperCase().startsWith(letter)) {
-      item.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      item.style.background = 'var(--accent-dim)';
-      setTimeout(() => item.style.background = '', 800);
-      found = true;
-      break;
+      const collapsedAncestor = item.closest('#lib-meals-wrap, #lib-ingredients-wrap');
+      if (collapsedAncestor && collapsedAncestor.style.display === 'none') {
+        const key = collapsedAncestor.id === 'lib-meals-wrap' ? 'lib-meals' : 'lib-ingredients';
+        const iconId = key + '-icon';
+        toggleSection(key, collapsedAncestor.id, iconId);
+      }
+      // Scroll on the next frame, after any expand-triggered layout change settles
+      requestAnimationFrame(() => {
+        item.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        item.style.background = 'var(--accent-dim)';
+        setTimeout(() => item.style.background = '', 800);
+      });
+      return;
     }
   }
-  // TEMPORARY DEBUG — remove once the letter-jump bug is confirmed fixed
-  console.warn('[jumpToLibraryLetter]', { letter, totalItemsInDOM: items.length, found, firstFewNames: sample });
-  if (!found) showToast(`DEBUG: "${letter}" — searched ${items.length} items, no match (check console)`);
+  showToast(`No items found starting with "${letter}"`);
 }
 
 function toggleLibraryBackToTop() {
