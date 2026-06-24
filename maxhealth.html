@@ -3624,7 +3624,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.10</div>
+        <div class="settings-value">MaxedHealth v3.10.11</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -10703,7 +10703,7 @@ async function calculateMissedDayConv() {
 
   try {
     const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
-    const prompt = `You are a nutrition calculator. The user ate the following on a missed day:\n\n"${meals}"\n\nCalculate the total nutrition for the entire day. Use evidence-based values.\nRespond ONLY with a JSON object (no markdown):\n{"kcal":2847,"protein":168.0,"carbs":30.0,"breakdown":"brief one-line summary of items and portions assumed"}`;
+    const prompt = `You are a nutrition calculator. The user ate the following on a missed day:\n\n"${meals}"\n\nCalculate the total nutrition for the entire day. Use evidence-based values.\nRespond ONLY with a JSON object (no markdown):\n{"kcal":2847,"protein":168.0,"carbs":30.0,"fat":220.0,"breakdown":"brief one-line summary of items and portions assumed"}`;
 
     const res = await fetch(PROXY, {
       method: 'POST',
@@ -10714,7 +10714,17 @@ async function calculateMissedDayConv() {
     const raw = data.content?.[0]?.text?.trim() || '';
     const cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-    const totals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*100)/100, carbs: Math.round(parsed.carbs*100)/100 };
+    const totals = {
+      kcal: Math.round(parsed.kcal),
+      protein: Math.round(parsed.protein*100)/100,
+      carbs: Math.round(parsed.carbs*100)/100,
+      // Use the AI's own fat estimate when present — it's informed by what was
+      // actually described eating, more accurate than a generic back-calculation.
+      // Falls back to the standard balance-of-macros formula only if missing.
+      fat: parsed.fat != null
+        ? Math.round(parsed.fat*100)/100
+        : Math.round(Math.max(0, (parsed.kcal - parsed.protein*4 - parsed.carbs*4) / 9) * 100) / 100
+    };
 
     // Remove meals prompt bubble
     const mealsBubble = document.getElementById('missedDayMealsBubble');
@@ -10727,14 +10737,14 @@ async function calculateMissedDayConv() {
     resultBubble.innerHTML = `
       <div style="font-size:11px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Result — ${_missedDayConvDate}</div>
       <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;">${totals.kcal} kcal</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">${totals.protein}g protein · ${totals.carbs}g carbs</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">${totals.protein}g protein · ${totals.fat}g fat · ${totals.carbs}g carbs</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5;">${parsed.breakdown}</div>
       <div style="margin-bottom:8px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">NOTES (optional)</div>
         <input id="missedDayConvNotes" class="modal-input" placeholder="e.g. normal day, holiday, eating out" style="font-size:13px;padding:8px 10px;width:100%;box-sizing:border-box;">
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="run-btn" style="flex:2;" onclick="saveMissedDayConv(${totals.kcal},${totals.protein},${totals.carbs})">Save to History ✓</button>
+        <button class="run-btn" style="flex:2;" onclick="saveMissedDayConv(${totals.kcal},${totals.protein},${totals.carbs},${totals.fat})">Save to History ✓</button>
         <button class="copy-btn" style="flex:1;font-size:12px;" onclick="cancelMissedDayFlow()">Cancel</button>
       </div>
     `;
@@ -10749,20 +10759,20 @@ async function calculateMissedDayConv() {
   }
 }
 
-function saveMissedDayConv(kcal, protein, carbs) {
+function saveMissedDayConv(kcal, protein, carbs, fat) {
   const dateVal = _missedDayConvDate;
   const notes = document.getElementById('missedDayConvNotes')?.value.trim() || 'missed day entry';
 
   const existing = state.history.find(h => h.date === dateVal);
   if (existing) {
-    existing.totals = { kcal, protein, carbs };
+    existing.totals = { kcal, protein, carbs, fat };
     existing.notes = notes;
     showToast(`${dateVal} updated ✓`);
   } else {
     state.history.push({
       date: dateVal,
-      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs }],
-      totals: { kcal, protein, carbs },
+      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs, fat }],
+      totals: { kcal, protein, carbs, fat },
       mode: 'standard',
       notes,
       weight: null
@@ -10780,7 +10790,7 @@ function saveMissedDayConv(kcal, protein, carbs) {
   });
   switchSubTab('log', 'hist');
   renderHistory();
-  addBubble(`✓ ${dateVal} saved — ${kcal} kcal · ${protein}g P · ${carbs}g C`, 'system', 'success');
+  addBubble(`✓ ${dateVal} saved — ${kcal} kcal · ${protein}g P · ${fat}g F · ${carbs}g C`, 'system', 'success');
 }
 
 function cancelMissedDayFlow() {
