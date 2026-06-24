@@ -3628,7 +3628,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.7</div>
+        <div class="settings-value">MaxedHealth v3.10.8</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -6617,7 +6617,12 @@ function saveActivityToNotes(acts) {
   if (actSummary) allNotes.push(actSummary);
   state.notes = allNotes.join(', ');
   localStorage.setItem('mh_today_notes', state.notes); // persist across restarts
-  if (allNotes.length > 0) state.dayMode = 'occasion';
+  // Exercise/steps tags alone keep the day Standard; only a genuine occasion tag
+  // (Chemotherapy, Travel, etc.) promotes it to Occasion. Holiday, once explicitly
+  // set, is never overridden by activity logging.
+  if (state.dayMode !== 'holiday') {
+    state.dayMode = _hasGenuineOccasionTag(allNotes) ? 'occasion' : 'standard';
+  }
   saveState();
 }
 function addCustomActivity() {
@@ -10936,6 +10941,18 @@ function setHistFilter(f, btn) {
 const OCCASION_TAGS = ['Chemotherapy','Hospital day','Illness','Social event','Travel','Fasting','Exercise','Birthday'];
 
 // Multi-tag occasion system — tags stored as comma-separated string in state.notes
+function _isActivityOnlyTag(tag) {
+  // Exercise summaries ("45min Walking") and steps tags ("5k steps", "5000 steps")
+  // are activity-derived, not genuine occasions — logging a walk or entering a step
+  // count should never by itself flip the day to Occasion. Only a real occasion tag
+  // (Chemotherapy, Travel, custom, etc.) should do that.
+  return /^\d+min /i.test(tag) || /^\d+k? steps$/i.test(tag) || /^steps/i.test(tag);
+}
+
+function _hasGenuineOccasionTag(tags) {
+  return tags.some(t => !_isActivityOnlyTag(t));
+}
+
 function _getOccasionTags(excludeActivitySummaries) {
   if (!state.notes || state.notes === 'occasion' || state.notes === 'standard' || state.notes === 'holiday') return [];
   const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
@@ -10946,8 +10963,16 @@ function _getOccasionTags(excludeActivitySummaries) {
 }
 
 function _setOccasionTags(tags) {
-  state.notes = [...new Set(tags)].join(', '); // de-duplicated at the single choke point every write goes through
-  state.dayMode = tags.length > 0 ? 'occasion' : 'standard';
+  const deduped = [...new Set(tags)];
+  state.notes = deduped.join(', '); // de-duplicated at the single choke point every write goes through
+  // Holiday is only ever set explicitly (via setDayMode/setHistDayType) — never
+  // inferred here, and never overridden just because tags changed. Exercise/steps
+  // tags alone keep the day Standard; any genuine occasion tag promotes it to
+  // Occasion. This only adjusts between those two — Holiday stands until the user
+  // explicitly changes it.
+  if (state.dayMode !== 'holiday') {
+    state.dayMode = _hasGenuineOccasionTag(deduped) ? 'occasion' : 'standard';
+  }
 }
 
 function calcKetosisStreak() {
