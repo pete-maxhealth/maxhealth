@@ -3628,7 +3628,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.5</div>
+        <div class="settings-value">MaxedHealth v3.10.7</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -8254,6 +8254,7 @@ function renderMealPreview() {
     ${window._pendingMealMessage ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;font-style:italic;">${window._pendingMealMessage}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
+      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="cancelMealPreview()">Cancel</button>
     </div>
   `;
@@ -8523,6 +8524,39 @@ function cancelMealPreview() {
   const modeBar = document.getElementById('chatModeBar');
   if (modeBar) modeBar.style.display = '';
   addBubble('Cancelled — nothing logged.', 'system');
+}
+
+function saveLibraryOnlyFromPreview() {
+  // Saves the previewed food(s) to the library WITHOUT logging them as eaten —
+  // previously the only route to "Save to library" required logging first, since
+  // that prompt only ever appeared after a real log action completed. This gives
+  // direct access to the thing Pete actually wanted: building up the library with
+  // frequently-eaten foods without it counting toward that day's totals.
+  const foods = window._pendingMealFoods;
+  if (!foods || foods.length === 0) { cancelMealPreview(); return; }
+  const lib = loadLibrary();
+  foods.forEach(f => {
+    lib.push({
+      id: 'ai_' + Date.now() + '_' + Math.round(Math.random()*1000),
+      name: f.name,
+      portion: f.amount || null,
+      per100g: f._per100g === true,
+      kcal: Math.round(f.kcal),
+      protein: Math.round((f.protein||0) * 10) / 10,
+      fat: Math.round((f.fat||0) * 10) / 10,
+      carbs: Math.round((f.carbs||0) * 10) / 10,
+      locked: true,
+      source: 'ai_confirmed'
+    });
+  });
+  saveLibrary(lib);
+  renderLibrary();
+  const bubble = document.getElementById('mealPreviewBubble');
+  if (bubble) bubble.remove();
+  window._pendingMealFoods = null;
+  const modeBar = document.getElementById('chatModeBar');
+  if (modeBar) modeBar.style.display = '';
+  addBubble(`Saved ${foods.length > 1 ? `${foods.length} items` : foods[0].name} to library — not logged as eaten today.`, 'system', 'success');
 }
 
 function logFoods(foods, originalText, aiMessage = null) {
@@ -9353,13 +9387,23 @@ function initSwipeDelete() {
     if (!dragging) return;
     const dx = e.changedTouches[0].clientX - startX;
     if (dx < -60) {
-      // Swiped far enough — delete
+      // Swiped far enough — confirm before animating away, so a cancelled
+      // deletion doesn't leave the entry looking gone when it isn't
       const idMatch = dragging.id.match(/log-entry-(\d+)/);
       if (idMatch) {
-        dragging.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        dragging.style.transform = 'translateX(-100%)';
-        dragging.style.opacity = '0';
-        setTimeout(() => deleteLogEntry(parseInt(idMatch[1])), 200);
+        const entryId = parseInt(idMatch[1]);
+        const draggedEl = dragging;
+        appConfirm('Delete this entry?', () => {
+          draggedEl.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+          draggedEl.style.transform = 'translateX(-100%)';
+          draggedEl.style.opacity = '0';
+          setTimeout(() => _doDeleteLogEntry(entryId), 200);
+        }, () => {
+          // Cancelled — snap back to original position
+          draggedEl.style.transition = 'transform 0.2s ease';
+          draggedEl.style.transform = 'translateX(0)';
+          draggedEl.style.background = '';
+        }, true);
       }
     } else {
       dragging.style.transition = 'transform 0.2s ease';
@@ -9372,6 +9416,10 @@ function initSwipeDelete() {
 }
 
 function deleteLogEntry(id) {
+  appConfirm('Delete this entry?', () => _doDeleteLogEntry(id), null, true);
+}
+
+function _doDeleteLogEntry(id) {
   const idx = state.todayLog.findIndex(e => e.id == id);
   if (idx === -1) { showToast('Entry not found'); return; }
   state.todayLog.splice(idx, 1);
