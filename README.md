@@ -33,15 +33,18 @@ mhstart
 # Open http://localhost:5757
 ```
 
-## Auto-start on boot (Termux:Boot)
+## Auto-start on boot — self-healing watchdog (recommended)
 
-```bash
-mkdir -p ~/.termux/boot
-echo '#!/data/data/com.termux/files/usr/bin/bash
-sleep 10
-mhstart' > ~/.termux/boot/start-maxhealth.sh
-chmod +x ~/.termux/boot/start-maxhealth.sh
-```
+This is the permanent fix for local server reliability. Once set up, Termux never needs to be opened manually again — the server starts on boot and auto-restarts itself if it ever crashes or gets killed by Android.
+
+1. Install cron: `pkg install cronie -y`
+2. Create `~/mh_watchdog.sh` that checks every minute, restarts the server if down, and kills duplicate instances if more than one is running.
+3. Add to crontab: `echo "* * * * * ~/mh_watchdog.sh" | crontab -`
+4. Add `~/.termux/boot/start-crond.sh` to launch `crond` on every boot.
+
+After a reboot, give it a minute, then confirm both crond and the server are running on their own — no manual Termux interaction needed. From this point on, Termux can stay closed; the server is self-healing.
+
+Note for cloud/GitHub Pages users: none of this is required — it only applies to local Termux setups. If you switch to local mode later, this is the section to follow.
 
 ## Deploy after update
 
