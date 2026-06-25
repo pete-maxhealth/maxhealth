@@ -10,7 +10,7 @@ BASHRC="/data/data/com.termux/files/home/.bashrc"
 clear
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║       MAXEDHEALTH SETUP v3.0        ║"
+echo "║       MAXEDHEALTH SETUP v3.1        ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 echo "This will take about 2 minutes."
@@ -20,7 +20,7 @@ echo ""
 # ── Step 1: Packages ──────────────────────────────────────────────────────────
 echo "━━━ Step 1/5: Installing packages ━━━"
 pkg update -y -q 2>/dev/null
-pkg install -y -q git python openssh 2>/dev/null
+pkg install -y -q git python openssh cronie 2>/dev/null
 pip install pyzipper --break-system-packages -q 2>/dev/null
 echo "  ✓ Done"
 echo ""
@@ -59,43 +59,53 @@ fi
 echo "  ✓ MaxedHealth ready"
 echo ""
 
-# ── Step 4: Create mhstart command ───────────────────────────────────────────
-echo "━━━ Step 4/5: Configuring commands ━━━"
+# ── Step 4: Self-healing watchdog ────────────────────────────────────────────
+echo "━━━ Step 4/5: Configuring self-healing server ━━━"
 
-# Create mhstart alias
-if ! grep -q "alias mhstart" "$BASHRC" 2>/dev/null; then
-  echo "" >> "$BASHRC"
-  echo "alias mhstart="mkdir -p /storage/emulated/0/maxhealth/data/tables /storage/emulated/0/maxhealth/data/inbox /storage/emulated/0/maxhealth/data/archive /storage/emulated/0/maxhealth/app/maxhealth; pkill -f server.py 2>/dev/null; sleep 1; cd /storage/emulated/0/maxhealth/app && python server.py &"" >> "$BASHRC"
-fi
-
-# Auto-start when Termux opens
-if ! grep -q "mhstart > /dev/null" "$BASHRC" 2>/dev/null; then
-  echo "" >> "$BASHRC"
-  echo "# MaxedHealth — auto-start server" >> "$BASHRC"
-  echo "mhstart > /dev/null 2>&1 &" >> "$BASHRC"
-fi
-
-# Make mhstart available immediately in this session
-alias mhstart="mkdir -p /storage/emulated/0/maxhealth/data/tables /storage/emulated/0/maxhealth/data/inbox /storage/emulated/0/maxhealth/data/archive /storage/emulated/0/maxhealth/app/maxhealth; pkill -f server.py 2>/dev/null; sleep 1; cd /storage/emulated/0/maxhealth/app && python server.py &"
-
-
-# Boot auto-start
-mkdir -p "$BOOT_DIR"
-cat > "$BOOT_DIR/maxhealth.sh" << 'BOOTEOF'
+# Watchdog script — checks every minute, restarts if down, kills duplicates
+cat > "$HOME/mh_watchdog.sh" << 'WATCHEOF'
 #!/data/data/com.termux/files/usr/bin/bash
-sleep 10
-mhstart > /dev/null 2>&1
-BOOTEOF
-chmod +x "$BOOT_DIR/maxhealth.sh"
+PIDS=$(pgrep -f "python.*server.py")
+COUNT=$(echo "$PIDS" | grep -c .)
+if [ "$COUNT" -eq 0 ]; then
+  cd /storage/emulated/0/maxhealth/app/maxhealth && python server.py &
+  echo "$(date): Server was down, restarted" >> ~/mh_watchdog.log
+elif [ "$COUNT" -gt 1 ]; then
+  KEEP=$(echo "$PIDS" | sort -n | head -1)
+  for PID in $PIDS; do
+    if [ "$PID" != "$KEEP" ]; then
+      kill "$PID"
+      echo "$(date): Killed duplicate PID $PID, kept $KEEP" >> ~/mh_watchdog.log
+    fi
+  done
+fi
+WATCHEOF
+chmod +x "$HOME/mh_watchdog.sh"
 
-echo "  ✓ mhstart command ready"
-echo "  ✓ Auto-start on Termux open configured"
-echo "  ✓ Boot script installed"
+# Crontab — check every minute
+echo "* * * * * ~/mh_watchdog.sh" | crontab -
+
+# Boot script — starts crond, which then runs the watchdog automatically
+mkdir -p "$BOOT_DIR"
+cat > "$BOOT_DIR/start-crond.sh" << 'BOOTEOF'
+#!/data/data/com.termux/files/usr/bin/bash
+sleep 5
+crond
+BOOTEOF
+chmod +x "$BOOT_DIR/start-crond.sh"
+
+# Start crond now for this session
+crond
+
+echo "  ✓ Self-healing watchdog installed"
+echo "  ✓ Cron configured (checks every 60s)"
+echo "  ✓ Boot script installed (Termux:Boot required for auto-start after reboot)"
 echo ""
 
 # ── Step 5: Start server ──────────────────────────────────────────────────────
 echo "━━━ Step 5/5: Starting MaxedHealth ━━━"
-mhstart
+bash "$HOME/mh_watchdog.sh"
+sleep 2
 echo ""
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -112,11 +122,12 @@ echo "  │  Bookmark it or Add to          │"
 echo "  │  Home Screen for easy access.   │"
 echo "  └─────────────────────────────────┘"
 echo ""
-echo "  The server starts automatically every"
-echo "  time you open Termux. You can minimise"
-echo "  Termux — it runs in the background."
+echo "  The server is self-healing — it checks"
+echo "  itself every minute and restarts if it"
+echo "  ever stops. You don't need to keep"
+echo "  Termux open."
 echo ""
-echo "  Optional: Install Termux:Boot from"
-echo "  F-Droid to start automatically after"
-echo "  your phone restarts."
+echo "  IMPORTANT: Install Termux:Boot from"
+echo "  F-Droid (not Play Store) so this"
+echo "  survives a phone restart."
 echo ""
