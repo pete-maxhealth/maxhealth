@@ -9506,15 +9506,13 @@ function showServerStatus() {
     colour = 'var(--accent)';
     body = `Server running at <strong>${MH_SERVER}</strong><br>All data saved to disk. Full sync available.`;
   } else if (!isLocal && _serverOnline) {
-    title = '⬡ REDIRECTING…';
+    title = '⬡ LOCAL SERVER FOUND';
     colour = 'var(--accent)';
-    body = `Server detected — redirecting to localhost…`;
-    setTimeout(tryLocalhostRedirect, 300);
+    body = `Your phone's local server is running.<br><br>Open your <strong>localhost:5757</strong> home screen shortcut for full sync — browsers no longer allow this page to jump there automatically.`;
   } else if (!isLocal) {
     title = '☁ CLOUD MODE';
     colour = 'var(--text3)';
-    body = `Checking for local server…<br><br>AI logging, barcode and library work normally.<br>For wearable sync, start the local server in Termux.<br><br>Currently on: <strong>${url}</strong>`;
-    setTimeout(tryLocalhostRedirect, 500);
+    body = `AI logging, barcode and library work normally.<br><br>For wearable sync, open your <strong>localhost:5757</strong> shortcut on this device (start the local server in Termux first if needed).<br><br>Currently on: <strong>${url}</strong>`;
   } else {
     title = '☁ SERVER OFFLINE';
     colour = 'var(--yellow)';
@@ -9539,31 +9537,15 @@ function showServerStatus() {
 }
 
 // ─── LOCALHOST REDIRECT ──────────────────────────────────
-// Detects local server using WebSocket (allowed from HTTPS→HTTP localhost)
-// then redirects to localhost for full functionality
+// REMOVED (v3.2): Chrome's Local Network Access (LNA) policy now blocks
+// cross-origin requests — including WebSocket — from a public HTTPS page
+// to localhost. Auto-redirect from GitHub Pages to localhost is no longer
+// possible from JS. Users should bookmark/pin localhost:5757 directly
+// (setup.sh does this automatically for new installs).
 function tryLocalhostRedirect() {
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
-  try {
-    const ws = new WebSocket('ws://localhost:5757/ws-probe');
-    const timeout = setTimeout(() => { try { ws.close(); } catch(e) {} }, 1500);
-    ws.onopen = function() {
-      clearTimeout(timeout);
-      ws.close();
-      // Update badge before redirect so user sees the transition
-      const badge = document.getElementById('serverModeBadge');
-      if (badge) {
-        badge.textContent = '⬡ LOCAL';
-        badge.style.color = 'var(--accent)';
-        badge.style.borderColor = 'var(--accent-glow)';
-        badge.style.background = 'var(--accent-dim)';
-      }
-      setTimeout(() => window.location.replace('http://localhost:5757/'), 400);
-    };
-    ws.onerror = function() {
-      clearTimeout(timeout);
-    };
-  } catch(e) {}
+  // Intentionally a no-op now — kept so any remaining call sites don't error.
 }
+
 
 // ─── TEXT SIZE ────────────────────────────────────────────
 function setTextSize(scale, btn) {
@@ -15674,6 +15656,17 @@ let _serverOnline = false;
 let _syncPollTimer = null;
 let _syncedCsvText = null;
 
+// Shown once per session if a local server is reachable while the user is
+// still on the public GitHub Pages URL — nudges them to open the
+// localhost:5757 bookmark/shortcut directly instead (auto-redirect is no
+// longer possible due to Chrome's Local Network Access policy).
+let _localhostHintShown = false;
+function showLocalhostHint() {
+  if (_localhostHintShown) return;
+  _localhostHintShown = true;
+  showToast('Local server found — open your localhost:5757 shortcut for full sync');
+}
+
 async function checkServer() {
   try {
     const res = await fetch(`${MH_SERVER}/ping`, { signal: AbortSignal.timeout(3000) });
@@ -15681,10 +15674,12 @@ async function checkServer() {
       const data = await res.json();
       _serverOnline = true;
       setServerDot('online');
-      // If we're on the GitHub URL (not already on localhost), redirect to localhost
-      // so all server features work without CORS restrictions
+      // NOTE (v3.2): we no longer attempt window.location.replace() to localhost
+      // from the public GitHub Pages origin — Chrome's Local Network Access
+      // policy blocks this. If the user is on the public URL with a local
+      // server reachable, just tell them once rather than silently failing.
       if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        window.location.replace('http://localhost:5757/');
+        showLocalhostHint();
         return true;
       }
       // Restore library from server if localStorage was cleared
@@ -15893,7 +15888,7 @@ function initSyncUI() {
 
 // ─── INIT ─────────────────────────────────────────────────
 try {
-  tryLocalhostRedirect(); // Redirect to localhost if server running (removes GitHub/localhost ambiguity)
+  tryLocalhostRedirect(); // no-op since v3.2 (Chrome LNA) — kept as harmless legacy call
   // If already on localhost, show LOCAL badge immediately without waiting for checkServer
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     const badge = document.getElementById('serverModeBadge');

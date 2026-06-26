@@ -1,5 +1,22 @@
 # MaxedHealth Changelog
 
+## v3.10.13 — Phase 9 (26 Jun 2026)
+- **Fixed:** GitHub Pages → localhost auto-redirect no longer works due to Chrome's
+  Local Network Access (LNA) policy (enforced from Chrome ~142–149), which blocks
+  cross-origin fetch/WebSocket requests from public HTTPS pages to localhost.
+  Removed the now-dead `tryLocalhostRedirect()` WebSocket probe and the
+  `checkServer()` auto-redirect; replaced with a one-time toast pointing users to
+  their localhost:5757 shortcut instead.
+- **Added:** setup.sh (v3.2) now auto-installs `termux-api`, detects whether
+  Termux:Boot and Termux:API are already installed, and prompts for the one-time
+  manual install only when missing (links open directly). New boot script
+  (`start-watchdog.sh`) holds a wake-lock and launches the watchdog immediately
+  on boot, alongside the existing cron-based boot script, to prevent Doze
+  suspending background checks overnight.
+- **Action required (existing installs):** re-pin your home screen shortcut to
+  `http://localhost:5757` directly — the old shortcut pointing at the GitHub
+  Pages URL will no longer auto-jump to local mode.
+
 ## v3.4.0 — Phase 9 (15 Jun 2026)
 - Custom themed modals replace all browser confirm/alert/prompt dialogs
 - Styled with app design system — dark/light theme aware, danger styling for deletions
