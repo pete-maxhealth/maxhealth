@@ -4247,6 +4247,32 @@ function onboardFinish() {
   updateDashboard();
   initSettings();
   showToast('Welcome to MaxedHealth ✓');
+
+  // If a local server is running and we're still on the public GitHub URL,
+  // offer a one-tap switch. This is a real user-gesture navigation, so
+  // Chrome's Local Network Access permission prompt can handle it properly
+  // (unlike the old silent background redirect, which is now blocked).
+  offerLocalSwitchIfAvailable();
+}
+
+async function offerLocalSwitchIfAvailable() {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
+  try {
+    const res = await fetch('http://localhost:5757/ping', { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return;
+  } catch (e) { return; } // no local server reachable — cloud-only user, say nothing
+
+  const banner = document.createElement('div');
+  banner.id = 'localSwitchBanner';
+  banner.style.cssText = 'position:fixed;bottom:16px;left:8px;right:8px;z-index:450;background:var(--surface);border:1px solid var(--accent);border-radius:12px;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,0.4);';
+  banner.innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;">⬡ Local server found</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px;">
+      Switch now for full sync, then add this page to your Home Screen so it opens directly in Local Mode next time.
+    </div>
+    <button class="run-btn" style="width:100%;" onclick="window.location.href='http://localhost:5757/'">Switch to Local Mode →</button>
+    <div style="text-align:center;margin-top:8px;"><span style="font-size:11px;color:var(--text3);cursor:pointer;" onclick="document.getElementById('localSwitchBanner').remove()">Not now</span></div>`;
+  document.body.appendChild(banner);
 }
 
 // PRELOADED_HISTORY removed for distribution — new users start clean
@@ -15667,6 +15693,18 @@ function showLocalhostHint() {
   showToast('Local server found — open your localhost:5757 shortcut for full sync');
 }
 
+// One-time (persistent across sessions) reminder to add THIS localhost page
+// to the home screen, shown the first time a user lands on localhost — e.g.
+// right after tapping "Switch to Local Mode" during onboarding.
+function maybeShowHomeScreenTip() {
+  if (localStorage.getItem('mh_homescreen_tip_shown')) return;
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') return;
+  localStorage.setItem('mh_homescreen_tip_shown', '1');
+  setTimeout(() => {
+    showToast('Tip: add this page to your Home Screen now — it\u2019ll always open in Local Mode');
+  }, 1200);
+}
+
 async function checkServer() {
   try {
     const res = await fetch(`${MH_SERVER}/ping`, { signal: AbortSignal.timeout(3000) });
@@ -15684,6 +15722,7 @@ async function checkServer() {
       }
       // Restore library from server if localStorage was cleared
       loadLibraryFromServer();
+      maybeShowHomeScreenTip();
       // Update mode badge
       const badge = document.getElementById('serverModeBadge');
       if (badge) {
