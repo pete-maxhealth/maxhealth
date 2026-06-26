@@ -47,7 +47,7 @@ MASTER_CSV      = os.path.join(TABLES_DIR, 'master.csv')
 LIBRARY_CSV     = os.path.join(TABLES_DIR, 'library.csv')
 SUPPLEMENTS_CSV = os.path.join(TABLES_DIR, 'supplements.csv')
 
-TRACKER    = os.path.join(APP_DIR, 'maxhealth', 'maxhealth.html')
+TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
 PORT       = 5757
 
