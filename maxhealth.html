@@ -4820,14 +4820,16 @@ function renderLibrary() {
   applySectionState('lib-ingredients',  'lib-ingredients-wrap',  'lib-ingredients-icon',  true);
   applySectionState('lib-recipes',      'lib-recipes-wrap',      'lib-recipes-icon',      true);
 
-  // Build A-Z quick nav — uses the FULL library (libWithIdx), not the currently
-  // search/category-filtered subset, so letters don't disappear as you type a
-  // search query. The nav should answer "what letters exist in my whole library,"
-  // not "what letters exist among today's filtered results."
+  // Build A-Z quick nav — ingredients only (meals have their own section header
+  // and don't benefit from letter-jumping in the same way). Uses the full
+  // ingredient subset of libWithIdx, not the currently filtered view, so
+  // letters don't disappear while typing a search query.
   const alphaNav = document.getElementById('libraryAlphaNav');
   if (alphaNav) {
-    const letters = [...new Set(libWithIdx.map(f => f.name[0]?.toUpperCase()).filter(Boolean))].sort();
-    alphaNav.innerHTML = letters.map(l =>
+    const ingredientLetters = [...new Set(
+      libWithIdx.filter(f => !isMealEntry(f)).map(f => f.name[0]?.toUpperCase()).filter(Boolean)
+    )].sort();
+    alphaNav.innerHTML = ingredientLetters.map(l =>
       `<button onclick="jumpToLibraryLetter('${l}')"
         style="min-width:32px;min-height:32px;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:13px;font-weight:600;font-family:Space Mono,monospace;cursor:pointer;touch-action:manipulation;">${l}</button>`
     ).join('');
@@ -5930,10 +5932,16 @@ CRITICAL DEDUPLICATION: Never return the same food item twice under different na
 
 LABEL PHOTO PRIORITY: If the user sends a photo of a nutrition label, READ THE EXACT VALUES FROM THE LABEL. Label values override all other sources including your training data. State clearly "Macros calculated from label values" in the message field and show the per-100g figures you read.
 
-MEAL PHOTO REASONING: If the user sends a photo of a plate or meal (not a label), follow these three steps before calculating anything:
-Step 1 — IDENTIFY: List every visible food component separately. Use the plate, bowl, or hand as a size reference.
-Step 2 — ESTIMATE WEIGHT: For each component, state your gram estimate and your reasoning — e.g. "chicken breast ~150g (palm-sized), rice ~75g (small mound, ~half cup dry equiv), broccoli ~60g (3 florets)".
-Step 3 — CALCULATE: Scale macros from your stated gram estimates using standard per-100g values. State the per-100g values you used.
+MEAL PHOTO REASONING: If the user sends a photo of a plate or meal (not a label), follow these four steps before calculating anything:
+Step 1 — IDENTIFY: List every visible food component separately, including oils, sauces, butter, dressings and cooking fats — these are frequently missed but contribute significantly to fat and calories.
+Step 2 — ESTIMATE WEIGHT: For each component, state your gram estimate and your reasoning using these anchors:
+  - A standard dinner plate is 26–28cm across and holds 400–700g total when loaded
+  - A palm of meat/fish ≈ 120–150g; a fist of veg ≈ 80–100g; a thumb of fat/oil ≈ 15g
+  - Cooked rice/pasta: a tennis ball ≈ 100g cooked; a mound filling half a side plate ≈ 150–200g
+  - Sauces/gravies: even a light coating on a 26cm plate ≈ 30–50g
+  - Oils used in cooking: a visible sheen or gloss on meat/veg ≈ 10–20g oil absorbed
+Step 3 — SANITY CHECK: Before calculating, sum your component weights and check it's plausible for the plate/bowl size visible. A loaded dinner plate typically totals 400–700g. Adjust individual estimates if the sum is implausibly low or high — do not systematically bias in either direction.
+Step 4 — CALCULATE: Scale macros from your stated gram estimates using standard per-100g values. State the per-100g values you used for each component.
 Always show the Step 2 estimates in the message field so the user can sanity-check and correct if needed. If the user has also typed a description or amounts, their text overrides your visual estimate for those items.
 
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
@@ -14816,6 +14824,102 @@ function applyAllSectionStates() {
   COLLAPSIBLE_SECTIONS.forEach(([key, wrapId, iconId, defaultOpen]) => applySectionState(key, wrapId, iconId, defaultOpen));
 }
 
+// ─── SHARED REPORT CONTEXT ───────────────────────────────────────────────────
+// Builds a consistent patient context block used by all AI report types:
+// Monthly Summary, Ask AI, and Full Summary. Ensures day-type aware carb
+// compliance, weight target, gaining phase, and activity factors are always
+// considered — not just standard targets.
+function buildPatientContext(history) {
+  const t    = getTargets();
+  const name = localStorage.getItem('mh_name') || 'the patient';
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const wtLow  = getWeightTargetLow()  || 92;
+  const wtHigh = getWeightTargetHigh() || 93;
+
+  // Per-day compliance using that day's actual mode ceiling
+  const dayBreakdown = history.map(e => {
+    const mode = e.mode || 'standard';
+    const ceil = t[mode]?.carbs ?? t.standard.carbs;
+    return {
+      mode,
+      ceil,
+      within: (e.totals?.carbs || 0) <= ceil,
+      carbs:   e.totals?.carbs   || 0,
+      kcal:    e.totals?.kcal    || 0,
+      protein: e.totals?.protein || 0,
+      fat:     getEntryFat(e)    || 0,
+      steps:   e.steps           || 0,
+      activeKcal: e.calories_active || 0,
+      weight:  e.weight,
+    };
+  });
+
+  const n = dayBreakdown.length;
+  const av = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
+  const on = dayBreakdown.filter(d => d.within).length;
+
+  const stdDays = dayBreakdown.filter(d => d.mode === 'standard');
+  const holDays = dayBreakdown.filter(d => d.mode === 'holiday');
+  const occDays = dayBreakdown.filter(d => d.mode === 'occasion');
+
+  const dayTypeSummary = [
+    stdDays.length ? `${stdDays.length} standard (≤${t.standard.carbs}g, ${stdDays.filter(d=>d.within).length}/${stdDays.length} within)` : '',
+    holDays.length ? `${holDays.length} holiday (≤${t.holiday.carbs}g, ${holDays.filter(d=>d.within).length}/${holDays.length} within)` : '',
+    occDays.length ? `${occDays.length} occasion (≤${t.occasion.carbs}g, ${occDays.filter(d=>d.within).length}/${occDays.length} within)` : '',
+  ].filter(Boolean).join('; ');
+
+  const streak = (() => {
+    let s = 0;
+    for (const d of dayBreakdown) { if (d.within) s++; else break; }
+    return s;
+  })();
+
+  const weights   = dayBreakdown.map(d => d.weight).filter(Boolean);
+  const latestWt  = weights[0] || null;
+  const wtTrend   = weights.length >= 2 ? (weights[0] - weights[weights.length-1]).toFixed(1) : null;
+  const wtStatus  = latestWt
+    ? latestWt < wtLow  ? `BELOW target (${latestWt}kg, target ${wtLow}–${wtHigh}kg) — gaining phase active`
+    : latestWt > wtHigh ? `ABOVE target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
+    :                     `WITHIN target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
+    : 'No weight data';
+
+  const avgSteps     = av(dayBreakdown.map(d => d.steps).filter(x => x > 0));
+  const avgActiveKcal = av(dayBreakdown.map(d => d.activeKcal).filter(x => x > 0));
+
+  return {
+    name, cond, n, t, wtLow, wtHigh,
+    on, dayTypeSummary, streak,
+    latestWt, wtTrend, wtStatus,
+    avgSteps, avgActiveKcal,
+    avKcal:    av(dayBreakdown.map(d => d.kcal)),
+    avProtein: av(dayBreakdown.map(d => d.protein)),
+    avCarbs:   av(dayBreakdown.map(d => d.carbs)),
+    avFat:     av(dayBreakdown.map(d => d.fat)),
+    pct: Math.round(on / n * 100),
+  };
+}
+
+// Returns the standard patient context block as a prompt string
+function patientContextBlock(ctx) {
+  return `PATIENT: ${ctx.name} | Condition: GBM (methylated, operable, currently in remission) | Phase: GAINING (target ${ctx.wtLow}–${ctx.wtHigh}kg)
+PROTOCOL TARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion)
+FAT TARGET: ~247g/day (ketogenic gaining protocol — gaining objective overrides macro targets when calories fall short)
+
+PERIOD: ${ctx.n} days
+NUTRITION AVERAGES: ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat
+CARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against each day's actual ceiling
+DAY TYPE BREAKDOWN: ${ctx.dayTypeSummary}
+CURRENT STREAK: ${ctx.streak} days within ceiling
+WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
+ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
+
+IMPORTANT CONTEXT:
+- Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets
+- Patient is in a calorie-surplus gaining phase; calorie adequacy is as important as carb control
+- Gaining protocol: 3,000–3,500 kcal/day; daily 150g double cream shake is non-negotiable
+- No medical disclaimers needed — patient has acknowledged the evidence base`;
+}
+
 async function askReportsAI() {
   const question = document.getElementById('rptAskInput')?.value.trim();
   if (!question) { showToast('Enter a question first'); return; }
@@ -14835,56 +14939,40 @@ async function askReportsAI() {
   btn.textContent = 'Thinking…'; btn.disabled = true;
   out.style.display = 'none';
 
-  const t    = getTargets().standard;
-  const cond = localStorage.getItem('mh_condition') || 'general';
-  const name = localStorage.getItem('mh_name') || 'the user';
-
-  // Build data table — one row per day, key columns
-  // Cap at 365 rows — full year fits comfortably in context
-  const rows = h.slice(0, 365);
-  const dataRows = rows.map(r => {
-    const cols = [
-      r.date,
-      r.totals?.kcal    != null ? r.totals.kcal    : '',
-      r.totals?.protein != null ? r.totals.protein : '',
-      r.totals?.carbs   != null ? r.totals.carbs   : '',
-      getEntryFat(r), // dietary fat in grams — recorded value if present, else back-calculated from kcal/protein/carbs
-      r.steps           != null ? r.steps           : '',
-      r.sleep_duration  != null ? r.sleep_duration  : '',
-      r.sleep_deep      != null ? r.sleep_deep      : '',
-      r.sleep_rem       != null ? r.sleep_rem       : '',
-      r.hrv             != null ? r.hrv             : '',
-      r.spo2            != null ? r.spo2            : '',
-      r.hr_avg          != null ? r.hr_avg          : '',
-      r.weight          != null ? r.weight          : '',
-      r.fat_pct         != null ? r.fat_pct         : '',
-      r.muscle_mass_kg  != null ? r.muscle_mass_kg  : '',
-      r.calories_active != null ? r.calories_active : '',
-      r.elevation_m     != null ? r.elevation_m     : '',
-    ];
-    return cols.join(',');
-  }).join('\n');
-
+  const rows   = h.slice(0, 365);
+  const ctx    = buildPatientContext(h);
   const schema = `date,kcal,protein_g,carbs_g,fat_g,steps,sleep_min,deep_min,rem_min,hrv_ms,spo2_pct,hr_avg,weight_kg,fat_pct,muscle_kg,active_kcal,elevation_m`;
+  const dataRows = rows.map(r => [
+    r.date,
+    r.totals?.kcal    != null ? r.totals.kcal    : '',
+    r.totals?.protein != null ? r.totals.protein : '',
+    r.totals?.carbs   != null ? r.totals.carbs   : '',
+    getEntryFat(r),
+    r.steps           != null ? r.steps           : '',
+    r.sleep_duration  != null ? r.sleep_duration  : '',
+    r.sleep_deep      != null ? r.sleep_deep      : '',
+    r.sleep_rem       != null ? r.sleep_rem       : '',
+    r.hrv             != null ? r.hrv             : '',
+    r.spo2            != null ? r.spo2            : '',
+    r.hr_avg          != null ? r.hr_avg          : '',
+    r.weight          != null ? r.weight          : '',
+    r.fat_pct         != null ? r.fat_pct         : '',
+    r.muscle_mass_kg  != null ? r.muscle_mass_kg  : '',
+    r.calories_active != null ? r.calories_active : '',
+    r.elevation_m     != null ? r.elevation_m     : '',
+  ].join(',')).join('\n');
 
-  const prompt = `You are a health data analyst. The user is ${name} (condition: ${cond}).
-Targets: ${t.kcal} kcal/day, ${t.protein}g protein, ${t.carbs}g carb ceiling.
-Period: ${rows.length} days of data (full available history, most recent first).
-Note: fat_g is dietary fat eaten that day (grams). fat_pct is body fat percentage from a smart scale — a completely different measurement. Don't confuse the two.
+  const prompt = `You are a specialist health analyst. ${patientContextBlock(ctx)}
 
-Data (CSV format, empty = no reading that day):
+Data (CSV, most recent first, empty = no reading):
 ${schema}
 ${dataRows}
 
+Note: fat_g is dietary fat (grams eaten). fat_pct is body fat percentage from a smart scale — completely different measurements.
+
 User question: ${question}
 
-Instructions:
-- Answer the question directly using the actual data provided
-- Reference specific dates or values where relevant
-- If correlations exist, describe them with supporting numbers
-- If the data is insufficient to answer, say so honestly
-- Plain English prose, 2-4 paragraphs, no bullet points
-- No medical disclaimers`;
+Answer the question directly using the actual data. Reference specific dates or values where relevant. If correlations exist, describe them with supporting numbers. Plain English prose, 2–4 paragraphs, no bullet points.`;
 
   try {
     const { provider, apiKey } = getAIConfig();
@@ -15129,42 +15217,24 @@ async function generateGBMSummary() {
   const txt = document.getElementById('gbm-summary-text');
   btn.textContent = 'Generating…'; btn.disabled = true;
 
-  const t    = getTargets().standard;
-  const name = localStorage.getItem('mh_name') || 'the patient';
-  const n    = h.length;
-  const av   = arr => Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
-  const kcals = h.map(e => e.totals?.kcal    || 0);
-  const prots = h.map(e => e.totals?.protein || 0);
-  const carbs = h.map(e => e.totals?.carbs   || 0);
-  const weights = h.map(e => e.weight).filter(Boolean);
-  const on    = carbs.filter(c => c <= t.carbs).length;
-  const streak = (() => { let s=0; for(const e of h){ if((e.totals?.carbs||0)<=t.carbs) s++; else break; } return s; })();
-  const weightTrend = weights.length >= 2
-    ? (weights[0] - weights[weights.length-1]).toFixed(1)
-    : null;
-
+  const ctx  = buildPatientContext(h);
   const todayDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  const prompt = `You are a specialist health analyst supporting a GBM (glioblastoma multiforme) patient following a therapeutic ketosis protocol. Write a structured monthly summary for ${name}. Today's date is ${todayDate}. Be concise and clinical. Each section maximum 3-4 sentences. Complete ALL sections. Do not truncate.
 
-DATA (${n} days):
-- Calorie intake: avg ${av(kcals)} kcal/day (target ${t.kcal} kcal)
-- Protein: avg ${av(prots)}g/day (target ${t.protein}g)
-- Carbohydrates: avg ${av(carbs)}g/day (ceiling ${t.carbs}g)
-- Carb ceiling adherence: ${on}/${n} days (${Math.round(on/n*100)}%)
-- Current streak: ${streak} consecutive days within ceiling
-${weights.length ? `- Weight: current ${weights[0]}kg${weightTrend ? `, trend ${weightTrend > 0 ? '+' : ''}${weightTrend}kg over period` : ''}` : ''}
+  const prompt = `You are a specialist health analyst supporting a GBM patient in remission following a therapeutic ketosis protocol. Write a structured monthly summary. Today: ${todayDate}. Be concise and clinical. Each section 3–4 sentences. Complete ALL sections — do not truncate.
+
+${patientContextBlock(ctx)}
 
 Write 4 sections:
 
-1. KETOSIS ADHERENCE — honest assessment of carb adherence, what the ${Math.round(on/n*100)}% means metabolically, whether the pattern is improving or declining.
+1. KETOSIS ADHERENCE — honest assessment of carb adherence. What does ${ctx.pct}% mean metabolically? Is the pattern improving or declining? Factor in day types — a holiday day within its ceiling is fully compliant.
 
-2. PROTEIN & MUSCLE MASS — assessment of protein sufficiency for lean mass preservation during therapeutic ketosis. Flag if avg ${av(prots)}g is adequate.
+2. CALORIE & GAINING PHASE — is ${ctx.avKcal} kcal/day adequate for the gaining goal (target ${ctx.wtLow}–${ctx.wtHigh}kg)? Comment on fat adequacy (~247g target) and whether the cream shake protocol is visibly supporting the surplus.
 
-3. WEIGHT & BODY COMPOSITION — weight trend interpretation in context of gaining phase and GBM protocol.
+3. WEIGHT & BODY COMPOSITION — interpret the weight trend in context of the gaining phase and GBM protocol. Is progress toward or within the ${ctx.wtLow}–${ctx.wtHigh}kg target range? Flag if off-track.
 
-4. RECOMMENDATIONS — 2-3 specific, actionable protocol adjustments for the next month. Categorise each as: [Proven] / [Early Stage] / [Speculative] based on evidence base.
+4. RECOMMENDATIONS — 2–3 specific, actionable protocol adjustments for the next month. Categorise each as: [Proven] / [Early Stage] / [Speculative].
 
-Prose only. No bullet points. No medical disclaimers (patient has acknowledged). Be direct, clinical, and forward-looking. Do not catastrophise.`;
+Prose only. No bullet points. Direct and clinical. Do not catastrophise.`;
 
   try {
     const { provider, apiKey } = getAIConfig();
