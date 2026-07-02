@@ -7586,6 +7586,18 @@ function quickPrompt(text) {
 }
 
 async function processMessage(text, imageBase64, imageMime) {
+  // ── Resume pending clarification — user is answering the AI's question ──
+  // When the AI asked about an ambiguous photo item (e.g. "pasta or veg?"),
+  // replay as a multi-turn conversation: [image] → [AI question] → [user answer]
+  // so the AI has full context when logging.
+  if (window._pendingClarification && !imageBase64) {
+    const pc = window._pendingClarification;
+    window._pendingClarification = null;
+    const clarifyText = `${pc.aiQuestion}\n\nUser clarification: ${text}`;
+    processMessage(clarifyText, pc.imageBase64, pc.imageMime);
+    return;
+  }
+
   // ── Resume pending label photo if user replies with an amount ──
   if (window._pendingLabelPhoto && !imageBase64) {
     const hasGrams = /\d+\s*(g|ml|kg)\b/i.test(text || '');
@@ -7598,6 +7610,11 @@ async function processMessage(text, imageBase64, imageMime) {
     }
     // If they replied but still no grams, clear pending and continue normally
     window._pendingLabelPhoto = null;
+  }
+
+  // ── If a new image arrives, any pending clarification is stale — clear it ──
+  if (imageBase64 && window._pendingClarification) {
+    window._pendingClarification = null;
   }
 
   // ── If a meal preview is pending, don't start a new one ──
@@ -7892,7 +7909,20 @@ async function processMessage(text, imageBase64, imageMime) {
       showMealPreview(sanitiseFatValues(result.items), text, result.message);
       return;
     }
-    if (result.type === 'query') { addBubble(result.message, 'system'); return; }
+    if (result.type === 'query') {
+      addBubble(result.message, 'system');
+      // If this looks like a clarification question (ends with ?) and we had
+      // an image, store context so the next user reply is treated as the
+      // answer rather than a fresh log entry.
+      if (result.message?.trim().endsWith('?') && imageBase64) {
+        window._pendingClarification = {
+          imageBase64,
+          imageMime,
+          aiQuestion: result.message
+        };
+      }
+      return;
+    }
   }
 
   // ── Nothing worked ────────────────────────────────────────
