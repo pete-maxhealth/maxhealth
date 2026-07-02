@@ -43,11 +43,6 @@ import io
 import os
 import sys
 import zipfile
-try:
-    import pyzipper
-    _HAS_PYZIPPER = True
-except ImportError:
-    _HAS_PYZIPPER = False
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -55,13 +50,7 @@ from datetime import datetime, timezone
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def open_zip(path, password=None):
-    """Open zip, with or without password. Uses pyzipper for AES-encrypted
-    Zepp exports (stdlib zipfile cannot decompress these even with the
-    correct password). Falls back to stdlib zipfile for unencrypted zips."""
-    if password and _HAS_PYZIPPER:
-        zf = pyzipper.AESZipFile(path, 'r')
-        zf.setpassword(password.encode('utf-8'))
-        return zf
+    """Open zip, with or without password. Returns ZipFile object."""
     zf = zipfile.ZipFile(path, 'r')
     if password:
         zf.setpassword(password.encode('utf-8'))
