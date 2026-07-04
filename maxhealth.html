@@ -3452,6 +3452,19 @@ body[data-theme="light"] {
         </div>
         <div id="goalDesc" style="font-size:12px;color:var(--text3);"></div>
       </div>
+      <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
+        <div class="settings-label">Condition / Protocol</div>
+        <select id="settingsCondition" onchange="saveCondition()"
+          style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;font-family:DM Sans,sans-serif;">
+          <option value="gbm">GBM — Therapeutic ketogenic (20–30g target)</option>
+          <option value="epilepsy">Epilepsy — Therapeutic ketogenic (20–30g target)</option>
+          <option value="strict_keto">Strict Ketosis — Metabolic/weight (20–50g)</option>
+          <option value="t1_diabetes">Type 1 Diabetes — Carb awareness &amp; insulin management</option>
+          <option value="t2_diabetes">Type 2 Diabetes — Low carb (50–100g)</option>
+          <option value="general">General Health / Weight Loss (100–150g)</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:2px;">Used to personalise AI report framing, recommendations and carb compliance thresholds. Does not change your carb ceilings — update those separately in Carb Ceilings below.</div>
+      </div>
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:4px;">
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
           <div class="settings-label">Daily calorie target</div>
@@ -3624,7 +3637,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.22</div>
+        <div class="settings-value">MaxedHealth v3.10.24</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5384,6 +5397,11 @@ function saveProfile() {
   if (!isNaN(age) && age >= 1 && age <= 120) localStorage.setItem('mh_age', age);
 }
 
+function saveCondition() {
+  const el = document.getElementById('settingsCondition');
+  if (el) localStorage.setItem('mh_condition', el.value);
+}
+
 function setSex(sex) {
   localStorage.setItem('mh_sex', sex);
   ['male','female'].forEach(s => {
@@ -5454,6 +5472,8 @@ function initSettings() {
   if (ageEl) ageEl.value = localStorage.getItem('mh_age') || '';
   const savedSex = localStorage.getItem('mh_sex');
   if (savedSex) setSex(savedSex);
+  const condEl = document.getElementById('settingsCondition');
+  if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'gbm';
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
@@ -14877,36 +14897,33 @@ function applyAllSectionStates() {
 }
 
 // ─── SHARED REPORT CONTEXT ───────────────────────────────────────────────────
-// Builds a consistent patient context block used by all AI report types:
-// Monthly Summary, Ask AI, and Full Summary. Ensures day-type aware carb
-// compliance, weight target, gaining phase, and activity factors are always
-// considered — not just standard targets.
+// Builds a consistent patient context block used by all AI report types.
+// Condition-aware: framing, thresholds and recommendations differ by condition.
 function buildPatientContext(history) {
-  const t    = getTargets();
-  const name = localStorage.getItem('mh_name') || 'the patient';
-  const cond = localStorage.getItem('mh_condition') || 'general';
+  const t      = getTargets();
+  const name   = localStorage.getItem('mh_name') || 'the patient';
+  const cond   = localStorage.getItem('mh_condition') || 'gbm';
+  const goal   = localStorage.getItem('mh_goal') || 'gain';
   const wtLow  = getWeightTargetLow()  || 92;
   const wtHigh = getWeightTargetHigh() || 93;
 
-  // Per-day compliance using that day's actual mode ceiling
   const dayBreakdown = history.map(e => {
     const mode = e.mode || 'standard';
     const ceil = t[mode]?.carbs ?? t.standard.carbs;
     return {
-      mode,
-      ceil,
-      within: (e.totals?.carbs || 0) <= ceil,
-      carbs:   e.totals?.carbs   || 0,
-      kcal:    e.totals?.kcal    || 0,
-      protein: e.totals?.protein || 0,
-      fat:     getEntryFat(e)    || 0,
-      steps:   e.steps           || 0,
+      mode, ceil,
+      within:     (e.totals?.carbs || 0) <= ceil,
+      carbs:      e.totals?.carbs   || 0,
+      kcal:       e.totals?.kcal    || 0,
+      protein:    e.totals?.protein || 0,
+      fat:        getEntryFat(e)    || 0,
+      steps:      e.steps           || 0,
       activeKcal: e.calories_active || 0,
-      weight:  e.weight,
+      weight:     e.weight,
     };
   });
 
-  const n = dayBreakdown.length;
+  const n  = dayBreakdown.length;
   const av = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0;
   const on = dayBreakdown.filter(d => d.within).length;
 
@@ -14926,36 +14943,83 @@ function buildPatientContext(history) {
     return s;
   })();
 
-  const weights   = dayBreakdown.map(d => d.weight).filter(Boolean);
-  const latestWt  = weights[0] || null;
-  const wtTrend   = weights.length >= 2 ? (weights[0] - weights[weights.length-1]).toFixed(1) : null;
-  const wtStatus  = latestWt
-    ? latestWt < wtLow  ? `BELOW target (${latestWt}kg, target ${wtLow}–${wtHigh}kg) — gaining phase active`
+  const weights  = dayBreakdown.map(d => d.weight).filter(Boolean);
+  const latestWt = weights[0] || null;
+  const wtTrend  = weights.length >= 2 ? (weights[0] - weights[weights.length-1]).toFixed(1) : null;
+  const wtStatus = latestWt
+    ? latestWt < wtLow  ? `BELOW target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
     : latestWt > wtHigh ? `ABOVE target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
     :                     `WITHIN target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
     : 'No weight data';
 
-  const avgSteps     = av(dayBreakdown.map(d => d.steps).filter(x => x > 0));
-  const avgActiveKcal = av(dayBreakdown.map(d => d.activeKcal).filter(x => x > 0));
-
   return {
-    name, cond, n, t, wtLow, wtHigh,
+    name, cond, goal, n, t, wtLow, wtHigh,
     on, dayTypeSummary, streak,
     latestWt, wtTrend, wtStatus,
-    avgSteps, avgActiveKcal,
-    avKcal:    av(dayBreakdown.map(d => d.kcal)),
-    avProtein: av(dayBreakdown.map(d => d.protein)),
-    avCarbs:   av(dayBreakdown.map(d => d.carbs)),
-    avFat:     av(dayBreakdown.map(d => d.fat)),
-    pct: Math.round(on / n * 100),
+    avgSteps:      av(dayBreakdown.map(d => d.steps).filter(x => x > 0)),
+    avgActiveKcal: av(dayBreakdown.map(d => d.activeKcal).filter(x => x > 0)),
+    avKcal:        av(dayBreakdown.map(d => d.kcal)),
+    avProtein:     av(dayBreakdown.map(d => d.protein)),
+    avCarbs:       av(dayBreakdown.map(d => d.carbs)),
+    avFat:         av(dayBreakdown.map(d => d.fat)),
+    pct:           Math.round(on / n * 100),
   };
 }
 
-// Returns the standard patient context block as a prompt string
+// Condition metadata — framing, protocol label, evidence note, carb concern threshold
+const CONDITION_META = {
+  gbm: {
+    label:        'GBM (methylated, operable, currently in remission)',
+    protocol:     'Therapeutic ketogenic — target 20–30g carbs/day',
+    evidenceNote: 'Ketogenic metabolic therapy for GBM: Early Stage evidence (Phase 1b Sativex trial, Meidenbauer et al). Categorise all recommendations as [Proven] / [Early Stage] / [Speculative].',
+    goalFrame:    'Gaining phase active — calorie adequacy is as important as carb control. Daily 150g double cream shake is non-negotiable.',
+    flagAbove:    'standard',  // flag if standard day > ceiling
+  },
+  epilepsy: {
+    label:        'Epilepsy — therapeutic ketogenic protocol',
+    protocol:     'Therapeutic ketogenic — target 20–30g carbs/day',
+    evidenceNote: 'Classical ketogenic diet for epilepsy: Proven evidence base. Carb compliance is the primary seizure-control lever.',
+    goalFrame:    null,
+    flagAbove:    'standard',
+  },
+  strict_keto: {
+    label:        'Strict Ketosis — metabolic health',
+    protocol:     'Standard ketogenic — target 20–50g carbs/day',
+    evidenceNote: 'Nutritional ketosis for metabolic health: Proven for weight loss and insulin sensitivity (multiple RCTs).',
+    goalFrame:    null,
+    flagAbove:    'standard',
+  },
+  t1_diabetes: {
+    label:        'Type 1 Diabetes',
+    protocol:     'Carb-aware — focus on glycaemic stability and insulin management',
+    evidenceNote: 'Low carb for T1D: Early Stage evidence (Bernstein method, Lennerz et al 2018). Note: carb reductions affect insulin dosing — flag this in recommendations.',
+    goalFrame:    null,
+    flagAbove:    'standard',
+  },
+  t2_diabetes: {
+    label:        'Type 2 Diabetes',
+    protocol:     'Low carb — target 50–100g carbs/day for glucose stability',
+    evidenceNote: 'Low carb for T2D: Proven evidence for HbA1c reduction and remission (Virta Health, Lean et al 2018). Frame recommendations around glucose stability and medication review.',
+    goalFrame:    null,
+    flagAbove:    'standard',
+  },
+  general: {
+    label:        'General Health / Weight Loss',
+    protocol:     'Balanced low carb — target 100–150g carbs/day',
+    evidenceNote: 'General low carb for weight loss: Proven short-term (12 months), evidence mixed long-term vs other diets.',
+    goalFrame:    null,
+    flagAbove:    null,
+  },
+};
+
 function patientContextBlock(ctx) {
-  return `PATIENT: ${ctx.name} | Condition: GBM (methylated, operable, currently in remission) | Phase: GAINING (target ${ctx.wtLow}–${ctx.wtHigh}kg)
-PROTOCOL TARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion)
-FAT TARGET: ~247g/day (ketogenic gaining protocol — gaining objective overrides macro targets when calories fall short)
+  const meta   = CONDITION_META[ctx.cond] || CONDITION_META.general;
+  const goalLbl = ctx.goal === 'gain' ? 'GAINING' : ctx.goal === 'lose' ? 'LOSING' : 'MAINTAINING';
+  const goalExtra = meta.goalFrame ? `\n${meta.goalFrame}` : '';
+
+  return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)
+PROTOCOL: ${meta.protocol}
+TARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ~${ctx.t.standard.fat || 247}g fat${goalExtra}
 
 PERIOD: ${ctx.n} days
 NUTRITION AVERAGES: ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat
@@ -14965,11 +15029,8 @@ CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
 
-IMPORTANT CONTEXT:
-- Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets
-- Patient is in a calorie-surplus gaining phase; calorie adequacy is as important as carb control
-- Gaining protocol: 3,000–3,500 kcal/day; daily 150g double cream shake is non-negotiable
-- No medical disclaimers needed — patient has acknowledged the evidence base`;
+EVIDENCE FRAMEWORK: ${meta.evidenceNote}
+IMPORTANT: Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets. No medical disclaimers needed — patient has acknowledged the evidence base.`;
 }
 
 async function askReportsAI() {
@@ -15547,14 +15608,26 @@ function generateCarerLink() {
 
   const name = localStorage.getItem('mh_name') || 'Patient';
   const t = getTargets().standard;
+  const ceilings = {
+    standard: parseInt(localStorage.getItem('mh_ceil_standard')) || 50,
+    occasion: parseInt(localStorage.getItem('mh_ceil_occasion')) || 75,
+    holiday:  parseInt(localStorage.getItem('mh_ceil_holiday'))  || 100,
+  };
   const h30 = h.slice(0, 30);
   const avg = key => Math.round(h30.reduce((a,d)=>a+(d.totals?.[key]||0),0)/Math.max(h30.length,1));
-  const ketoAdh = Math.round(h30.filter(d=>(d.totals?.carbs||0)<=t.carbs).length/Math.max(h30.length,1)*100);
+  const ketoAdh = Math.round(h30.filter(d => {
+    const mode = d.mode || 'standard';
+    const ceil = mode === 'holiday' ? ceilings.holiday : mode === 'occasion' ? ceilings.occasion : ceilings.standard;
+    return (d.totals?.carbs || 0) <= ceil;
+  }).length / Math.max(h30.length, 1) * 100);
   const dayRows = h30.map(d => {
+    const mode = d.mode || 'standard';
+    const ceil = mode === 'holiday' ? ceilings.holiday : mode === 'occasion' ? ceilings.occasion : ceilings.standard;
     const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
     const tags = (d.notes||'').split(',').map(x=>x.trim()).filter(x=>x&&!legacy.includes(x.toLowerCase()));
     const isChemo = tags.some(x=>x.toLowerCase().includes('chemo'));
-    return '<tr style="background:'+(isChemo?'#f9f0ff':'')+'"><td style="padding:4px 8px;font-size:11px;">'+d.date+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.kcal||0)+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.protein||0)+'g</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.fat||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(( d.totals?.carbs||0)<=t.carbs?'#16a34a':'#dc2626')+'">'+Math.round(d.totals?.carbs||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(isChemo?'#7c3aed':'#666')+'">'+tags.join(', ')+'</td></tr>';
+    const overCarbs = (d.totals?.carbs || 0) > ceil;
+    return '<tr style="background:'+(isChemo?'#f9f0ff':'')+'"><td style="padding:4px 8px;font-size:11px;">'+d.date+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.kcal||0)+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.protein||0)+'g</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.fat||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(overCarbs?'#dc2626':'#16a34a')+'">'+Math.round(d.totals?.carbs||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(isChemo?'#7c3aed':'#666')+'">'+tags.join(', ')+'</td></tr>';
   }).join('');
 
   const pageHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+name+' — Health Summary</title>'
