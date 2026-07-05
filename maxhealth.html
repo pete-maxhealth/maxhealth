@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v2.1.9 — Phase 7: library fixes, meal photo reasoning, save to library -->
+<meta charset="UTF-8"><!-- v3.10.32 — Phase 9: full feature build -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -6155,6 +6155,12 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
     }
   } catch (e) {
     console.error('AI parse error:', e);
+    const isOffline = e.name === 'TimeoutError' || e.name === 'AbortError'
+      || e.message?.includes('Failed to fetch')
+      || e.message?.includes('NetworkError')
+      || e.message?.includes('Load failed')
+      || !navigator.onLine;
+    if (isOffline) return { type: 'offline' };
     return { type: 'error', message: `AI error: ${e.message}` };
   }
 }
@@ -7613,6 +7619,61 @@ function quickPrompt(text) {
   processMessage(text, null, null);
 }
 
+// ─── MANUAL ENTRY FORM (offline fallback) ────────────────────────────────────
+function showManualEntryForm(prefillName) {
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble system';
+  bubble.id = 'manualEntryBubble';
+  bubble.innerHTML = `
+    <div style="font-size:10px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">✈ Offline — Manual Entry</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5;">AI unavailable. Enter macros directly:</div>
+    <input id="meName" value="${(prefillName||'').replace(/"/g,'&quot;')}" placeholder="Food name"
+      style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">KCAL</div>
+        <input id="meKcal" type="number" placeholder="0" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
+      <div><div style="font-size:10px;color:var(--green);margin-bottom:2px;">PROTEIN g</div>
+        <input id="meProt" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
+      <div><div style="font-size:10px;color:#a78bfa;margin-bottom:2px;">FAT g</div>
+        <input id="meFat" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
+      <div><div style="font-size:10px;color:var(--yellow);margin-bottom:2px;">CARBS g</div>
+        <input id="meCarbs" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmManualEntry()">Log it ✓</button>
+      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="document.getElementById('manualEntryBubble')?.remove()">Cancel</button>
+    </div>`;
+  const scroll = document.getElementById('chatScroll');
+  scroll.appendChild(bubble);
+  scroll.scrollTop = scroll.scrollHeight;
+  document.getElementById('meName')?.focus();
+}
+
+function confirmManualEntry() {
+  const name  = document.getElementById('meName')?.value.trim()  || 'Manual entry';
+  const kcal  = parseFloat(document.getElementById('meKcal')?.value)  || 0;
+  const prot  = parseFloat(document.getElementById('meProt')?.value)  || 0;
+  const fat   = parseFloat(document.getElementById('meFat')?.value)   || 0;
+  const carbs = parseFloat(document.getElementById('meCarbs')?.value) || 0;
+  const entry = { description: name, kcal, protein: prot, fat, carbs,
+    time: new Date().toTimeString().slice(0,5), source: 'manual' };
+  state.todayLog.push(entry);
+  saveState();
+  renderDash();
+  document.getElementById('manualEntryBubble')?.remove();
+  addBubble(`✓ Logged: ${name} — ${kcal}kcal · ${prot}g P · ${fat}g F · ${carbs}g C`, 'system', 'success');
+}
+
+// ─── WEIGHT CARRY-FORWARD ─────────────────────────────────────────────────────
+function getLastKnownWeight() {
+  if (state.weight) return state.weight;
+  const hist = state.history || [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    if (hist[i].weight) return hist[i].weight;
+  }
+  return null;
+}
+
 async function processMessage(text, imageBase64, imageMime) {
   // ── Resume pending clarification — user is answering the AI's question ──
   // When the AI asked about an ambiguous photo item (e.g. "pasta or veg?"),
@@ -7914,6 +7975,11 @@ async function processMessage(text, imageBase64, imageMime) {
       return;
     }
     if (result.type === 'error') { addBubble(`⚠ ${result.message}`, 'system', 'warn'); return; }
+    if (result.type === 'offline') {
+      thinkingBubble?.remove();
+      showManualEntryForm(text);
+      return;
+    }
     if (result.type === 'water') {
       const ml = result.ml || 250;
       state.waterToday = (state.waterToday || 0) + ml;
@@ -9412,22 +9478,29 @@ function updateDashboard(skipActivityRender) {
   const csvDate = todayStr();
   const notes = state.notes || state.dayMode;
 
-  // Weight
-  document.getElementById('displayWeight').innerHTML = `${state.weight}<span>kg</span>`;
+  // Weight — carry forward last known if today has no reading
+  const displayWeight = state.weight || getLastKnownWeight();
+  const weightIsCarried = !state.weight && !!displayWeight;
+  document.getElementById('displayWeight').innerHTML = displayWeight
+    ? `${displayWeight}<span>kg</span>${weightIsCarried ? '<span style="font-size:9px;color:var(--text3);display:block;margin-top:1px;">last known</span>' : ''}`
+    : `—<span>kg</span>`;
   const wtLow  = WEIGHT_TARGET_LOW();
   const wtHigh = WEIGHT_TARGET_HIGH();
-  const gap = (wtLow - state.weight).toFixed(1);
+  const gap = displayWeight ? (wtLow - displayWeight).toFixed(1) : null;
   const gapEl = document.getElementById('weightGap');
   const tgtEl = document.getElementById('dashWeightTarget');
   if (tgtEl) tgtEl.textContent = `${wtLow}–${wtHigh}`;
-  if (state.weight < wtLow) {
+  if (!displayWeight) {
+    gapEl.textContent = 'No weight recorded';
+    gapEl.style.color = 'var(--text3)';
+  } else if (displayWeight < wtLow) {
     gapEl.textContent = `+${gap}kg to go`;
     gapEl.style.color = 'var(--yellow)';
-  } else if (state.weight <= wtHigh) {
+  } else if (displayWeight <= wtHigh) {
     gapEl.textContent = '✓ In target range';
     gapEl.style.color = 'var(--green)';
   } else {
-    gapEl.textContent = `${(state.weight - wtHigh).toFixed(1)}kg over`;
+    gapEl.textContent = `${(displayWeight - wtHigh).toFixed(1)}kg over`;
     gapEl.style.color = 'var(--red)';
   }
   // Weight trend prediction
