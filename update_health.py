@@ -44,10 +44,10 @@ MAX_LOG_LINES = 500
 # ── Source precedence (default order, user-configurable via prefs) ─────────────
 DEFAULT_PRECEDENCE = {
     'weight':   ['withings', 'manual', 'ringconn', 'amazfit'],
-    'hrv':      ['ringconn', 'withings', 'garmin'],
+    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit'],
     'sleep':    ['ringconn', 'withings', 'garmin', 'amazfit'],
     'steps':    ['garmin', 'withings', 'ringconn', 'amazfit'],
-    'spo2':     ['ringconn', 'withings'],
+    'spo2':     ['ringconn', 'withings', 'amazfit'],
     'hr':       ['ringconn', 'amazfit', 'withings', 'garmin'],
 }
 
@@ -71,7 +71,7 @@ SOURCE_FIELDS = {
                  'hr_avg', 'hr_min', 'hr_max', 'hrv'],
     'amazfit':  ['steps', 'distance_m', 'calories_active',
                  'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
-                 'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max',
+                 'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
 }
 
