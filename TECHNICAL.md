@@ -29,7 +29,9 @@ AI requests route through a Cloudflare Worker proxy (`maxhealth-ai.bogginsuk.wor
 | master.csv | `/storage/emulated/0/maxhealth/data/tables/master.csv` |
 | combined.csv | `/storage/emulated/0/maxhealth/data/tables/combined.csv` |
 | library.csv | `/storage/emulated/0/maxhealth/data/tables/library.csv` |
-| Boot script | `~/.termux/boot/maxhealth.sh` |
+| Boot script (crond) | `~/.termux/boot/start-crond.sh` |
+| Boot script (watchdog) | `~/.termux/boot/start-watchdog.sh` |
+| Boot script (sync) | `~/.termux/boot/maxedhealth.sh` |
 
 ---
 
@@ -206,11 +208,71 @@ curl http://localhost:5757/ping
 
 ---
 
+## Boot survival (Termux)
+
+Three boot scripts in `~/.termux/boot/` fire after any phone reboot:
+
+| Script | Purpose |
+|--------|---------|
+| `start-crond.sh` | Starts crond after 5s delay (allows storage to mount) |
+| `start-watchdog.sh` | Acquires wake-lock via `termux-wake-lock`, immediately runs `mh_watchdog.sh` |
+| `maxedhealth.sh` | Runs `sync.sh` to restore data after reboot |
+
+`mh_watchdog.sh` runs via cron every minute — checks if `server.py` is alive, restarts it if not, kills duplicate processes. `termux-wake-lock` prevents Android Doze from suspending the check between cron ticks.
+
+Requires: **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux). `setup.sh` (v3.2+) auto-detects whether these are installed and prompts the one-time manual install only when missing.
+
+---
+
+## Local Network Access (Chrome LNA)
+
+Chrome ~142–149 enforced the Local Network Access (LNA) policy, which blocks cross-origin requests — including WebSocket — from public HTTPS pages (GitHub Pages) to localhost. The old auto-redirect from `pete-maxhealth.github.io` to `localhost:5757` no longer works.
+
+**Current behaviour:**
+- GitHub Pages URL is for cloud-only users (no local server)
+- Local server users should pin `localhost:5757` directly as their home screen shortcut
+- setup.sh explicitly instructs this in its closing screen
+- If a local server is detected while on the public URL, a one-time banner offers a user-gesture tap to switch (user-gesture navigation is permitted by LNA, silent fetch/WebSocket is not)
+
+---
+
+## Amazfit/Zepp data pipeline
+
+Zepp exports are AES-encrypted zip files. Python's stdlib `zipfile` cannot decrypt these — `pyzipper` is required (`pip install pyzipper --break-system-packages`). `amazfit.py` uses `pyzipper.AESZipFile` when a password is supplied.
+
+**Field precedence:**
+- `AMAZFIT_EXCLUSIVE` fields (`steps`, `distance_m`, `calories_active`) always overwrite on re-sync — Zepp's daily totals can be partial on first export and correct themselves later. These fields have no other source in the pipeline, so fill-only merge would permanently lock in stale values.
+- All other fields follow fill-only merge — Withings owns weight/body comp, RingConn owns HRV/sleep/SpO2/HR.
+
+`fix_amazfit_steps.py` — one-off retroactive correction tool. Run manually after fixing the pipeline to backfill historical data.
+
+---
+
+## Condition/Protocol system
+
+`localStorage('mh_condition')` stores the user's selected condition:
+
+| Key | Condition | Carb target | Report framing |
+|-----|-----------|-------------|----------------|
+| `gbm` | GBM — therapeutic ketogenic | 20–30g | Evidence-categorised ([Proven]/[Early Stage]/[Speculative]), gaining phase context |
+| `epilepsy` | Epilepsy — therapeutic ketogenic | 20–30g | Seizure control focus, strict compliance |
+| `strict_keto` | Strict Ketosis | 20–50g | Metabolic health, weight focus |
+| `t1_diabetes` | Type 1 Diabetes | Carb-aware | Insulin management, flag dosing implications |
+| `t2_diabetes` | Type 2 Diabetes | 50–100g | Glucose stability, HbA1c framing |
+| `general` | General Health / Weight Loss | 100–150g | Calorie deficit, balanced approach |
+
+`buildPatientContext()` and `patientContextBlock()` in `maxhealth.html` build all AI report prompts from this value. The `CONDITION_META` table maps conditions to protocol labels, evidence notes and report framing. Carb ceilings themselves are set separately in Settings → Carb Ceilings and are independent of this selection.
+
+---
+
 ## Known issues
 
 - Tab bleeding — occasional, cosmetic only
 - Cloudflare Worker cannot be updated from Android (use dashboard or laptop)
-- GitHub Pages service worker can interfere with localhost — clear site data if this occurs
+- Monthly summary may truncate if Cloudflare Worker caps `max_tokens` below the app's requested 6000 — check Worker script if this occurs
+- Reports history count ~90-day limit (by design — localStorage cap)
+- Water target celebration not firing
+- `why-free.html` GitHub 404 unconfirmed
 
 ---
 
