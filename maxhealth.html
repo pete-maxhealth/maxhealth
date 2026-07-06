@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.53 — Phase 10: add error handling around AI-response processing, was failing completely silently -->
+<meta charset="UTF-8"><!-- v3.10.54 — Phase 10: global error/rejection catcher, surfaces any uncaught error directly in chat for on-device debugging -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4378,8 +4378,30 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.53'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.54'; // single source of truth — bump here each release
 let state = loadState();
+
+// Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
+// rejection directly in the chat, visible on-device with no PC or devtools needed.
+// Added specifically because a repeatable silent photo-logging failure couldn't be
+// explained by any existing try/catch — if it's happening somewhere outside
+// processMessage's own error handling (a stray .then(), a callback, anything),
+// this is the net that finally catches it.
+window.addEventListener('error', (e) => {
+  try {
+    const msg = `🐛 JS ERROR: ${e.message} (${(e.filename||'').split('/').pop() || 'unknown'}:${e.lineno})`;
+    console.error(msg, e.error);
+    if (typeof addBubble === 'function') addBubble(msg, 'system', 'warn');
+  } catch(_) {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    const reason = e.reason?.message || e.reason?.toString?.() || JSON.stringify(e.reason);
+    const msg = `🐛 UNHANDLED PROMISE REJECTION: ${reason}`;
+    console.error(msg, e.reason);
+    if (typeof addBubble === 'function') addBubble(msg, 'system', 'warn');
+  } catch(_) {}
+});
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
 // fixed bug where exercise/steps tags were being appended repeatedly rather than
