@@ -1,54 +1,105 @@
 # MaxedHealth Changelog
 
+## v3.10.39 — Phase 9 (6 Jul 2026)
+- **Added:** Goal change (Lose/Maintain/Gain) now automatically appends a timestamped entry to Weight Phase History. No manual entry needed except for historical backdating.
+
+## v3.10.38 — Phase 9 (6 Jul 2026)
+- **Added:** ⭐ Full Summary — dedicated one-tap button in Ask AI generating a comprehensive 9-section health analysis (nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict). Phase-aware, condition-specific, nil days excluded.
+- **Fixed:** Ask AI section title updated with ⭐ star status indicator.
+
+## v3.10.37 — Phase 9 (6 Jul 2026)
+- **Added:** Suggested Targets calculator in Settings → Profile. Calculates personalised TDEE (Mifflin-St Jeor × activity multiplier from real avg step count), phase-adjusted calories, protein (1.8g/kg GBM/Epilepsy, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for GBM/Epilepsy. "Apply these targets →" button applies in one tap. Recalculates when Settings opens or weight updates.
+
+## v3.10.36 — Phase 9 (6 Jul 2026)
+- **Added:** Weight Phase History field in Settings. Log intentional weight phases (loss/maintain/gain) with ISO dates, one per line. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
+- **Fixed:** `savePhaseHistory()` now calls `renderSuggestedTargets()` after saving.
+
+## v3.10.35 — Phase 9 (6 Jul 2026)
+- **Fixed:** Nil nutrition days (<100 kcal) now filtered from Ask AI raw data table, Monthly Summary calculations, and `buildPatientContext`. Gap days reported as "tracking gaps, not zero intake" in AI context.
+
+## v3.10.34 — Phase 9 (6 Jul 2026)
+- **Fixed:** Report streak now uses `calcKetosisStreak()` which includes today's logged data. Previously the report showed 0 streak even when today was compliant because today's log wasn't included in the history array.
+- **Fixed:** Nil nutrition days excluded from protein misses, fat misses and best carbs calculations in report summary.
+
+## v3.10.33 — Phase 9 (6 Jul 2026)
+- **Fixed:** JS syntax error — `const trackedCarbs` declaration placed inside a chained expression, breaking all JavaScript. Node syntax check now run on every build before deploy.
+
+## v3.10.32 — Phase 9 (5–6 Jul 2026)
+- **Fixed:** File header comment corrected from stale "v2.1.9 Phase 7" to "v3.10.32 Phase 9". The comment was misleading but the file was always Phase 9.
+- **Added:** Offline manual entry fallback — when AI is unreachable (flight mode, no network), a manual kcal/protein/fat/carbs form appears automatically instead of an error.
+- **Added:** Weight carry-forward — dashboard shows last known weight when today has no reading, labelled "last known". Never writes to data.
+- **Fixed:** Watchdog (`mh_watchdog.sh`) was starting server.py from wrong directory, causing `combined_exists: false`. Fixed `cd` path from `app/maxhealth` to `app`.
+
+## v3.10.31 — Phase 9 (5 Jul 2026)
+- **Fixed:** Tesco Double Cream fat=0 bug. Three-layer fix: (1) label-locked values (467kcal/50.5g F/1.5g P/1.6g C per 100g), (2) FAT_FLOOR_DB updated with label-confirmed 50.5g, added lamb/pork/single cream, (3) high-kcal backstop — any item >200kcal with 0g fat has fat back-calculated from `(kcal - protein×4 - carbs×4) ÷ 9`.
+- **Fixed:** AI fat prompt updated with label-confirmed Tesco double cream values and explicit rule: never return 0g fat for cream/oil/dairy/nuts/eggs.
+
+## v3.10.30 — Phase 9 (5 Jul 2026)
+- **Fixed:** Report summary stats (best carbs, protein misses, fat misses) now exclude days with <100 kcal logged, preventing untracked days from skewing statistics.
+
+## v3.10.29 — Phase 9 (2 Jul 2026)
+- **Added:** Inline edit (✏) per component row in meal preview. Tap to edit name and gram amount; macros recalculate live from original per-100g base values. Save updates the preview; Cancel reverts.
+
+## v3.10.28 — Phase 9 (2 Jul 2026)
+- **Fixed:** story.html links in app used absolute GitHub Pages URL — now works correctly from both localhost and GitHub Pages.
+
+## v3.10.27 — Phase 9 (2 Jul 2026)
+- **Fixed:** story.html link path was `docs/story.html` (non-existent subfolder). Corrected to `story.html`.
+- **Fixed:** History render — log entries whose description is a mode word ("standard", "holiday", "occasion") now filtered from display. These ghost entries were created by an old rollover bug.
+- **Added:** HOL/OCC badge next to date in history header for holiday/occasion days.
+
+## v3.10.26 — Phase 9 (2 Jul 2026)
+- **Fixed:** Ghost mode-word log entries filtered from history display.
+- **Added:** Day mode badge (HOL/OCC) in history header.
+
+## v3.10.25 — Phase 9 (5 Jul 2026)
+- **Fixed:** Carb zone gaps — dropdown labels now use contiguous ceiling values (≤20g / ≤50g / ≤100g / ≤150g). No gaps between zones.
+- **Updated:** `CONDITION_META` protocol labels and carb ceilings hint text to match.
+
+## v3.10.24 — Phase 9 (5 Jul 2026)
+- **Fixed:** `carer.html` — title and all brand references corrected to "MaxedHealth". Hardcoded carb ceilings replaced with `data.ceilings` from payload. `generateCarerLink()` now embeds actual ceiling values from localStorage.
+
 ## v3.10.23 — Phase 9 (5 Jul 2026)
-- **Added:** Condition/Protocol dropdown in Settings → Profile (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports now adapt framing, evidence categorisation and thresholds to the user's actual condition — not hardcoded GBM assumptions.
-- **Added:** `CONDITION_META` table with per-condition protocol label, evidence note, and carb concern framing. `patientContextBlock()` builds appropriate context for each condition.
-- **Fixed:** `buildPatientContext` and `patientContextBlock` were hardcoded to GBM gaining phase. Now reads `mh_condition` and `mh_goal` from localStorage and generates condition-appropriate prompts.
+- **Added:** Condition/Protocol dropdown in Settings → Profile (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports now adapt framing, evidence categorisation and thresholds to the user's condition.
+- **Added:** `CONDITION_META` table with per-condition protocol label, evidence note and report framing.
+- **Fixed:** `buildPatientContext` and `patientContextBlock` were hardcoded to GBM gaining phase. Now reads `mh_condition` and `mh_goal`.
 
 ## v3.10.22 — Phase 9 (5 Jul 2026)
-- **Fixed:** Meal/Label toggle was hardcoded to Label as the active state in HTML despite JS defaulting to Meal. Corrected to Meal as default — Label requires explicit user selection.
+- **Fixed:** Meal/Label toggle was hardcoded to Label as the active state in HTML despite JS defaulting to Meal.
 
 ## v3.10.21 — Phase 9 (4 Jul 2026)
-- **Fixed:** Step 0 photo classification prompt was too broad — meal photos were being misclassified as nutrition labels. Tightened to binary yes/no question: "does this photo show a printed nutrition panel with actual numbers in table/list format?" Added explicit rule: food on a plate is always MEAL PATH.
+- **Fixed:** Step 0 photo classification prompt was too broad. Tightened to binary yes/no: "does this photo show a printed nutrition panel with actual numbers?" Food on a plate is always MEAL PATH.
 
 ## v3.10.20 — Phase 9 (2 Jul 2026)
-- **Added:** Delete button (✕) per component row in multi-item meal preview. Tap to remove an individual ingredient/item from the "Ready to Log" list before logging. Cancels cleanly if all items are removed.
-- **Added:** Step 0 photo classification — AI now explicitly classifies photo as label or meal before any other reasoning fires, routing to the correct analysis path.
+- **Added:** Delete button (✕) per component row in multi-item meal preview.
+- **Added:** Step 0 photo classification — AI classifies photo as label or meal before any other reasoning fires.
 
 ## v3.10.19 — Phase 9 (2 Jul 2026)
-- **Fixed:** When AI asks a clarification question about an ambiguous photo item (e.g. "pasta or vegetables?"), the next user reply is now correctly treated as the answer to that question rather than a fresh log entry. Stored as `window._pendingClarification` with image + AI question; replayed as full context on next send.
+- **Fixed:** When AI asks a clarification question about an ambiguous photo item, the next user reply is now correctly treated as the answer. Stored as `window._pendingClarification`.
 - **Fixed:** Sauce double-counting — when a protein is logged "in sauce/curry", sauce is no longer also added as a separate line item.
 
 ## v3.10.18 — Phase 9 (2 Jul 2026)
-- **Added:** Termux:Boot boot survival — `start-watchdog.sh` runs `termux-wake-lock` and immediately launches `mh_watchdog.sh` on boot, preventing Android Doze from suspending the server between cron ticks.
-- **Fixed:** GitHub Pages → localhost auto-redirect blocked by Chrome's Local Network Access (LNA) policy (enforced ~Chrome 142–149). Removed dead WebSocket probe (`tryLocalhostRedirect`) and silent fetch redirect. Replaced with one-time toast pointing to localhost:5757 shortcut.
-- **Fixed:** setup.sh (v3.2) now auto-installs `termux-api`, detects Termux:Boot/API via `pm list packages`, and prompts only when missing (opens F-Droid page directly).
-- **Added:** `buildPatientContext` + `patientContextBlock` shared functions — all three report types (Monthly Summary, Ask AI, Full Summary) now receive full patient context: day-type aware carb compliance, weight target, gaining phase, activity factors.
-- **Fixed:** Monthly summary section 2 now evaluates calorie adequacy for the gaining phase, not just protein.
-- **Fixed:** A-Z library nav now draws letters from ingredients only, excluding meals.
-- **Added:** Meal photo ambiguity rule — if any component could plausibly be two different foods (pasta vs cooked vegetables, rice vs cauliflower etc.), AI flags it and asks before logging. Prevents phantom carb entries.
+- **Added:** Termux:Boot boot survival — `start-watchdog.sh` runs `termux-wake-lock` and immediately launches `mh_watchdog.sh` on boot.
+- **Fixed:** GitHub Pages → localhost auto-redirect blocked by Chrome LNA policy. Removed dead WebSocket probe. Replaced with one-time toast pointing to localhost:5757 shortcut.
+- **Fixed:** setup.sh (v3.2) now auto-installs `termux-api`, detects Termux:Boot/API, prompts only when missing.
+- **Added:** `buildPatientContext` + `patientContextBlock` — all three report types receive full patient context.
+- **Added:** Meal photo ambiguity rule — flags uncertain items and asks before logging.
 
 ## v3.10.17 — Phase 9 (27 Jun 2026)
-- **Added:** Meal photo Step 4 calibration sanity check — sum of component weights verified against expected plate size before calculating macros.
-- **Fixed:** Meal photo prompt removed directional bias ("estimate higher"). Replaced with neutral plate-weight anchor.
+- **Fixed:** Meal photo prompt — removed directional bias. Added Step 4 plate-weight sanity check.
 
 ## v3.10.16 — Phase 9 (27 Jun 2026)
-- **Added:** `showLocalhostHint()` — one-time per-session toast when local server detected but user still on public GitHub Pages URL.
-- **Added:** `maybeShowHomeScreenTip()` — one-time persistent localStorage reminder to pin localhost:5757 shortcut when landing on localhost for the first time.
-- **Added:** `offerLocalSwitchIfAvailable()` — post-onboarding banner offering one-tap switch to localhost if local server is running and user is still on public URL. User-gesture navigation so Chrome LNA permission prompt fires correctly.
+- **Added:** `showLocalhostHint()`, `maybeShowHomeScreenTip()`, `offerLocalSwitchIfAvailable()` for post-LNA localhost shortcut guidance.
 
 ## v3.10.15 — Phase 9 (27 Jun 2026)
-- **Fixed:** `amazfit.py` now uses `pyzipper.AESZipFile` for AES-encrypted Zepp exports. stdlib `zipfile` cannot decrypt these even with the correct password ("That compression method is not supported").
-- **Added:** `AMAZFIT_EXCLUSIVE` field set (`steps`, `distance_m`, `calories_active`) — these fields always overwrite on re-sync rather than fill-only, so partial/stale daily totals from early syncs get corrected by later exports.
-- **Added:** `fix_amazfit_steps.py` — one-off retroactive correction script. Reads latest Zepp export, identifies steps/distance/calories discrepancies in combined.csv, previews all changes, applies after y/N confirmation. Backup written automatically.
+- **Fixed:** `amazfit.py` now uses `pyzipper.AESZipFile` for AES-encrypted Zepp exports.
+- **Added:** `AMAZFIT_EXCLUSIVE` fields always overwrite on re-sync. `fix_amazfit_steps.py` one-off retroactive correction script.
 
 ## v3.10.14 — Phase 9 (26 Jun 2026)
-- **Added:** `offerLocalSwitchIfAvailable()` post-onboarding prompt.
-- **Fixed:** `start-watchdog.sh` boot script filename (previously saved without `.sh` extension in some environments).
+- **Added:** Post-onboarding local server switch banner.
 
 ## v3.10.13 — Phase 9 (26 Jun 2026)
-- **Fixed:** GitHub Pages → localhost auto-redirect (first pass — WebSocket probe removed; full LNA fix completed in v3.10.18).
-- **Added:** setup.sh v3.2 — Termux:Boot/API auto-detection.
+- **Fixed:** GitHub Pages → localhost redirect (first pass). setup.sh v3.2 Termux:Boot/API auto-detection.
 
 - **Fixed:** GitHub Pages → localhost auto-redirect no longer works due to Chrome's
   Local Network Access (LNA) policy (enforced from Chrome ~142–149), which blocks

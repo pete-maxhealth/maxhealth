@@ -265,14 +265,63 @@ Zepp exports are AES-encrypted zip files. Python's stdlib `zipfile` cannot decry
 
 ---
 
+## Suggested Targets calculator
+
+`renderSuggestedTargets()` in `maxhealth.html`. Called on Settings open and when weight updates.
+
+**Inputs:** `mh_height_cm`, `mh_age`, `mh_sex`, `state.weight` (or `getLastKnownWeight()`), `mh_goal`, `mh_condition`, `mh_ceil_standard`, last 30 days avg steps from `state.history`.
+
+**Calculation:**
+1. BMR via Mifflin-St Jeor (sex-adjusted)
+2. Activity multiplier from avg steps: >12k=1.725, >8k=1.55, >5k=1.375, else 1.2
+3. TDEE = BMR × multiplier
+4. Calories = TDEE −500 (lose) / ±0 (maintain) / +400 (gain)
+5. Protein = 1.8g/kg (GBM/Epilepsy), 1.6g/kg (all others)
+6. Fat = (calories − protein×4 − carbCeiling×4) ÷ 9
+7. Carbs = untouched (from existing ceiling)
+
+**Condition overlay:** GBM/Epilepsy shows fat% vs ≥65% therapeutic threshold with ✓/⚠. T1D flags insulin dosing warning. T2D flags carb ceiling dependency.
+
+`applySuggestedTargets()` pushes values into Settings fields and calls `saveMacroTargets()`.
+
+---
+
+## Weight Phase History
+
+Stored in `localStorage('mh_phase_history')` as newline-separated `YYYY-MM-DD goal` entries (goal = loss/maintain/gain), sorted earliest first.
+
+`getPhaseHistory()` parses and returns sorted array. `getPhaseForDate(isoDate)` walks the array to find the active phase for any given date.
+
+`setGoal()` automatically appends a new timestamped entry when the goal changes — only if the goal actually changed from the previous entry (deduplication). The textarea in Settings is for historical backdating only.
+
+All AI reports receive the full phase history via `patientContextBlock()` with explicit instruction not to treat intentional loss as a concern.
+
+---
+
+## ⭐ Full Summary
+
+`runFullSummary()` — pre-built 9-section comprehensive analysis prompt fed directly into `askReportsAI()`. Covers: nutrition overview, weight & body composition, ketosis quality, sleep, HRV & recovery, activity, best performing period, areas needing attention, protocol verdict. Phase-aware and condition-specific via `patientContextBlock()`. Nil days excluded.
+
+---
+
+## Nil day filtering
+
+Days with <100 kcal logged are excluded from:
+- `buildPatientContext()` — AI reports context and averages
+- `askReportsAI()` raw data table
+- Monthly summary local stats
+- Report summary cards (best carbs, protein misses, fat misses)
+
+Gap days are reported to the AI as "X day(s) had no nutrition logged (tracking gaps, not zero intake)" so it can acknowledge gaps without treating them as nutritional data points.
+
+---
+
 ## Known issues
 
 - Tab bleeding — occasional, cosmetic only
 - Cloudflare Worker cannot be updated from Android (use dashboard or laptop)
-- Monthly summary may truncate if Cloudflare Worker caps `max_tokens` below the app's requested 6000 — check Worker script if this occurs
-- Reports history count ~90-day limit (by design — localStorage cap)
+- Monthly summary may truncate if Cloudflare Worker caps `max_tokens` — check Worker script if this occurs
 - Water target celebration not firing
-- `why-free.html` GitHub 404 unconfirmed
 
 ---
 

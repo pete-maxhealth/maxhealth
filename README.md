@@ -4,26 +4,25 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.23
+**Version:** v3.10.39
 
 ---
 
 ## What it does
 
-- **AI meal logging** — type, paste, photo, barcode or voice. 10+ item lists split automatically. Photo path uses Step 0 classification (label vs meal), ambiguity detection (asks before logging uncertain items), and sanity-checked portion estimation.
-- **Food library** — Meals and Ingredients. Search box filters both by name as you type, with a live match count. Long-press for instant log. Recently scanned items for quick re-log. A-Z nav (ingredients only).
-- **Meal preview** — per-component delete button (✕) to remove individual items before logging.
-- **Condition/Protocol** — Settings dropdown (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports adapt framing, evidence categorisation and thresholds to the user's condition.
-- **Activity card** — permanent on dashboard. Walking, Resistance + custom exercises. For Walking and any custom activity flagged as distance-based, effort (Easy/Moderate/Hard) is auto-calculated from pace and total distance — always manually overridable. All macro targets adjust dynamically — calories, protein (+15g resistance), water (+500ml/hr).
-- **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, removable, retroactively editable. Writes to master.csv.
-- **Dashboard** — calories, protein, carbs, fat tiles. Ketosis streak. Weight trend prediction. Dynamic targets from activity.
-- **History** — daily log with fat back-calculation. Exercise minutes shown separately (🏃). Edit totals and tags retrospectively. Swipe left to delete.
-- **Reports** — query builder (all 39 columns + notes/tags text search), Treatment Analysis, Weekly Summary export, GBM Monthly Summary, Oncology Team View. All reports are condition-aware and day-type aware (holiday/occasion days evaluated against their own ceilings, not penalised against standard targets).
-- **Boot survival** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots and Android Doze, with zero user interaction required.
-- **Local server shortcut** — home screen shortcut should point to `localhost:5757` directly (not GitHub Pages). setup.sh guides new installs through this. GitHub Pages URL serves as cloud fallback for users without local Termux setup.
-- **Themes** — Dark, Light, Auto. Custom modals throughout.
-- **Voice input** — microphone button, Web Speech API.
-- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports handled via `pyzipper`.
+- **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for GBM/Epilepsy. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
+- **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
+- **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
+- **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
+- **Food library** — Meals and Ingredients. Search, A-Z nav (ingredients only), long-press to log, recently scanned items.
+- **Condition/Protocol** — Settings dropdown (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports adapt framing, evidence categorisation and thresholds.
+- **Activity card** — Walking, Resistance + custom exercises. Distance-aware effort auto-calculation. All macro targets adjust dynamically.
+- **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
+- **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
+- **Boot survival** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots, zero user interaction required.
+- **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
+- **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
+- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`.
 
 ---
 
