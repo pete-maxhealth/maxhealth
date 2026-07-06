@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.55 — Phase 10: fix real ReferenceError, result was out of scope in the photo fallback message -->
+<meta charset="UTF-8"><!-- v3.10.57 — Phase 10: extend deterministic label scaling to auto-detected labels, not just explicit Label mode -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4378,7 +4378,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.55'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.57'; // single source of truth — bump here each release
 let state = loadState();
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
@@ -6195,6 +6195,16 @@ If the user describes food or a meal (or you can see food in an image), respond 
   "message": "one line summary including any portion assumptions"
 }
 
+If PHOTO CLASSIFICATION below determines this is a LABEL PATH item (a genuine printed nutrition panel, not estimated), use this shape instead for that item — raw per-100g label facts plus the gram amount, NOT pre-multiplied, since scaling is done deterministically downstream rather than trusted to your arithmetic:
+{
+  "type": "food",
+  "items": [
+    { "name": "Product name", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }, "grams": 150 }
+  ],
+  "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C."
+}
+Mixed responses are fine — a meal photo with one labelled component and one estimated component can use both shapes in the same items array.
+
 The "amount" field should contain the quantity/portion (e.g. "200g", "1 tablespoon", "2 cloves", "150ml", "1 large breast") — separate from the food name. If no amount is specified, use a typical serving description.
 
 CRITICAL: Always identify EVERY separate food component as its own item.
@@ -6214,7 +6224,7 @@ PHOTO CLASSIFICATION — ALWAYS DO THIS FIRST: Before any other reasoning, class
   - TEXT ONLY (no photo): user has typed a meal description → parse the text directly, do not invent or estimate unlisted ingredients
   A photo of food ON a plate is ALWAYS MEAL PATH, even if the food came from a labelled package. Only use LABEL PATH if the label panel itself is the main subject of the photo.
 
-LABEL PATH: READ THE EXACT VALUES FROM THE LABEL. Label values override all other sources including your training data. State clearly "Macros calculated from label values" in the message field and show the per-100g figures you read. Do not estimate or substitute any values not visible on the label.
+LABEL PATH: READ THE EXACT VALUES FROM THE LABEL. Label values override all other sources including your training data. Report the per-100g figures exactly as printed, in the "per100g" shape shown above — do NOT multiply by the amount yourself, put the gram amount in "grams" and let the app scale it. State clearly "Macros calculated from label values" in the message field. Do not estimate or substitute any values not visible on the label. If no gram amount is stated or visible, omit "grams" rather than guessing.
 
 MEAL PATH: Follow these four steps before calculating anything:
 Step 1 — IDENTIFY: List every visible food component separately, including oils, sauces, butter, dressings and cooking fats — these are frequently missed but contribute significantly to fat and calories.
@@ -7898,7 +7908,7 @@ function sendChat() {
       // Build interactive bubble
       const bubble = addBubble('', 'system', 'warn');
       bubble.innerHTML = `
-        <div style="margin-bottom:8px;">How much did you have? Type the amount (e.g. <strong>150g</strong>) and I'll scale the label values accurately.</div>
+        <div style="margin-bottom:8px;">I've read the label, but I still need <strong>how much you actually ate</strong> — not the pack size. Type the amount (e.g. <strong>150g</strong>) and I'll scale the per-100g label values to that.</div>
         <div style="margin-bottom:6px;font-size:11px;color:var(--text3);">Not sure?</div>
         <button onclick="requestLabelPortionEstimate()"
           style="padding:8px 14px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;">
