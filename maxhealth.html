@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.45 — Phase 10: auto-scroll to Ask AI / Full Summary output, was landing off-screen looking silent -->
+<meta charset="UTF-8"><!-- v3.10.46 — Phase 10: structured Strength Training log (sets/reps/weight) + CSV export/import -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2400,6 +2400,31 @@ body[data-theme="light"] {
       </div>
     </div>
 
+    <!-- STRENGTH TRAINING CARD -->
+    <div class="activity-card" id="strengthCard">
+      <div class="activity-card-title" style="cursor:pointer;" onclick="toggleSection('dash-strength','dash-strength-wrap','dash-strength-icon')">🏋️ STRENGTH TRAINING <span id="dash-strength-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▾</span></div>
+      <div id="dash-strength-wrap">
+        <div id="strengthRows" style="font-size:12px;color:var(--text3);"></div>
+        <div id="strengthAddForm" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+          <input type="text" id="strengthExerciseName" class="modal-input" placeholder="Exercise name (e.g. Bench Press)" style="width:100%;font-size:13px;padding:8px 10px;margin-bottom:8px;">
+          <div id="strengthSetRows"></div>
+          <button onclick="addStrengthSetRow()" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;margin-top:4px;">+ Add set</button>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="run-btn" onclick="saveStrengthWorkout()" style="flex:1;">Save workout</button>
+            <button onclick="cancelStrengthAdd()" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Log a workout</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="copy-btn" onclick="exportStrengthCSV()" style="flex:1;font-size:11px;">💾 Export CSV</button>
+          <input type="file" id="strengthCsvInput" accept=".csv" style="display:none" onchange="importStrengthCSV(this)">
+          <button class="copy-btn" onclick="document.getElementById('strengthCsvInput').click()" style="flex:1;font-size:11px;">📥 Import CSV</button>
+        </div>
+      </div>
+    </div>
+
     <div class="water-card">
       <div class="water-header">
         <div class="water-title">💧 Water</div>
@@ -4333,7 +4358,8 @@ function defaultState() {
     history: [],
     notes: '',
     lastDate: todayStr(),
-    onboarded: false
+    onboarded: false,
+    strengthLog: []
   };
 }
 
@@ -4352,7 +4378,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.45'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.46'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -6378,6 +6404,144 @@ Use evidence-based nutritional values. Be precise with portions. If quantity is 
 // ─── FOOD DATABASE (Open Food Facts) ────────────────────────────────────────
 
 let _foodSearchTimer = null;
+// ─── STRENGTH TRAINING ───────────────────────────────────────────────────────
+// Separate from the flat Resistance activity multiplier (which stays as-is for
+// quick calorie/protein bump tagging). This is real structured logging — actual
+// exercises, sets, reps, weight — for progression tracking, not just effort tags.
+
+let _strengthDraftSets = [];
+
+function renderStrengthCard() {
+  const el = document.getElementById('strengthRows');
+  if (!el) return;
+  const today = todayStr();
+  const sessions = (state.strengthLog || []).filter(s => s.date === today);
+  if (!sessions.length) {
+    el.innerHTML = '<span style="color:var(--text3);">No strength training logged today.</span>';
+    return;
+  }
+  el.innerHTML = sessions.map(s => {
+    const setsStr = s.sets.map(st => `${st.weight_kg}kg×${st.reps}`).join(', ');
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+      <div><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
+      <span onclick="deleteStrengthSession('${s.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
+    </div>`;
+  }).join('');
+}
+
+function showStrengthAddForm() {
+  _strengthDraftSets = [{ reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }];
+  document.getElementById('strengthExerciseName').value = '';
+  renderStrengthSetRows();
+  document.getElementById('strengthAddForm').style.display = 'block';
+  document.getElementById('strengthAddBtn').style.display = 'none';
+}
+
+function cancelStrengthAdd() {
+  document.getElementById('strengthAddForm').style.display = 'none';
+  document.getElementById('strengthAddBtn').style.display = 'block';
+}
+
+function renderStrengthSetRows() {
+  const el = document.getElementById('strengthSetRows');
+  if (!el) return;
+  el.innerHTML = _strengthDraftSets.map((s, i) => `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <span style="font-size:11px;color:var(--text3);width:16px;">${i + 1}</span>
+      <input type="number" placeholder="reps" value="${s.reps}" oninput="updateStrengthDraftField(${i},'reps',this.value)" style="flex:1;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <input type="number" placeholder="kg" value="${s.weight_kg}" step="0.5" oninput="updateStrengthDraftField(${i},'weight_kg',this.value)" style="flex:1;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <span onclick="removeStrengthSetRow(${i})" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
+    </div>`).join('');
+}
+
+function addStrengthSetRow() {
+  _strengthDraftSets.push({ reps: '', weight_kg: '' });
+  renderStrengthSetRows();
+}
+
+function removeStrengthSetRow(i) {
+  _strengthDraftSets.splice(i, 1);
+  renderStrengthSetRows();
+}
+
+function updateStrengthDraftField(i, field, val) {
+  if (_strengthDraftSets[i]) _strengthDraftSets[i][field] = val;
+}
+
+function saveStrengthWorkout() {
+  const exercise = document.getElementById('strengthExerciseName')?.value.trim();
+  if (!exercise) { showToast('Enter an exercise name'); return; }
+  const sets = _strengthDraftSets
+    .filter(s => s.reps !== '' && s.weight_kg !== '')
+    .map(s => ({ reps: parseInt(s.reps), weight_kg: parseFloat(s.weight_kg) }));
+  if (!sets.length) { showToast('Enter at least one complete set'); return; }
+
+  const entry = { id: 'str' + Date.now(), date: todayStr(), exercise, sets };
+  state.strengthLog = [...(state.strengthLog || []), entry];
+  saveState();
+  cancelStrengthAdd();
+  renderStrengthCard();
+  showToast(`${exercise} logged ✓`);
+}
+
+function deleteStrengthSession(id) {
+  state.strengthLog = (state.strengthLog || []).filter(s => s.id !== id);
+  saveState();
+  renderStrengthCard();
+}
+
+// Export schema: date,exercise,set,reps,weight_kg — one row per set. This is a
+// documented, portable format (not a true industry standard the way GPX/TCX is
+// for cardio — no such standard exists for strength sets), but it round-trips
+// cleanly through MaxedHealth's own import and opens fine in any spreadsheet.
+function exportStrengthCSV() {
+  const log = state.strengthLog || [];
+  const rows = [];
+  log.forEach(s => {
+    s.sets.forEach((set, i) => {
+      rows.push([s.date, s.exercise, i + 1, set.reps, set.weight_kg].join(','));
+    });
+  });
+  const csv = 'date,exercise,set,reps,weight_kg\n' + rows.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'strength_log.csv';
+  a.click();
+  showToast(`Exported ${log.length} workout${log.length===1?'':'s'} ✓`);
+}
+
+function importStrengthCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.trim().split('\n');
+    if (lines.length < 2) { showToast('No data found in file'); return; }
+    const header = lines[0].toLowerCase();
+    if (!header.includes('date') || !header.includes('exercise') || !header.includes('reps') || !header.includes('weight')) {
+      showToast('Column headers don\'t match — expected date,exercise,set,reps,weight_kg');
+      return;
+    }
+    // Group flat set-rows back into sessions by date+exercise
+    const sessions = {};
+    lines.slice(1).forEach(line => {
+      const [date, exercise, set, reps, weight_kg] = line.split(',').map(v => v.trim());
+      if (!date || !exercise || reps === undefined || weight_kg === undefined) return;
+      const key = date + '|' + exercise;
+      if (!sessions[key]) sessions[key] = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date, exercise, sets: [] };
+      sessions[key].sets.push({ reps: parseInt(reps), weight_kg: parseFloat(weight_kg) });
+    });
+    const imported = Object.values(sessions);
+    if (!imported.length) { showToast('No valid rows found'); return; }
+    state.strengthLog = [...(state.strengthLog || []), ...imported];
+    saveState();
+    renderStrengthCard();
+    showToast(`Imported ${imported.length} workout${imported.length===1?'':'s'} ✓`);
+  };
+  reader.readAsText(file);
+}
+
 // ─── ACTIVITY TRACKING ───────────────────────────────────────────────────────
 const MET = {
   walking:    { Easy: 2.8, Moderate: 3.5, Hard: 4.5 },
@@ -9258,6 +9422,7 @@ function updateDashboard(skipActivityRender) {
   }
   updateOccasionBanner();
   if (!skipActivityRender) renderActivityCard();
+  renderStrengthCard();
   // Restore the Daily Steps input from its saved value, and apply its collapse state —
   // this card lives outside renderActivityCard()'s re-render, so needs its own refresh
   const stepsInputEl = document.getElementById('dailyStepsInput');
