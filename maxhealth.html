@@ -3465,6 +3465,15 @@ body[data-theme="light"] {
         </select>
         <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:2px;">Used to personalise AI report framing, recommendations and carb compliance thresholds. Does not change your carb ceilings — update those separately in Carb Ceilings below.</div>
       </div>
+      <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+        <div class="settings-label">Weight Phase History</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.5;">Tell the AI about intentional weight phases so it interprets trends correctly. One phase per line: <span style="color:var(--accent);font-family:Space Mono,monospace;">YYYY-MM-DD goal</span> where goal is <span style="font-family:Space Mono,monospace;">loss</span>, <span style="font-family:Space Mono,monospace;">maintain</span>, or <span style="font-family:Space Mono,monospace;">gain</span>. Earliest first.</div>
+        <textarea id="settingsPhaseHistory"
+          style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:12px;font-family:Space Mono,monospace;line-height:1.6;resize:vertical;min-height:80px;"
+          placeholder="2026-03-12 loss&#10;2026-06-21 gain"></textarea>
+        <button class="settings-save-btn" onclick="savePhaseHistory()">Save</button>
+        <div style="font-size:11px;color:var(--text3);">Example: first line <span style="font-family:Space Mono,monospace;">2026-03-12 loss</span> means intentional loss from data start. Second line <span style="font-family:Space Mono,monospace;">2026-06-21 gain</span> means gaining phase from that date.</div>
+      </div>
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:4px;">
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
           <div class="settings-label">Daily calorie target</div>
@@ -3637,7 +3646,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.34</div>
+        <div class="settings-value">MaxedHealth v3.10.36</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5403,6 +5412,39 @@ function saveCondition() {
   if (el) localStorage.setItem('mh_condition', el.value);
 }
 
+function savePhaseHistory() {
+  const el = document.getElementById('settingsPhaseHistory');
+  if (el) {
+    localStorage.setItem('mh_phase_history', el.value.trim());
+    showToast('Phase history saved');
+  }
+}
+
+function getPhaseHistory() {
+  const raw = localStorage.getItem('mh_phase_history') || '';
+  if (!raw) return [];
+  return raw.split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const parts = line.split(/\s+/);
+      return { date: parts[0], goal: (parts[1] || 'gain').toLowerCase() };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// Returns the weight phase (loss/maintain/gain) for a given ISO date string
+function getPhaseForDate(isoDate) {
+  const phases = getPhaseHistory();
+  if (!phases.length) return null;
+  let current = phases[0].goal;
+  for (const p of phases) {
+    if (isoDate >= p.date) current = p.goal;
+    else break;
+  }
+  return current;
+}
+
 function setSex(sex) {
   localStorage.setItem('mh_sex', sex);
   ['male','female'].forEach(s => {
@@ -5475,6 +5517,8 @@ function initSettings() {
   if (savedSex) setSex(savedSex);
   const condEl = document.getElementById('settingsCondition');
   if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'gbm';
+  const phaseEl = document.getElementById('settingsPhaseHistory');
+  if (phaseEl) phaseEl.value = localStorage.getItem('mh_phase_history') || '2026-03-12 loss\n2026-06-21 gain';
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
@@ -15195,9 +15239,15 @@ function patientContextBlock(ctx) {
   const goalLbl = ctx.goal === 'gain' ? 'GAINING' : ctx.goal === 'lose' ? 'LOSING' : 'MAINTAINING';
   const goalExtra = meta.goalFrame ? `\n${meta.goalFrame}` : '';
 
+  const phases = getPhaseHistory();
+  const phaseContext = phases.length
+    ? `WEIGHT PHASE HISTORY (intentional — use this to interpret weight trends correctly):\n${phases.map(p => `  ${p.date}: switched to ${p.goal.toUpperCase()} phase`).join('\n')}\nWhen analysing any date range, identify which phase applied and frame weight trends accordingly. Do NOT treat intentional loss as a concern.`
+    : '';
+
   return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)
 PROTOCOL: ${meta.protocol}
 TARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ~${ctx.t.standard.fat || 247}g fat${goalExtra}
+${phaseContext ? '\n' + phaseContext : ''}
 
 PERIOD: ${ctx.n} tracked days (days with <100 kcal logged excluded from all calculations)${ctx.gapDays > 0 ? ` — ${ctx.gapDays} day(s) in period had no nutrition logged (tracking gaps, not zero intake)` : ''}
 NUTRITION AVERAGES: ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat
@@ -15230,7 +15280,7 @@ async function askReportsAI() {
   btn.textContent = 'Thinking…'; btn.disabled = true;
   out.style.display = 'none';
 
-  const rows   = h.slice(0, 365);
+  const rows   = h.filter(e => (e.totals?.kcal || 0) >= 100).slice(0, 365);
   const ctx    = buildPatientContext(h);
   const schema = `date,kcal,protein_g,carbs_g,fat_g,steps,sleep_min,deep_min,rem_min,hrv_ms,spo2_pct,hr_avg,weight_kg,fat_pct,muscle_kg,active_kcal,elevation_m`;
   const dataRows = rows.map(r => [
@@ -15454,7 +15504,7 @@ function renderReports() {
 }
 
 function updateGBMStats() {
-  const h = getReportHistory();
+  const h = getReportHistory().filter(e => (e.totals?.kcal || 0) >= 100);
   if (h.length < 3) return;
   const t = getTargets().standard;
   const n = h.length;
