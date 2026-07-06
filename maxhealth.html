@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.52 — Phase 10: fix misleading "requires AI provider" message, was actually empty-items-from-photo -->
+<meta charset="UTF-8"><!-- v3.10.53 — Phase 10: add error handling around AI-response processing, was failing completely silently -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4378,7 +4378,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.52'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.53'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -8344,6 +8344,12 @@ async function processMessage(text, imageBase64, imageMime) {
       addBubble("Couldn't reach the AI. Check your connection and try again.", 'system', 'warn');
       return;
     }
+    // Everything from here on processes an already-successful AI response (scaling,
+    // sanitisation, preview building). None of it was wrapped in error handling —
+    // any exception here failed completely silently, with the thinking bubble
+    // already gone and nothing to show for it. This is exactly the failure mode
+    // just reported: AI responds fine, then something downstream breaks invisibly.
+    try {
     if (result && result.type === 'unknown') {
       addBubble(result.message || "I didn't understand that as a food entry. Try being more specific.", 'system');
       return;
@@ -8421,6 +8427,11 @@ async function processMessage(text, imageBase64, imageMime) {
           aiQuestion: result.message
         };
       }
+      return;
+    }
+    } catch (e) {
+      console.error('Result processing error:', e);
+      addBubble(`⚠ Something broke processing that response: ${e.message}. The AI replied fine — this failed afterwards, in the app's own code, not the AI. Worth reporting if it repeats.`, 'system', 'warn');
       return;
     }
   }
