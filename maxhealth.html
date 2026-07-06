@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.43 — Phase 10: clarify report purposes with subtitles (Full Summary / Personal / Clinical) -->
+<meta charset="UTF-8"><!-- v3.10.44 — Phase 10: fix Full Summary UX — no more prompt dump in input box, added Copy button, longer token budget -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -3113,8 +3113,9 @@ body[data-theme="light"] {
       <textarea id="rptAskInput" class="modal-input" rows="2" placeholder="Ask anything about your data…" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;margin-bottom:10px;font-family:'DM Sans',sans-serif;"></textarea>
       <button class="run-btn" onclick="askReportsAI()" id="rptAskBtn" style="width:100%;">Ask AI →</button>
       <div id="rpt-ask-output" style="display:none;margin-top:14px;">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;">AI Response</div>
+        <div id="rpt-ask-label" style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;">AI Response</div>
         <div id="rpt-ask-text" style="font-size:14px;color:var(--text2);line-height:1.9;white-space:pre-wrap;"></div>
+        <button class="run-btn" onclick="copyReportAskAnswer()" style="width:auto;padding:8px 14px;margin-top:12px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);">📋 Copy</button>
       </div>
     </div>
     </div>
@@ -4351,7 +4352,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.43'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.44'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -15651,6 +15652,10 @@ EVIDENCE FRAMEWORK: ${meta.evidenceNote}
 IMPORTANT: Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets. No medical disclaimers needed — patient has acknowledged the evidence base.`;
 }
 
+function copyReportAskAnswer() {
+  navigator.clipboard.writeText(window._reportAskText || '').then(() => showToast('Copied ✓')).catch(() => showToast('Copy failed'));
+}
+
 async function runFullSummary() {
   const btn = document.getElementById('rptFullSummaryBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
@@ -15668,14 +15673,15 @@ async function runFullSummary() {
 
 Keep each section to 3-4 sentences. Prose only. Clinical and direct.`;
 
-  // Reuse askReportsAI machinery with our pre-built prompt
-  document.getElementById('rptAskInput').value = fullSummaryPrompt;
-  await askReportsAI();
+  // Pass the prompt directly rather than writing it into the visible question box —
+  // seeing the raw internal prompt sitting in the input looked broken and left no
+  // way to tell the box had "generated" anything.
+  await askReportsAI(fullSummaryPrompt, true);
   if (btn) { btn.disabled = false; btn.textContent = '⭐ Generate Full Summary →'; }
 }
 
-async function askReportsAI() {
-  const question = document.getElementById('rptAskInput')?.value.trim();
+async function askReportsAI(overrideQuestion, isFullSummary) {
+  const question = overrideQuestion || document.getElementById('rptAskInput')?.value.trim();
   if (!question) { showToast('Enter a question first'); return; }
 
   // Use all available history for AI queries, not just selected range
@@ -15731,30 +15737,34 @@ Answer the question directly using the actual data. Reference specific dates or 
   try {
     const { provider, apiKey } = getAIConfig();
     const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+    const maxTok = isFullSummary ? 1500 : 800;
     let res, text;
     if (provider === 'claude' && apiKey) {
       res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTok, messages: [{ role: 'user', content: prompt }] })
       });
       text = (await res.json()).content?.[0]?.text || 'Could not generate response.';
     } else if (provider === 'openai' && apiKey) {
       res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 800, messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: maxTok, messages: [{ role: 'user', content: prompt }] })
       });
       text = (await res.json()).choices?.[0]?.message?.content || 'Could not generate response.';
     } else {
       res = await fetch(PROXY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 800, system: 'You are a health data analyst. Answer questions about the provided data accurately and concisely.', messages: [{ role: 'user', content: prompt }] })
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: maxTok, system: 'You are a health data analyst. Answer questions about the provided data accurately and concisely.', messages: [{ role: 'user', content: prompt }] })
       });
       text = (await res.json()).content?.[0]?.text || 'Could not generate response.';
     }
     txt.textContent = text;
+    window._reportAskText = text;
+    const label = document.getElementById('rpt-ask-label');
+    if (label) label.textContent = isFullSummary ? '⭐ Full Summary' : 'AI Response';
     out.style.display = 'block';
   } catch(e) {
     txt.textContent = 'Error — check your connection and try again.';
