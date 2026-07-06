@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.40 — Phase 10: TDEE-aware AI context, ketosis check, muscle-gain plan -->
+<meta charset="UTF-8"><!-- v3.10.41 — Phase 10: TDEE-aware AI context, ketosis check, muscle-gain plan, oncology report reference-event + cycle analysis + AI clinical summary -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -3264,6 +3264,7 @@ body[data-theme="light"] {
         <div id="exportActions" style="display:none;gap:8px;margin-top:10px;">
           <button class="run-btn" style="padding:8px 14px;width:auto;background:var(--surface2);color:var(--text2);border:1px solid var(--border);" onclick="printExport()">🖨 Print / PDF</button>
           <button class="run-btn" style="padding:8px 14px;width:auto;" onclick="copyExport()">📋 Copy text</button>
+          <button class="run-btn" id="oncologyAIBtn" style="display:none;padding:8px 14px;width:auto;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent);" onclick="generateOncologyAINarrative()">🧠 Add AI summary</button>
         </div>
 
         <!-- Keep old IDs for backwards compatibility -->
@@ -3665,7 +3666,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.40</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.40</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4347,6 +4348,7 @@ function loadState() {
   return defaultState();
 }
 
+const APP_VERSION = 'v3.10.41'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -5596,6 +5598,8 @@ function setSex(sex) {
 }
 
 function initSettings() {
+  const verEl = document.getElementById('settingsVersionDisplay');
+  if (verEl) verEl.textContent = 'MaxedHealth ' + APP_VERSION;
   // One-time fix: if kcal target is 3063 (wrong default), reset to 3670
   if (localStorage.getItem('mh_target_kcal') === '3063') localStorage.setItem('mh_target_kcal', '3670');
   const kcalEl = document.getElementById('settingKcalTarget');
@@ -14359,6 +14363,8 @@ function copyExport() {
 
 function generateWeeklySummary() {
   try {
+  const aiBtnHide = document.getElementById('oncologyAIBtn');
+  if (aiBtnHide) aiBtnHide.style.display = 'none';
   const weeksBack = parseInt(document.getElementById('weekExportSelector')?.value || 0);
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0=Sun
@@ -14523,6 +14529,72 @@ function copyWeeklySummary() {
   navigator.clipboard.writeText(text).then(() => showToast('Summary copied to clipboard ✓')).catch(() => showToast('Copy failed — try selecting manually'));
 }
 
+// Converts the app's DD/MM/YY display format to a real Date object for comparisons.
+function _ddmmyyToDate(ddmmyy) {
+  const parts = (ddmmyy || '').split('/');
+  if (parts.length !== 3) return null;
+  const [d, m, y] = parts;
+  return new Date(`20${y}-${m}-${d}`);
+}
+
+// Finds the most recent logged day tagged chemo / radiotherapy / scan (via notes
+// keywords) and computes weight + body composition change from that day to now.
+// Deliberately does NOT assume a fixed interval (monthly for chemo, quarterly for
+// scans, etc.) — different patients have different treatment cadences, so this reads
+// whatever dates are actually logged and reports the real elapsed time, adapting
+// automatically to daily radiotherapy, monthly chemo, quarterly scans, or any mix.
+function getReferenceEventComparisons() {
+  const h = state.history || [];
+  const eventGroups = {
+    chemo:        { label: 'Chemotherapy',  kws: ['chemotherapy', 'chemo', 'infusion'] },
+    radiotherapy: { label: 'Radiotherapy',  kws: ['radiotherapy', 'radiation'] },
+    scan:         { label: 'Scan / imaging', kws: ['mri', 'scan', 'ct scan', 'pet scan', 'scanned'] },
+  };
+
+  const bodyCompFull = getFullBodyCompositionHistory(); // date-sorted, ISO dates
+  const weightDays = h.filter(d => d.weight > 0)
+    .map(d => ({ date: d.date, weight: parseFloat(d.weight), dt: _ddmmyyToDate(d.date) }))
+    .filter(d => d.dt)
+    .sort((a, b) => a.dt - b.dt);
+
+  const latestWeight    = weightDays[weightDays.length - 1] || null;
+  const latestBodyComp  = bodyCompFull[bodyCompFull.length - 1] || null;
+
+  const nearestWeightOnOrBefore = (targetDt) => {
+    const cands = weightDays.filter(w => w.dt <= targetDt);
+    return cands.length ? cands[cands.length - 1] : null;
+  };
+  const nearestBodyCompOnOrBefore = (targetDt) => {
+    const cands = bodyCompFull.filter(b => new Date(b.isoDate) <= targetDt);
+    return cands.length ? cands[cands.length - 1] : null;
+  };
+
+  const results = {};
+  for (const [key, { label, kws }] of Object.entries(eventGroups)) {
+    const days = h.filter(d => kws.some(k => (d.notes || '').toLowerCase().includes(k)))
+      .map(d => ({ date: d.date, dt: _ddmmyyToDate(d.date) }))
+      .filter(d => d.dt)
+      .sort((a, b) => a.dt - b.dt);
+    if (!days.length) { results[key] = null; continue; }
+
+    const mostRecent = days[days.length - 1];
+    const daysSince = Math.round((new Date() - mostRecent.dt) / 86400000);
+
+    const wThen = nearestWeightOnOrBefore(mostRecent.dt);
+    const weightDelta = (wThen && latestWeight && wThen.date !== latestWeight.date)
+      ? +(latestWeight.weight - wThen.weight).toFixed(1) : null;
+
+    const bThen = nearestBodyCompOnOrBefore(mostRecent.dt);
+    const muscleDelta = (bThen?.muscle_mass_kg != null && latestBodyComp?.muscle_mass_kg != null)
+      ? +(latestBodyComp.muscle_mass_kg - bThen.muscle_mass_kg).toFixed(1) : null;
+    const fatDelta = (bThen?.fat_mass_kg != null && latestBodyComp?.fat_mass_kg != null)
+      ? +(latestBodyComp.fat_mass_kg - bThen.fat_mass_kg).toFixed(1) : null;
+
+    results[key] = { label, mostRecentDate: mostRecent.date, daysSince, weightDelta, muscleDelta, fatDelta, occurrences: days.length };
+  }
+  return results;
+}
+
 function generateOncologyView() {
   const days = parseInt(document.getElementById('oncologyPeriod')?.value || 30);
   const cutoff = new Date();
@@ -14552,6 +14624,50 @@ function generateOncologyView() {
     ${treatDays.map(d => `<tr><td style="padding:4px 8px;font-size:11px;">${d.date}</td><td style="padding:4px 8px;font-size:11px;">${Math.round(d.totals.kcal)}kcal</td><td style="padding:4px 8px;font-size:11px;">${Math.round(d.totals.protein||0)}g P</td><td style="padding:4px 8px;font-size:11px;color:#7c3aed;">${(d.notes||'').split(',').filter(t=>t.trim()).join(', ')}</td></tr>`).join('')}
   ` : '';
 
+  const refEvents = getReferenceEventComparisons();
+  const refRows = Object.values(refEvents).filter(Boolean);
+  const fmtDelta = (v, unit) => v == null ? '—' : `${v > 0 ? '+' : ''}${v}${unit}`;
+  const refSection = refRows.length > 0 ? `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:6px;">SINCE LAST LOGGED EVENT</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;">Event</th><th style="padding:6px 8px;text-align:left;">Last logged</th><th style="padding:6px 8px;text-align:left;">Days since</th><th style="padding:6px 8px;text-align:left;">Weight Δ</th><th style="padding:6px 8px;text-align:left;">Muscle Δ</th><th style="padding:6px 8px;text-align:left;">Fat Δ</th></tr></thead>
+        <tbody>
+          ${refRows.map(r => `<tr><td style="padding:4px 8px;">${r.label}</td><td style="padding:4px 8px;">${r.mostRecentDate}</td><td style="padding:4px 8px;">${r.daysSince}d</td><td style="padding:4px 8px;">${fmtDelta(r.weightDelta,'kg')}</td><td style="padding:4px 8px;">${fmtDelta(r.muscleDelta,'kg')}</td><td style="padding:4px 8px;">${fmtDelta(r.fatDelta,'kg')}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="font-size:9px;color:#999;margin-top:4px;">Computed from your actual logged dates for each event type — not a fixed interval, since review cadence (e.g. daily radiotherapy vs quarterly scans) varies by patient.</div>
+    </div>
+  ` : '';
+
+  const cycleData = computeChemoCycleAnalysis();
+  const cycleSection = cycleData ? (() => {
+    const { cycles, chemoDays: cd, recoveryDays: rd, chemoKcal, recovKcal, chemoProt, recovProt, chemoCarbs, recovCarbs } = cycleData;
+    const diffPct = (a, b) => b > 0 ? Math.round((a-b)/b*100) : 0;
+    return `
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:6px;">TREATMENT CYCLE ANALYSIS</div>
+      <div style="font-size:11px;color:#666;margin-bottom:8px;">${cycles.length} cycle${cycles.length>1?'s':''} detected · ${cd.length} treatment days · ${rd.length} recovery days tracked</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+        <div style="border:1px solid #e0e0e0;border-radius:6px;padding:8px;">
+          <div style="font-size:9px;color:#7c3aed;font-weight:700;">TREATMENT DAYS</div>
+          <div style="font-size:11px;color:#333;">${chemoKcal}kcal avg (${diffPct(chemoKcal,recovKcal)>0?'+':''}${diffPct(chemoKcal,recovKcal)}%)</div>
+          <div style="font-size:11px;color:#333;">${chemoProt}g protein (${diffPct(chemoProt,recovProt)>0?'+':''}${diffPct(chemoProt,recovProt)}%)</div>
+          <div style="font-size:11px;color:#333;">${chemoCarbs}g carbs (${diffPct(chemoCarbs,recovCarbs)>0?'+':''}${diffPct(chemoCarbs,recovCarbs)}%)</div>
+        </div>
+        <div style="border:1px solid #e0e0e0;border-radius:6px;padding:8px;">
+          <div style="font-size:9px;color:#16a34a;font-weight:700;">RECOVERY DAYS</div>
+          <div style="font-size:11px;color:#333;">${recovKcal}kcal avg</div>
+          <div style="font-size:11px;color:#333;">${recovProt}g protein</div>
+          <div style="font-size:11px;color:#333;">${recovCarbs}g carbs</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#666;">${cycles.map((c,i) => `Cycle ${i+1}: ${c[0].date}${c.length>1?' → '+c[c.length-1].date:''} (${c.length}d)`).join(' · ')}</div>
+    </div>`;
+  })() : '';
+
+  const meta = CONDITION_META[cond] || CONDITION_META.general;
+
   const html = `
     <div style="font-family:sans-serif;color:#111;background:#fff;padding:16px;border-radius:8px;border:1px solid #e0e0e0;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #111;">
@@ -14561,8 +14677,8 @@ function generateOncologyView() {
           <div style="font-size:12px;color:#666;">Generated: ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</div>
         </div>
         <div style="text-align:right;font-size:11px;color:#666;">
-          MaxedHealth v3.0<br>
-          ${cond === 'gbm' ? 'GBM Therapeutic Protocol' : 'Nutritional Tracking'}
+          MaxedHealth ${APP_VERSION || ''}<br>
+          ${meta.label}
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px;">
@@ -14585,6 +14701,8 @@ function generateOncologyView() {
           <div style="font-size:11px;color:#666;">${weightChange ? (weightChange > 0 ? '+' : '')+weightChange+'kg over period' : 'No weight data'}</div>
         </div>
       </div>
+      ${refSection}
+      ${cycleSection}
       ${treatDays.length > 0 ? `
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;">
         <thead><tr style="background:#f5f5f5;"><th style="padding:6px 8px;text-align:left;">Date</th><th style="padding:6px 8px;text-align:left;">Calories</th><th style="padding:6px 8px;text-align:left;">Protein</th><th style="padding:6px 8px;text-align:left;">Tags</th></tr></thead>
@@ -14599,13 +14717,107 @@ function generateOncologyView() {
   const actions = document.getElementById('oncologyActions');
   if (out) { out.style.display = 'block'; out.innerHTML = html; }
   if (actions) { actions.style.display = 'flex'; }
+  const aiBtn = document.getElementById('oncologyAIBtn');
+  if (aiBtn) { aiBtn.style.display = 'inline-block'; aiBtn.textContent = '🧠 Add AI summary'; aiBtn.disabled = false; }
+  window._oncologyCtx = { cond, refEvents, cycleData }; // stashed for the AI narrative step
   window._oncologyHTML = html;
   window._oncologyText = `${name} — Nutrition Report (Last ${days} days)\n` +
     `Generated: ${new Date().toLocaleDateString('en-GB')}\n\n` +
     `Days logged: ${h.length} | Ketosis adherence: ${ketoAdh}%\n` +
     `Avg: ${avgKcal}kcal | ${avgProt}g P | ${avgFat}g F | ${avgCarbs}g C\n` +
     `Weight: ${currentWeight ? currentWeight+'kg' : 'N/A'}${weightChange ? ' ('+( weightChange > 0 ? '+' : '')+weightChange+'kg)' : ''}\n` +
-    (treatDays.length > 0 ? `\nTreatment days: ${treatDays.length}\n` + treatDays.map(d=>`  ${d.date}: ${Math.round(d.totals.kcal)}kcal | ${(d.notes||'').split(',').filter(t=>t.trim()).join(', ')}`).join('\n') : '');
+    (refRows.length > 0 ? `\nSince last logged event:\n` + refRows.map(r=>`  ${r.label} (${r.mostRecentDate}, ${r.daysSince}d ago): weight ${fmtDelta(r.weightDelta,'kg')}, muscle ${fmtDelta(r.muscleDelta,'kg')}, fat ${fmtDelta(r.fatDelta,'kg')}`).join('\n') : '') +
+    (cycleData ? `\n\nTreatment cycles: ${cycleData.cycles.length} (${cycleData.chemoDays.length} treatment days, ${cycleData.recoveryDays.length} recovery days)\n` +
+      `  Treatment days: ${cycleData.chemoKcal}kcal | ${cycleData.chemoProt}g P | ${cycleData.chemoCarbs}g C\n` +
+      `  Recovery days: ${cycleData.recovKcal}kcal | ${cycleData.recovProt}g P | ${cycleData.recovCarbs}g C` : '') +
+    (treatDays.length > 0 ? `\n\nTreatment days: ${treatDays.length}\n` + treatDays.map(d=>`  ${d.date}: ${Math.round(d.totals.kcal)}kcal | ${(d.notes||'').split(',').filter(t=>t.trim()).join(', ')}`).join('\n') : '');
+}
+
+// Generates a clinical-register narrative to append to the oncology report.
+// Kept as a separate, explicit step (not baked into generateOncologyView) so the
+// stats-only report above still works with zero network — this part needs it.
+async function generateOncologyAINarrative() {
+  const btn = document.getElementById('oncologyAIBtn');
+  if (!window._oncologyCtx) { showToast('Generate the report first'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+
+  const { cond, refEvents, cycleData } = window._oncologyCtx;
+  const allHistory = (state.history || []).map(entry => {
+    const parts = entry.date.split('/');
+    const isoDate = parts.length === 3 ? `20${parts[2]}-${parts[1]}-${parts[0]}` : entry.date;
+    return { ...entry, isoDate };
+  }).sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+
+  const ctx = buildPatientContext(allHistory);
+  const refRows = Object.values(refEvents).filter(Boolean);
+  const refText = refRows.length
+    ? refRows.map(r => `${r.label}: last logged ${r.mostRecentDate} (${r.daysSince}d ago) — weight change since ${r.weightDelta ?? 'n/a'}kg, muscle mass change ${r.muscleDelta ?? 'n/a'}kg, fat mass change ${r.fatDelta ?? 'n/a'}kg`).join('\n')
+    : 'No treatment/scan dates logged in notes for this period.';
+  const cycleText = cycleData
+    ? `${cycleData.cycles.length} treatment cycle(s) detected. Treatment days averaged ${cycleData.chemoKcal}kcal/${cycleData.chemoProt}g protein/${cycleData.chemoCarbs}g carbs vs recovery days at ${cycleData.recovKcal}kcal/${cycleData.recovProt}g protein/${cycleData.recovCarbs}g carbs.`
+    : 'Insufficient treatment-day data to compare cycles.';
+
+  const prompt = `You are writing a clinical nutrition and metabolic status summary for a treating oncologist. This is NOT a patient-facing document — write in flat clinical register, third person, no encouragement, no motivational language, no "you" statements.
+
+${patientContextBlock(ctx)}
+
+REFERENCE EVENT DATA:
+${refText}
+
+TREATMENT CYCLE DATA:
+${cycleText}
+
+Write a concise clinical summary (3-4 short paragraphs) covering:
+1. Nutritional adherence and metabolic ketosis status over the period, with specific adherence percentage
+2. Weight and body composition trend, correctly interpreted against the patient's stated intentional phase (do not flag intentional weight change as a concern)
+3. Any observable relationship between treatment days and nutritional intake, if data permits — state clearly if data is insufficient to draw a conclusion rather than speculating
+4. A single-paragraph overall status assessment
+
+Do not invent data not present above. If a section lacks sufficient data, state that plainly rather than filling the gap with plausible-sounding text.`;
+
+  try {
+    const { provider, apiKey } = getAIConfig();
+    const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+    let text;
+    if (provider === 'claude' && apiKey) {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 900, messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).content?.[0]?.text || 'Could not generate summary.';
+    } else if (provider === 'openai' && apiKey) {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 900, messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).choices?.[0]?.message?.content || 'Could not generate summary.';
+    } else {
+      const res = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 900, system: 'You are a clinical nutrition analyst writing for an oncologist. Flat clinical register only.', messages: [{ role: 'user', content: prompt }] })
+      });
+      text = (await res.json()).content?.[0]?.text || 'Could not generate summary.';
+    }
+
+    const narrativeHtml = `<div style="margin-top:16px;padding-top:14px;border-top:2px solid #111;">
+      <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:8px;">CLINICAL SUMMARY (AI-GENERATED)</div>
+      <div style="font-size:12px;color:#333;line-height:1.6;white-space:pre-wrap;">${text.replace(/</g,'&lt;')}</div>
+      <div style="font-size:9px;color:#999;margin-top:8px;">AI-generated interpretation of the data above. Not a substitute for clinical assessment.</div>
+    </div>`;
+
+    window._oncologyHTML = (window._oncologyHTML || '') + narrativeHtml;
+    window._oncologyText = (window._oncologyText || '') + `\n\n--- CLINICAL SUMMARY (AI-GENERATED) ---\n${text}`;
+    const out = document.getElementById('oncologyOutput');
+    if (out) out.innerHTML = window._oncologyHTML;
+    if (btn) { btn.textContent = '✓ AI summary added'; btn.disabled = true; }
+    showToast('AI clinical summary added ✓');
+  } catch (e) {
+    showToast('Could not generate — check your connection');
+    if (btn) { btn.disabled = false; btn.textContent = '🧠 Add AI summary'; }
+  }
 }
 
 function printOncologyView() {
@@ -14620,14 +14832,12 @@ function copyOncologySummary() {
   navigator.clipboard.writeText(window._oncologyText || '').then(() => showToast('Report copied ✓')).catch(() => showToast('Copy failed'));
 }
 
-function renderChemoCycleAnalysis() {
-  const section = document.getElementById('chemo-cycle-section');
-  const el = document.getElementById('chemo-cycle-content');
-  if (!section || !el) return;
-
+// Shared chemo-cycle computation — used by both the on-screen Reports view and
+// the printed/copyable oncology report, so the two never drift out of sync.
+// Returns null if fewer than 2 treatment days are logged (not enough to compare).
+function computeChemoCycleAnalysis() {
   const h = state.history || [];
   const treatKw = ['chemotherapy','chemo','treatment','infusion'];
-  // Include today
   const _todayTotalsC = calcTotals(state.todayLog);
   const _todayNotesC = localStorage.getItem('mh_today_notes') || state.notes || '';
   const _allDaysC = _todayNotesC && treatKw.some(k=>_todayNotesC.toLowerCase().includes(k)) && _todayTotalsC.kcal > 0
@@ -14639,8 +14849,7 @@ function renderChemoCycleAnalysis() {
       return new Date(`20${ay}-${am}-${ad}`) - new Date(`20${by}-${bm}-${bd}`);
     });
 
-  if (chemoDays.length < 2) { section.style.display = 'none'; return; }
-  section.style.display = 'block';
+  if (chemoDays.length < 2) return null;
 
   // Group into cycles — gap > 14 days = new cycle
   const cycles = [];
@@ -14670,12 +14879,23 @@ function renderChemoCycleAnalysis() {
     });
   });
 
-  const chemoKcal = avg(chemoDays, 'kcal');
-  const recovKcal = avg(recoveryDays, 'kcal');
-  const chemoProt = avg(chemoDays, 'protein');
-  const recovProt = avg(recoveryDays, 'protein');
-  const chemoCarbs = avg(chemoDays, 'carbs');
-  const recovCarbs = avg(recoveryDays, 'carbs');
+  return {
+    cycles, chemoDays, recoveryDays,
+    chemoKcal:  avg(chemoDays, 'kcal'),  recovKcal:  avg(recoveryDays, 'kcal'),
+    chemoProt:  avg(chemoDays, 'protein'), recovProt:  avg(recoveryDays, 'protein'),
+    chemoCarbs: avg(chemoDays, 'carbs'), recovCarbs: avg(recoveryDays, 'carbs'),
+  };
+}
+
+function renderChemoCycleAnalysis() {
+  const section = document.getElementById('chemo-cycle-section');
+  const el = document.getElementById('chemo-cycle-content');
+  if (!section || !el) return;
+
+  const data = computeChemoCycleAnalysis();
+  if (!data) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  const { cycles, chemoDays, recoveryDays, chemoKcal, recovKcal, chemoProt, recovProt, chemoCarbs, recovCarbs } = data;
 
   const diffPct = (a, b) => b > 0 ? Math.round((a-b)/b*100) : 0;
   const diffStr = (a, b) => { const d = diffPct(a,b); return `<span style="color:${d<0?'var(--yellow)':'var(--green)'};font-size:10px;"> (${d>0?'+':''}${d}%)</span>`; };
