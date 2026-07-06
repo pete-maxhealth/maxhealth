@@ -3474,6 +3474,13 @@ body[data-theme="light"] {
         <button class="settings-save-btn" onclick="savePhaseHistory()">Save</button>
         <div style="font-size:11px;color:var(--text3);">Example: first line <span style="font-family:Space Mono,monospace;">2026-03-12 loss</span> means intentional loss from data start. Second line <span style="font-family:Space Mono,monospace;">2026-06-21 gain</span> means gaining phase from that date.</div>
       </div>
+      <div style="background:var(--accent-dim);border:1px solid var(--accent-glow);border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:11px;font-family:Space Mono,monospace;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">⚡ Suggested Targets</div>
+        <div id="suggestedTargetsContent" style="font-size:12px;color:var(--text2);line-height:1.7;">
+          <span style="color:var(--text3);">Enter height, age, sex and weight to generate suggestions.</span>
+        </div>
+        <button id="applySuggestedBtn" onclick="applySuggestedTargets()" style="display:none;margin-top:12px;width:100%;background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;font-family:Space Mono,monospace;cursor:pointer;touch-action:manipulation;">Apply these targets →</button>
+      </div>
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:4px;">
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
           <div class="settings-label">Daily calorie target</div>
@@ -3646,7 +3653,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.36</div>
+        <div class="settings-value">MaxedHealth v3.10.37</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5417,7 +5424,118 @@ function savePhaseHistory() {
   if (el) {
     localStorage.setItem('mh_phase_history', el.value.trim());
     showToast('Phase history saved');
+    renderSuggestedTargets();
   }
+}
+
+// ─── SUGGESTED TARGETS CALCULATOR ────────────────────────────────────────────
+let _suggestedTargets = null;
+
+function renderSuggestedTargets() {
+  const el = document.getElementById('suggestedTargetsContent');
+  const btn = document.getElementById('applySuggestedBtn');
+  if (!el) return;
+
+  const heightCm = parseInt(localStorage.getItem('mh_height_cm'));
+  const age      = parseInt(localStorage.getItem('mh_age'));
+  const sex      = localStorage.getItem('mh_sex') || 'male';
+  const cond     = localStorage.getItem('mh_condition') || 'general';
+  const weight   = parseFloat(state.weight) || getLastKnownWeight();
+  const goal     = localStorage.getItem('mh_goal') || 'gain';
+  const carbCeil = parseInt(localStorage.getItem('mh_ceil_standard')) || 50;
+
+  if (!heightCm || !age || !weight) {
+    el.innerHTML = '<span style="color:var(--text3);">Enter height, age, sex and weight in Profile to generate suggestions.</span>';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+
+  // Mifflin-St Jeor BMR
+  const bmr = sex === 'female'
+    ? (10 * weight) + (6.25 * heightCm) - (5 * age) - 161
+    : (10 * weight) + (6.25 * heightCm) - (5 * age) + 5;
+
+  // Activity multiplier from avg steps (last 30 days)
+  const recentSteps = (state.history || []).slice(0, 30)
+    .map(d => d.steps || 0).filter(s => s > 0);
+  const avgSteps = recentSteps.length
+    ? recentSteps.reduce((a,b) => a+b,0) / recentSteps.length : 5000;
+  const actMult = avgSteps > 12000 ? 1.725
+    : avgSteps > 8000 ? 1.55
+    : avgSteps > 5000 ? 1.375
+    : 1.2;
+
+  const tdee = Math.round(bmr * actMult);
+
+  // Phase-based calorie target
+  const calTarget = goal === 'lose'     ? tdee - 500
+                  : goal === 'maintain' ? tdee
+                  :                       tdee + 400; // gain
+
+  // Protein — condition-specific
+  const protMultiplier = ['gbm','epilepsy'].includes(cond) ? 1.8
+    : cond === 't1_diabetes' ? 1.6
+    : cond === 't2_diabetes' ? 1.6
+    : 1.6;
+  const protTarget = Math.round(weight * protMultiplier);
+
+  // Fat fills remaining calories
+  const carbKcal = carbCeil * 4;
+  const protKcal = protTarget * 4;
+  const fatKcal  = calTarget - protKcal - carbKcal;
+  const fatTarget = fatKcal > 0 ? Math.round(fatKcal / 9) : 50;
+
+  // Condition overlay note
+  const condNotes = {
+    gbm:        `<div style="color:var(--accent);margin-top:6px;font-size:11px;">🧬 GBM protocol: fat should be ≥65% of calories. At these targets fat is ${Math.round(fatTarget*9/calTarget*100)}% — ${fatTarget*9/calTarget >= 0.65 ? '✓ within therapeutic range' : '⚠ consider increasing fat or reducing protein slightly'}.</div>`,
+    epilepsy:   `<div style="color:var(--accent);margin-top:6px;font-size:11px;">⚡ Epilepsy protocol: fat ≥65% of calories recommended.</div>`,
+    t2_diabetes:`<div style="color:var(--yellow);margin-top:6px;font-size:11px;">🩸 T2D: carb ceiling is primary lever. These targets assume your ≤${carbCeil}g ceiling is set.</div>`,
+    t1_diabetes:`<div style="color:var(--yellow);margin-top:6px;font-size:11px;">💉 T1D: consult your diabetes team before adjusting targets — insulin dosing is affected by carb changes.</div>`,
+  };
+
+  _suggestedTargets = { kcal: calTarget, protein: protTarget, fat: fatTarget };
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div style="background:var(--surface);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">TDEE (estimated)</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">${tdee} <span style="font-size:11px;font-weight:400;">kcal</span></div>
+        <div style="font-size:10px;color:var(--text3);">${Math.round(avgSteps).toLocaleString()} avg steps/day</div>
+      </div>
+      <div style="background:var(--surface);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">TARGET (${goal.toUpperCase()})</div>
+        <div style="font-size:18px;font-weight:700;color:var(--blue);">${calTarget} <span style="font-size:11px;font-weight:400;">kcal</span></div>
+        <div style="font-size:10px;color:var(--text3);">${goal === 'lose' ? 'TDEE −500' : goal === 'gain' ? 'TDEE +400' : 'TDEE'}</div>
+      </div>
+      <div style="background:var(--surface);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:var(--green);margin-bottom:2px;">PROTEIN</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green);">${protTarget}g</div>
+        <div style="font-size:10px;color:var(--text3);">${protMultiplier}g × ${weight}kg</div>
+      </div>
+      <div style="background:var(--surface);border-radius:8px;padding:10px;">
+        <div style="font-size:10px;color:#a78bfa;margin-bottom:2px;">FAT</div>
+        <div style="font-size:18px;font-weight:700;color:#a78bfa;">${fatTarget}g</div>
+        <div style="font-size:10px;color:var(--text3);">${Math.round(fatTarget*9/calTarget*100)}% of calories</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);">Carbs: ≤${carbCeil}g (from your ceiling — unchanged)</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${weight}kg · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
+    ${condNotes[cond] || ''}`;
+
+  if (btn) btn.style.display = 'block';
+}
+
+function applySuggestedTargets() {
+  if (!_suggestedTargets) return;
+  const { kcal, protein, fat } = _suggestedTargets;
+  const kcalEl = document.getElementById('settingKcalTarget');
+  const protEl = document.getElementById('settingProteinTarget');
+  const fatEl  = document.getElementById('settingFatTarget');
+  if (kcalEl) kcalEl.value = kcal;
+  if (protEl) protEl.value = protein;
+  if (fatEl)  fatEl.value  = fat;
+  saveMacroTargets();
+  showToast(`Targets applied: ${kcal}kcal · ${protein}g P · ${fat}g F`);
 }
 
 function getPhaseHistory() {
@@ -5519,6 +5637,7 @@ function initSettings() {
   if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'gbm';
   const phaseEl = document.getElementById('settingsPhaseHistory');
   if (phaseEl) phaseEl.value = localStorage.getItem('mh_phase_history') || '2026-03-12 loss\n2026-06-21 gain';
+  renderSuggestedTargets();
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
 
