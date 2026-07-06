@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.49 — Phase 10: plausibility sanitisation moved to single choke point (logFoods), fixed missing fat field in database search path -->
+<meta charset="UTF-8"><!-- v3.10.50 — Phase 10: label-photo scaling now deterministic (app multiplies, AI just reads per-100g + grams) -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4378,7 +4378,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.49'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.50'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -6146,18 +6146,18 @@ The description contains the product name and the amount they had (e.g. "ASDA Co
 
 Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate or use your training data.
 Step 2: Extract the amount in grams or ml from the user's description. The amount MUST be stated — do not assume 100g if no amount is given; instead set amount to "unknown" and note this in the message field.
-Step 3: If a valid gram amount is present, scale the per-100g values to that amount. Show the per-100g values you read AND the scaled values in the message field.
-
-Use the product name from the user's description if provided, otherwise identify it from the label.
 
 Respond ONLY with a JSON object (no markdown, no preamble):
 {
   "type": "food",
   "items": [
-    { "name": "Product name (no quantity)", "amount": "150g", "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }
+    { "name": "Product name (no quantity)", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }, "grams": 150 }
   ],
-  "message": "Read from label: 107kcal/100g · 9.1g P · 5.5g F · 4.1g C. Scaled to 150g."
-}`
+  "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C."
+}
+
+CRITICAL: Report ONLY the raw per-100g figures exactly as printed on the label, in "per100g". Do NOT multiply or scale them yourself — put the gram amount in "grams" as a plain number and let the multiplication happen downstream. If no amount is stated, omit "grams" entirely rather than guessing.
+Use the product name from the user's description if provided, otherwise identify it from the label.`
     : `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
 Today's targets: ${targets.kcal} kcal | ${targets.protein}g protein | ${targets.carbs}g carbs (${state.dayMode} day).
@@ -8368,13 +8368,45 @@ async function processMessage(text, imageBase64, imageMime) {
       return;
     }
     if (result.type === 'food' && result.items && result.items.length > 0) {
+      // Label-path items arrive as raw per100g facts + a grams number — the app does
+      // the multiplication here, deterministically, rather than trusting the AI to
+      // have scaled correctly itself. This is what let a 150g entry silently log as
+      // unscaled per-100g values: the AI was doing the arithmetic in one shot with
+      // no verification, exactly the same failure class as the meat-carbs bug.
+      const scaledItems = result.items.map(it => {
+        if (it.per100g && typeof it.per100g === 'object') {
+          const grams = parseFloat(it.grams) || null;
+          const p = it.per100g;
+          if (grams && grams > 0) {
+            const factor = grams / 100;
+            return {
+              name: it.name,
+              amount: grams + 'g',
+              kcal:    Math.round((p.kcal    || 0) * factor),
+              protein: Math.round((p.protein || 0) * factor * 100) / 100,
+              fat:     Math.round((p.fat     || 0) * factor * 100) / 100,
+              carbs:   Math.round((p.carbs   || 0) * factor * 100) / 100,
+              _per100gBase: p,
+            };
+          }
+          // No valid gram amount — show per-100g values as-is and flag it clearly
+          // rather than guessing a portion.
+          return {
+            name: it.name + ' (per 100g — amount not confirmed)',
+            amount: '100g',
+            kcal: p.kcal || 0, protein: p.protein || 0, fat: p.fat || 0, carbs: p.carbs || 0,
+            _per100gBase: p, _amountUnconfirmed: true,
+          };
+        }
+        return it; // meal-path items already carry final values, untouched
+      });
       const mealItem = {
         name: text.length <= 50 ? text : text.slice(0,47) + '...',
-        kcal: Math.round(result.items.reduce((a,i)=>a+i.kcal,0)),
-        protein: Math.round(result.items.reduce((a,i)=>a+i.protein,0)*100)/100,
-        carbs: Math.round(result.items.reduce((a,i)=>a+i.carbs,0)*100)/100,
+        kcal: Math.round(scaledItems.reduce((a,i)=>a+i.kcal,0)),
+        protein: Math.round(scaledItems.reduce((a,i)=>a+i.protein,0)*100)/100,
+        carbs: Math.round(scaledItems.reduce((a,i)=>a+i.carbs,0)*100)/100,
       };
-      showMealPreview(sanitiseFatValues(result.items), text, result.message);
+      showMealPreview(sanitiseFatValues(scaledItems), text, result.message);
       return;
     }
     if (result.type === 'query') {
