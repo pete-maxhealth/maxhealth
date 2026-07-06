@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.46 — Phase 10: structured Strength Training log (sets/reps/weight) + CSV export/import -->
+<meta charset="UTF-8"><!-- v3.10.48 — Phase 10: meat-carbs upgraded from warning to hard auto-correct, no longer dismissible -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4378,7 +4378,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.46'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.48'; // single source of truth — bump here each release
 let state = loadState();
 
 // One-time cleanup: de-duplicate today's notes tags, fixing accumulation from a
@@ -8621,6 +8621,15 @@ const FAT_FLOOR_DB = {
   'milk':              { fat100: 3.5  },
 };
 
+// Shared detection helpers — used by both the hard auto-correct in sanitiseFatValues
+// and the preview warnings, so the two can never drift out of sync with each other.
+function isMeatOrFishName(n) {
+  return /steak|beef|chicken|pork|turkey|lamb|\bmeat\b|fish|salmon|tuna|prawn|venison|duck|mince/i.test(n || '');
+}
+function hasCarbSourceInName(n) {
+  return /bread(ed|crumb)|batter|sauce|marinade|bbq|honey|sweet|teriyaki|hoisin|glaze|stuffing|coating|gravy/i.test(n || '');
+}
+
 function sanitiseFatValues(items) {
   return items.map(item => {
     const f = {...item};
@@ -8652,6 +8661,48 @@ function sanitiseFatValues(items) {
         f.fat = Math.round(fatKcal / 9 * 10) / 10;
         f._fatBackCalc = true;
       }
+    }
+
+    // High-confidence pure fats (oil, butter — fat100 ≥ 80g/100g) are unambiguous:
+    // fat is ~90-100% of the stated gram weight regardless of what the AI returned.
+    // Unlike the floor above (which only fires when fat is missing), this corrects
+    // a present-but-wrong value — the exact failure mode that let a 60g olive oil
+    // entry through at 8.4g fat. Kept to only the highest-confidence category
+    // (not cream, which varies 19-50% and is a judgement call, not a hard fact).
+    if (!f._fatSanitised) {
+      const grams = parseFloat(f.amount) || null;
+      if (grams && grams > 5) {
+        for (const [key, val] of Object.entries(FAT_FLOOR_DB)) {
+          if (val.fat100 >= 80 && nameLower.includes(key)) {
+            const expectedFat = val.fat100 * grams / 100;
+            if ((f.fat || 0) < expectedFat * 0.5) {
+              const oldFat = f.fat || 0;
+              f.fat = Math.round(expectedFat * 100) / 100;
+              f.protein = 0;
+              f.carbs = 0;
+              f.kcal = Math.round(f.fat * 9);
+              f._fatAutoCorrected = true;
+              f._fatAutoCorrectedFrom = oldFat;
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    // Plain meat/fish carrying carbs is not a judgement call — raw/plain protein has
+    // zero carbohydrate, full stop. A warning wasn't enough (it can be logged past),
+    // so this now hard-corrects: zero the carbs and recompute kcal from protein+fat
+    // only, same as the pure-fat correction above. Skipped if the name implies a
+    // genuine carb source (breaded, sauced, marinaded, sweet glaze etc).
+    if (isMeatOrFishName(f.name) && !hasCarbSourceInName(f.name) && (f.carbs || 0) > 0.5) {
+      const oldCarbs = f.carbs;
+      const oldKcal = f.kcal;
+      f.carbs = 0;
+      f.kcal = Math.round((f.protein || 0) * 4 + (f.fat || 0) * 9);
+      f._carbsAutoCorrected = true;
+      f._carbsAutoCorrectedFrom = oldCarbs;
+      f._kcalAutoCorrectedFrom = oldKcal;
     }
 
     return f;
@@ -8721,6 +8772,9 @@ function renderMealPreview() {
   const warnings = [];
   const isPureFat = n => /oil|butter|cream|lard|ghee|dripping/i.test(n);
   foods.forEach(f => {
+    if (f._fatAutoCorrected) {
+      warnings.push(`✅ ${f.name}: fat auto-corrected from ${f._fatAutoCorrectedFrom}g to ${f.fat}g — pure fats are ~90-100% fat by weight, the AI's original figure didn't match the stated amount`);
+    }
     if (f.kcal > 50 && f.protein < f.kcal * 0.01 && !isPureFat(f.name)) {
       const isMeat = /steak|beef|chicken|pork|turkey|lamb|meat|fish|salmon|tuna|prawn/i.test(f.name);
       const emoji = isMeat ? '🔴' : '⚠️';
@@ -8744,6 +8798,41 @@ function renderMealPreview() {
           warnings.push(`⚠️ ${f.name}: protein may not be scaled to ${f.amount} — verify values`);
         }
       }
+    }
+
+    // Plain meat/fish should never carry carbs — a nonzero value here is a known
+    // failure mode (phantom carbs from a hallucinated/misapplied estimate), not a
+    // judgement call. Excludes anything with a genuine carb source (breading, sauce,
+    // marinade, sweet glaze) since those legitimately do carry carbs.
+    // Plain meat/fish carrying carbs is now hard auto-corrected in sanitiseFatValues
+    // (not just warned) — this note makes that correction visible rather than silent.
+    if (f._carbsAutoCorrected) {
+      warnings.push(`✅ ${f.name}: carbs auto-corrected from ${f._carbsAutoCorrectedFrom}g to 0g — plain meat/fish has no carbohydrate`);
+    }
+
+    // Pure fats (oil, butter, cream) are excluded from the fat checks above, but that
+    // means an under-scaled value (e.g. 60g oil returning 8g fat) was never checked
+    // either. Pure fats are ~95-100% fat by weight — if the reported fat is far below
+    // what the stated gram amount implies, the AI likely mis-scaled it.
+    if (isPureFat(f.name) && f.amount) {
+      const amtIsGrams = /^\d+(\.\d+)?\s*(g|ml)\b/i.test(f.amount);
+      const grams = amtIsGrams ? parseFloat(f.amount) : 0;
+      if (grams > 5) {
+        const fatFraction = /cream/i.test(f.name) ? 0.5 : 0.9; // cream ~50% fat; oil/butter/lard/ghee ~90-100%
+        const expectedFat = grams * fatFraction;
+        if ((f.fat || 0) < grams * (fatFraction * 0.45)) {
+          warnings.push(`🔴 ${f.name}: ${f.fat||0}g fat looks far too low for ${f.amount} (expect roughly ${Math.round(expectedFat)}g) — verify or edit`);
+        }
+      }
+    }
+
+    // Plain vegetables shouldn't carry meaningful fat unless oil/butter/frying is
+    // explicitly named — a high fat figure here usually means the AI pulled a
+    // pre-cooked/oil-roasted product instead of the plain one actually logged.
+    const isPlantFood = /vegetable|\bveg\b|pepper|courgette|broccoli|spinach|salad|onion|mushroom|carrot|tomato|aubergine|cauliflower/i.test(f.name);
+    const impliesOil = /oil|butter|fried|roasted in|sauté|sauteed/i.test(f.name);
+    if (isPlantFood && !impliesOil && f.fat > 5) {
+      warnings.push(`⚠️ ${f.name}: ${f.fat}g fat seems high for plain vegetables — check this isn't assuming oil/butter you didn't add`);
     }
   });
 
