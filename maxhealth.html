@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.60 — Phase 10: handle bare-array AI response (missing type/items wrapper), confirmed via raw diagnostic -->
+<meta charset="UTF-8"><!-- v3.10.61 — Phase 10: net/gross carb toggle, fuzzy library match with confirmation, confirmed save-to-library already sanitised -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -3571,6 +3571,15 @@ body[data-theme="light"] {
         </div>
       </div>
       <button class="settings-save-btn" style="margin-top:10px;width:100%;" onclick="saveCarbCeilings()">Save ceilings</button>
+
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+        <div class="settings-label" style="margin-bottom:6px;">Carb counting method</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5;">UK labels are usually already total carbs. Some countries' labels separate out fibre, which many trackers subtract as "net carbs" since fibre is minimally glycemic. Defaults to Total — switching only affects <strong>today's</strong> ceiling check reliably; older logged days may not have fibre recorded, so this can't be safely applied retroactively.</div>
+        <div style="display:flex;gap:6px;">
+          <button id="carbMethodBtn-gross" onclick="setCarbMethod('gross')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-family:'Space Mono',monospace;">Total (gross)</button>
+          <button id="carbMethodBtn-net" onclick="setCarbMethod('net')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-family:'Space Mono',monospace;">Net (total − fibre)</button>
+        </div>
+      </div>
     </div>
     </div>
 
@@ -4378,7 +4387,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.60'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.61'; // single source of truth — bump here each release
 let state = loadState();
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
@@ -4739,10 +4748,52 @@ async function loadLibraryFromServer() {
   } catch(e) {}
 }
 
+function useFuzzyLibraryMatch() {
+  const pending = window._pendingFuzzyLibraryMatch;
+  if (!pending) return;
+  window._pendingFuzzyLibraryMatch = null;
+  const libMatch = pending.match;
+  const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
+  food._per100g = libMatch.per100g === true;
+  food._portionG = parseFloat(libMatch.portion) || 0;
+  window._pendingMealFoods = [food];
+  window._pendingMealText = libMatch.name;
+  showMealPreview([food], libMatch.name, 'From library — values locked. Adjust amount if needed.');
+}
+
+function declineFuzzyLibraryMatch() {
+  const pending = window._pendingFuzzyLibraryMatch;
+  if (!pending) return;
+  window._pendingFuzzyLibraryMatch = null;
+  processMessage(pending.originalText, null, null);
+}
+
 function findInLibrary(name) {
   const lib = loadLibrary();
   const lower = name.toLowerCase().trim();
   return lib.find(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().split(' ').slice(0,3).join(' ')));
+}
+
+// Fuzzy fallback for when findInLibrary's substring match misses — e.g. "salted
+// peanuts" vs a locked "ASDA Roasted & Salted Mixed Nuts" entry. Deliberately
+// returns a candidate to CONFIRM, not to silently apply — a wrong fuzzy match
+// logged automatically would be worse than the AI-guess it's meant to prevent.
+const LIBRARY_STOPWORDS = new Set(['the','and','with','from','asda','tesco','sainsburys','morrisons','waitrose','aldi','lidl','of','a','an','in','on']);
+function fuzzyFindInLibrary(name) {
+  const lib = loadLibrary();
+  const queryWords = name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
+  if (!queryWords.length) return null;
+  let best = null, bestScore = 0;
+  for (const item of lib) {
+    const itemWords = item.name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
+    if (!itemWords.length) continue;
+    const matches = queryWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw))).length;
+    const score = matches / queryWords.length;
+    if (score > bestScore) { bestScore = score; best = item; }
+  }
+  // Require at least half the meaningful words to overlap — loose enough to catch
+  // "salted peanuts" → "ASDA...Salted...Nuts", tight enough to avoid false matches.
+  return bestScore >= 0.5 ? best : null;
 }
 
 function jumpToLibraryLetter(letter) {
@@ -5701,6 +5752,7 @@ function initSettings() {
   const carbEl = document.getElementById('settingCarbTarget');
   if (carbEl) carbEl.value = localStorage.getItem('mh_target_carbs') || '50';
   initCarbCeilings();
+  initCarbMethod();
   const { provider, apiKey } = getAIConfig();
   setProvider(provider);
   const name = localStorage.getItem('mh_name') || '';
@@ -5819,6 +5871,41 @@ function setGoal(goal) {
     if (phaseEl) phaseEl.value = updated;
   }
   renderSuggestedTargets();
+}
+
+function setCarbMethod(method) {
+  localStorage.setItem('mh_carb_method', method);
+  const grossBtn = document.getElementById('carbMethodBtn-gross');
+  const netBtn = document.getElementById('carbMethodBtn-net');
+  if (grossBtn) {
+    grossBtn.style.borderColor = method === 'gross' ? 'var(--accent)' : 'var(--border)';
+    grossBtn.style.background = method === 'gross' ? 'var(--accent-dim)' : 'var(--surface2)';
+    grossBtn.style.color = method === 'gross' ? 'var(--accent)' : 'var(--text2)';
+  }
+  if (netBtn) {
+    netBtn.style.borderColor = method === 'net' ? 'var(--accent)' : 'var(--border)';
+    netBtn.style.background = method === 'net' ? 'var(--accent-dim)' : 'var(--surface2)';
+    netBtn.style.color = method === 'net' ? 'var(--accent)' : 'var(--text2)';
+  }
+  updateDashboard();
+  showToast(`Carb counting: ${method === 'net' ? 'Net (total − fibre)' : 'Total (gross)'} ✓`);
+}
+
+function initCarbMethod() {
+  const method = localStorage.getItem('mh_carb_method') || 'gross';
+  setCarbMethod(method);
+}
+
+// Only reliable for today's log — fibre isn't consistently stored on historical
+// rolled-over days (several older code paths never captured it), so applying this
+// retroactively to history/streak data would silently be wrong some of the time.
+// Reads directly from a calcTotals() result, which always has fibre for today.
+function getEffectiveCarbs(totals) {
+  const method = localStorage.getItem('mh_carb_method') || 'gross';
+  if (method === 'net') {
+    return Math.max(0, Math.round(((totals.carbs || 0) - (totals.fibre || 0)) * 10) / 10);
+  }
+  return totals.carbs || 0;
 }
 
 function saveCarbCeilings() {
@@ -8271,6 +8358,23 @@ async function processMessage(text, imageBase64, imageMime) {
     return;
   }
 
+  // ── Fuzzy library match — confirm before using, never apply silently ──
+  // Catches near-misses like "salted peanuts" vs a locked "ASDA Roasted & Salted
+  // Mixed Nuts" that the exact substring match above wouldn't catch, without
+  // risking a wrong fuzzy match getting logged automatically.
+  const fuzzyMatch = !hasPhoto && !isMultiComponent ? fuzzyFindInLibrary(text) : null;
+  if (fuzzyMatch) {
+    window._pendingFuzzyLibraryMatch = { match: fuzzyMatch, originalText: text };
+    const bubble = addBubble('', 'system', 'warn');
+    bubble.innerHTML = `
+      <div style="margin-bottom:10px;">Did you mean your locked <strong>${fuzzyMatch.name}</strong>? (${fuzzyMatch.kcal}kcal · ${fuzzyMatch.protein}g P · ${fuzzyMatch.fat||0}g F · ${fuzzyMatch.carbs}g C per ${fuzzyMatch.portion || '100g'})</div>
+      <div style="display:flex;gap:8px;">
+        <button class="run-btn" style="flex:1;padding:8px;font-size:13px;" onclick="useFuzzyLibraryMatch()">Yes, use this</button>
+        <button class="copy-btn" style="flex:1;padding:8px;font-size:13px;" onclick="declineFuzzyLibraryMatch()">No, log fresh</button>
+      </div>`;
+    return;
+  }
+
   // ── Try local food database (simple entries only) ──────────
   // Skip for photos, multi-component meals — let AI handle them properly
   const foods = !hasPhoto && !isMultiComponent ? parseFood(text) : [];
@@ -9716,12 +9820,13 @@ function updateDashboard(skipActivityRender) {
   // Progress bars
   const calPct = Math.min(totals.kcal / targets.kcal * 100, 100);
   const protPct = Math.min(totals.protein / targets.protein * 100, 100);
-  const carbPct = Math.min(totals.carbs / targets.carbs * 100, 100);
+  const effCarbs = getEffectiveCarbs(totals); // net-aware if that setting is on — today's data only
+  const carbPct = Math.min(effCarbs / targets.carbs * 100, 100);
 
   document.getElementById('calCurrent').innerHTML = Math.round(totals.kcal) + '<span class="prog-unit">kcal</span>';
   document.getElementById('calTarget').textContent = `/ ${targets.kcal}`;
   document.getElementById('protCurrent').innerHTML = Math.round(totals.protein) + '<span class="prog-unit">g</span>';
-  document.getElementById('carbCurrent').innerHTML = Math.round(totals.carbs) + '<span class="prog-unit">g</span>';
+  document.getElementById('carbCurrent').innerHTML = Math.round(effCarbs) + '<span class="prog-unit">g</span>';
   document.getElementById('carbTarget').textContent = `/ ${targets.carbs}g`;
 
   document.getElementById('calBar').style.width = calPct + '%';
@@ -11755,10 +11860,14 @@ function calcKetosisStreak() {
   const t = getTargets().standard;
   const hist = (state.history || []).slice(); // newest first
   let streak = 0;
-  // Count today if within ceiling
-  const todayCarbs = calcTotals(state.todayLog).carbs;
+  // Count today if within ceiling — uses net-carb-aware effective carbs if that
+  // setting is on, since today's fibre data is always reliably available.
+  const todayTotals = calcTotals(state.todayLog);
+  const todayCarbs = getEffectiveCarbs(todayTotals);
   if (todayCarbs <= t.carbs) streak++;
-  // Count consecutive past days
+  // Count consecutive past days — always gross carbs here, since historical
+  // day.totals often don't have fibre recorded (several older rollover paths never
+  // captured it), so net-carb recalculation on history can't be done reliably.
   for (const day of hist) {
     if ((day.totals?.carbs || 0) <= t.carbs) streak++;
     else break;
