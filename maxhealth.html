@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.32 — Phase 9: full feature build -->
+<meta charset="UTF-8"><!-- v3.10.40 — Phase 10: TDEE-aware AI context, ketosis check, muscle-gain plan -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -3105,6 +3105,8 @@ body[data-theme="light"] {
           <span style="font-size:11px;color:var(--text2);cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;" onclick="setAskStarter('Which days did I hit all three targets — calories, protein and carbs?')">🎯 Target days</span>
           <span style="font-size:11px;color:var(--text2);cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;" onclick="setAskStarter('How has my weight changed over time and what might be driving it?')">⚖️ Weight trend</span>
           <span style="font-size:11px;color:var(--text2);cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;" onclick="setAskStarter('Analyse my sleep patterns and any correlations with next-day activity or HRV.')">🌙 Sleep analysis</span>
+          <span style="font-size:11px;color:var(--text2);cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;" onclick="setAskStarter('Did I likely break ketosis on any recent days where I went over my carb ceiling? Weigh each overage against my TDEE, what I ate, and any exercise that day rather than just the raw carb number.')">🔥 Ketosis check</span>
+          <span style="font-size:11px;color:var(--text2);cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;" onclick="setAskStarter('I want to build muscle and tone up. Based on my actual eating and activity history, what would I need to change — protein, calories, training?')">💪 Muscle gain plan</span>
         </div>
       </div>
       <textarea id="rptAskInput" class="modal-input" rows="2" placeholder="Ask anything about your data…" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;margin-bottom:10px;font-family:'DM Sans',sans-serif;"></textarea>
@@ -3663,7 +3665,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value">MaxedHealth v3.10.39</div>
+        <div class="settings-value">MaxedHealth v3.10.40</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5441,24 +5443,15 @@ function savePhaseHistory() {
 // ─── SUGGESTED TARGETS CALCULATOR ────────────────────────────────────────────
 let _suggestedTargets = null;
 
-function renderSuggestedTargets() {
-  const el = document.getElementById('suggestedTargetsContent');
-  const btn = document.getElementById('applySuggestedBtn');
-  if (!el) return;
-
+// Shared current-TDEE calculator — single source of truth for Suggested Targets
+// AND the AI patient context (ketosis / muscle-gain questions need real TDEE, not
+// just the static onboarding figure). Returns null if profile data is incomplete.
+function getCurrentTDEE() {
   const heightCm = parseInt(localStorage.getItem('mh_height_cm'));
   const age      = parseInt(localStorage.getItem('mh_age'));
   const sex      = localStorage.getItem('mh_sex') || 'male';
-  const cond     = localStorage.getItem('mh_condition') || 'general';
   const weight   = parseFloat(state.weight) || getLastKnownWeight();
-  const goal     = localStorage.getItem('mh_goal') || 'gain';
-  const carbCeil = parseInt(localStorage.getItem('mh_ceil_standard')) || 50;
-
-  if (!heightCm || !age || !weight) {
-    el.innerHTML = '<span style="color:var(--text3);">Enter height, age, sex and weight in Profile to generate suggestions.</span>';
-    if (btn) btn.style.display = 'none';
-    return;
-  }
+  if (!heightCm || !age || !weight) return null;
 
   // Mifflin-St Jeor BMR
   const bmr = sex === 'female'
@@ -5476,6 +5469,25 @@ function renderSuggestedTargets() {
     : 1.2;
 
   const tdee = Math.round(bmr * actMult);
+  return { bmr: Math.round(bmr), tdee, actMult, avgSteps: Math.round(avgSteps), weight, heightCm, age, sex };
+}
+
+function renderSuggestedTargets() {
+  const el = document.getElementById('suggestedTargetsContent');
+  const btn = document.getElementById('applySuggestedBtn');
+  if (!el) return;
+
+  const cond     = localStorage.getItem('mh_condition') || 'general';
+  const goal     = localStorage.getItem('mh_goal') || 'gain';
+  const carbCeil = parseInt(localStorage.getItem('mh_ceil_standard')) || 50;
+
+  const tdeeData = getCurrentTDEE();
+  if (!tdeeData) {
+    el.innerHTML = '<span style="color:var(--text3);">Enter height, age, sex and weight in Profile to generate suggestions.</span>';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  const { bmr, tdee, weight, heightCm, age, sex, avgSteps } = tdeeData;
 
   // Phase-based calorie target
   const calTarget = goal === 'lose'     ? tdee - 500
@@ -15319,10 +15331,14 @@ function buildPatientContext(history) {
     :                     `WITHIN target (${latestWt}kg, target ${wtLow}–${wtHigh}kg)`
     : 'No weight data';
 
+  const tdeeData = getCurrentTDEE();
+
   return {
     name, cond, goal, n, gapDays, t, wtLow, wtHigh,
     on, dayTypeSummary, streak,
     latestWt, wtTrend, wtStatus,
+    tdee: tdeeData?.tdee ?? null,
+    bmr:  tdeeData?.bmr  ?? null,
     avgSteps:      av(dayBreakdown.map(d => d.steps).filter(x => x > 0)),
     avgActiveKcal: av(dayBreakdown.map(d => d.activeKcal).filter(x => x > 0)),
     avKcal:        av(dayBreakdown.map(d => d.kcal)),
@@ -15401,6 +15417,8 @@ DAY TYPE BREAKDOWN: ${ctx.dayTypeSummary}
 CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
+ESTIMATED TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day (BMR ${ctx.bmr} kcal, Mifflin-St Jeor, activity-adjusted from 30-day avg steps)` : 'Not available — height/age/sex missing from Profile'}
+When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
 
 EVIDENCE FRAMEWORK: ${meta.evidenceNote}
 IMPORTANT: Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets. No medical disclaimers needed — patient has acknowledged the evidence base.`;
