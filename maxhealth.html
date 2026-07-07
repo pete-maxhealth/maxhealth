@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.85 — Phase 10: apply plausibility checks (meat-carbs, pure-fat) to manual log-entry edits, was previously unprotected -->
+<meta charset="UTF-8"><!-- v3.10.86 — Phase 10: fix library overwrite being blocked entirely (3 paths), was creating duplicate entries instead -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.85'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.86'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8104,11 +8104,6 @@ function saveFoodToLibraryFromPanel() {
     ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})`
     : _selectedFoodItem.name;
   const lib = loadLibrary();
-  const alreadySaved = lib.some(l => l.name.toLowerCase() === displayName.toLowerCase());
-  if (alreadySaved) {
-    showToast(`"${displayName}" is already in your library`);
-    return;
-  }
   const entry = {
     name:    displayName,
     kcal:    _selectedFoodItem.kcal,
@@ -8123,9 +8118,18 @@ function saveFoodToLibraryFromPanel() {
     per100g: true,
     source:  'database',
   };
-  lib.push(entry);
-  saveLibrary(lib);
-  showToast(`"${displayName}" saved to library ✓`);
+  // Previously blocked outright with no way to overwrite — meaning a wrong existing
+  // entry could never be corrected via this path. Overwrites by name instead.
+  const existingIdx = lib.findIndex(l => l.name.toLowerCase() === displayName.toLowerCase());
+  if (existingIdx > -1) {
+    lib[existingIdx] = entry;
+    saveLibrary(lib);
+    showToast(`"${displayName}" updated in library ✓`);
+  } else {
+    lib.push(entry);
+    saveLibrary(lib);
+    showToast(`"${displayName}" saved to library ✓`);
+  }
 }
 
 // ─── CHAT LOGIC ──────────────────────────────────────────
@@ -9470,14 +9474,16 @@ function showSaveIngredientsDialog(foods, saveBar) {
   const rows = foods.map((f, i) => {
     const dupe = _libDupeCheck(f.name);
     const dupeLabel = dupe
-      ? `<span style="font-size:10px;color:var(--text3);margin-left:4px;">(already saved)</span>`
+      ? `<span style="font-size:10px;color:var(--yellow);margin-left:4px;">(already saved — tick to overwrite)</span>`
       : '';
+    // Previously disabled entirely for duplicates, with no way to override even when
+    // that's exactly what's needed (e.g. correcting a wrong library entry with a
+    // fresh, accurate label read). Now just unchecked by default — overwriting is an
+    // explicit, available choice, not blocked outright.
     const checked = !dupe ? 'checked' : '';
-    const disabled = dupe ? 'disabled' : '';
-    const dimStyle = dupe ? 'opacity:0.4;' : '';
     return `
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:${dupe ? 'default' : 'pointer'};${dimStyle}">
-        <input type="checkbox" data-idx="${i}" ${checked} ${disabled}
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+        <input type="checkbox" data-idx="${i}" ${checked}
           style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
         <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}${dupeLabel}</span>
         <span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:Space Mono,monospace;">${Math.round(f.kcal)}kcal</span>
@@ -9503,17 +9509,16 @@ function confirmSaveIngredients(btn) {
   if (!foods) return;
   const list = saveBar.querySelector('#saveIngredientsList');
   if (!list) return;
-  const checkboxes = list.querySelectorAll('input[type="checkbox"]:not([disabled])');
+  const checkboxes = list.querySelectorAll('input[type="checkbox"]');
   const lib = loadLibrary() || [];
   const saved = [];
+  const overwritten = [];
 
   checkboxes.forEach(cb => {
     if (!cb.checked) return;
     const f = foods[parseInt(cb.dataset.idx)];
     if (!f) return;
-    const dupe = _libDupeCheck(f.name);
-    if (dupe) return;
-    lib.push({
+    const entry = {
       name:    f.name,
       kcal:    Math.round(f.kcal * 100) / 100,
       protein: Math.round(f.protein * 100) / 100,
@@ -9522,14 +9527,27 @@ function confirmSaveIngredients(btn) {
       portion: f.amount || '',
       locked:  false,
       isMeal:  false,
-    });
-    saved.push(f.name);
+    };
+    // Explicitly ticking a duplicate means overwriting is exactly what's wanted —
+    // previously this was blocked outright with no way to correct a wrong library
+    // entry using a fresh, accurate read.
+    const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
+    if (existingIdx > -1) {
+      lib[existingIdx] = entry;
+      overwritten.push(f.name);
+    } else {
+      lib.push(entry);
+      saved.push(f.name);
+    }
   });
 
-  if (!saved.length) { showToast('Nothing new to save'); return; }
+  if (!saved.length && !overwritten.length) { showToast('Nothing selected to save'); return; }
   saveLibrary(lib);
-  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ Saved: ${saved.join(', ')}</span>`;
-  showToast(`${saved.length} item${saved.length > 1 ? 's' : ''} saved to library`);
+  const parts = [];
+  if (saved.length) parts.push(`Saved: ${saved.join(', ')}`);
+  if (overwritten.length) parts.push(`Overwritten: ${overwritten.join(', ')}`);
+  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ ${parts.join(' · ')}</span>`;
+  showToast(parts.join(' · '));
 }
 
 function confirmMealLog() {
@@ -9561,8 +9579,9 @@ function saveLibraryOnlyFromPreview() {
   const foods = window._pendingMealFoods;
   if (!foods || foods.length === 0) { cancelMealPreview(); return; }
   const lib = loadLibrary();
+  const saved = [], overwritten = [];
   foods.forEach(f => {
-    lib.push({
+    const entry = {
       id: 'ai_' + Date.now() + '_' + Math.round(Math.random()*1000),
       name: f.name,
       portion: f.amount || null,
@@ -9573,7 +9592,14 @@ function saveLibraryOnlyFromPreview() {
       carbs: Math.round((f.carbs||0) * 10) / 10,
       locked: true,
       source: 'ai_confirmed'
-    });
+    };
+    // This previously had no duplicate check at all — every save blindly pushed a
+    // new entry regardless of name, which is exactly how the same food ended up
+    // with two separate library entries. Re-saving from a fresh read now correctly
+    // overwrites the existing one rather than duplicating it.
+    const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
+    if (existingIdx > -1) { lib[existingIdx] = entry; overwritten.push(f.name); }
+    else { lib.push(entry); saved.push(f.name); }
   });
   saveLibrary(lib);
   renderLibrary();
@@ -9582,7 +9608,10 @@ function saveLibraryOnlyFromPreview() {
   window._pendingMealFoods = null;
   const modeBar = document.getElementById('chatModeBar');
   if (modeBar) modeBar.style.display = '';
-  addBubble(`Saved ${foods.length > 1 ? `${foods.length} items` : foods[0].name} to library — not logged as eaten today.`, 'system', 'success');
+  const parts = [];
+  if (saved.length) parts.push(`Saved ${saved.join(', ')}`);
+  if (overwritten.length) parts.push(`Overwritten ${overwritten.join(', ')}`);
+  addBubble(`${parts.join(' · ')} — not logged as eaten today.`, 'system', 'success');
 }
 
 function logFoods(foods, originalText, aiMessage = null) {
