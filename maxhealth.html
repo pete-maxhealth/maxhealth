@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.82 — Phase 10: merge Strength Training into Activity card, one shared collapsible box instead of two -->
+<meta charset="UTF-8"><!-- v3.10.84 — Phase 10: changed-from-X-to-Y diff summary after editing historical day totals -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.82'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.84'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9960,6 +9960,18 @@ function updateDashboard(skipActivityRender) {
     const _capturedMode = state.dayMode || 'standard';
     const _capturedWeight = state.weight;
     const _capturedWater = state.waterToday || 0;
+    // Steps was being deleted at rollover (localStorage.removeItem below) without ever
+    // being captured into history — meaning avgSteps in TDEE/Suggested Targets/every
+    // AI report has likely been silently starved of real data for every past day,
+    // since day.steps was never actually populated, only shown as a notes-text mention.
+    const _capturedSteps = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+    // Same problem for exercise — only a flattened text tag ("45min Resistance")
+    // survived rollover, with the effort level dropped entirely and no way to
+    // edit or recompute it retroactively. Capturing the real structured data now.
+    const _capturedExercises = getActivities().filter(a => a.enabled && a.duration).map(a => ({
+      type: a.type, name: a.name, duration: a.duration, effort: a.effort || 'Moderate',
+      kcal: calcActivityKcal(a)
+    }));
     const _existingEntry = (state.history||[]).find(h => h.date === _rolloverDate);
     const _hasLog = _capturedLog.length > 0;
     const _rt = calcTotals(_capturedLog);
@@ -10010,7 +10022,8 @@ function updateDashboard(skipActivityRender) {
       state.history.unshift({
         date: _rolloverDate, log: _capturedLog, totals: _rt,
         mode: _capturedMode, notes: _capturedNotes,
-        weight: _capturedWeight, water_ml: _capturedWater
+        weight: _capturedWeight, water_ml: _capturedWater,
+        steps: _capturedSteps, exercises: _capturedExercises
       });
       // Build clean notes for master.csv
       const _midLegacy = ['standard','occasion','holiday','missed day entry','missed day'];
@@ -11240,9 +11253,16 @@ function editHistDayTotals(dayIdx, renderIdx) {
   const form = document.createElement('div');
   form.className = 'hist-day-totals-edit';
   form.style.cssText = 'padding:10px 0 6px;border-top:1px solid var(--border);margin-top:6px;display:flex;flex-direction:column;gap:8px;';
+  const exercises = day.exercises || [];
   form.innerHTML = `
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">OVERRIDE DAY TOTALS</div>
     <div style="font-size:11px;color:var(--text3);line-height:1.5;">This overrides the calculated total for this day. Use if you need to correct an entire day's figures without editing individual entries.</div>
+    <input type="hidden" id="hday-kcal-orig-${dayIdx}" value="${day.totals.kcal}">
+    <input type="hidden" id="hday-prot-orig-${dayIdx}" value="${day.totals.protein}">
+    <input type="hidden" id="hday-fat-orig-${dayIdx}" value="${day.totals.fat || 0}">
+    <input type="hidden" id="hday-carb-orig-${dayIdx}" value="${day.totals.carbs}">
+    <input type="hidden" id="hday-water-orig-${dayIdx}" value="${day.water_ml || 0}">
+    <input type="hidden" id="hday-steps-orig-${dayIdx}" value="${day.steps || 0}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       <div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">KCAL</div>
@@ -11260,6 +11280,40 @@ function editHistDayTotals(dayIdx, renderIdx) {
         <div style="font-size:10px;color:var(--yellow);margin-bottom:2px;">CARBS g</div>
         <input id="hday-carb-${dayIdx}" class="modal-input" type="number" value="${day.totals.carbs}" step="0.1" style="font-size:14px;padding:7px 10px;">
       </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
+      <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">WATER &amp; STEPS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:10px;color:#38bdf8;margin-bottom:2px;">WATER ml</div>
+          <input id="hday-water-${dayIdx}" class="modal-input" type="number" value="${day.water_ml || ''}" placeholder="0 = none" style="font-size:14px;padding:7px 10px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">STEPS</div>
+          <input id="hday-steps-${dayIdx}" class="modal-input" type="number" value="${day.steps || ''}" placeholder="0 = none" style="font-size:14px;padding:7px 10px;">
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Leave blank or 0 for a rest day with nothing to record — not left ambiguous.</div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
+      <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">EXERCISE</div>
+      <div id="histExerciseRows-${dayIdx}">
+        ${exercises.length === 0 ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">No exercise logged this day.</div>` : exercises.map((ex, exIdx) => `
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;" data-ex-idx="${exIdx}">
+          <span style="font-size:11px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(ex.name||ex.type||'Exercise').replace(/^[^\w]*/,'').trim()}</span>
+          <input type="number" value="${ex.duration||''}" placeholder="min" data-field="duration" style="width:60px;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <select data-field="effort" style="width:90px;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+            <option value="Easy" ${ex.effort==='Easy'?'selected':''}>Easy</option>
+            <option value="Moderate" ${(!ex.effort||ex.effort==='Moderate')?'selected':''}>Moderate</option>
+            <option value="Hard" ${ex.effort==='Hard'?'selected':''}>Hard</option>
+          </select>
+          <span onclick="this.closest('[data-ex-idx]').remove()" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;">×</span>
+        </div>`).join('')}
+      </div>
+      <button onclick="addHistExerciseRow(${dayIdx})" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;margin-top:2px;">+ Add exercise</button>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Deleting or emptying an exercise here automatically removes its calorie contribution from this day's total — unless you've manually typed a different KCAL value above, which always wins.</div>
     </div>
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">DAY TYPE</div>
@@ -11375,23 +11429,125 @@ function addHistCustomTag(dayIdx) {
   input.value = '';
 }
 
+function addHistExerciseRow(dayIdx) {
+  appPrompt('Exercise name', 'e.g. Resistance, Walking', (name) => {
+    if (!name || !name.trim()) return;
+    const container = document.getElementById(`histExerciseRows-${dayIdx}`);
+    if (!container) return;
+    const noneMsg = container.querySelector('div:not([data-ex-idx])');
+    if (noneMsg && noneMsg.textContent.includes('No exercise')) noneMsg.remove();
+    const exIdx = container.querySelectorAll('[data-ex-idx]').length;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+    row.dataset.exIdx = exIdx;
+    row.dataset.name = name.trim();
+    row.innerHTML = `
+      <span style="font-size:11px;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name.trim()}</span>
+      <input type="number" value="" placeholder="min" data-field="duration" style="width:60px;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <select data-field="effort" style="width:90px;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+        <option value="Easy">Easy</option>
+        <option value="Moderate" selected>Moderate</option>
+        <option value="Hard">Hard</option>
+      </select>
+      <span onclick="this.closest('[data-ex-idx]').remove()" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;">×</span>`;
+    container.appendChild(row);
+  });
+}
+
 function saveHistDayTotals(dayIdx) {
   const day = state.history[dayIdx];
   if (!day) return;
-  const kcal = parseFloat(document.getElementById(`hday-kcal-${dayIdx}`)?.value);
+  const kcalInput = parseFloat(document.getElementById(`hday-kcal-${dayIdx}`)?.value);
+  const kcalOrig  = parseFloat(document.getElementById(`hday-kcal-orig-${dayIdx}`)?.value);
   const prot = parseFloat(document.getElementById(`hday-prot-${dayIdx}`)?.value);
   const fat  = parseFloat(document.getElementById(`hday-fat-${dayIdx}`)?.value);
   const carb = parseFloat(document.getElementById(`hday-carb-${dayIdx}`)?.value);
-  if (isNaN(kcal) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
+  if (isNaN(kcalInput) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
+
+  // Water & steps — blank/0 explicitly means "rest day, nothing to record", not left
+  // ambiguous the way it silently was before (steps was being deleted at rollover
+  // with no way to ever set or correct it after the fact).
+  const waterVal = parseFloat(document.getElementById(`hday-water-${dayIdx}`)?.value);
+  const stepsVal = parseFloat(document.getElementById(`hday-steps-${dayIdx}`)?.value);
+  day.water_ml = isNaN(waterVal) ? 0 : Math.round(waterVal);
+  day.steps    = isNaN(stepsVal) ? 0 : Math.round(stepsVal);
+
+  // Exercise rows — read back whatever's left in the form (edited/deleted rows)
+  const oldExerciseKcal = (day.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0);
+  const exerciseRows = document.querySelectorAll(`#histExerciseRows-${dayIdx} [data-ex-idx]`);
+  const newExercises = [];
+  exerciseRows.forEach(row => {
+    const name = row.dataset.name || row.querySelector('span')?.textContent?.trim();
+    const duration = row.querySelector('[data-field="duration"]')?.value;
+    const effort = row.querySelector('[data-field="effort"]')?.value || 'Moderate';
+    if (!name || !duration || parseFloat(duration) <= 0) return; // empty duration = not counted, treated as rest
+    // Recompute kcal using the same MET formula live logging uses, based on the
+    // weight recorded for THIS day if available, falling back to current weight —
+    // using today's weight to cost a historical session would be wrong if weight
+    // has since changed significantly.
+    const w = day.weight || state.weight || 90;
+    const type = (name.toLowerCase().includes('walk')) ? 'walking'
+               : (name.toLowerCase().includes('run')||name.toLowerCase().includes('jog')) ? 'running'
+               : (name.toLowerCase().includes('cycl')||name.toLowerCase().includes('bike')) ? 'cycling'
+               : (name.toLowerCase().includes('swim')) ? 'swimming'
+               : (name.toLowerCase().includes('row')) ? 'rowing'
+               : (name.toLowerCase().includes('resistance')) ? 'resistance' : 'exercise';
+    const met = (MET[type] || MET.exercise)[effort] || MET.exercise.Moderate;
+    const kcal = Math.round(met * w * (parseFloat(duration) / 60));
+    newExercises.push({ type, name, duration, effort, kcal });
+  });
+  day.exercises = newExercises;
+  const newExerciseKcal = newExercises.reduce((s, e) => s + e.kcal, 0);
+  const exerciseKcalDelta = newExerciseKcal - oldExerciseKcal;
+
+  // Precedence: if the KCAL box still shows exactly what it was pre-filled with,
+  // the person hasn't manually overridden it — exercise changes should adjust the
+  // total automatically. If they've typed a different number, that's an explicit
+  // manual override and wins outright, exercise delta is not applied on top of it.
+  const kcalUnchanged = Math.round(kcalInput) === Math.round(kcalOrig);
+  const finalKcal = kcalUnchanged ? kcalInput + exerciseKcalDelta : kcalInput;
+
   day.totals = {
-    kcal:    Math.round(kcal),
+    kcal:    Math.round(finalKcal),
     protein: Math.round(prot * 10) / 10,
     fat:     isNaN(fat) ? 0 : Math.round(fat * 10) / 10,
     carbs:   Math.round(carb * 10) / 10,
   };
+
+  // Keep the notes activity-tag text in sync with the structured exercise data —
+  // otherwise the day could show "45min Resistance" in its tag while the real
+  // data underneath says something different, reintroducing exactly the kind of
+  // silent inconsistency this session has been about eliminating.
+  const _legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+  const existingOccasionTags = (day.notes || '').split(',').map(t => t.trim())
+    .filter(t => t && !_legacy.includes(t.toLowerCase()) && !t.match(/^\d+min /i));
+  const newExerciseTags = newExercises.map(e => `${e.duration}min ${e.name.replace(/^[^\w]*/,'').trim()}`);
+  day.notes = [...existingOccasionTags, ...newExerciseTags].join(', ');
+
   saveState();
+
+  // Build a "changed from X to Y" summary so a mistake during editing is visible
+  // immediately, not discovered later. Only lists fields that actually changed.
+  const protOrig  = parseFloat(document.getElementById(`hday-prot-orig-${dayIdx}`)?.value);
+  const fatOrig   = parseFloat(document.getElementById(`hday-fat-orig-${dayIdx}`)?.value);
+  const carbOrig  = parseFloat(document.getElementById(`hday-carb-orig-${dayIdx}`)?.value);
+  const waterOrig = parseFloat(document.getElementById(`hday-water-orig-${dayIdx}`)?.value);
+  const stepsOrig = parseFloat(document.getElementById(`hday-steps-orig-${dayIdx}`)?.value);
+  const changes = [];
+  if (Math.round(kcalOrig) !== day.totals.kcal) changes.push(`Kcal: ${Math.round(kcalOrig)} → ${day.totals.kcal}`);
+  if (Math.round(protOrig*10)/10 !== day.totals.protein) changes.push(`Protein: ${protOrig}g → ${day.totals.protein}g`);
+  if (Math.round(fatOrig*10)/10 !== day.totals.fat) changes.push(`Fat: ${fatOrig}g → ${day.totals.fat}g`);
+  if (Math.round(carbOrig*10)/10 !== day.totals.carbs) changes.push(`Carbs: ${carbOrig}g → ${day.totals.carbs}g`);
+  if (Math.round(waterOrig) !== day.water_ml) changes.push(`Water: ${Math.round(waterOrig)}ml → ${day.water_ml}ml`);
+  if (Math.round(stepsOrig) !== day.steps) changes.push(`Steps: ${Math.round(stepsOrig)} → ${day.steps}`);
+  if (exerciseKcalDelta !== 0) changes.push(`Exercise kcal: ${exerciseKcalDelta > 0 ? '+' : ''}${exerciseKcalDelta}`);
+
   renderHistory();
-  showToast('Day totals updated ✓');
+  if (changes.length) {
+    showToast(`✓ Changed:<br>${changes.join('<br>')}`, null, null, 4500);
+  } else {
+    showToast('No changes made');
+  }
 }
 
 let _missedMode = 'ai';
