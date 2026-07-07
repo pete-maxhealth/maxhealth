@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.92 — Phase 10: routine templates — save named exercise lists, apply as one-action multi-exercise log -->
+<meta charset="UTF-8"><!-- v3.10.93 — Phase 10: apply library's redundancy pattern to recipes, routines, and the main app state -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4446,21 +4446,28 @@ function defaultState() {
 }
 
 function loadState() {
-  try {
-    const s = localStorage.getItem('maxhealth_v1');
-    if (s) {
-      const parsed = JSON.parse(s);
-      // NOTE: Rollover logic lives ONLY in updateDashboard() now.
-      // This used to also roll over here, causing a race condition that
-      // produced duplicate/incorrect history entries (two rollover systems
-      // firing independently). Do not re-add rollover logic here.
-      return parsed;
-    }
-  } catch(e) {}
+  const keys = ['maxhealth_v1', 'maxhealth_v1_backup'];
+  for (const key of keys) {
+    try {
+      const s = localStorage.getItem(key);
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (key !== 'maxhealth_v1') {
+          localStorage.setItem('maxhealth_v1', s);
+          console.log(`[state] Restored from ${key}`);
+        }
+        // NOTE: Rollover logic lives ONLY in updateDashboard() now.
+        // This used to also roll over here, causing a race condition that
+        // produced duplicate/incorrect history entries (two rollover systems
+        // firing independently). Do not re-add rollover logic here.
+        return parsed;
+      }
+    } catch(e) {}
+  }
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.92'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.93'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -4512,13 +4519,21 @@ function saveState() {
         return rest;
       });
     }
-    localStorage.setItem('maxhealth_v1', JSON.stringify(slimmed));
+    const stateJson = JSON.stringify(slimmed);
+    localStorage.setItem('maxhealth_v1', stateJson);
+    // Same redundancy pattern as library/recipes/routines — this is the single
+    // highest-value data in the whole app (full nutrition history, weight,
+    // strengthLog) and previously had the least protection of all: one key,
+    // no backup, straight to a blank defaultState() if it went missing.
+    localStorage.setItem('maxhealth_v1_backup', stateJson);
   } catch(e) {
     // Fallback — try saving without any logs at all
     try {
       const minimal = JSON.parse(JSON.stringify(state));
       minimal.history = (minimal.history || []).map(({ log, ...rest }) => rest);
-      localStorage.setItem('maxhealth_v1', JSON.stringify(minimal));
+      const minimalJson = JSON.stringify(minimal);
+      localStorage.setItem('maxhealth_v1', minimalJson);
+      localStorage.setItem('maxhealth_v1_backup', minimalJson);
     } catch(e2) { console.warn('saveState failed:', e2); }
   }
   // Also maintain a running master.csv cache in localStorage
@@ -6729,11 +6744,32 @@ function editStrengthSession(id) {
 // duration deliberately aren't part of the template, since those are exactly
 // what changes session to session even when doing "the same routine".
 function loadRoutines() {
-  try { return JSON.parse(localStorage.getItem('mh_routines') || '[]'); }
-  catch(e) { return []; }
+  // Same redundancy pattern as library and recipes — built fresh tonight with no
+  // protection at all, worth closing that gap immediately rather than waiting
+  // for a real loss to happen first.
+  const keys = ['mh_routines', 'mh_routines_backup', 'mh_routines_b2'];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const routines = JSON.parse(raw);
+        if (Array.isArray(routines) && routines.length > 0) {
+          if (key !== 'mh_routines') {
+            localStorage.setItem('mh_routines', raw);
+            console.log(`[routines] Restored from ${key}`);
+          }
+          return routines;
+        }
+      }
+    } catch(e) {}
+  }
+  return [];
 }
 function saveRoutines(routines) {
-  localStorage.setItem('mh_routines', JSON.stringify(routines));
+  const json = JSON.stringify(routines);
+  localStorage.setItem('mh_routines', json);
+  localStorage.setItem('mh_routines_backup', json);
+  localStorage.setItem('mh_routines_b2', json);
 }
 
 function showRoutineList() {
@@ -11940,10 +11976,32 @@ let _recipeIngredients = [];
 let _editingRecipeId = null;
 
 function loadRecipes() {
-  return JSON.parse(localStorage.getItem('mh_recipes') || '[]');
+  // Same three-key redundancy and auto-restore pattern proven for the food
+  // library — recipes represent real user effort (multi-ingredient combos) and
+  // previously had zero protection at all, not even a try/catch.
+  const keys = ['mh_recipes', 'mh_recipes_backup', 'mh_recipes_b2'];
+  for (const key of keys) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const recipes = JSON.parse(raw);
+        if (Array.isArray(recipes) && recipes.length > 0) {
+          if (key !== 'mh_recipes') {
+            localStorage.setItem('mh_recipes', raw);
+            console.log(`[recipes] Restored from ${key}`);
+          }
+          return recipes;
+        }
+      }
+    } catch(e) {}
+  }
+  return [];
 }
 function saveRecipes(recipes) {
-  localStorage.setItem('mh_recipes', JSON.stringify(recipes));
+  const json = JSON.stringify(recipes);
+  localStorage.setItem('mh_recipes', json);
+  localStorage.setItem('mh_recipes_backup', json);
+  localStorage.setItem('mh_recipes_b2', json);
 }
 
 function openRecipeBuilder(editId = null) {
