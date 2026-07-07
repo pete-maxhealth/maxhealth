@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.91 — Phase 10: collapsible exercise list, edit-in-place for strength sessions -->
+<meta charset="UTF-8"><!-- v3.10.92 — Phase 10: routine templates — save named exercise lists, apply as one-action multi-exercise log -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2432,8 +2432,10 @@ body[data-theme="light"] {
             <button onclick="cancelStrengthAdd()" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">Cancel</button>
           </div>
         </div>
-        <div style="margin-top:8px;">
-          <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Log a workout</button>
+        <div id="routineListContainer" style="margin-top:8px;"></div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button onclick="showRoutineList()" id="routineListBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">📋 Use a routine</button>
+          <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">+ Log a workout</button>
         </div>
         </div>
         </div>
@@ -4458,7 +4460,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.91'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.92'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6720,6 +6722,211 @@ function editStrengthSession(id) {
   renderStrengthSetRows();
   const saveBtn = document.querySelector('#strengthAddForm .run-btn');
   if (saveBtn) saveBtn.textContent = 'Save changes';
+}
+
+// ─── ROUTINE TEMPLATES ────────────────────────────────────────────────────
+// A routine is just a named, ordered list of exercise names — reps/weight/
+// duration deliberately aren't part of the template, since those are exactly
+// what changes session to session even when doing "the same routine".
+function loadRoutines() {
+  try { return JSON.parse(localStorage.getItem('mh_routines') || '[]'); }
+  catch(e) { return []; }
+}
+function saveRoutines(routines) {
+  localStorage.setItem('mh_routines', JSON.stringify(routines));
+}
+
+function showRoutineList() {
+  const routines = loadRoutines();
+  const container = document.getElementById('routineListContainer');
+  if (!container) return;
+  if (!routines.length) {
+    container.innerHTML = `
+      <div style="font-size:12px;color:var(--text3);padding:8px 0;">No routines saved yet.</div>
+      <button onclick="showCreateRoutineForm()" style="width:100%;padding:7px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;cursor:pointer;">+ Create a routine</button>
+      ${(state.strengthLog||[]).some(s=>s.date===todayStr()) ? `<button onclick="showSaveTodayAsRoutineForm()" style="width:100%;padding:7px;margin-top:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">Save today's exercises as a routine instead</button>` : ''}
+    `;
+    return;
+  }
+  container.innerHTML = routines.map(r => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-size:13px;color:var(--text2);">${r.name} <span style="color:var(--text3);font-size:11px;">(${r.exercises.length} exercises)</span></span>
+      <span onclick="applyRoutine('${r.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Apply</span>
+      <span onclick="deleteRoutine('${r.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;">×</span>
+    </div>`).join('') + `
+    <button onclick="showCreateRoutineForm()" style="width:100%;padding:7px;margin-top:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;cursor:pointer;">+ Create another routine</button>
+    <button onclick="document.getElementById('routineListContainer').innerHTML=''" style="width:100%;padding:6px;margin-top:6px;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;">Close</button>
+  `;
+}
+
+function deleteRoutine(id) {
+  saveRoutines(loadRoutines().filter(r => r.id !== id));
+  showRoutineList();
+}
+
+// ── Create a new routine (name + list of exercise names, no numbers) ──
+let _routineDraftExercises = [];
+function showCreateRoutineForm() {
+  _routineDraftExercises = [''];
+  const container = document.getElementById('routineListContainer');
+  renderCreateRoutineForm(container);
+}
+function renderCreateRoutineForm(container) {
+  if (!container) return;
+  container.innerHTML = `
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
+      <input type="text" id="newRoutineName" placeholder="Routine name (e.g. Upper Body)" class="modal-input" style="width:100%;font-size:13px;padding:8px 10px;margin-bottom:8px;box-sizing:border-box;">
+      <div id="routineExerciseRows"></div>
+      <button onclick="addRoutineExerciseRow()" style="width:100%;padding:5px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="saveNewRoutine()" style="flex:1;padding:7px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Save routine</button>
+        <button onclick="showRoutineList()" style="flex:1;padding:7px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>`;
+  renderRoutineExerciseRows();
+}
+function renderRoutineExerciseRows() {
+  const el = document.getElementById('routineExerciseRows');
+  if (!el) return;
+  el.innerHTML = _routineDraftExercises.map((name, i) => `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <input type="text" value="${(name||'').replace(/"/g,'&quot;')}" placeholder="Exercise name" oninput="_routineDraftExercises[${i}]=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <span onclick="_routineDraftExercises.splice(${i},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
+    </div>`).join('');
+}
+function addRoutineExerciseRow() {
+  _routineDraftExercises.push('');
+  renderRoutineExerciseRows();
+}
+function saveNewRoutine() {
+  const name = document.getElementById('newRoutineName')?.value.trim();
+  if (!name) { showToast('Enter a routine name'); return; }
+  const exercises = _routineDraftExercises.map(e => e.trim()).filter(Boolean);
+  if (!exercises.length) { showToast('Add at least one exercise'); return; }
+  const routines = loadRoutines();
+  routines.push({ id: 'rt' + Date.now(), name, exercises });
+  saveRoutines(routines);
+  showToast(`"${name}" routine saved ✓`);
+  showRoutineList();
+}
+
+// ── Save today's already-logged exercises as a routine (order preserved) ──
+function showSaveTodayAsRoutineForm() {
+  const todayExercises = [...new Set((state.strengthLog||[]).filter(s=>s.date===todayStr()).map(s=>s.exercise))];
+  if (!todayExercises.length) { showToast('Nothing logged today to save as a routine'); return; }
+  appPrompt('Name this routine', 'e.g. Full Body Test', (name) => {
+    if (!name || !name.trim()) return;
+    const routines = loadRoutines();
+    routines.push({ id: 'rt' + Date.now(), name: name.trim(), exercises: todayExercises });
+    saveRoutines(routines);
+    showToast(`"${name.trim()}" saved from today's ${todayExercises.length} exercises ✓`);
+    showRoutineList();
+  });
+}
+
+// ── Apply a routine: one row per exercise, numbers typed fresh each time,
+// one overall duration/effort, everything logs in a single action. ──
+let _routineApplyId = null;
+function applyRoutine(id) {
+  const routine = loadRoutines().find(r => r.id === id);
+  if (!routine) return;
+  _routineApplyId = id;
+  const container = document.getElementById('routineListContainer');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">${routine.name}</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button id="routineUnitBtn-kg" onclick="setRoutineUnit('kg')" style="flex:1;padding:6px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);">kg</button>
+        <button id="routineUnitBtn-lbs" onclick="setRoutineUnit('lbs')" style="flex:1;padding:6px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2);">lbs</button>
+      </div>
+      <div id="routineApplyRows"></div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Optional — credits the whole session as Resistance activity, same as a single manual workout.</div>
+        <div style="display:flex;gap:6px;">
+          <input type="number" id="routineSessionDuration" placeholder="Total session minutes" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <select id="routineSessionEffort" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+            <option value="Easy">Easy</option>
+            <option value="Moderate" selected>Moderate</option>
+            <option value="Hard">Hard</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="saveRoutineSession()" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Log routine</button>
+        <button onclick="showRoutineList()" style="flex:1;padding:8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>`;
+  window._routineApplyDrafts = routine.exercises.map(name => ({ name, sets: [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}] }));
+  renderRoutineApplyRows();
+}
+function setRoutineUnit(unit) {
+  _strengthUnit = unit; // reuse the same unit state as manual logging
+  ['kg','lbs'].forEach(u => {
+    const btn = document.getElementById(`routineUnitBtn-${u}`);
+    if (!btn) return;
+    const active = u === unit;
+    btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    btn.style.background = active ? 'var(--accent-dim)' : 'var(--surface2)';
+    btn.style.color = active ? 'var(--accent)' : 'var(--text2)';
+  });
+  renderRoutineApplyRows();
+}
+function renderRoutineApplyRows() {
+  const el = document.getElementById('routineApplyRows');
+  if (!el || !window._routineApplyDrafts) return;
+  el.innerHTML = window._routineApplyDrafts.map((ex, exIdx) => `
+    <div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:4px;">${ex.name}</div>
+      ${ex.sets.map((s, setIdx) => `
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+          <span style="font-size:10px;color:var(--text3);width:14px;">${setIdx+1}</span>
+          <input type="number" placeholder="reps" value="${s.reps}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].reps=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+        </div>`).join('')}
+      <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
+    </div>`).join('');
+}
+function saveRoutineSession() {
+  const LBS_TO_KG = 0.453592;
+  const drafts = window._routineApplyDrafts || [];
+  let loggedCount = 0;
+  drafts.forEach(ex => {
+    const sets = ex.sets.filter(s => s.reps !== '').map(s => {
+      const hasWeight = s.weight_kg !== '' && s.weight_kg != null;
+      const raw = hasWeight ? parseFloat(s.weight_kg) : null;
+      const kg = hasWeight ? (_strengthUnit === 'lbs' ? Math.round(raw * LBS_TO_KG * 10) / 10 : raw) : null;
+      return { reps: parseInt(s.reps), weight_kg: kg };
+    });
+    if (!sets.length) return; // skip exercises left entirely blank this session
+    const entry = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date: todayStr(), exercise: ex.name, sets };
+    state.strengthLog = [...(state.strengthLog || []), entry];
+    loggedCount++;
+  });
+  if (!loggedCount) { showToast('Enter at least one exercise with reps'); return; }
+  saveState();
+
+  // Same one-entry-one-event link as manual logging — one overall duration/effort
+  // credits Resistance for the whole session, not per exercise.
+  const durationVal = document.getElementById('routineSessionDuration')?.value;
+  if (durationVal && parseFloat(durationVal) > 0) {
+    const effortVal = document.getElementById('routineSessionEffort')?.value || 'Moderate';
+    const acts = getActivities();
+    const resIdx = acts.findIndex(a => a.type === 'resistance');
+    if (resIdx > -1) {
+      acts[resIdx].enabled = true;
+      acts[resIdx].duration = durationVal;
+      acts[resIdx].effort = effortVal;
+      acts[resIdx]._syncedFromStrength = true;
+      saveActivities(acts);
+      updateDashboard();
+    }
+  }
+  window._routineApplyDrafts = null;
+  _routineApplyId = null;
+  document.getElementById('routineListContainer').innerHTML = '';
+  renderStrengthCard();
+  showToast(`${loggedCount} exercise${loggedCount===1?'':'s'} logged ✓`);
 }
 
 function showStrengthAddForm() {
