@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.71 — Phase 10: fix checkGoalMismatch using real dates not array order, was showing wildly wrong weight change -->
+<meta charset="UTF-8"><!-- v3.10.72 — Phase 10: historical fibre backfill (30-day window), net-carb-aware streak, fix array-order bug in calcKetosisStreak -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4446,8 +4446,9 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.71'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.72'; // single source of truth — bump here each release
 let state = loadState();
+backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
 // rejection directly in the chat, visible on-device with no PC or devtools needed.
@@ -12042,20 +12043,63 @@ function _setOccasionTags(tags) {
   }
 }
 
+// Backfills fibre into historical day.totals where it's missing but recoverable —
+// only possible for the last 30 days, since saveState() strips per-item log arrays
+// beyond that to control storage size, permanently losing the detail needed to
+// recompute fibre. Anything older genuinely can't be backfilled; this is honest
+// about that rather than pretending full historical coverage.
+function backfillHistoricalFibre() {
+  let updated = 0;
+  (state.history || []).forEach(day => {
+    if (!day.log || !Array.isArray(day.log) || day.log.length === 0) return; // log stripped, can't recover
+    if (day.totals && day.totals.fibre) return; // already has it
+    const fibreSum = day.log.reduce((sum, item) => sum + (item.fibre || 0), 0);
+    if (fibreSum > 0) {
+      if (!day.totals) day.totals = {};
+      day.totals.fibre = Math.round(fibreSum * 10) / 10;
+      updated++;
+    }
+  });
+  if (updated > 0) saveState();
+  return updated;
+}
+
+// Net-carb-aware ceiling check that works day-by-day across history — uses net
+// carbs where fibre data is actually available (last 30 days, post-backfill),
+// falls back to gross for older days where that data is permanently gone. This
+// is more honest than either forcing net everywhere (wrong for days without
+// fibre data) or forcing gross everywhere (ignores the setting once fibre exists).
+function getEffectiveCarbsForDay(day) {
+  const method = localStorage.getItem('mh_carb_method') || 'gross';
+  const carbs = day.totals?.carbs || 0;
+  if (method === 'net' && day.totals?.fibre) {
+    return Math.max(0, Math.round((carbs - day.totals.fibre) * 10) / 10);
+  }
+  return carbs;
+}
+
 function calcKetosisStreak() {
   const t = getTargets().standard;
-  const hist = (state.history || []).slice(); // newest first
+  // Sort by actual parsed date, not raw array order — the same ordering
+  // inconsistency found twice already tonight (some entries added via unshift,
+  // others via push) means trusting array position here could silently break a
+  // streak count on the single number that matters most.
+  const hist = (state.history || []).map(d => {
+    const parts = (d.date || '').split('/');
+    const dt = parts.length === 3 ? new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`) : new Date(0);
+    return { ...d, _dt: dt };
+  }).sort((a, b) => b._dt - a._dt); // newest first, by real date
+
   let streak = 0;
   // Count today if within ceiling — uses net-carb-aware effective carbs if that
   // setting is on, since today's fibre data is always reliably available.
   const todayTotals = calcTotals(state.todayLog);
   const todayCarbs = getEffectiveCarbs(todayTotals);
   if (todayCarbs <= t.carbs) streak++;
-  // Count consecutive past days — always gross carbs here, since historical
-  // day.totals often don't have fibre recorded (several older rollover paths never
-  // captured it), so net-carb recalculation on history can't be done reliably.
+  // Count consecutive past days — net-carb-aware per day where fibre data exists
+  // (last 30 days, or backfilled via backfillHistoricalFibre()), gross otherwise.
   for (const day of hist) {
-    if ((day.totals?.carbs || 0) <= t.carbs) streak++;
+    if (getEffectiveCarbsForDay(day) <= t.carbs) streak++;
     else break;
   }
   return streak;
