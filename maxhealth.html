@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.94 — Phase 10: server-side CSV backup for recipes, routines, strengthLog — matches library's full protection -->
+<meta charset="UTF-8"><!-- v3.10.95 — Phase 10: routines pre-fill last logged reps/weight instead of starting blank -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4467,7 +4467,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.94'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.95'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6897,6 +6897,19 @@ function showSaveTodayAsRoutineForm() {
 // ── Apply a routine: one row per exercise, numbers typed fresh each time,
 // one overall duration/effort, everything logs in a single action. ──
 let _routineApplyId = null;
+// Finds the most recent logged sets for a given exercise name, by real date —
+// not array order, which has repeatedly proven unreliable elsewhere tonight.
+function getLastLoggedSets(exerciseName) {
+  const nameLower = exerciseName.toLowerCase().trim();
+  const matches = (state.strengthLog || []).filter(s => (s.exercise||'').toLowerCase().trim() === nameLower);
+  if (!matches.length) return null;
+  matches.sort((a, b) => {
+    const parseD = d => { const p = (d||'').split('/'); return p.length===3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0); };
+    return parseD(b.date) - parseD(a.date);
+  });
+  return matches[0].sets;
+}
+
 function applyRoutine(id) {
   const routine = loadRoutines().find(r => r.id === id);
   if (!routine) return;
@@ -6927,8 +6940,22 @@ function applyRoutine(id) {
         <button onclick="showRoutineList()" style="flex:1;padding:8px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;">Cancel</button>
       </div>
     </div>`;
-  window._routineApplyDrafts = routine.exercises.map(name => ({ name, sets: [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}] }));
-  renderRoutineApplyRows();
+  // Pre-fill each exercise with its last logged reps/weight as a starting point
+  // to edit — previously this always started blank, which meant applying a
+  // routine gave nothing to work from and no record of what was done last time,
+  // exactly the gap that led to real progression data getting lost.
+  window._routineApplyDrafts = routine.exercises.map(name => {
+    const lastSets = getLastLoggedSets(name);
+    return {
+      name,
+      sets: lastSets && lastSets.length
+        ? lastSets.map(s => ({ reps: String(s.reps), weight_kg: s.weight_kg != null ? String(s.weight_kg) : '' }))
+        : [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}]
+    };
+  });
+  // Stored weights are always in kg — force the toggle to match so a pre-filled
+  // number never sits under a mismatched "lbs" label.
+  setRoutineUnit('kg');
 }
 function setRoutineUnit(unit) {
   _strengthUnit = unit; // reuse the same unit state as manual logging
