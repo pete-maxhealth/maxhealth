@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.84 — Phase 10: changed-from-X-to-Y diff summary after editing historical day totals -->
+<meta charset="UTF-8"><!-- v3.10.85 — Phase 10: apply plausibility checks (meat-carbs, pure-fat) to manual log-entry edits, was previously unprotected -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.84'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.85'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10559,11 +10559,21 @@ function saveLogEdit(id) {
   const origKcal = entry.kcal;
   const origAmt = parseFloat(entry._origAmount || entry.amount) || 0;
 
+  // Same plausibility checks that protect the initial log action — meat-carbs,
+  // under-scaled pure fats — previously only ran inside logFoods(), meaning a manual
+  // edit here could silently save something like 300g carbs on a beef entry with
+  // zero warning. Running the edited values through the same check closes that.
+  const candidate = { name: desc || entry.description, amount: entry.amount, kcal: Math.round(kcal), protein: Math.round(prot*10)/10, fat, carbs: Math.round(carb*10)/10 };
+  const [sanitised] = sanitiseFatValues([candidate]);
+  const corrections = [];
+  if (sanitised._carbsAutoCorrected) corrections.push(`Carbs corrected: ${sanitised._carbsAutoCorrectedFrom}g → 0g (plain meat/fish has none)`);
+  if (sanitised._fatAutoCorrected) corrections.push(`Fat corrected: ${sanitised._fatAutoCorrectedFrom}g → ${sanitised.fat}g (pure fats are ~90-100% fat by weight)`);
+
   entry.description = desc || entry.description;
-  entry.fat = fat;
-  entry.kcal = Math.round(kcal);
-  entry.protein = Math.round(prot * 10) / 10;
-  entry.carbs = Math.round(carb * 10) / 10;
+  entry.fat = sanitised.fat;
+  entry.kcal = Math.round(sanitised.kcal);
+  entry.protein = Math.round(sanitised.protein * 10) / 10;
+  entry.carbs = Math.round(sanitised.carbs * 10) / 10;
 
   // Badge: ratio of new to original kcal
   const badgePct = origKcal > 0 ? Math.round(entry.kcal / origKcal * 100) : 100;
@@ -10584,7 +10594,11 @@ function saveLogEdit(id) {
   if (editForm) editForm.remove();
   saveState();
   updateDashboard();
-  showToast('Entry updated ✓');
+  if (corrections.length) {
+    showToast(`Entry updated — ${corrections.join('; ')}`, null, null, 4500);
+  } else {
+    showToast('Entry updated ✓');
+  }
 }
 
 function deleteEntry(id) {
