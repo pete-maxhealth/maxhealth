@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.64 — Phase 10: extend BMR/TDEE tolerance check to onboarding, protects new users from day one -->
+<meta charset="UTF-8"><!-- v3.10.65 — Phase 10: universal 1200kcal floor, fires even without complete profile data -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4239,12 +4239,22 @@ function onboardNext(step) {
     const weightRaw = parseFloat(document.getElementById('onboardWeight')?.value);
     const heightRaw  = parseFloat(document.getElementById('onboardHeight')?.value);
     const ageOb      = parseFloat(document.getElementById('onboardAge')?.value);
+    const warnEl = document.getElementById('onboardKcalWarning');
+    // Universal floor — fires even if profile data below is incomplete, so someone
+    // skipping height/age/weight can't save a genuine crash-diet number with zero
+    // warning at all. The BMR-based check is more precise but depends on profile
+    // data existing; this is the backstop when it doesn't.
+    let floorTriggered = false;
+    if (warnEl && kcal < 1200) {
+      warnEl.style.display = 'block';
+      warnEl.innerHTML = `⚠ <strong>${kcal}kcal</strong> is below the general 1200kcal floor considered safe without medical supervision, regardless of individual stats. Worth checking this is intentional before continuing.`;
+      floorTriggered = true;
+    }
     if (weightRaw && heightRaw && ageOb) {
       const w = getWeightInKg(weightRaw), h = getHeightInCm(heightRaw);
       const bmrOb = _obSex === 'male' ? (10*w)+(6.25*h)-(5*ageOb)+5 : (10*w)+(6.25*h)-(5*ageOb)-161;
       const maxTierTdee = Math.round(bmrOb * 1.725);
       const sensibleMax = _obGoal === 'lose' ? maxTierTdee : _obGoal === 'maintain' ? maxTierTdee + 100 : maxTierTdee + 500;
-      const warnEl = document.getElementById('onboardKcalWarning');
       if (warnEl) {
         if (kcal > sensibleMax) {
           warnEl.style.display = 'block';
@@ -4252,7 +4262,7 @@ function onboardNext(step) {
         } else if (kcal < Math.round(bmrOb)) {
           warnEl.style.display = 'block';
           warnEl.innerHTML = `⚠ <strong>${kcal}kcal</strong> is below your estimated BMR (~${Math.round(bmrOb)}kcal) — eating under BMR long-term is usually a medically-supervised decision, not a default starting point.`;
-        } else {
+        } else if (!floorTriggered) {
           warnEl.style.display = 'none';
         }
       }
@@ -4417,7 +4427,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.64'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.65'; // single source of truth — bump here each release
 let state = loadState();
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
@@ -5979,6 +5989,14 @@ function saveMacroTargets() {
   // situations sometimes need targets outside typical bounds) but it surfaces
   // the actual numbers so an inflated or too-low target can't go in silently.
   const warnings = [];
+  // Universal floor — fires regardless of whether profile data exists, since the
+  // BMR-based check below is skipped entirely without it. 1200kcal is a widely-used
+  // conservative "don't go below this without medical supervision" threshold —
+  // without this, someone with no profile data set up could save a genuine
+  // crash-diet number (600-800kcal) with zero warning at all.
+  if (kcal && kcal < 1200) {
+    warnings.push(`⚠ ${kcal}kcal is below the general 1200kcal floor considered safe without medical supervision, regardless of individual stats. If this is intentional under clinical guidance, that's fine — but it shouldn't happen by accident.`);
+  }
   const tdeeData = getCurrentTDEE();
   if (tdeeData && kcal) {
     const goal = localStorage.getItem('mh_goal') || 'gain';
