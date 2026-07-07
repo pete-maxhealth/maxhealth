@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.79 — Phase 10: remove Strength Training CSV export/import, real-world value wasn't there -->
+<meta charset="UTF-8"><!-- v3.10.80 — Phase 10: add body composition (fat/muscle mass) to shared patient context, was weight-only across all AI reports -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.79'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.80'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -16216,10 +16216,28 @@ function buildPatientContext(history) {
 
   const tdeeData = getCurrentTDEE();
 
+  // Body composition trend — previously only available in the oncology report's
+  // own hardcoded reference-event table, invisible to Full Summary, Ask AI, and
+  // even the oncology report's own AI-written narrative. Weight alone can't tell
+  // anyone whether a gain/loss is fat or muscle; this closes that gap consistently
+  // across every report that uses this shared context, not just one.
+  const bodyCompFull = getFullBodyCompositionHistory(); // earliest-first
+  const latestBodyComp = bodyCompFull[bodyCompFull.length - 1] || null;
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - Math.max(n, 14));
+  const oldestInWindow = bodyCompFull.find(b => new Date(b.isoDate) >= cutoffDate) || bodyCompFull[0] || null;
+  const fatMassTrend = (latestBodyComp?.fat_mass_kg != null && oldestInWindow?.fat_mass_kg != null)
+    ? Math.round((latestBodyComp.fat_mass_kg - oldestInWindow.fat_mass_kg) * 10) / 10 : null;
+  const muscleMassTrend = (latestBodyComp?.muscle_mass_kg != null && oldestInWindow?.muscle_mass_kg != null)
+    ? Math.round((latestBodyComp.muscle_mass_kg - oldestInWindow.muscle_mass_kg) * 10) / 10 : null;
+
   return {
     name, cond, goal, n, gapDays, t, wtLow, wtHigh,
     on, dayTypeSummary, streak,
     latestWt, wtTrend, wtStatus,
+    latestFatMassKg: latestBodyComp?.fat_mass_kg ?? null,
+    latestMuscleMassKg: latestBodyComp?.muscle_mass_kg ?? null,
+    fatMassTrend, muscleMassTrend,
     tdee: tdeeData?.tdee ?? null,
     bmr:  tdeeData?.bmr  ?? null,
     avgSteps:      av(dayBreakdown.map(d => d.steps).filter(x => x > 0)),
@@ -16299,6 +16317,7 @@ CARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against eac
 DAY TYPE BREAKDOWN: ${ctx.dayTypeSummary}
 CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
+BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
 ESTIMATED TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day (BMR ${ctx.bmr} kcal, Mifflin-St Jeor, activity-adjusted from 30-day avg steps)` : 'Not available — height/age/sex missing from Profile'}
 When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
