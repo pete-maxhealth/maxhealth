@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.74 — Phase 10: kg/lbs toggle for Strength Training, converts to kg for storage -->
+<meta charset="UTF-8"><!-- v3.10.75 — Phase 10: one-entry strength+resistance credit, optional duration/effort fields on the Strength form -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2417,6 +2417,17 @@ body[data-theme="light"] {
           </div>
           <div id="strengthSetRows"></div>
           <button onclick="addStrengthSetRow()" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;margin-top:4px;box-sizing:border-box;">+ Add set</button>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Optional — also credits this session as Resistance activity (calories/protein), same as ticking it on the Activity card. Leave blank to log progression only.</div>
+            <div style="display:flex;gap:6px;">
+              <input type="number" id="strengthSessionDuration" placeholder="Total session minutes" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+              <select id="strengthSessionEffort" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+                <option value="Easy">Easy</option>
+                <option value="Moderate" selected>Moderate</option>
+                <option value="Hard">Hard</option>
+              </select>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;margin-top:10px;">
             <button class="run-btn" onclick="saveStrengthWorkout()" style="flex:1;">Save workout</button>
             <button onclick="cancelStrengthAdd()" style="flex:1;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;">Cancel</button>
@@ -4450,7 +4461,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.74'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.75'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6699,6 +6710,10 @@ function renderStrengthCard() {
 function showStrengthAddForm() {
   _strengthDraftSets = [{ reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }];
   document.getElementById('strengthExerciseName').value = '';
+  const durEl = document.getElementById('strengthSessionDuration');
+  const effEl = document.getElementById('strengthSessionEffort');
+  if (durEl) durEl.value = '';
+  if (effEl) effEl.value = 'Moderate';
   setStrengthUnit(_strengthUnit); // sync button visual state (also re-renders set rows)
   document.getElementById('strengthAddForm').style.display = 'block';
   document.getElementById('strengthAddBtn').style.display = 'none';
@@ -6751,6 +6766,24 @@ function saveStrengthWorkout() {
   const entry = { id: 'str' + Date.now(), date: todayStr(), exercise, sets };
   state.strengthLog = [...(state.strengthLog || []), entry];
   saveState();
+
+  // One entry, one event — if a session duration was given, this also credits
+  // the Resistance activity (calories/protein) automatically, same as manually
+  // ticking it on the Activity card. Sets/overwrites rather than adds, since this
+  // represents today's one resistance session, not a running tally.
+  const durationVal = document.getElementById('strengthSessionDuration')?.value;
+  if (durationVal && parseFloat(durationVal) > 0) {
+    const effortVal = document.getElementById('strengthSessionEffort')?.value || 'Moderate';
+    const acts = getActivities();
+    const resIdx = acts.findIndex(a => a.type === 'resistance');
+    if (resIdx > -1) {
+      acts[resIdx].enabled = true;
+      acts[resIdx].duration = durationVal;
+      acts[resIdx].effort = effortVal;
+      saveActivities(acts);
+      updateDashboard();
+    }
+  }
   cancelStrengthAdd();
   renderStrengthCard();
   showToast(`${exercise} logged ✓`);
