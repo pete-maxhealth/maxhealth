@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.75 — Phase 10: one-entry strength+resistance credit, optional duration/effort fields on the Strength form -->
+<meta charset="UTF-8"><!-- v3.10.76 — Phase 10: visible synced-from-strength indicator on Resistance row, clears on manual override -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4461,7 +4461,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.75'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.76'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6780,6 +6780,7 @@ function saveStrengthWorkout() {
       acts[resIdx].enabled = true;
       acts[resIdx].duration = durationVal;
       acts[resIdx].effort = effortVal;
+      acts[resIdx]._syncedFromStrength = true;
       saveActivities(acts);
       updateDashboard();
     }
@@ -7202,6 +7203,7 @@ function renderActivityCard() {
           </select>
         </div>
       </div>
+      ${act.type==='resistance' && act._syncedFromStrength ? `<div style="font-size:10px;color:var(--accent);padding-left:2px;width:100%;">🔗 Synced from today's Strength Training log — edit here to override</div>` : ''}
       ${act.needsDistance && suggestedEffort ? `<div style="font-size:10px;color:var(--text3);padding-left:2px;width:100%;">${act._manualEffort ? 'Manually set · ' : 'Auto-calculated from pace & distance · '}<span onclick="resetActivityEffort(${i})" style="cursor:pointer;color:var(--accent);text-decoration:underline;${act._manualEffort?'':'display:none;'}">use auto</span></div>` : ''}
       ${(() => {
         if (!act.needsDistance || !act.distance || !act.duration) return '';
@@ -7266,6 +7268,7 @@ function renderActivityCard() {
 function toggleActivity(idx, enabled) {
   const acts = getActivities();
   acts[idx].enabled = enabled;
+  if (acts[idx].type === 'resistance') acts[idx]._syncedFromStrength = false;
   saveActivities(acts);
   saveActivityToNotes(acts);
   renderActivityCard();
@@ -7279,6 +7282,12 @@ function updateActivity(idx, field, val, isLive) {
     acts[idx]._manualEffort = true;
   } else if (field === 'distance' || field === 'duration') {
     acts[idx]._manualEffort = false;
+  }
+  // Manually touching a resistance row that was synced from Strength Training
+  // means the person's taking direct control — clear the sync flag so the
+  // indicator stops claiming it's linked when it's now independently edited.
+  if (acts[idx].type === 'resistance' && (field === 'duration' || field === 'effort')) {
+    acts[idx]._syncedFromStrength = false;
   }
   saveActivities(acts);
   if (isLive || field === 'distance' || field === 'duration') {
