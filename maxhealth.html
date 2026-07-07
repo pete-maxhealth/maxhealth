@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.88 — Phase 10: fuzzy library match confirmation with was-X-now-Y diff, closes gap exact-match fix missed -->
+<meta charset="UTF-8"><!-- v3.10.89 — Phase 10: fix AI-portion-estimate label path, had its own unfixed old prompt causing wildly wrong values -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.88'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.89'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8205,7 +8205,7 @@ function requestLabelPortionEstimate() {
 The user has sent a photo of a nutrition label but is unsure how much they consumed.
 
 Step 1: Read the per-100g values from the label exactly — LEFT or FIRST column on UK labels.
-Step 2: Identify the product type and estimate a typical single serving based on:
+Step 2: Identify the product type and estimate a typical single serving in grams, based on:
   - Any pack size visible on the label
   - Common serving sizes for this type of product
   - The user's food library references below (if relevant)
@@ -8215,10 +8215,12 @@ Respond ONLY with a JSON object (no markdown, no preamble):
 {
   "type": "food",
   "items": [
-    { "name": "Product name (no quantity)", "amount": "125g (estimated)", "kcal": 134, "protein": 11.4, "fat": 6.9, "carbs": 5.2 }
+    { "name": "Product name (no quantity)", "per100g": { "kcal": 107, "protein": 9.1, "fat": 5.5, "carbs": 4.1 }, "grams": 125 }
   ],
   "message": "Read from label: 107kcal/100g. Estimated 125g — typical single serve. Tap edit if you know the exact amount."
-}`;
+}
+
+CRITICAL: Report ONLY the raw per-100g figures exactly as printed on the label, in "per100g" — do NOT multiply them yourself. Put your estimated gram amount in "grams" as a plain number; the app does the scaling deterministically, not you. This is the same reason label-reading elsewhere in this app no longer trusts the model to do its own arithmetic — it's unreliable under this kind of combined read-and-multiply task.`;
 
   // Send directly — bypass the normal system prompt
   _processLabelEstimate(pending.b64, pending.mime, systemOverride);
@@ -8259,7 +8261,34 @@ async function _processLabelEstimate(b64, mime, systemPrompt) {
 
     thinking.remove();
     if (parsed.type === 'food' && parsed.items?.length) {
-      showMealPreview(parsed.items, parsed.items[0].name, parsed.message || 'AI portion estimate — verify before saving');
+      // Same deterministic scaling as every other label path — the AI reads the
+      // label and estimates a portion, but the app does the multiplication, never
+      // the model. This function had its own separate prompt that was never
+      // updated when that fix went in elsewhere, which is exactly what caused a
+      // wildly wrong result (150 got treated as grams of pure fat, not grams of
+      // product) despite the AI's own message stating the correct label values.
+      const scaledItems = parsed.items.map(it => {
+        if (it.per100g && typeof it.per100g === 'object') {
+          const grams = parseFloat(it.grams) || null;
+          const p = it.per100g;
+          if (grams && grams > 0) {
+            const factor = grams / 100;
+            return {
+              name: it.name,
+              amount: grams + 'g (estimated)',
+              kcal:    Math.round((p.kcal    || 0) * factor),
+              protein: Math.round((p.protein || 0) * factor * 100) / 100,
+              fat:     Math.round((p.fat     || 0) * factor * 100) / 100,
+              carbs:   Math.round((p.carbs   || 0) * factor * 100) / 100,
+              _per100gBase: p,
+            };
+          }
+          return { name: it.name + ' (per 100g — amount not confirmed)', amount: '100g', kcal: p.kcal||0, protein: p.protein||0, fat: p.fat||0, carbs: p.carbs||0, _per100gBase: p, _amountUnconfirmed: true };
+        }
+        return it; // fallback if the model ever reverts to the old shape
+      });
+      const sanitised = sanitiseFatValues(scaledItems);
+      showMealPreview(sanitised, sanitised[0].name, parsed.message || 'AI portion estimate — verify before saving');
       switchTabById('chat');
     } else {
       addBubble('Couldn\'t estimate a portion — try entering the amount manually.', 'system', 'warn');
