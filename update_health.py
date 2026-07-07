@@ -10,10 +10,10 @@ Usage:
   python update_health.py --dry-run                # preview, no writes
   python update_health.py --restore backup_file.csv
 
-Reads exports from:  /storage/emulated/0/MaxHealth/data/inbox/
-Writes merged data:  /storage/emulated/0/MaxHealth/data/tables/combined.csv
-Backups:             /storage/emulated/0/MaxHealth/data/backup/
-Log:                 /storage/emulated/0/MaxHealth/pipeline.log
+Reads exports from:  /storage/emulated/0/maxhealth/app/data/inbox/
+Writes merged data:  /storage/emulated/0/maxhealth/app/data/tables/combined.csv
+Backups:             /storage/emulated/0/maxhealth/app/data/backup/
+Log:                 /storage/emulated/0/maxhealth/app/pipeline.log
 """
 
 import argparse
