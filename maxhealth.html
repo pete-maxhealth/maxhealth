@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.89 — Phase 10: fix AI-portion-estimate label path, had its own unfixed old prompt causing wildly wrong values -->
+<meta charset="UTF-8"><!-- v3.10.90 — Phase 10: fix remaining 3 library save paths to use real fuzzy matching, remove now-dead weak-match code -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.89'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.90'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9413,20 +9413,6 @@ function applyPreviewEdit(index) {
   renderMealPreview();
 }
 
-function _libNormName(n) {
-  return (n || '').toLowerCase().trim().replace(/s$/, '');
-}
-
-function _libDupeCheck(name) {
-  const lib = loadLibrary() || [];
-  const key = _libNormName(name);
-  // Exact match first, then check if library name starts with or contains the food name
-  return lib.find(item => {
-    const libKey = _libNormName(item.name);
-    return libKey === key || libKey.startsWith(key) || key.startsWith(libKey);
-  });
-}
-
 function showSaveMealDialog(foods, saveBar, saveAll=false) {
   saveBar._saveFoods = foods;
   saveBar._saveAll = saveAll;
@@ -9453,9 +9439,6 @@ function confirmSaveMeal(btn) {
   const name = nameEl?.value?.trim();
   if (!name) { showToast('Enter a meal name'); return; }
 
-  const dupe = _libDupeCheck(name);
-  if (dupe) { showToast(`"${dupe.name}" already in library`); return; }
-
   const totals = foods.reduce((a, f) => ({
     kcal:    a.kcal    + (f.kcal    || 0),
     protein: a.protein + (f.protein || 0),
@@ -9475,6 +9458,27 @@ function confirmSaveMeal(btn) {
     items: foods.map(f => ({ name: f.name, amount: f.amount || '' })),
   };
 
+  // Was a hard block with no way to overwrite at all — same gap found and fixed
+  // in every other save-to-library path tonight. Fuzzy match (not just exact)
+  // so a differently-worded meal name pointing at the same thing is still caught.
+  const dupe = fuzzyFindInLibrary(name);
+  if (dupe) {
+    appConfirm(
+      `"${name}" looks like it might already be saved as "${dupe.name}" (${dupe.kcal}kcal · ${dupe.protein}g P · ${dupe.fat}g F · ${dupe.carbs}g C).\n\nOverwrite it with this new version (${entry.kcal}kcal · ${entry.protein}g P · ${entry.fat}g F · ${entry.carbs}g C)?`,
+      () => {
+        const lib = loadLibrary() || [];
+        const existingIdx = lib.findIndex(l => l.name.toLowerCase() === dupe.name.toLowerCase());
+        entry.name = dupe.name; // keep existing name so this genuinely overwrites, not duplicates under a new name
+        if (existingIdx > -1) lib[existingIdx] = entry; else lib.push(entry);
+        saveLibrary(lib);
+        saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ "${dupe.name}" overwritten</span>`;
+        showToast(`"${dupe.name}" updated ✓`);
+      },
+      null, false, { confirm: 'Overwrite', cancel: 'Cancel' }
+    );
+    return;
+  }
+
   const lib = loadLibrary() || [];
   lib.push(entry);
   saveLibrary(lib);
@@ -9482,7 +9486,7 @@ function confirmSaveMeal(btn) {
     const lib2 = loadLibrary() || [];
     let added = 0;
     foods.forEach(f => {
-      if (!_libDupeCheck(f.name)) {
+      if (!fuzzyFindInLibrary(f.name)) {
         lib2.push({ name: f.name, kcal: Math.round(f.kcal*100)/100, protein: Math.round(f.protein*100)/100, fat: Math.round((f.fat||0)*100)/100, carbs: Math.round(f.carbs*100)/100, portion: f.amount || '100g', locked: false, isMeal: false });
         added++;
       }
@@ -9501,17 +9505,18 @@ function showSaveIngredientsDialog(foods, saveBar) {
   saveBar.setAttribute('data-savebar','1');
 
   const rows = foods.map((f, i) => {
-    const dupe = _libDupeCheck(f.name);
+    // Was exact/prefix-only (_libDupeCheck), which missed genuinely similar but
+    // differently-worded names — e.g. "Elmlea whipping cream" vs the existing
+    // "Elmlea Double Cream" scored zero on that check despite being the same
+    // product, so it silently created a second entry instead of ever offering
+    // to overwrite. Real fuzzy word-overlap matching catches this properly.
+    const dupe = fuzzyFindInLibrary(f.name);
     const dupeLabel = dupe
-      ? `<span style="font-size:10px;color:var(--yellow);margin-left:4px;">(already saved — tick to overwrite)</span>`
+      ? `<span style="font-size:10px;color:var(--yellow);margin-left:4px;">(possibly already saved as "${dupe.name}" — tick to compare &amp; overwrite)</span>`
       : '';
-    // Previously disabled entirely for duplicates, with no way to override even when
-    // that's exactly what's needed (e.g. correcting a wrong library entry with a
-    // fresh, accurate label read). Now just unchecked by default — overwriting is an
-    // explicit, available choice, not blocked outright.
     const checked = !dupe ? 'checked' : '';
     return `
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" data-existing-name="${dupe ? dupe.name.replace(/"/g,'&quot;') : ''}">
         <input type="checkbox" data-idx="${i}" ${checked}
           style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
         <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}${dupeLabel}</span>
@@ -9547,8 +9552,10 @@ function confirmSaveIngredients(btn) {
     if (!cb.checked) return;
     const f = foods[parseInt(cb.dataset.idx)];
     if (!f) return;
+    const label = cb.closest('label');
+    const existingName = label?.dataset.existingName || '';
     const entry = {
-      name:    f.name,
+      name:    existingName || f.name, // keep the existing library name when overwriting a fuzzy match, not the newly-typed one
       kcal:    Math.round(f.kcal * 100) / 100,
       protein: Math.round(f.protein * 100) / 100,
       fat:     Math.round((f.fat || 0) * 100) / 100,
@@ -9558,12 +9565,17 @@ function confirmSaveIngredients(btn) {
       isMeal:  false,
     };
     // Explicitly ticking a duplicate means overwriting is exactly what's wanted —
-    // previously this was blocked outright with no way to correct a wrong library
-    // entry using a fresh, accurate read.
-    const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
+    // previously this used only exact-name matching, missing fuzzy matches like
+    // "Elmlea whipping cream" against an existing "Elmlea Double Cream" entry,
+    // which silently created a second entry instead of ever offering to overwrite.
+    const existingIdx = existingName
+      ? lib.findIndex(l => l.name.toLowerCase() === existingName.toLowerCase())
+      : lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
     if (existingIdx > -1) {
+      const old = lib[existingIdx];
+      const diff = `${old.name}: ${old.kcal}→${entry.kcal}kcal, ${old.protein}→${entry.protein}g P, ${old.fat}→${entry.fat}g F, ${old.carbs}→${entry.carbs}g C`;
       lib[existingIdx] = entry;
-      overwritten.push(f.name);
+      overwritten.push(diff);
     } else {
       lib.push(entry);
       saved.push(f.name);
@@ -9574,9 +9586,9 @@ function confirmSaveIngredients(btn) {
   saveLibrary(lib);
   const parts = [];
   if (saved.length) parts.push(`Saved: ${saved.join(', ')}`);
-  if (overwritten.length) parts.push(`Overwritten: ${overwritten.join(', ')}`);
-  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ ${parts.join(' · ')}</span>`;
-  showToast(parts.join(' · '));
+  if (overwritten.length) parts.push(`Overwritten:<br>${overwritten.join('<br>')}`);
+  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);line-height:1.6;">✓ ${parts.join('<br>')}</span>`;
+  showToast(parts.join('<br>'), null, null, 4500);
 }
 
 function confirmMealLog() {
