@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.80 — Phase 10: add body composition (fat/muscle mass) to shared patient context, was weight-only across all AI reports -->
+<meta charset="UTF-8"><!-- v3.10.81 — Phase 10: proper cardio structure — running (full distance/pace/PB), swimming, rowing METs, fixes generic-exercise MET mismatch -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.80'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.81'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6800,6 +6800,9 @@ const MET = {
   walking:    { Easy: 2.8, Moderate: 3.5, Hard: 4.5 },
   resistance: { Easy: 3.0, Moderate: 5.0, Hard: 6.0 },
   cycling:    { Easy: 4.0, Moderate: 6.8, Hard: 10.0 },
+  running:    { Easy: 8.3, Moderate: 9.8, Hard: 11.8 }, // ~5mph/12min-mile, ~6mph/10min-mile, ~8mph/7:30-mile
+  swimming:   { Easy: 6.0, Moderate: 8.3, Hard: 9.8 },  // freestyle laps, light/moderate/vigorous
+  rowing:     { Easy: 4.8, Moderate: 7.0, Hard: 8.5 },  // erg or water, light/moderate/vigorous
   exercise:   { Easy: 3.5, Moderate: 5.0, Hard: 7.0 },
 };
 
@@ -6811,6 +6814,7 @@ const MET = {
 const PACE_BANDS = {
   walking: { easyMax: 2.5, moderateMax: 4.0, longBumpMiles: 4 },
   cycling: { easyMax: 10,  moderateMax: 16,  longBumpMiles: 20 },
+  running: { easyMax: 5,   moderateMax: 7,   longBumpMiles: 10 }, // ~12min/mile, ~8:34/mile
   generic: { easyMax: 3,   moderateMax: 6,   longBumpMiles: 8 },
 };
 
@@ -6835,6 +6839,7 @@ function calcSuggestedEffort(act) {
   const nameLower = (act.name || '').toLowerCase();
   if (act.type === 'walking' || nameLower.includes('walk')) bandKey = 'walking';
   else if (act.type === 'cycling' || nameLower.includes('cycl') || nameLower.includes('bike')) bandKey = 'cycling';
+  else if (act.type === 'running' || nameLower.includes('run') || nameLower.includes('jog')) bandKey = 'running';
   const bands = PACE_BANDS[bandKey];
 
   let effort = pace <= bands.easyMax ? 'Easy' : pace <= bands.moderateMax ? 'Moderate' : 'Hard';
@@ -6870,6 +6875,17 @@ function getActivities() {
       healed = true;
     }
     if (a.id === 'resistance' && a.name !== '💪 Resistance') { a.name = '💪 Resistance'; healed = true; }
+    // Same fix as walking, extended to running/swimming/rowing — a pre-existing
+    // entry created before this MET fix would still be stuck on the generic
+    // 'exercise' type (5.0 MET) instead of its real energy cost.
+    const bareName = (a.name || '').replace(/^[^\w]*/, '').trim().toLowerCase();
+    if ((bareName === 'running' || bareName === 'run' || bareName === 'jogging') && a.type !== 'running') {
+      a.type = 'running'; a.needsDistance = true; healed = true;
+    } else if (bareName === 'swimming' && a.type !== 'swimming') {
+      a.type = 'swimming'; healed = true;
+    } else if (bareName === 'rowing' && a.type !== 'rowing') {
+      a.type = 'rowing'; healed = true;
+    }
   });
   if (healed) saveActivities(acts);
 
@@ -12665,10 +12681,17 @@ function _doAddCustomActivity(name) {
   const nameLower = name.toLowerCase();
   const isWalking = nameLower.includes('walk') || nameLower.includes('hike') || nameLower.includes('stroll');
   const isCycling = nameLower.includes('cycl') || nameLower.includes('bike');
-  const emoji = isWalking ? '🚶' : nameLower.includes('swim') ? '🏊' : isCycling ? '🚴' : nameLower.includes('run')||nameLower.includes('jog') ? '🏃' : nameLower.includes('yoga')||nameLower.includes('stretch') ? '🧘' : nameLower.includes('row') ? '🚣' : nameLower.includes('climb') ? '🧗' : '🏋️';
-  const detectedType = isWalking ? 'walking' : isCycling ? 'cycling' : 'exercise';
+  const isRunning = nameLower.includes('run') || nameLower.includes('jog');
+  const isSwimming = nameLower.includes('swim');
+  const isRowing = nameLower.includes('row');
+  const emoji = isWalking ? '🚶' : isSwimming ? '🏊' : isCycling ? '🚴' : isRunning ? '🏃' : nameLower.includes('yoga')||nameLower.includes('stretch') ? '🧘' : isRowing ? '🚣' : nameLower.includes('climb') ? '🧗' : '🏋️';
+  // Emoji detection already correctly spotted running/swimming/rowing — the type
+  // assignment didn't match, silently falling to the generic 'exercise' MET (5.0
+  // moderate) instead of each activity's real energy cost (running ~9.8, swimming
+  // ~8.3, rowing ~7.0). Same MET-mismatch class of bug found elsewhere tonight.
+  const detectedType = isWalking ? 'walking' : isCycling ? 'cycling' : isRunning ? 'running' : isSwimming ? 'swimming' : isRowing ? 'rowing' : 'exercise';
 
-  appConfirm(`Does "${name}" need distance as well as time to calculate effort? (e.g. walking, cycling, rowing — not weights or stretching)`, () => {
+  appConfirm(`Does "${name}" need distance as well as time to calculate effort? (e.g. walking, cycling, running — not weights, swimming, rowing or stretching)`, () => {
     _finishAddCustomActivity(name, emoji, detectedType, true);
   }, () => {
     _finishAddCustomActivity(name, emoji, detectedType, false);
