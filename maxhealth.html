@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.62 — Phase 10: fix getLastKnownWeight walking history backward, was returning stale weight -->
+<meta charset="UTF-8"><!-- v3.10.63 — Phase 10: real BMR/TDEE-based tolerance check on manual calorie/protein targets -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4387,7 +4387,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.62'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.63'; // single source of truth — bump here each release
 let state = loadState();
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
@@ -5941,11 +5941,42 @@ function saveMacroTargets() {
   const kcal = parseInt(document.getElementById('settingKcalTarget')?.value);
   const prot = parseInt(document.getElementById('settingProteinTarget')?.value);
   const fat  = parseInt(document.getElementById('settingFatTarget')?.value);
+
+  // Tolerance check against the person's own BMR/TDEE — the old check only
+  // enforced a flat 500-10000kcal range, which a 3670kcal target for someone
+  // whose actual max-activity TDEE is ~3025kcal sails straight through. This
+  // doesn't block saving (it's advisory, not a hard rule — real medical
+  // situations sometimes need targets outside typical bounds) but it surfaces
+  // the actual numbers so an inflated or too-low target can't go in silently.
+  const warnings = [];
+  const tdeeData = getCurrentTDEE();
+  if (tdeeData && kcal) {
+    const goal = localStorage.getItem('mh_goal') || 'gain';
+    const maxTierTdee = Math.round(tdeeData.bmr * 1.725); // highest defined activity tier
+    const sensibleMax = goal === 'lose' ? maxTierTdee : goal === 'maintain' ? maxTierTdee + 100 : maxTierTdee + 500; // gain: bounded surplus, not unlimited
+    const sensibleMin = tdeeData.bmr; // below BMR long-term without supervision is a flag, not a block
+    if (kcal > sensibleMax) {
+      warnings.push(`⚠ ${kcal}kcal is above what your stats support even at maximum activity (BMR ${tdeeData.bmr} × highest tier = ~${maxTierTdee}kcal, +${sensibleMax-maxTierTdee} sensible surplus allowance = ~${sensibleMax}kcal ceiling). Worth double-checking this is intentional.`);
+    } else if (kcal < sensibleMin) {
+      warnings.push(`⚠ ${kcal}kcal is below your estimated BMR (~${tdeeData.bmr}kcal) — eating under BMR long-term is usually a medically-supervised decision, not a default.`);
+    }
+  }
+  if (prot && tdeeData?.weight) {
+    const perKg = prot / tdeeData.weight;
+    if (perKg > 2.5) warnings.push(`⚠ ${prot}g protein is ${perKg.toFixed(1)}g/kg — unusually high, worth confirming intentional.`);
+  }
+
   if (kcal && kcal >= 500 && kcal <= 10000) localStorage.setItem('mh_target_kcal', kcal);
   if (prot && prot >= 10 && prot <= 500)    localStorage.setItem('mh_target_protein', prot);
   if (fat  && fat  >= 10 && fat  <= 600)    localStorage.setItem('mh_target_fat', fat);
   updateDashboard();
-  showToast('Targets saved ✓');
+
+  if (warnings.length) {
+    showToast('Targets saved — see warning below');
+    const bubble = addBubble(warnings.join('\n\n'), 'system', 'warn');
+  } else {
+    showToast('Targets saved ✓');
+  }
 }
 
 function saveWeightTarget() {
