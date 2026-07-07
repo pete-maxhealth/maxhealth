@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.70 — Phase 10: unify keto-ratio advice text to consistent floor-based framing, fixes apparent contradiction -->
+<meta charset="UTF-8"><!-- v3.10.71 — Phase 10: fix checkGoalMismatch using real dates not array order, was showing wildly wrong weight change -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4446,7 +4446,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.70'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.71'; // single source of truth — bump here each release
 let state = loadState();
 
 // Global diagnostic catcher — surfaces ANY uncaught error or unhandled promise
@@ -9792,10 +9792,24 @@ function checkGoalMismatch() {
   if (!el) return;
 
   const goal = localStorage.getItem('mh_goal') || 'gain';
-  const hist = (state.history || []).slice(0, 14); // most recent ~14 days (newest-first)
+
+  // Filter by actual elapsed date, not array position — array order isn't reliably
+  // chronological (some entries are added via unshift, others via push across
+  // different code paths, the same inconsistency found and fixed earlier in
+  // getLastKnownWeight). Trusting slice(0,14) here caused a wildly wrong reading
+  // by picking up an out-of-place old entry as if it were "2 weeks ago".
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 14);
   const weights = [];
-  if (state.weight) weights.push({ w: parseFloat(state.weight), i: -1 });
-  hist.forEach((d, i) => { if (d.weight) weights.push({ w: parseFloat(d.weight), i }); });
+  if (state.weight) weights.push({ w: parseFloat(state.weight), dt: new Date() });
+  (state.history || []).forEach(d => {
+    if (!d.weight || !d.date) return;
+    const parts = d.date.split('/');
+    if (parts.length !== 3) return;
+    const dt = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
+    if (dt >= cutoff) weights.push({ w: parseFloat(d.weight), dt });
+  });
+  weights.sort((a, b) => b.dt - a.dt); // newest first, by actual date
 
   // Need enough real data points spanning a real window to say anything meaningful —
   // otherwise this would fire noisy false positives on sparse logging.
