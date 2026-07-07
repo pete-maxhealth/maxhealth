@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.77 — Phase 10: prompt to log structured strength detail when Resistance filled in manually first -->
+<meta charset="UTF-8"><!-- v3.10.78 — Phase 10: fix bodyweight exercises being silently dropped, weight now optional -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4461,7 +4461,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.77'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.78'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6699,7 +6699,7 @@ function renderStrengthCard() {
     return;
   }
   el.innerHTML = sessions.map(s => {
-    const setsStr = s.sets.map(st => `${st.weight_kg}kg×${st.reps}`).join(', ');
+    const setsStr = s.sets.map(st => st.weight_kg != null ? `${st.weight_kg}kg×${st.reps}` : `Bodyweight×${st.reps}`).join(', ');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
       <div><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
       <span onclick="deleteStrengthSession('${s.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
@@ -6754,14 +6754,18 @@ function saveStrengthWorkout() {
   const exercise = document.getElementById('strengthExerciseName')?.value.trim();
   if (!exercise) { showToast('Enter an exercise name'); return; }
   const LBS_TO_KG = 0.453592;
+  // Weight is optional — bodyweight exercises (crunches, push-ups, pull-ups) have
+  // no added external load, and requiring a weight value here silently dropped
+  // reps-only sets with no error at all. null means bodyweight, not "0kg added".
   const sets = _strengthDraftSets
-    .filter(s => s.reps !== '' && s.weight_kg !== '')
+    .filter(s => s.reps !== '')
     .map(s => {
-      const raw = parseFloat(s.weight_kg);
-      const kg = _strengthUnit === 'lbs' ? Math.round(raw * LBS_TO_KG * 10) / 10 : raw;
+      const hasWeight = s.weight_kg !== '' && s.weight_kg != null;
+      const raw = hasWeight ? parseFloat(s.weight_kg) : null;
+      const kg = hasWeight ? (_strengthUnit === 'lbs' ? Math.round(raw * LBS_TO_KG * 10) / 10 : raw) : null;
       return { reps: parseInt(s.reps), weight_kg: kg };
     });
-  if (!sets.length) { showToast('Enter at least one complete set'); return; }
+  if (!sets.length) { showToast('Enter at least reps for one set'); return; }
 
   const entry = { id: 'str' + Date.now(), date: todayStr(), exercise, sets };
   state.strengthLog = [...(state.strengthLog || []), entry];
@@ -6833,10 +6837,10 @@ function importStrengthCSV(input) {
     const sessions = {};
     lines.slice(1).forEach(line => {
       const [date, exercise, set, reps, weight_kg] = line.split(',').map(v => v.trim());
-      if (!date || !exercise || reps === undefined || weight_kg === undefined) return;
+      if (!date || !exercise || reps === undefined) return;
       const key = date + '|' + exercise;
       if (!sessions[key]) sessions[key] = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date, exercise, sets: [] };
-      sessions[key].sets.push({ reps: parseInt(reps), weight_kg: parseFloat(weight_kg) });
+      sessions[key].sets.push({ reps: parseInt(reps), weight_kg: (weight_kg === '' || weight_kg === undefined) ? null : parseFloat(weight_kg) });
     });
     const imported = Object.values(sessions);
     if (!imported.length) { showToast('No valid rows found'); return; }
