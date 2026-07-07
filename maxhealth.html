@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.90 — Phase 10: fix remaining 3 library save paths to use real fuzzy matching, remove now-dead weak-match code -->
+<meta charset="UTF-8"><!-- v3.10.91 — Phase 10: collapsible exercise list, edit-in-place for strength sessions -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2404,7 +2404,8 @@ body[data-theme="light"] {
       <div id="activityDetailLine" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;"></div>
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);overflow-x:hidden;max-width:100%;box-sizing:border-box;">
-        <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;">🏋️ STRENGTH TRAINING</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;cursor:pointer;" onclick="toggleSection('dash-strength-list','strengthRowsWrap','dash-strength-list-icon')">🏋️ STRENGTH TRAINING <span id="dash-strength-list-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▾</span></div>
+        <div id="strengthRowsWrap">
         <div id="dash-strength-wrap">
         <div id="strengthRows" style="font-size:12px;color:var(--text3);"></div>
         <div id="strengthAddForm" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);max-width:100%;box-sizing:border-box;">
@@ -2433,6 +2434,7 @@ body[data-theme="light"] {
         </div>
         <div style="margin-top:8px;">
           <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Log a workout</button>
+        </div>
         </div>
         </div>
       </div>
@@ -4456,7 +4458,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.90'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.91'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6665,6 +6667,7 @@ let _foodSearchTimer = null;
 // exercises, sets, reps, weight — for progression tracking, not just effort tags.
 
 let _strengthDraftSets = [];
+let _strengthEditingId = null; // set when editing an existing session rather than logging a new one
 let _strengthUnit = 'kg'; // kg or lbs — internal storage always stays kg regardless (weight_kg field, CSV schema)
 
 function setStrengthUnit(unit) {
@@ -6695,20 +6698,40 @@ function renderStrengthCard() {
   }
   el.innerHTML = sessions.map(s => {
     const setsStr = s.sets.map(st => st.weight_kg != null ? `${st.weight_kg}kg×${st.reps}` : `Bodyweight×${st.reps}`).join(', ');
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
-      <div><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
-      <span onclick="deleteStrengthSession('${s.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:8px;">
+      <div style="flex:1;min-width:0;"><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
+      <span onclick="editStrengthSession('${s.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 8px;border:1px solid var(--accent);border-radius:6px;flex-shrink:0;">Edit</span>
+      <span onclick="deleteStrengthSession('${s.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;flex-shrink:0;">×</span>
     </div>`;
   }).join('');
 }
 
+// Previously there was no way to correct a typo'd exercise name or fix a wrong
+// rep/weight without deleting the whole entry and starting over. Opens the same
+// add form, pre-filled, and updates the existing session in place instead of
+// creating a new one.
+function editStrengthSession(id) {
+  const session = (state.strengthLog || []).find(s => s.id === id);
+  if (!session) return;
+  showStrengthAddForm();
+  document.getElementById('strengthExerciseName').value = session.exercise;
+  _strengthDraftSets = session.sets.map(st => ({ reps: String(st.reps), weight_kg: st.weight_kg != null ? String(st.weight_kg) : '' }));
+  _strengthEditingId = id;
+  renderStrengthSetRows();
+  const saveBtn = document.querySelector('#strengthAddForm .run-btn');
+  if (saveBtn) saveBtn.textContent = 'Save changes';
+}
+
 function showStrengthAddForm() {
   _strengthDraftSets = [{ reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }];
+  _strengthEditingId = null;
   document.getElementById('strengthExerciseName').value = '';
   const durEl = document.getElementById('strengthSessionDuration');
   const effEl = document.getElementById('strengthSessionEffort');
   if (durEl) durEl.value = '';
   if (effEl) effEl.value = 'Moderate';
+  const saveBtn = document.querySelector('#strengthAddForm .run-btn');
+  if (saveBtn) saveBtn.textContent = 'Save workout';
   setStrengthUnit(_strengthUnit); // sync button visual state (also re-renders set rows)
   document.getElementById('strengthAddForm').style.display = 'block';
   document.getElementById('strengthAddBtn').style.display = 'none';
@@ -6717,6 +6740,7 @@ function showStrengthAddForm() {
 function cancelStrengthAdd() {
   document.getElementById('strengthAddForm').style.display = 'none';
   document.getElementById('strengthAddBtn').style.display = 'block';
+  _strengthEditingId = null;
 }
 
 function renderStrengthSetRows() {
@@ -6762,8 +6786,17 @@ function saveStrengthWorkout() {
     });
   if (!sets.length) { showToast('Enter at least reps for one set'); return; }
 
-  const entry = { id: 'str' + Date.now(), date: todayStr(), exercise, sets };
-  state.strengthLog = [...(state.strengthLog || []), entry];
+  if (_strengthEditingId) {
+    const existing = (state.strengthLog || []).find(s => s.id === _strengthEditingId);
+    if (existing) {
+      existing.exercise = exercise;
+      existing.sets = sets;
+    }
+    _strengthEditingId = null;
+  } else {
+    const entry = { id: 'str' + Date.now(), date: todayStr(), exercise, sets };
+    state.strengthLog = [...(state.strengthLog || []), entry];
+  }
   saveState();
 
   // One entry, one event — if a session duration was given, this also credits
