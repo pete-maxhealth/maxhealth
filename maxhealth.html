@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.99 — Phase 10: library-aware meal suggestions, cross-references real remaining macros against actual saved foods -->
+<meta charset="UTF-8"><!-- v3.10.100 — Phase 10: library-check button embedded in the meal-guidance reply, add explicit fat-focused guidance -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2558,7 +2558,6 @@ body[data-theme="light"] {
     </div>
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" onclick="quickPrompt('what should I eat next?')">Next meal idea</div>
-      <div class="quick-btn" onclick="suggestMealFromLibrary()">📚 From my library</div>
       <div class="quick-btn" onclick="startMissedDayFlow()">+ Missed day</div>
       <div class="quick-btn" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" onclick="quickPrompt('show today summary')">Today summary</div>
@@ -4468,7 +4467,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.99'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.100'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8895,13 +8894,22 @@ async function processMessage(text, imageBase64, imageMime) {
     const remCal = targets.kcal - totals.kcal;
     const remProt = targets.protein - totals.protein;
     const remCarb = targets.carbs - totals.carbs;
+    const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+    const remFat = fatTgt - (totals.fat || 0);
     let suggestions = [];
     if (remProt > 30) suggestions.push('High-protein focus needed');
     if (remCal > 600) suggestions.push(`You have ${remCal} kcal left — a substantial meal is fine`);
+    if (remFat > 60) suggestions.push(`${Math.round(remFat)}g fat still to go — lean toward richer, higher-fat foods`);
     if (remCarb < 10) suggestions.push('Keep carbs very low — protein and fat only');
     if (remCal < 300 && remCal > 0) suggestions.push('Light snack only — near target');
     if (remCal <= 0) suggestions.push('You\'ve hit your calorie target — consider stopping here');
-    addBubble(suggestions.length ? `Guidance for next meal:\n\n${suggestions.join('\n')}` : `You're well on track. Keep up the current approach.`, 'system');
+    const guidanceText = suggestions.length ? `Guidance for next meal:\n\n${suggestions.join('\n')}` : `You're well on track. Keep up the current approach.`;
+    // Embedded directly in this bubble rather than a separate standing button —
+    // this is the natural next step after generic guidance: check what actually
+    // fits from what's really in the cupboard, not just abstract advice.
+    const libButtonHtml = `<div style="margin-top:10px;"><button onclick="suggestMealFromLibrary()" style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">📚 Check what fits from my library</button></div>`;
+    const bubble = addBubble(guidanceText, 'system');
+    bubble.innerHTML += libButtonHtml;
     return;
   }
   if (lower.includes('weight') && !lower.includes('g ') && lower.split(' ').length < 6) {
