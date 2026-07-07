@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.78 — Phase 10: fix bodyweight exercises being silently dropped, weight now optional -->
+<meta charset="UTF-8"><!-- v3.10.79 — Phase 10: remove Strength Training CSV export/import, real-world value wasn't there -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2436,11 +2436,6 @@ body[data-theme="light"] {
         <div style="margin-top:8px;">
           <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Log a workout</button>
         </div>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="copy-btn" onclick="exportStrengthCSV()" style="flex:1;font-size:11px;">💾 Export CSV</button>
-          <input type="file" id="strengthCsvInput" accept=".csv" style="display:none" onchange="importStrengthCSV(this)">
-          <button class="copy-btn" onclick="document.getElementById('strengthCsvInput').click()" style="flex:1;font-size:11px;">📥 Import CSV</button>
-        </div>
       </div>
     </div>
 
@@ -4461,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.78'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.79'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6798,58 +6793,6 @@ function deleteStrengthSession(id) {
   state.strengthLog = (state.strengthLog || []).filter(s => s.id !== id);
   saveState();
   renderStrengthCard();
-}
-
-// Export schema: date,exercise,set,reps,weight_kg — one row per set. This is a
-// documented, portable format (not a true industry standard the way GPX/TCX is
-// for cardio — no such standard exists for strength sets), but it round-trips
-// cleanly through MaxedHealth's own import and opens fine in any spreadsheet.
-function exportStrengthCSV() {
-  const log = state.strengthLog || [];
-  const rows = [];
-  log.forEach(s => {
-    s.sets.forEach((set, i) => {
-      rows.push([s.date, s.exercise, i + 1, set.reps, set.weight_kg].join(','));
-    });
-  });
-  const csv = 'date,exercise,set,reps,weight_kg\n' + rows.join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'strength_log.csv';
-  a.click();
-  showToast(`Exported ${log.length} workout${log.length===1?'':'s'} ✓`);
-}
-
-function importStrengthCSV(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const lines = e.target.result.trim().split('\n');
-    if (lines.length < 2) { showToast('No data found in file'); return; }
-    const header = lines[0].toLowerCase();
-    if (!header.includes('date') || !header.includes('exercise') || !header.includes('reps') || !header.includes('weight')) {
-      showToast('Column headers don\'t match — expected date,exercise,set,reps,weight_kg');
-      return;
-    }
-    // Group flat set-rows back into sessions by date+exercise
-    const sessions = {};
-    lines.slice(1).forEach(line => {
-      const [date, exercise, set, reps, weight_kg] = line.split(',').map(v => v.trim());
-      if (!date || !exercise || reps === undefined) return;
-      const key = date + '|' + exercise;
-      if (!sessions[key]) sessions[key] = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date, exercise, sets: [] };
-      sessions[key].sets.push({ reps: parseInt(reps), weight_kg: (weight_kg === '' || weight_kg === undefined) ? null : parseFloat(weight_kg) });
-    });
-    const imported = Object.values(sessions);
-    if (!imported.length) { showToast('No valid rows found'); return; }
-    state.strengthLog = [...(state.strengthLog || []), ...imported];
-    saveState();
-    renderStrengthCard();
-    showToast(`Imported ${imported.length} workout${imported.length===1?'':'s'} ✓`);
-  };
-  reader.readAsText(file);
 }
 
 // ─── ACTIVITY TRACKING ───────────────────────────────────────────────────────
