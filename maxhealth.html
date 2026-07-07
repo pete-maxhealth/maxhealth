@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.87 — Phase 10: differentiate the two near-identical Ask placeholders (quick vs deep-history) -->
+<meta charset="UTF-8"><!-- v3.10.88 — Phase 10: fuzzy library match confirmation with was-X-now-Y diff, closes gap exact-match fix missed -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4456,7 +4456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.87'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.88'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9579,7 +9579,8 @@ function saveLibraryOnlyFromPreview() {
   const foods = window._pendingMealFoods;
   if (!foods || foods.length === 0) { cancelMealPreview(); return; }
   const lib = loadLibrary();
-  const saved = [], overwritten = [];
+  const saved = [], overwritten = [], needsConfirm = [];
+
   foods.forEach(f => {
     const entry = {
       id: 'ai_' + Date.now() + '_' + Math.round(Math.random()*1000),
@@ -9593,14 +9594,22 @@ function saveLibraryOnlyFromPreview() {
       locked: true,
       source: 'ai_confirmed'
     };
-    // This previously had no duplicate check at all — every save blindly pushed a
-    // new entry regardless of name, which is exactly how the same food ended up
-    // with two separate library entries. Re-saving from a fresh read now correctly
-    // overwrites the existing one rather than duplicating it.
     const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
-    if (existingIdx > -1) { lib[existingIdx] = entry; overwritten.push(f.name); }
-    else { lib.push(entry); saved.push(f.name); }
+    if (existingIdx > -1) {
+      lib[existingIdx] = entry;
+      overwritten.push(f.name);
+      return;
+    }
+    // No exact match — but a fuzzy match (e.g. typing "Elmlea" against a saved
+    // "Elmlea Whipping Cream (buttermilk blend)") shouldn't just create a second
+    // entry either. This needs confirmation rather than auto-overwriting, since
+    // a wrong fuzzy match could clobber something unrelated.
+    const fuzzy = fuzzyFindInLibrary(f.name);
+    if (fuzzy) { needsConfirm.push({ newEntry: entry, existing: fuzzy }); return; }
+    lib.push(entry);
+    saved.push(f.name);
   });
+
   saveLibrary(lib);
   renderLibrary();
   const bubble = document.getElementById('mealPreviewBubble');
@@ -9608,10 +9617,58 @@ function saveLibraryOnlyFromPreview() {
   window._pendingMealFoods = null;
   const modeBar = document.getElementById('chatModeBar');
   if (modeBar) modeBar.style.display = '';
+
   const parts = [];
   if (saved.length) parts.push(`Saved ${saved.join(', ')}`);
   if (overwritten.length) parts.push(`Overwritten ${overwritten.join(', ')}`);
-  addBubble(`${parts.join(' · ')} — not logged as eaten today.`, 'system', 'success');
+  if (parts.length) addBubble(`${parts.join(' · ')} — not logged as eaten today.`, 'system', 'success');
+
+  if (needsConfirm.length) showFuzzyLibraryConfirm(needsConfirm);
+}
+
+// Renders the confirm-before-overwrite UI for fuzzy (non-exact) name matches —
+// greyed out by default, click to activate, then shows "was X now Y" per field
+// so the actual change is visible before committing to it.
+function showFuzzyLibraryConfirm(pairs) {
+  const bubble = addBubble('', 'system', 'warn');
+  window._fuzzyLibPairs = pairs;
+  bubble.innerHTML = pairs.map((p, i) => {
+    const fields = ['kcal','protein','fat','carbs'];
+    const labels = { kcal:'Kcal', protein:'Protein g', fat:'Fat g', carbs:'Carbs g' };
+    const diffRows = fields.map(k => `<div data-diff-field="${k}" style="display:none;font-size:11px;color:var(--accent);">${labels[k]}: ${p.existing[k]} → ${p.newEntry[k]}</div>`).join('');
+    return `
+    <div data-fuzzy-idx="${i}" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;opacity:0.5;transition:opacity 0.2s;">
+      <div style="font-size:12px;color:var(--text2);cursor:pointer;" onclick="activateFuzzyLibConfirm(${i})">
+        "${p.newEntry.name}" possibly already saved as <strong>"${p.existing.name}"</strong> — tap to compare &amp; overwrite
+      </div>
+      <div data-diff-block="${i}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+        ${diffRows}
+        <button onclick="confirmFuzzyLibOverwrite(${i})" style="margin-top:8px;width:100%;padding:7px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Overwrite "${p.existing.name}"</button>
+      </div>
+    </div>`;
+  }).join('') + `<div style="font-size:11px;color:var(--text3);">Not confirmed = not saved. Ignore this if the match above is wrong.</div>`;
+}
+
+function activateFuzzyLibConfirm(idx) {
+  const row = document.querySelector(`[data-fuzzy-idx="${idx}"]`);
+  if (!row) return;
+  row.style.opacity = '1';
+  const diffBlock = row.querySelector(`[data-diff-block="${idx}"]`);
+  if (diffBlock) diffBlock.style.display = 'block';
+  row.querySelectorAll('[data-diff-field]').forEach(el => el.style.display = 'block');
+}
+
+function confirmFuzzyLibOverwrite(idx) {
+  const pair = window._fuzzyLibPairs?.[idx];
+  if (!pair) return;
+  const lib = loadLibrary();
+  const existingIdx = lib.findIndex(l => l.name.toLowerCase() === pair.existing.name.toLowerCase());
+  if (existingIdx > -1) lib[existingIdx] = pair.newEntry; else lib.push(pair.newEntry);
+  saveLibrary(lib);
+  renderLibrary();
+  const row = document.querySelector(`[data-fuzzy-idx="${idx}"]`);
+  if (row) row.innerHTML = `<span style="font-size:12px;color:var(--accent);">✓ Overwrote "${pair.existing.name}" with "${pair.newEntry.name}" values</span>`;
+  showToast(`"${pair.existing.name}" updated ✓`);
 }
 
 function logFoods(foods, originalText, aiMessage = null) {
