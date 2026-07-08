@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.104 — Phase 10: demo mode now seeds library, recipes, routines — previously completely empty, hiding tonight's biggest features -->
+<meta charset="UTF-8"><!-- v3.10.106 — Phase 10: add custom device to precedence list, persists without needing a code change each time -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4469,7 +4469,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.104'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.106'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -15006,6 +15006,7 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
 }
 
 const PRECEDENCE_KEY = 'mh_device_precedence';
+const CUSTOM_DEVICES_KEY = 'mh_custom_devices';
 const PRECEDENCE_METRICS = [
   { key: 'steps', label: 'Steps' },
   { key: 'hr_avg', label: 'Heart Rate' },
@@ -15015,13 +15016,37 @@ const PRECEDENCE_METRICS = [
   { key: 'weight', label: 'Weight' },
 ];
 const KNOWN_DEVICES = ['RingConn', 'Withings', 'Zepp/Amazfit', 'Garmin', 'Auto (pipeline default)'];
+// Custom devices persist once added — this is what makes a new source "stick"
+// without needing a code change each time, since true auto-detection would need
+// combined.csv to carry per-row device attribution, which the pipeline doesn't
+// currently write and isn't something to build blind without seeing that file.
+function getAllDevices() {
+  let custom = [];
+  try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
+  return [...KNOWN_DEVICES.slice(0, -1), ...custom, KNOWN_DEVICES[KNOWN_DEVICES.length - 1]]; // keep "Auto" last
+}
+function addCustomDevice() {
+  appPrompt('New device name', 'e.g. Oura, Fitbit', (name) => {
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (getAllDevices().includes(trimmed)) { showToast(`"${trimmed}" already in the list`); return; }
+    let custom = [];
+    try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
+    custom.push(trimmed);
+    localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
+    renderPrecedenceEditor();
+    showToast(`"${trimmed}" added — now available for any metric`);
+  });
+}
 function getStoredPrecedence() { try { return JSON.parse(localStorage.getItem(PRECEDENCE_KEY) || '{}'); } catch(e) { return {}; } }
 function renderPrecedenceEditor() {
   const el = document.getElementById('precedenceEditor');
   if (!el) return;
   const stored = getStoredPrecedence();
   const defaults = { steps: 'RingConn', hr_avg: 'RingConn', hrv: 'RingConn', spo2: 'RingConn', sleep_duration: 'Zepp/Amazfit', weight: 'Withings' };
-  el.innerHTML = PRECEDENCE_METRICS.map(m => `<div class="drill-row"><span class="drill-row-label">${m.label}</span><select id="prec_${m.key}" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);font-family:'Syne',sans-serif;">${KNOWN_DEVICES.map(d => `<option value="${d}" ${(stored[m.key]||defaults[m.key])===d?'selected':''}>${d}</option>`).join('')}</select></div>`).join('');
+  const devices = getAllDevices();
+  el.innerHTML = PRECEDENCE_METRICS.map(m => `<div class="drill-row"><span class="drill-row-label">${m.label}</span><select id="prec_${m.key}" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);font-family:'Syne',sans-serif;">${devices.map(d => `<option value="${d}" ${(stored[m.key]||defaults[m.key])===d?'selected':''}>${d}</option>`).join('')}</select></div>`).join('')
+    + `<button onclick="addCustomDevice()" style="width:100%;margin-top:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add a new device</button>`;
 }
 function savePrecedence() {
   const prec = {};
@@ -17698,6 +17723,26 @@ function generateDemoRecipes() {
 function generateDemoRoutines() {
   return [{ id: 'demo_rt1', name: 'Upper Body', exercises: ['Bench Press', 'Shoulder Press', 'Tricep Extension', 'Bicep Curl'] }];
 }
+// Demo strength training history — previously demo mode left this section
+// completely empty too, hiding one of the newest features from anyone exploring.
+function generateDemoStrengthLog() {
+  const log = [];
+  for (let i = 4; i >= 1; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yy = String(d.getFullYear()).slice(2);
+    const date = `${dd}/${mm}/${yy}`;
+    if (i % 2 === 0) {
+      log.push({ id: 'demo_s'+i+'a', date, exercise: 'Bench Press', sets: [{reps:10,weight_kg:60},{reps:8,weight_kg:65},{reps:6,weight_kg:70}] });
+      log.push({ id: 'demo_s'+i+'b', date, exercise: 'Shoulder Press', sets: [{reps:12,weight_kg:30},{reps:10,weight_kg:32.5},{reps:8,weight_kg:35}] });
+    } else {
+      log.push({ id: 'demo_s'+i+'c', date, exercise: 'Squats', sets: [{reps:10,weight_kg:80},{reps:8,weight_kg:90},{reps:6,weight_kg:100}] });
+      log.push({ id: 'demo_s'+i+'d', date, exercise: 'Press Ups', sets: [{reps:20,weight_kg:null},{reps:15,weight_kg:null},{reps:12,weight_kg:null}] });
+    }
+  }
+  return log;
+}
 
 function generateDemoData() {
   const entries=[];
@@ -17767,6 +17812,7 @@ function startDemoMode() {
   state.history  = generateDemoData();
   state.weight   = 90.2;
   state.todayLog = [];
+  state.strengthLog = generateDemoStrengthLog();
   state.onboarded= true;
   state.lastDate = todayStr();
   // Set demo targets in localStorage temporarily
