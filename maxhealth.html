@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.112 — Phase 10: add Goal Check and Guides & Docs to reorder/hide system, now every dashboard section covered -->
+<meta charset="UTF-8"><!-- v3.10.113 — Phase 10: Recipes vs Food Library sections in Library tab now reorderable -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2706,13 +2706,18 @@ body[data-theme="light"] {
     <button id="libraryBackToTop" onclick="document.getElementById('libraryScroll').scrollTo({top:0,behavior:'smooth'})"
       style="display:none;position:fixed;bottom:90px;right:20px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#000;border:none;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4);z-index:50;cursor:pointer;">↑</button>
 
-    <!-- RECIPES SECTION — shown first for easy access -->
+    <!-- RECIPES SECTION -->
+    <div id="dashSection-libRecipes">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:4px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <div class="section-title" style="margin:0;cursor:pointer;" onclick="toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')">Recipes</div>
         <span id="lib-recipes-icon" style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')">▾ hide</span>
       </div>
-      <button class="settings-save-btn" onclick="openRecipeBuilder()">+ New Recipe</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span onclick="moveLibrarySection('recipes','up')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▲</span>
+        <span onclick="moveLibrarySection('recipes','down')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▼</span>
+        <button class="settings-save-btn" onclick="openRecipeBuilder()">+ New Recipe</button>
+      </div>
     </div>
     <div id="lib-recipes-wrap">
     <div class="settings-card" style="padding:12px 16px;margin-bottom:10px;">
@@ -2722,11 +2727,17 @@ body[data-theme="light"] {
       <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No recipes yet — tap + New Recipe to create one.</div>
     </div>
     </div>
+    </div>
 
     <!-- FOOD LIBRARY -->
+    <div id="dashSection-libFood">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
       <div class="section-title" style="margin:0">Food Library</div>
-      <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span onclick="moveLibrarySection('food','up')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▲</span>
+        <span onclick="moveLibrarySection('food','down')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▼</span>
+        <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
+      </div>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
@@ -2765,6 +2776,7 @@ body[data-theme="light"] {
     <div id="libraryAlphaNav" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding:8px 0 12px 0;border-bottom:1px solid var(--border);position:relative;z-index:5;"></div>
     <div id="libraryList" style="position:relative;">
       <div style="font-size:13px; color:var(--text3); text-align:center; padding:30px 0;">Loading library…</div>
+    </div>
     </div>
 
   </div>
@@ -4536,7 +4548,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.112'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.113'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -5019,8 +5031,44 @@ function filterLibrary(query) {
   filterLibrary._timer = setTimeout(() => renderLibrary(), 120);
 }
 
+// Library tab section reordering — same pattern as the dashboard, but kept as
+// a fully separate system rather than generalizing the dashboard functions,
+// to avoid any risk of breaking what's already working there.
+const LIBRARY_ORDER_KEY = 'mh_library_section_order';
+const DEFAULT_LIBRARY_ORDER = ['recipes', 'food'];
+const LIBRARY_SECTION_IDS = { recipes: 'dashSection-libRecipes', food: 'dashSection-libFood' };
+function getLibraryOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LIBRARY_ORDER_KEY) || 'null');
+    if (Array.isArray(stored) && stored.length === DEFAULT_LIBRARY_ORDER.length
+        && DEFAULT_LIBRARY_ORDER.every(k => stored.includes(k))) return stored;
+  } catch(e) {}
+  return [...DEFAULT_LIBRARY_ORDER];
+}
+function applyLibraryOrder() {
+  const order = getLibraryOrder();
+  const firstEl = document.getElementById(LIBRARY_SECTION_IDS[order[0]]);
+  const parent = firstEl?.parentNode;
+  if (!parent) return;
+  order.forEach(key => {
+    const el = document.getElementById(LIBRARY_SECTION_IDS[key]);
+    if (el) parent.appendChild(el);
+  });
+}
+function moveLibrarySection(key, direction) {
+  const order = getLibraryOrder();
+  const idx = order.indexOf(key);
+  if (idx === -1) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  localStorage.setItem(LIBRARY_ORDER_KEY, JSON.stringify(order));
+  applyLibraryOrder();
+}
+
 function renderLibrary() {
   try {
+  applyLibraryOrder();
   // Recipes previously only re-rendered after deleting one — meaning the static
   // "No recipes yet" placeholder in the HTML never got replaced with real data
   // until some other action happened to trigger renderRecipeList(). Calling it
