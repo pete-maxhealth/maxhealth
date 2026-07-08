@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.107 — Phase 10: group Settings into clear categories, visually separate debug tools from everyday settings -->
+<meta charset="UTF-8"><!-- v3.10.108 — Phase 10: dashboard section reordering via up/down buttons -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -2318,8 +2318,14 @@ body[data-theme="light"] {
 
 
 
-    <div class="remaining-card">
-      <div class="remaining-title">Remaining Today</div>
+    <div class="remaining-card" id="dashSection-remaining">
+      <div class="remaining-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Remaining Today</span>
+        <span>
+          <span onclick="moveDashboardSection('remaining','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▲</span>
+          <span onclick="moveDashboardSection('remaining','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▼</span>
+        </span>
+      </div>
       <div class="remaining-row">
         <div class="rem-name">Calories</div>
         <div class="rem-val good" id="remCal">3,670 kcal</div>
@@ -2394,7 +2400,7 @@ body[data-theme="light"] {
     <!-- ACTIVITY CARD (now includes Strength Training — merged per user feedback that
          two separate cards for exercise-related logging read as confusing duplication) -->
     <div class="activity-card" id="activityCard">
-      <div class="activity-card-title" style="cursor:pointer;" onclick="toggleSection('dash-activity','dash-activity-wrap','dash-activity-icon')">TODAY'S ACTIVITY <span id="activityTotalKcal" style="color:var(--accent);float:right;"></span><span id="dash-activity-icon" style="font-size:10px;color:var(--text3);margin-left:6px;">▾</span></div>
+      <div class="activity-card-title" style="cursor:pointer;" onclick="toggleSection('dash-activity','dash-activity-wrap','dash-activity-icon')">TODAY'S ACTIVITY <span id="activityTotalKcal" style="color:var(--accent);float:right;"></span><span onclick="event.stopPropagation();moveDashboardSection('activity','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;float:right;">▼</span><span onclick="event.stopPropagation();moveDashboardSection('activity','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;float:right;">▲</span><span id="dash-activity-icon" style="font-size:10px;color:var(--text3);margin-left:6px;">▾</span></div>
       <div id="dash-activity-wrap">
       <div id="activityRows"></div>
       <div style="margin-top:8px;">
@@ -2444,12 +2450,16 @@ body[data-theme="light"] {
       </div>
     </div>
 
-    <div class="water-card">
+    <div class="water-card" id="dashSection-water">
       <div class="water-header">
         <div class="water-title">💧 Water</div>
-        <div style="display:flex;align-items:baseline;gap:4px;">
-          <div class="water-amount" id="waterAmount">0</div>
-          <div class="water-amount"><span id="waterTarget">/ 2000ml</span></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span onclick="moveDashboardSection('water','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▲</span>
+          <span onclick="moveDashboardSection('water','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▼</span>
+          <div style="display:flex;align-items:baseline;gap:4px;">
+            <div class="water-amount" id="waterAmount">0</div>
+            <div class="water-amount"><span id="waterTarget">/ 2000ml</span></div>
+          </div>
         </div>
       </div>
       <div class="water-bar-wrap"><div class="water-bar" id="waterBar" style="width:0%"></div></div>
@@ -4484,7 +4494,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.107'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.108'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10502,6 +10512,46 @@ function checkGoalMismatch() {
   }
 }
 
+// Dashboard section reordering — simple up/down buttons rather than true
+// drag-and-drop, which is meaningfully more effort and fragile on mobile
+// (fighting with scroll gestures, ghost-element rendering, drop-zone detection).
+// This gets the same real value — cards in whatever order you actually want —
+// at a fraction of the risk.
+const DASHBOARD_SECTIONS_KEY = 'mh_dashboard_order';
+const DEFAULT_DASHBOARD_ORDER = ['remaining', 'activity', 'water'];
+const DASHBOARD_SECTION_IDS = { remaining: 'dashSection-remaining', activity: 'activityCard', water: 'dashSection-water' };
+function getDashboardOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(DASHBOARD_SECTIONS_KEY) || 'null');
+    if (Array.isArray(stored) && stored.length === DEFAULT_DASHBOARD_ORDER.length
+        && DEFAULT_DASHBOARD_ORDER.every(k => stored.includes(k))) return stored;
+  } catch(e) {}
+  return [...DEFAULT_DASHBOARD_ORDER];
+}
+function applyDashboardOrder() {
+  const order = getDashboardOrder();
+  const firstEl = document.getElementById(DASHBOARD_SECTION_IDS[order[0]]);
+  const parent = firstEl?.parentNode;
+  if (!parent) return;
+  // appendChild on a node already in the DOM MOVES it rather than cloning —
+  // this preserves every embedded id, event handler and live value untouched,
+  // unlike rebuilding the HTML would.
+  order.forEach(key => {
+    const el = document.getElementById(DASHBOARD_SECTION_IDS[key]);
+    if (el) parent.appendChild(el);
+  });
+}
+function moveDashboardSection(key, direction) {
+  const order = getDashboardOrder();
+  const idx = order.indexOf(key);
+  if (idx === -1) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  localStorage.setItem(DASHBOARD_SECTIONS_KEY, JSON.stringify(order));
+  applyDashboardOrder();
+}
+
 function updateDashboard(skipActivityRender) {
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
@@ -10509,6 +10559,7 @@ function updateDashboard(skipActivityRender) {
     if (savedNotes) state.notes = savedNotes;
   }
   updateOccasionBanner();
+  applyDashboardOrder();
   checkGoalMismatch();
   if (!skipActivityRender) renderActivityCard();
   renderStrengthCard();
