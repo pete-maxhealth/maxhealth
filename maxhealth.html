@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.102 — Phase 10: fix Export All Data missing recipes/routines, correct misleading zip wording -->
+<meta charset="UTF-8"><!-- v3.10.103 — Phase 10: library meal suggestions now propose real combos with one-tap logging, deterministic totals -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4469,7 +4469,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.102'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.103'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8670,25 +8670,31 @@ async function suggestMealFromLibrary() {
 
   addBubble('📚 Checking your library against what today still needs…', 'system');
 
-  const libText = lib.map(f => `${f.name} | ${f.kcal}kcal | ${f.protein}g P | ${f.carbs}g C | ${f.fat||0}g F | per ${f.portion || (f.per100g ? '100g' : 'item')}`).join('\n');
+  const libText = lib.map(f => `${f.name} | ${f.kcal}kcal | ${f.protein}g P | ${f.carbs}g C | ${f.fat||0}g F | logs at ${f.portion || (f.per100g ? '100g' : 'its stored amount')}`).join('\n');
 
-  const systemPrompt = `You are a nutrition assistant helping someone on a strict ketogenic protocol pick what to eat next, using ONLY foods they've actually got saved in their library — never suggest anything not in this list.
+  const systemPrompt = `You are a nutrition assistant helping someone on a strict ketogenic protocol pick what to eat next, using ONLY foods they've actually got saved in their library — never suggest anything not in this exact list.
 
 TODAY'S REMAINING BUDGET:
 Calories: ${remaining.kcal}kcal | Protein: ${remaining.protein}g | Carbs: ${remaining.carbs}g | Fat: ${remaining.fat}g
 
 Rules:
-- Carbs are the hardest ceiling — never suggest anything that would push carbs negative, even by a small amount.
-- If protein remaining is negative or near zero, don't suggest high-protein items — prioritize fat/calorie sources instead.
-- If protein remaining is meaningfully positive, prioritize protein-heavy library items to help close that gap.
-- Give 2-4 concrete suggestions with realistic portions (using the library's own listed portion/per-100g figures), not vague ideas.
-- Be honest if nothing in the library fits well — don't force a bad suggestion.
-- Keep it short — a few lines, not an essay.
+- Carbs are the hardest ceiling — never combine items that would push carbs negative, even slightly.
+- If protein remaining is negative or near zero, favour fat/calorie-dense items over protein-heavy ones.
+- If protein remaining is meaningfully positive, prioritise protein-heavy items to help close that gap.
+- Propose 1-3 combinations of 1-3 items each, using each item's name EXACTLY as listed below — the app looks these up by exact name to calculate real totals, so any name that doesn't match exactly will fail silently.
+- Each combo should use items at their own stored/listed amount — do not invent different portions.
+- Be honest if nothing fits well — return fewer combos rather than force a bad one.
 
 LIBRARY:
 ${libText}
 
-Respond with plain text only, no JSON, no markdown headers — just the suggestions as you'd say them in conversation.`;
+Respond ONLY with JSON, no markdown, no preamble:
+{
+  "combos": [
+    { "items": ["Exact Library Name 1", "Exact Library Name 2"], "note": "Short reason this combo fits — one sentence" }
+  ]
+}
+If nothing genuinely fits, return {"combos": []} and explain why in a "note" at the top level instead.`;
 
   try {
     const provider = localStorage.getItem('mh_provider') || 'proxy';
@@ -8698,7 +8704,7 @@ Respond with plain text only, no JSON, no markdown headers — just the suggesti
     const endpoint  = useProxy ? PROXY : 'https://api.anthropic.com/v1/messages';
     const payload = {
       model: 'claude-sonnet-4-6',
-      max_tokens: 400,
+      max_tokens: 500,
       messages: [{ role: 'user', content: systemPrompt }]
     };
     if (!useProxy) payload.system = systemPrompt;
@@ -8706,11 +8712,67 @@ Respond with plain text only, no JSON, no markdown headers — just the suggesti
     if (!useProxy && apiKey) { headers['x-api-key'] = apiKey; headers['anthropic-version'] = '2023-06-01'; }
     const res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) });
     const data = await res.json();
-    const reply = data.content?.[0]?.text?.trim() || "Couldn't get a suggestion — try again.";
-    addBubble(reply, 'system');
+    let raw = data.content?.[0]?.text?.trim() || '{}';
+    raw = raw.replace(/^```json\s*|\s*```$/g, '').trim();
+    const parsed = JSON.parse(raw);
+    renderLibraryComboSuggestions(parsed, lib);
   } catch (e) {
     addBubble('Couldn\'t reach the AI to check your library — try again in a moment.', 'system', 'warn');
   }
+}
+
+// Renders each AI-suggested combo as a card with REAL, deterministically-summed
+// totals (from each item's own stored library values, same as a normal quick-log
+// — never trusting the AI to do this arithmetic) plus a one-tap logging action.
+window._pendingLibraryCombos = [];
+function renderLibraryComboSuggestions(parsed, lib) {
+  const combos = parsed.combos || [];
+  if (!combos.length) {
+    addBubble(parsed.note || 'Nothing in your library fits well right now — worth logging something fresh instead.', 'system');
+    return;
+  }
+  window._pendingLibraryCombos = [];
+  let html = '';
+  combos.forEach((combo, i) => {
+    const resolvedItems = [];
+    let anyMissing = false;
+    (combo.items || []).forEach(name => {
+      let match = lib.find(l => l.name.toLowerCase() === name.toLowerCase());
+      if (!match) match = fuzzyFindInLibrary(name); // name drifted slightly — still try to resolve it
+      if (match) resolvedItems.push(match); else anyMissing = true;
+    });
+    if (!resolvedItems.length) return; // nothing resolved at all — skip this combo entirely
+    const combTotals = resolvedItems.reduce((a, f) => ({
+      kcal: a.kcal + (f.kcal||0), protein: a.protein + (f.protein||0),
+      carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0)
+    }), { kcal:0, protein:0, carbs:0, fat:0 });
+    window._pendingLibraryCombos.push(resolvedItems);
+    const itemNames = resolvedItems.map(f => f.name).join(' + ');
+    html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
+      <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">${itemNames}</div>
+      ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
+      <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${Math.round(combTotals.kcal)}kcal · ${Math.round(combTotals.protein*10)/10}g P · ${Math.round(combTotals.carbs*10)/10}g C · ${Math.round(combTotals.fat*10)/10}g F</div>
+      ${anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
+      <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
+    </div>`;
+  });
+  if (!html) { addBubble('Couldn\'t match the suggested items to your library exactly — try again.', 'system', 'warn'); return; }
+  const bubble = addBubble('Here\'s what fits, using real items from your library:', 'system');
+  bubble.innerHTML += html;
+}
+
+function logSuggestedCombo(comboIndex) {
+  const items = window._pendingLibraryCombos?.[comboIndex];
+  if (!items || !items.length) return;
+  const foods = items.map(f => ({
+    name: f.name, amount: f.portion || '100g',
+    kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs,
+    _fromLibrary: true,
+  }));
+  const mealName = items.map(f => f.name).join(' + ');
+  logFoods(foods, mealName);
+  showToast(`✓ ${mealName} logged`);
+  switchTabById('chat');
 }
 
 function quickPrompt(text) {
