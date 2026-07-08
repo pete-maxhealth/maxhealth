@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.114 — Phase 10: portion sizes in meal combo suggestions, explicit hide affordance on ketosis tooltip -->
+<meta charset="UTF-8"><!-- v3.10.115 — Phase 10: fix reorder system destroying input focus on every render (search box, likely Daily Steps/water too) -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.114'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.115'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -5050,13 +5050,19 @@ function getLibraryOrder() {
 }
 function applyLibraryOrder() {
   const order = getLibraryOrder();
-  const firstEl = document.getElementById(LIBRARY_SECTION_IDS[order[0]]);
-  const parent = firstEl?.parentNode;
+  const els = order.map(key => document.getElementById(LIBRARY_SECTION_IDS[key])).filter(Boolean);
+  if (!els.length) return;
+  const parent = els[0].parentNode;
   if (!parent) return;
-  order.forEach(key => {
-    const el = document.getElementById(LIBRARY_SECTION_IDS[key]);
-    if (el) parent.appendChild(el);
-  });
+  // Was calling appendChild unconditionally on every render, even when nothing
+  // needed to move — appendChild on a node already in the DOM still forces a
+  // real remove+reinsert, which destroys focus on anything inside it (like the
+  // search input this was found from). Only touch the DOM if the order has
+  // genuinely changed since last render.
+  const currentOrder = Array.from(parent.children).filter(c => els.includes(c));
+  const alreadyCorrect = currentOrder.length === els.length && currentOrder.every((el, i) => el === els[i]);
+  if (alreadyCorrect) return;
+  els.forEach(el => parent.appendChild(el));
 }
 function moveLibrarySection(key, direction) {
   const order = getLibraryOrder();
@@ -10642,16 +10648,20 @@ function getDashboardOrder() {
 }
 function applyDashboardOrder() {
   const order = getDashboardOrder();
-  const firstIds = DASHBOARD_SECTION_IDS[order[0]] || [];
-  const firstEl = document.getElementById(firstIds[0]);
-  const parent = firstEl?.parentNode;
+  const elGroups = order.map(key => (DASHBOARD_SECTION_IDS[key] || []).map(id => document.getElementById(id)).filter(Boolean));
+  const allEls = elGroups.flat();
+  if (!allEls.length) return;
+  const parent = allEls[0].parentNode;
   if (!parent) return;
-  order.forEach(key => {
-    (DASHBOARD_SECTION_IDS[key] || []).forEach(id => {
-      const el = document.getElementById(id);
-      if (el) parent.appendChild(el);
-    });
-  });
+  // Same fix as the library version — appendChild on an already-placed node still
+  // forces a real remove+reinsert, destroying focus on any input inside it. This
+  // fires far more often than the library one (any log action, any tab switch),
+  // so was very likely also silently breaking focus on Daily Steps, custom water
+  // amount, and anything else typed into on the dashboard.
+  const currentOrder = Array.from(parent.children).filter(c => allEls.includes(c));
+  const alreadyCorrect = currentOrder.length === allEls.length && currentOrder.every((el, i) => el === allEls[i]);
+  if (alreadyCorrect) return;
+  allEls.forEach(el => parent.appendChild(el));
 }
 function moveDashboardSection(key, direction) {
   const order = getDashboardOrder();
