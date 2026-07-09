@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.125 — Phase 10: clarify Recipes vs Meals naming confusion with cross-referencing subtitles -->
+<meta charset="UTF-8"><!-- v3.10.126 — Phase 10: generic reorder system for Reports, Manage, Import — discovers sections automatically -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.125'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.126'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -5130,6 +5130,77 @@ function getLibraryOrder() {
   } catch(e) {}
   return [...DEFAULT_LIBRARY_ORDER];
 }
+// Generic section reordering for Reports / Manage / Import — rather than hand-wire
+// ~25+ individual sections the way Today's dashboard needed, this discovers
+// sections automatically from their existing toggleSection(key, wrapId, ...)
+// onclick attributes (every section already has one), injects reorder buttons
+// at runtime, and moves title+wrap pairs together. Bakes in the "skip if
+// already correct" safety from the start, rather than finding that bug again
+// the way the dashboard version did.
+window._reorderableSections = {};
+function makeContainerReorderable(containerEl, scopeKey) {
+  if (!containerEl) return;
+  const titles = Array.from(containerEl.querySelectorAll('[onclick*="toggleSection("]'));
+  const sections = [];
+  titles.forEach(titleEl => {
+    const m = (titleEl.getAttribute('onclick') || '').match(/toggleSection\('([^']+)'\s*,\s*'([^']+)'/);
+    if (!m) return;
+    const wrapEl = document.getElementById(m[2]);
+    if (!wrapEl) return;
+    sections.push({ key: m[1], titleEl, wrapEl });
+  });
+  if (sections.length < 2) return; // nothing meaningful to reorder
+  window._reorderableSections[scopeKey] = sections;
+
+  sections.forEach(sec => {
+    if (sec.titleEl.dataset.reorderInjected) return;
+    sec.titleEl.dataset.reorderInjected = '1';
+    const btns = document.createElement('span');
+    btns.innerHTML = `<span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${sec.key}','up')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▲</span><span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${sec.key}','down')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▼</span>`;
+    sec.titleEl.appendChild(btns);
+  });
+
+  applyGenericOrder(scopeKey);
+}
+function getGenericOrder(scopeKey) {
+  const sections = window._reorderableSections[scopeKey] || [];
+  const defaultOrder = sections.map(s => s.key);
+  try {
+    const stored = JSON.parse(localStorage.getItem('mh_reorder_' + scopeKey) || 'null');
+    if (Array.isArray(stored) && stored.length === defaultOrder.length && defaultOrder.every(k => stored.includes(k))) return stored;
+  } catch(e) {}
+  return defaultOrder;
+}
+function applyGenericOrder(scopeKey) {
+  const sections = window._reorderableSections[scopeKey];
+  if (!sections || !sections.length) return;
+  const byKey = {}; sections.forEach(s => byKey[s.key] = s);
+  const order = getGenericOrder(scopeKey);
+  const allEls = [];
+  order.forEach(k => { const s = byKey[k]; if (s) allEls.push(s.titleEl, s.wrapEl); });
+  if (!allEls.length) return;
+  const parent = allEls[0].parentNode;
+  if (!parent) return;
+  // Same safety fix as the dashboard/library versions — never move anything
+  // that's already correctly placed, since appendChild on an in-DOM node still
+  // forces a real remove+reinsert, which would destroy focus on anything typed
+  // into within these sections (several have text/number inputs).
+  const currentOrder = Array.from(parent.children).filter(c => allEls.includes(c));
+  const alreadyCorrect = currentOrder.length === allEls.length && currentOrder.every((el, i) => el === allEls[i]);
+  if (alreadyCorrect) return;
+  allEls.forEach(el => parent.appendChild(el));
+}
+function moveGenericSection(scopeKey, key, direction) {
+  const order = getGenericOrder(scopeKey);
+  const idx = order.indexOf(key);
+  if (idx === -1) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  localStorage.setItem('mh_reorder_' + scopeKey, JSON.stringify(order));
+  applyGenericOrder(scopeKey);
+}
+
 function applyLibraryOrder() {
   const order = getLibraryOrder();
   const els = order.map(key => document.getElementById(LIBRARY_SECTION_IDS[key])).filter(Boolean);
@@ -13753,13 +13824,13 @@ function switchSubTab(parent, tab, el) {
     const el2 = document.getElementById('view-' + tab);
     if (el2) el2.classList.add('active');
     if (tab === 'trends') { const dayNav=document.getElementById('trendsDayNav'); if(typeof trendsWindow!=='undefined'&&trendsWindow==='today'&&dayNav) dayNav.style.display='flex'; updateTrendsDayLabel(); renderTrends(); }
-    if (tab === 'reports') renderReports();
+    if (tab === 'reports') { renderReports(); setTimeout(() => makeContainerReorderable(document.getElementById('view-reports'), 'reports'), 100); }
   } else if (parent === 'settings') {
     ['view-manage','view-customise','view-import'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
     const el2 = document.getElementById('view-' + tab);
     if (el2) el2.classList.add('active');
-    if (tab === 'manage' || tab === 'customise') { initSettings(); renderPrecedenceEditor(); }
-    if (tab === 'import') { renderSavedDevices(); updateImportStatus(); initSyncUI(); }
+    if (tab === 'manage' || tab === 'customise') { initSettings(); renderPrecedenceEditor(); setTimeout(() => makeContainerReorderable(document.getElementById('view-manage'), 'manage'), 100); }
+    if (tab === 'import') { renderSavedDevices(); updateImportStatus(); initSyncUI(); setTimeout(() => makeContainerReorderable(document.getElementById('view-import'), 'import'), 100); }
   }
 }
 
