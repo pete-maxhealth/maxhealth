@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.132 — Phase 10: add Save as new item option when duplicate comparison shows a genuinely different product -->
+<meta charset="UTF-8"><!-- v3.10.133 — Phase 10: never silently show a named item with all-zero macros in long-meal split parsing -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4540,7 +4540,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.132'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.133'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9539,13 +9539,23 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
       const items1 = r1?.items || [];
       const items2 = r2?.items || [];
 
-      const allItems = [...items1, ...items2];
+      let allItems = [...items1, ...items2];
+      // A named item with every single macro at zero is essentially never a real
+      // food (water is the only genuine exception, and that's rarely logged this
+      // way) — it's far more likely a parsing failure somewhere in the fallback
+      // chain silently surviving as a name with no numbers attached. Silently
+      // logging that as if it were real data is worse than refusing outright.
+      const failedItems = allItems.filter(i => i.name && !i.kcal && !i.protein && !i.fat && !i.carbs && !/water/i.test(i.name));
+      allItems = allItems.filter(i => !failedItems.includes(i));
       if (allItems.length === 0) {
         addBubble("Couldn't parse the meal. Try describing it in smaller groups.", 'system', 'warn');
         return;
       }
       const combined = { type: 'food', items: allItems, message: items2.length === 0 ? `Partial parse — second batch failed (r2: ${JSON.stringify(r2)?.slice(0,100)})` : 'Long meal — processed in two parts' };
       const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
+      if (failedItems.length) {
+        addBubble(`⚠ Couldn't get real values for: ${failedItems.map(i => i.name).join(', ')} — left out rather than logging as zero. Try adding ${failedItems.length > 1 ? 'these' : 'this'} separately.`, 'system', 'warn');
+      }
       showMealPreview(sanitiseFatValues(foods), text, 'Long meal — processed in two parts');
       return;
     }
