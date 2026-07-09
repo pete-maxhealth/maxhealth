@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.128 — Phase 10: fix orphaned group headers by removing plain labels, excluding debug tools from reordering -->
+<meta charset="UTF-8"><!-- v3.10.129 — Phase 10: fix fuzzy match false-positives across different meats and short 2-word queries -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4540,7 +4540,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.128'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.129'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -5009,10 +5009,17 @@ const LIBRARY_KNOWN_BRANDS = ['asda','tesco',"tesco's",'sainsburys','sainsbury',
 function canonicalBrand(matched) {
   return matched.replace(/'s$/, '').replace(/s$/, '');
 }
+const MEAT_TYPE_WORDS = ['chicken','beef','pork','lamb','turkey','duck','venison','salmon','tuna','cod','haddock','prawn','prawns','bacon','ham','gammon'];
+function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 function fuzzyFindInLibrary(name) {
   const lib = loadLibrary();
   const lowerName = name.toLowerCase();
   const queryBrand = canonicalBrand(LIBRARY_KNOWN_BRANDS.find(b => lowerName.includes(b)) || '') || null;
+  // Same class of bug as the brand fix — "Chicken Mince" and "Beef Mince" share
+  // the generic word "mince", which alone hits the 50% threshold for a 2-word
+  // query even though the actual meat is completely different. The meat/protein
+  // type is exactly as disqualifying as a brand name when it differs.
+  const queryMeat = canonicalMeatType(MEAT_TYPE_WORDS.find(m => lowerName.includes(m)) || '') || null;
   const queryWords = name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
   if (!queryWords.length) return null;
   let best = null, bestScore = 0;
@@ -5026,15 +5033,21 @@ function fuzzyFindInLibrary(name) {
     const itemLower = item.name.toLowerCase();
     const itemBrand = canonicalBrand(LIBRARY_KNOWN_BRANDS.find(b => itemLower.includes(b)) || '') || null;
     if (queryBrand && itemBrand && queryBrand !== itemBrand) continue;
+    const itemMeat = canonicalMeatType(MEAT_TYPE_WORDS.find(m => itemLower.includes(m)) || '') || null;
+    if (queryMeat && itemMeat && queryMeat !== itemMeat) continue;
     const itemWords = itemLower.split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     if (!itemWords.length) continue;
     const matches = queryWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw))).length;
     const score = matches / queryWords.length;
     if (score > bestScore) { bestScore = score; best = item; }
   }
-  // Require at least half the meaningful words to overlap — loose enough to catch
-  // "salted peanuts" → "ASDA...Salted...Nuts", tight enough to avoid false matches.
-  return bestScore >= 0.5 ? best : null;
+  // A 2-word query hitting the general 50% threshold means just ONE shared
+  // word is enough — fine for a 4-word query (2 solid matches), but for a bare
+  // 2-word query like "chicken mince" it let a single generic word ("chicken")
+  // match a completely different, much longer product name. Short queries need
+  // both words to genuinely match, not just half.
+  const threshold = queryWords.length <= 2 ? 0.99 : 0.5;
+  return bestScore >= threshold ? best : null;
 }
 
 // Looser cousin of fuzzyFindInLibrary — returns several candidates from the same
