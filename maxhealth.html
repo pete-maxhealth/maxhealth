@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.118 — Phase 10: add macro-mass plausibility check, macros cannot physically outweigh the food itself -->
+<meta charset="UTF-8"><!-- v3.10.119 — Phase 10: are-you-sure confirmation for implausible amounts/impossible mass before logging, not blocking, allows batch cooking -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.118'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.119'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10303,14 +10303,44 @@ function confirmSaveIngredients(btn) {
 }
 
 function confirmMealLog() {
+  if (!window._pendingMealFoods) return;
+
+  // Run the same sanity checks used everywhere else, but here — before actually
+  // committing the log — so an implausible amount or a mass that can't physically
+  // fit gets a genuine "are you sure?" rather than either silently logging it or
+  // blocking it outright. Batch cooking is a real thing (a big pot of something
+  // meant for several days), so the answer to an unusual amount should be a
+  // confirmation, not a rejection — but it shouldn't sail through unnoticed either.
+  const checked = sanitiseFatValues(window._pendingMealFoods);
+  const flagged = checked.filter(f => f._implausibleAmountWarning || f._impossibleMacroMassWarning);
+
+  if (flagged.length) {
+    const lines = flagged.map(f => {
+      if (f._impossibleMacroMassWarning) {
+        return `${f.name}: ${f._impossibleMacroMass}g of protein+fat+carbs in a ${f.amount} portion — that's more mass than the food itself.`;
+      }
+      return `${f.name}: ${f.amount} is an unusually large or small amount.`;
+    }).join('\n\n');
+    appConfirm(
+      `${lines}\n\nIf this is a genuine large batch, that's fine — confirm to log it as-is. If it doesn't look right, cancel and check the amount.`,
+      () => finishMealLog(checked),
+      null,
+      false,
+      { confirm: 'Yes, log it as-is', cancel: 'Cancel, let me check' }
+    );
+    return;
+  }
+
+  finishMealLog(checked);
+}
+
+function finishMealLog(foods) {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   const modeBar = document.getElementById('chatModeBar');
   if (modeBar) modeBar.style.display = '';
-  if (window._pendingMealFoods) {
-    logFoods(window._pendingMealFoods, window._pendingMealText, window._pendingMealMessage);
-    window._pendingMealFoods = null;
-  }
+  logFoods(foods, window._pendingMealText, window._pendingMealMessage);
+  window._pendingMealFoods = null;
 }
 
 function cancelMealPreview() {
