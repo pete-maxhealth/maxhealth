@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.116 — Phase 10: fix fuzzy match ignoring explicitly-named brand, was looping on wrong entry -->
+<meta charset="UTF-8"><!-- v3.10.117 — Phase 10: three new sanity checks — Atwater kcal consistency, low-carb-fruit warning, implausible portion size -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.116'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.117'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9737,6 +9737,50 @@ function sanitiseFatValues(items) {
       f._kcalAutoCorrectedFrom = oldKcal;
     }
 
+    // ── Atwater consistency check ────────────────────────────────────────
+    // A food's calories are a direct physical consequence of its own stated
+    // macros (protein×4 + carbs×4 + fat×9) — this isn't a food-type judgement
+    // call like the checks above, it's arithmetic that must hold regardless of
+    // what the food actually is. Catches internally-inconsistent entries (macros
+    // that don't add up to their own stated kcal) that none of the other checks
+    // would catch, since those all reason about what's plausible for a food type,
+    // not whether a single entry's own numbers are self-consistent.
+    // Alcohol carries real calories (~7kcal/g) that protein/carb/fat alone never
+    // capture — without this exception, a correctly-logged beer or wine would get
+    // its true kcal silently "corrected" down to just its macro contribution,
+    // quietly discarding the alcohol calories that actually matter for tracking.
+    const isAlcohol = /\b(beer|lager|wine|cider|spirit|vodka|whisky|whiskey|gin|rum|liqueur|prosecco|champagne|ale|stout)\b/i.test(nameLower);
+    if (f.kcal && (f.protein || f.fat || f.carbs) && !isAlcohol) {
+      const expectedKcal = (f.protein || 0) * 4 + (f.carbs || 0) * 4 + (f.fat || 0) * 9;
+      const diff = Math.abs(f.kcal - expectedKcal);
+      if (expectedKcal > 0 && diff > Math.max(30, expectedKcal * 0.15)) {
+        const oldKcal = f.kcal;
+        f.kcal = Math.round(expectedKcal);
+        f._kcalAtwaterCorrected = true;
+        f._kcalAtwaterCorrectedFrom = oldKcal;
+      }
+    }
+
+    // ── Implausible near-zero carbs on fruit ─────────────────────────────
+    // The inverse of the meat-carbs check above — real fruit always carries
+    // meaningful natural sugar, so a fruit-named item claiming under 2g carbs
+    // is the same class of error as meat claiming carbs, just in the opposite
+    // direction. Warns rather than hard-corrects, since there's no reliable
+    // universal fruit-carb table to correct TO the way pure fats have one.
+    const FRUIT_KEYWORDS = ['berry','berries','apple','banana','grape','orange','mango','pear','peach','plum','cherry','cherries','melon','kiwi','pineapple','currant','blueberr','strawberr','raspberr'];
+    if (FRUIT_KEYWORDS.some(k => nameLower.includes(k)) && (f.carbs || 0) < 2 && !f._carbsAutoCorrected) {
+      f._lowCarbFruitWarning = true;
+    }
+
+    // ── Magnitude / typo bound check ──────────────────────────────────────
+    // Catches an obvious fat-finger amount (2500g instead of 250g, a missing
+    // decimal point) — not a food-type judgement, just a sanity bound on
+    // portion size that no single real food item is likely to fall outside.
+    const amtGrams = parseFloat(f.amount);
+    if (amtGrams && (amtGrams > 2000 || amtGrams < 1)) {
+      f._implausibleAmountWarning = true;
+    }
+
     return f;
   });
 }
@@ -9840,6 +9884,26 @@ function renderMealPreview() {
     // (not just warned) — this note makes that correction visible rather than silent.
     if (f._carbsAutoCorrected) {
       warnings.push(`✅ ${f.name}: carbs auto-corrected from ${f._carbsAutoCorrectedFrom}g to 0g — plain meat/fish has no carbohydrate`);
+    }
+
+    // Atwater consistency — a food's own macros must add up to its own stated
+    // kcal (protein×4 + carbs×4 + fat×9). This is arithmetic, not a food-type
+    // judgement call, so it's auto-corrected the same way the checks above are.
+    if (f._kcalAtwaterCorrected) {
+      warnings.push(`✅ ${f.name}: kcal corrected from ${f._kcalAtwaterCorrectedFrom} to ${f.kcal} — didn't match its own protein/carb/fat values`);
+    }
+
+    // Real fruit always carries meaningful natural sugar — near-zero carbs on a
+    // fruit-named item is the same class of error as meat carrying carbs, just
+    // the opposite direction. Warned rather than auto-corrected, since there's
+    // no reliable universal fruit-carb table to correct TO.
+    if (f._lowCarbFruitWarning) {
+      warnings.push(`⚠ ${f.name}: ${f.carbs||0}g carbs looks implausibly low for a fruit — worth checking against the real packet`);
+    }
+
+    // Catches an obvious fat-finger amount rather than a real portion size.
+    if (f._implausibleAmountWarning) {
+      warnings.push(`⚠ ${f.name}: ${f.amount} is an unusual portion size — check for a typo before logging`);
     }
 
     // Pure fats (oil, butter, cream) are excluded from the fat checks above, but that
@@ -11384,6 +11448,9 @@ function saveLogEdit(id) {
   const corrections = [];
   if (sanitised._carbsAutoCorrected) corrections.push(`Carbs corrected: ${sanitised._carbsAutoCorrectedFrom}g → 0g (plain meat/fish has none)`);
   if (sanitised._fatAutoCorrected) corrections.push(`Fat corrected: ${sanitised._fatAutoCorrectedFrom}g → ${sanitised.fat}g (pure fats are ~90-100% fat by weight)`);
+  if (sanitised._kcalAtwaterCorrected) corrections.push(`Kcal corrected: ${sanitised._kcalAtwaterCorrectedFrom} → ${sanitised.kcal} (didn't match its own protein/carb/fat)`);
+  if (sanitised._lowCarbFruitWarning) corrections.push(`⚠ ${sanitised.carbs||0}g carbs looks implausibly low for a fruit — worth double-checking`);
+  if (sanitised._implausibleAmountWarning) corrections.push(`⚠ ${sanitised.amount} is an unusual portion size — check for a typo`);
 
   entry.description = desc || entry.description;
   entry.fat = sanitised.fat;
