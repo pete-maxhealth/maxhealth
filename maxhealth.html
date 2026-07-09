@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.129 — Phase 10: fix fuzzy match false-positives across different meats and short 2-word queries -->
+<meta charset="UTF-8"><!-- v3.10.130 — Phase 10: add missing fat to today's summary, add library-only save option skipping eaten-amount -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4540,7 +4540,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.129'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.130'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8798,8 +8798,13 @@ function sendChat() {
         <div style="margin-bottom:8px;">I've read the label, but I still need <strong>how much you actually ate</strong> — not the pack size. Type the amount (e.g. <strong>150g</strong>) and I'll scale the per-100g label values to that.</div>
         <div style="margin-bottom:6px;font-size:11px;color:var(--text3);">Not sure?</div>
         <button onclick="requestLabelPortionEstimate()"
-          style="padding:8px 14px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;">
+          style="padding:8px 14px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;margin-bottom:8px;">
           🤖 AI help needed?
+        </button>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);">Not eating this now — just want it saved for later?</div>
+        <button onclick="saveLabelToLibraryOnly()"
+          style="padding:8px 14px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--text2);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;margin-top:6px;">
+          📚 Just add to library (haven't eaten this)
         </button>`;
       return;
     }
@@ -8810,6 +8815,21 @@ function sendChat() {
     ? '[LABEL] ' + (text || '')
     : text;
   processMessage(messageText, photoB64, photoMime);
+}
+
+// Reuses the already-proven processMessage → showMealPreview pipeline (same
+// one used for every other label/photo log) rather than writing separate,
+// untested AI-calling logic — "100g" is just a neutral placeholder so the
+// label's own per-100g reference values come through unscaled, since nothing
+// is actually being logged as eaten. The preview's existing "Save only"
+// button (already working, already used elsewhere) handles the actual save.
+function saveLabelToLibraryOnly() {
+  const pending = window._pendingLabelPhoto;
+  if (!pending) return;
+  window._pendingLabelPhoto = null;
+  addBubble('📚 Just add to library (haven\'t eaten this)', 'user');
+  showToast('Reading the label — use "📚 Save only" below, not "Log it", since nothing was eaten');
+  processMessage((pending.text || '') + ' 100g', pending.b64, pending.mime, true);
 }
 
 function requestLabelPortionEstimate() {
@@ -9294,10 +9314,12 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
   }
   if (lower.includes('summary') || lower.includes('how am i doing') || lower.includes('show today')) {
     const pct = Math.round(totals.kcal / targets.kcal * 100);
+    const fatTarget = parseInt(localStorage.getItem('mh_target_fat')) || 247;
     const reply = `Today's summary (${state.dayMode} day):\n\n` +
       `Calories: ${totals.kcal} / ${targets.kcal} kcal (${pct}%)\n` +
       `Protein: ${totals.protein}g / ${targets.protein}g\n` +
       `Carbs: ${totals.carbs}g / ${targets.carbs}g\n` +
+      `Fat: ${totals.fat || 0}g / ${fatTarget}g\n` +
       `Meals logged: ${state.todayLog.length}`;
     addBubble(reply, 'system');
     return;
