@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.117 — Phase 10: three new sanity checks — Atwater kcal consistency, low-carb-fruit warning, implausible portion size -->
+<meta charset="UTF-8"><!-- v3.10.118 — Phase 10: add macro-mass plausibility check, macros cannot physically outweigh the food itself -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.117'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.118'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9781,6 +9781,21 @@ function sanitiseFatValues(items) {
       f._implausibleAmountWarning = true;
     }
 
+    // ── Macro-mass plausibility ──────────────────────────────────────────
+    // A food's protein + fat + carbs, all measured in grams, physically cannot
+    // exceed the food's own total weight — there's no room in the mass balance
+    // for it. Catches the case none of the checks above would: values that are
+    // internally consistent with each other (Atwater holds) and use a normal
+    // portion size, but pack more macro-mass into the food than the food itself
+    // weighs. A small buffer allows for rounding, not for genuine violations.
+    if (amtGrams && amtGrams > 0) {
+      const macroMass = (f.protein || 0) + (f.fat || 0) + (f.carbs || 0);
+      if (macroMass > amtGrams * 1.05) {
+        f._impossibleMacroMassWarning = true;
+        f._impossibleMacroMass = Math.round(macroMass * 10) / 10;
+      }
+    }
+
     return f;
   });
 }
@@ -9904,6 +9919,13 @@ function renderMealPreview() {
     // Catches an obvious fat-finger amount rather than a real portion size.
     if (f._implausibleAmountWarning) {
       warnings.push(`⚠ ${f.name}: ${f.amount} is an unusual portion size — check for a typo before logging`);
+    }
+
+    // A food's macros literally cannot outweigh the food itself — this is a hard
+    // physical impossibility, not a judgement call, so it's flagged prominently
+    // rather than as a routine warning.
+    if (f._impossibleMacroMassWarning) {
+      warnings.push(`🔴 ${f.name}: ${f._impossibleMacroMass}g of protein+fat+carbs cannot fit inside a ${f.amount} food — this is impossible, not just unusual. Check the values before logging.`);
     }
 
     // Pure fats (oil, butter, cream) are excluded from the fat checks above, but that
@@ -11451,6 +11473,7 @@ function saveLogEdit(id) {
   if (sanitised._kcalAtwaterCorrected) corrections.push(`Kcal corrected: ${sanitised._kcalAtwaterCorrectedFrom} → ${sanitised.kcal} (didn't match its own protein/carb/fat)`);
   if (sanitised._lowCarbFruitWarning) corrections.push(`⚠ ${sanitised.carbs||0}g carbs looks implausibly low for a fruit — worth double-checking`);
   if (sanitised._implausibleAmountWarning) corrections.push(`⚠ ${sanitised.amount} is an unusual portion size — check for a typo`);
+  if (sanitised._impossibleMacroMassWarning) corrections.push(`🔴 ${sanitised._impossibleMacroMass}g of protein+fat+carbs cannot fit inside a ${sanitised.amount} food — impossible, not just unusual`);
 
   entry.description = desc || entry.description;
   entry.fat = sanitised.fat;
