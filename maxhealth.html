@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.119 — Phase 10: are-you-sure confirmation for implausible amounts/impossible mass before logging, not blocking, allows batch cooking -->
+<meta charset="UTF-8"><!-- v3.10.120 — Phase 10: library substitute offering when no exact match found, generalizes the Lidl/Asda swap into a real feature -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.119'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.120'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -4959,7 +4959,28 @@ function declineFuzzyLibraryMatch() {
   const pending = window._pendingFuzzyLibraryMatch;
   if (!pending) return;
   window._pendingFuzzyLibraryMatch = null;
-  processMessage(pending.originalText, null, null);
+  processMessage(pending.originalText, null, null, true);
+}
+
+// Uses a chosen substitute exactly like a direct fuzzy match — the library's
+// own locked values, carried into the normal preview/logging flow.
+function useLibrarySubstitute(index) {
+  const sub = window._pendingSubstitutes?.[index];
+  if (!sub) return;
+  window._pendingSubstitutes = null;
+  const food = { name: sub.name, kcal: sub.kcal, protein: sub.protein, fat: sub.fat||0, carbs: sub.carbs, amount: sub.portion || '100g' };
+  food._per100g = sub.per100g === true;
+  food._portionG = parseFloat(sub.portion) || 0;
+  window._pendingMealFoods = [food];
+  window._pendingMealText = sub.name;
+  showMealPreview([food], sub.name, 'Substituted from your library — values locked. Adjust amount if needed.');
+}
+
+function declineLibrarySubstitutes() {
+  const text = window._pendingSubstituteOriginalText;
+  window._pendingSubstitutes = null;
+  window._pendingSubstituteOriginalText = null;
+  if (text) processMessage(text, null, null, true);
 }
 
 function findInLibrary(name) {
@@ -5000,6 +5021,30 @@ function fuzzyFindInLibrary(name) {
   // Require at least half the meaningful words to overlap — loose enough to catch
   // "salted peanuts" → "ASDA...Salted...Nuts", tight enough to avoid false matches.
   return bestScore >= 0.5 ? best : null;
+}
+
+// Looser cousin of fuzzyFindInLibrary — returns several candidates from the same
+// broad food category rather than one strict best match, for offering real
+// substitutes ("don't have that exact one, but here's what I do have") rather
+// than confirming a single specific item. Brand mismatches are allowed here
+// deliberately — swapping Lidl for Asda double cream is exactly the point.
+function findLibrarySubstitutes(name, excludeName, limit = 3) {
+  const lib = loadLibrary();
+  const queryWords = name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
+  if (!queryWords.length) return [];
+  const scored = [];
+  for (const item of lib) {
+    if (excludeName && item.name.toLowerCase() === excludeName.toLowerCase()) continue;
+    const itemWords = item.name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
+    if (!itemWords.length) continue;
+    const matches = queryWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw))).length;
+    const score = matches / queryWords.length;
+    // Looser bar than the strict finder — just needs the core category word
+    // (e.g. "cream", "cheese") to overlap, not most of the query.
+    if (score >= 0.34) scored.push({ item, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.item);
 }
 
 function jumpToLibraryLetter(letter) {
@@ -8980,7 +9025,7 @@ function getLastKnownWeight() {
   return null;
 }
 
-async function processMessage(text, imageBase64, imageMime) {
+async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = false) {
   // ── Resume pending clarification — user is answering the AI's question ──
   // When the AI asked about an ambiguous photo item (e.g. "pasta or veg?"),
   // replay as a multi-turn conversation: [image] → [AI question] → [user answer]
@@ -9184,7 +9229,7 @@ async function processMessage(text, imageBase64, imageMime) {
   // Catches near-misses like "salted peanuts" vs a locked "ASDA Roasted & Salted
   // Mixed Nuts" that the exact substring match above wouldn't catch, without
   // risking a wrong fuzzy match getting logged automatically.
-  const fuzzyMatch = !hasPhoto && !isMultiComponent ? fuzzyFindInLibrary(text) : null;
+  const fuzzyMatch = !hasPhoto && !isMultiComponent && !skipLibraryChecks ? fuzzyFindInLibrary(text) : null;
   if (fuzzyMatch) {
     window._pendingFuzzyLibraryMatch = { match: fuzzyMatch, originalText: text };
     const bubble = addBubble('', 'system', 'warn');
@@ -9195,6 +9240,28 @@ async function processMessage(text, imageBase64, imageMime) {
         <button class="copy-btn" style="flex:1;padding:8px;font-size:13px;" onclick="declineFuzzyLibraryMatch()">No, log fresh</button>
       </div>`;
     return;
+  }
+
+  // ── Substitute offering — "I don't have that exact one, but here's what I do" ──
+  // Catches the case tonight's brand-fix deliberately created: "double cream asda"
+  // now correctly finds no exact match rather than wrongly matching a Lidl entry —
+  // but that's an incomplete answer on its own. If the library has a genuine
+  // substitute in the same category, offer it directly rather than silently
+  // falling through to a fresh AI estimate the user didn't actually need.
+  if (!hasPhoto && !isMultiComponent && !skipLibraryChecks) {
+    const substitutes = findLibrarySubstitutes(text);
+    if (substitutes.length) {
+      window._pendingSubstituteOriginalText = text;
+      const bubble = addBubble('', 'system', 'warn');
+      bubble.innerHTML = `
+        <div style="margin-bottom:10px;">Don't have an exact match for <strong>${text}</strong> — but your library has:</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+          ${substitutes.map((s, i) => `<button class="run-btn" style="text-align:left;padding:8px 10px;font-size:13px;" onclick="useLibrarySubstitute(${i})">${s.name} (${s.kcal}kcal · ${s.protein}g P · ${s.fat||0}g F · ${s.carbs}g C per ${s.portion || '100g'})</button>`).join('')}
+        </div>
+        <button class="copy-btn" style="width:100%;padding:8px;font-size:13px;" onclick="declineLibrarySubstitutes()">None of these, log fresh</button>`;
+      window._pendingSubstitutes = substitutes;
+      return;
+    }
   }
 
   // ── Try local food database (simple entries only) ──────────
