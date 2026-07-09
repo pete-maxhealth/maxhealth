@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.123 — Phase 10: offer substitutes when declining a fuzzy match too, not just when no match is found at all -->
+<meta charset="UTF-8"><!-- v3.10.124 — Phase 10: recipe-aware meal suggestions, proper servings math reusing logRecipe formula -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.123'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.124'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -8863,7 +8863,8 @@ async function _processLabelEstimate(b64, mime, systemPrompt) {
 // as a real, repeatable in-app feature.
 async function suggestMealFromLibrary() {
   const lib = loadLibrary();
-  if (!lib.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
+  const recipes = loadRecipes();
+  if (!lib.length && !recipes.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
 
   const mode = state.dayMode || 'standard';
   const t = getTargets()[mode] || getTargets().standard;
@@ -8878,11 +8879,19 @@ async function suggestMealFromLibrary() {
     fat:     Math.round((fatTarget - (totals.fat || 0)) * 10) / 10,
   };
 
-  addBubble('📚 Checking your library against what today still needs…', 'system');
+  addBubble('📚 Checking your library and recipes against what today still needs…', 'system');
 
   const libText = lib.map(f => `${f.name} | ${f.kcal}kcal | ${f.protein}g P | ${f.carbs}g C | ${f.fat||0}g F | logs at ${f.portion || (f.per100g ? '100g' : 'its stored amount')}`).join('\n');
+  // Recipes are shown per-serving, not just as a total — the AI needs to know
+  // what ONE serving actually costs to suggest a sensible number of servings,
+  // and the app will do the real scaling math afterward regardless of what
+  // number the AI proposes.
+  const recipesText = recipes.map(r => {
+    const per = { kcal: Math.round(r.total.kcal/r.servings), protein: Math.round(r.total.protein/r.servings*10)/10, carbs: Math.round(r.total.carbs/r.servings*10)/10, fat: Math.round((r.total.fat||0)/r.servings*10)/10 };
+    return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F`;
+  }).join('\n');
 
-  const systemPrompt = `You are a nutrition assistant helping someone on a strict ketogenic protocol pick what to eat next, using ONLY foods they've actually got saved in their library — never suggest anything not in this exact list.
+  const systemPrompt = `You are a nutrition assistant helping someone on a strict ketogenic protocol pick what to eat next, using ONLY foods and recipes they've actually got saved — never suggest anything not in these exact lists.
 
 TODAY'S REMAINING BUDGET:
 Calories: ${remaining.kcal}kcal | Protein: ${remaining.protein}g | Carbs: ${remaining.carbs}g | Fat: ${remaining.fat}g
@@ -8891,17 +8900,22 @@ Rules:
 - Carbs are the hardest ceiling — never combine items that would push carbs negative, even slightly.
 - If protein remaining is negative or near zero, favour fat/calorie-dense items over protein-heavy ones.
 - If protein remaining is meaningfully positive, prioritise protein-heavy items to help close that gap.
-- Propose 1-3 combinations of 1-3 items each, using each item's name EXACTLY as listed below — the app looks these up by exact name to calculate real totals, so any name that doesn't match exactly will fail silently.
-- Each combo should use items at their own stored/listed amount — do not invent different portions.
-- Be honest if nothing fits well — return fewer combos rather than force a bad one.
+- A saved recipe is often a better single suggestion than combining several raw ingredients — prefer a recipe when one genuinely fits well, but don't force one if the remaining budget doesn't suit any recipe's per-serving numbers.
+- Propose 1-3 suggestions total, mixing recipes and ingredient-combos as appropriate. Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
+- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
+- Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
 
-LIBRARY:
-${libText}
+LIBRARY (individual ingredients):
+${libText || '(none saved)'}
+
+RECIPES:
+${recipesText || '(none saved)'}
 
 Respond ONLY with JSON, no markdown, no preamble:
 {
   "combos": [
-    { "items": ["Exact Library Name 1", "Exact Library Name 2"], "note": "Short reason this combo fits — one sentence" }
+    { "items": ["Exact Library Name 1", "Exact Library Name 2"], "note": "Short reason this combo fits — one sentence" },
+    { "recipe": "Exact Recipe Name", "servings": 1, "note": "Short reason this fits — one sentence" }
   ]
 }
 If nothing genuinely fits, return {"combos": []} and explain why in a "note" at the top level instead.`;
@@ -8925,7 +8939,7 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
     let raw = data.content?.[0]?.text?.trim() || '{}';
     raw = raw.replace(/^```json\s*|\s*```$/g, '').trim();
     const parsed = JSON.parse(raw);
-    renderLibraryComboSuggestions(parsed, lib);
+    renderLibraryComboSuggestions(parsed, lib, recipes);
   } catch (e) {
     addBubble('Couldn\'t reach the AI to check your library — try again in a moment.', 'system', 'warn');
   }
@@ -8935,7 +8949,7 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
 // totals (from each item's own stored library values, same as a normal quick-log
 // — never trusting the AI to do this arithmetic) plus a one-tap logging action.
 window._pendingLibraryCombos = [];
-function renderLibraryComboSuggestions(parsed, lib) {
+function renderLibraryComboSuggestions(parsed, lib, recipes) {
   const combos = parsed.combos || [];
   if (!combos.length) {
     addBubble(parsed.note || 'Nothing in your library fits well right now — worth logging something fresh instead.', 'system');
@@ -8944,6 +8958,30 @@ function renderLibraryComboSuggestions(parsed, lib) {
   window._pendingLibraryCombos = [];
   let html = '';
   combos.forEach((combo, i) => {
+    // Recipe-type suggestion — reuses the exact same servings-scaling formula
+    // as logRecipe() itself, so a suggested recipe logs identically to how
+    // manually applying that recipe from the Library tab would.
+    if (combo.recipe) {
+      const recipe = (recipes || []).find(r => r.name.toLowerCase() === combo.recipe.toLowerCase());
+      if (!recipe) return; // named recipe no longer exists — skip rather than guess
+      const servings = combo.servings && combo.servings > 0 ? combo.servings : 1;
+      const factor = servings / recipe.servings;
+      const scaled = {
+        kcal: Math.round(recipe.total.kcal * factor),
+        protein: Math.round(recipe.total.protein * factor * 10) / 10,
+        carbs: Math.round(recipe.total.carbs * factor * 10) / 10,
+        fat: Math.round((recipe.total.fat||0) * factor * 10) / 10,
+      };
+      window._pendingLibraryCombos.push({ type: 'recipe', recipe, servings });
+      html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
+        <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">🍽 ${recipe.name} (${servings} serving${servings>1?'s':''})</div>
+        ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
+        <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.carbs}g C · ${scaled.fat}g F</div>
+        <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
+      </div>`;
+      return;
+    }
+
     const resolvedItems = [];
     let anyMissing = false;
     (combo.items || []).forEach(name => {
@@ -8956,7 +8994,7 @@ function renderLibraryComboSuggestions(parsed, lib) {
       kcal: a.kcal + (f.kcal||0), protein: a.protein + (f.protein||0),
       carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0)
     }), { kcal:0, protein:0, carbs:0, fat:0 });
-    window._pendingLibraryCombos.push(resolvedItems);
+    window._pendingLibraryCombos.push({ type: 'items', items: resolvedItems });
     const itemNames = resolvedItems.map(f => `${f.name} (${f.portion || (f.per100g ? '100g' : 'as stored')})`).join(' + ');
     html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
       <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">${itemNames}</div>
@@ -8967,12 +9005,31 @@ function renderLibraryComboSuggestions(parsed, lib) {
     </div>`;
   });
   if (!html) { addBubble('Couldn\'t match the suggested items to your library exactly — try again.', 'system', 'warn'); return; }
-  const bubble = addBubble('Here\'s what fits, using real items from your library:', 'system');
+  const bubble = addBubble('Here\'s what fits, using real items from your library and recipes:', 'system');
   bubble.innerHTML += html;
 }
 
 function logSuggestedCombo(comboIndex) {
-  const items = window._pendingLibraryCombos?.[comboIndex];
+  const pending = window._pendingLibraryCombos?.[comboIndex];
+  if (!pending) return;
+
+  if (pending.type === 'recipe') {
+    const { recipe, servings } = pending;
+    const factor = servings / recipe.servings;
+    const foods = recipe.ingredients.map(ing => ({
+      name:    ing.name,
+      kcal:    Math.round(ing.kcal    * factor),
+      protein: Math.round(ing.protein * factor * 10) / 10,
+      carbs:   Math.round(ing.carbs   * factor * 10) / 10,
+      fibre:   Math.round((ing.fibre  || 0) * factor * 10) / 10,
+    }));
+    logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
+    showToast(`✓ ${recipe.name} logged`);
+    switchTabById('chat');
+    return;
+  }
+
+  const items = pending.items;
   if (!items || !items.length) return;
   const foods = items.map(f => ({
     name: f.name, amount: f.portion || '100g',
