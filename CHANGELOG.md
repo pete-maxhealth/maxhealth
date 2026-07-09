@@ -1,3 +1,76 @@
+# MaxedHealth Changelog — Phase 10 continued (v3.10.99 – v3.10.133)
+
+## New Features
+
+**Library-aware meal suggestions ("📚 From my library")**
+- Proposes real combinations of saved library items and Recipes (with proper per-serving math) against today's actual remaining macros — never invents values, only ever uses locked/stored data
+- Shows each item's real portion size, not just names
+- One-tap logging directly from the suggestion card
+- Recipe suggestions reuse the exact same servings-scaling formula as the Recipe Builder itself
+
+**Ingredient substitution flow**
+- If a described food doesn't exactly match your library (e.g. wrong brand), offers real alternatives from what you actually have instead of silently falling through to a fresh AI guess
+- Works both when no match is found at all, and when you explicitly decline a suggested match
+- "Save as new item" option added to the duplicate-comparison screen, for when comparison reveals two genuinely different products rather than a real duplicate
+
+**Ketosis streak milestones**
+- One-time celebration messages at 7/14/30/50/100/200/365 consecutive days, shown as both a chat message and a toast (visible regardless of active tab)
+
+**Dashboard & Library section reordering**
+- Every section on the Today dashboard (Weight, Day Mode, Ketosis, Macros, Remaining, Macro Ratio, Goal Check, Steps, Activity, Water, Log, Guides & Docs) can be reordered via ▲▼ buttons
+- Recipes vs Food Library sections in the Library tab reorderable the same way
+- Reports, Manage, and Import tabs also fully reorderable — built as one generic, self-discovering system rather than hand-wiring dozens of sections individually
+
+**Demo mode overhaul**
+- "Try a demo first" now seeds realistic sample data across Library, Recipes, Routines, and Strength Training history — previously these sections were completely empty in demo mode, hiding most of what the app actually does
+- Built via safe read/write redirection rather than temporarily overwriting real user data
+
+**Library-only ingredient saving**
+- New "📚 Just add to library (haven't eaten this)" option when reading a label, for cataloging an ingredient without logging it as eaten today
+
+## Nutrition Logging Accuracy
+
+**Four new sanity checks added to the existing meat-carbs and pure-fat plausibility checks:**
+- Atwater kcal-consistency (a food's stated calories must roughly match protein×4 + carbs×4 + fat×9), with an explicit exception for alcohol
+- Implausibly low carbs on fruit-named items (the inverse of the meat-carbs check)
+- Implausible portion size (under 1g or over 2000g)
+- Macro-mass plausibility — protein + fat + carbs in grams cannot physically exceed the food's own stated weight
+
+**Fuzzy-match accuracy (library duplicate detection and substitution)**
+- Brand names (Asda, Tesco, Sainsbury's, Lidl, etc.) now correctly disqualify a match when they genuinely differ between query and candidate — previously "double cream is Asda" and "double cream is Lidl" scored identically
+- Meat/protein type (chicken vs beef vs pork etc.) now works the same way — previously a single shared generic word like "mince" could match two completely different meats
+- Short 2-word queries now require both words to match, not just one — closes the gap where a single generic shared word inflated the match score
+
+**Meal-photo reasoning text**
+- AI no longer states its own rough sanity-check total in the message field — previously this could show a different number from the actual, more carefully-calculated logged total, creating a confusing self-contradiction
+
+**Long-meal parsing safety net**
+- A named item with every macro at zero is now excluded rather than silently logged — this pattern almost never represents a real food and more likely indicates a parsing failure somewhere in the AI response chain
+
+**Today's summary — fixed missing fat**
+- The "show today summary" conversational response was missing fat entirely from its output; now included alongside calories, protein, and carbs
+
+## Data Safety
+
+- "Export All Data" now includes recipes and routines in the JSON backup — previously silently missing
+- Corrected misleading "downloads one zip" wording to accurately describe the several separate files actually produced
+- Recipe deletion now requires confirmation — previously deleted instantly with no warning
+
+## UX & Organization
+
+- Settings grouped into clear categories (Your Targets, Data & Devices, App Info), with debug/diagnostic tools (Body Comp Debug, Rollover Debug Log) visually and functionally separated from everyday settings via a distinct "⚠ Advanced" warning box
+- Recipes vs Meals naming confusion addressed with cross-referencing subtitles in each section, rather than a rename
+- Fixed a focus-destroying bug where the reorder system's own render logic was silently kicking users out of text inputs (search box, Daily Steps, custom water amount) on every keystroke
+
+## Donation / Fundraising Page
+
+- Story, cover photo, and donation copy finalized for the JustGiving crowdfunding page and app-linked story page
+- Subsequently removed personal fundraising link and photo from the app entirely per decision to direct support toward charity rather than personal fundraising
+
+## Known Outstanding Items
+- Documentation (this file, README.md, TECHNICAL.md, user-guide.html) needs the above folded in properly
+- Garmin data quality comparison against RingConn/Withings not yet completed
+- Server auto-restart reliability — occasional manual restart needed, root cause (battery optimization vs boot-script failure) not yet confirmed
 # MaxedHealth Changelog
 
 ## v3.10.39 — Phase 9 (6 Jul 2026)

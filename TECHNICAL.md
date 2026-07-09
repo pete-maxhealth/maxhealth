@@ -81,6 +81,13 @@ date|kcal|protein|carbs|fat|notes
 | `mh_library` | Food library JSON |
 | `mh_supplement_defs` | Supplement definitions |
 | `mh_supplement_log` | Today's supplement log |
+| `mh_dashboard_order` | Today dashboard section order (array of section keys) |
+| `mh_library_section_order` | Library tab Recipes/Food Library order |
+| `mh_reorder_reports` / `mh_reorder_manage` / `mh_reorder_import` | Generic reorder system order per tab (see below) |
+| `mh_custom_devices` | User-added devices for the precedence list, beyond the built-in set |
+| `mh_celebrated_milestones` | Ketosis streak day-counts already celebrated, so milestones fire once ever |
+| `mh_recipes` | Saved Recipes JSON (servings-based, distinct from Meals in `mh_library`) |
+| `mh_routines` | Saved Routine Templates (named exercise lists) |
 
 ---
 
@@ -168,6 +175,7 @@ Cannot be deployed from Android (Wrangler requires x86_64).
 | v3.2.x | 9 | Model fix, GBM summary, dynamic targets |
 | v3.3.x | 9 | Activity layout, water dynamic, rollover guard |
 | v3.4.x | 9 | Custom modals, intelligence analysis, rollover rewrite |
+| v3.10.x | 10 | Library-aware meal suggestions, ingredient substitution, recipe-aware suggestions, dashboard/tab reordering, ketosis milestones, four new nutrition sanity checks, demo mode overhaul, corrected TDEE (height fix: 188cm not 178cm) |
 
 ---
 
@@ -316,7 +324,50 @@ Gap days are reported to the AI as "X day(s) had no nutrition logged (tracking g
 
 ---
 
-## Known issues
+## Generic section reordering (Reports / Manage / Import)
+
+Rather than hand-wire reorder buttons into ~25+ individual sections, `makeContainerReorderable(containerEl, scopeKey)` discovers sections automatically at runtime by scanning for existing `onclick="toggleSection(key, wrapId, ...)"` attributes — every collapsible section already has one, so no HTML changes were needed per section. Injects ▲▼ buttons directly into each title, tracks order in `localStorage['mh_reorder_' + scopeKey]`, and moves title+wrap element pairs together via `appendChild`.
+
+**Critical safety detail:** `applyGenericOrder()` checks whether the DOM already matches the stored order before doing anything — `appendChild` on an element already in the correct position still forces a real remove+reinsert, which destroys focus on any input inside it (this was found and fixed after it silently broke a search box on every keystroke). Never call the move logic unconditionally on every render.
+
+Debug/troubleshooting sections (`set-bodycompdebug`, `set-rollover`) are explicitly excluded from the reorderable set — they live inside a fixed "⚠ Advanced" warning box, and reordering them would eventually orphan that box from the sections it's meant to mark.
+
+The Today dashboard (`applyDashboardOrder`) and Library tab (`applyLibraryOrder`) use separate, similar-but-not-shared implementations of the same pattern, built earlier and kept independent to avoid risk when the generic version was added later.
+
+---
+
+## Nutrition logging sanity checks
+
+`sanitiseFatValues(items)` runs on every logging path (fresh log, edit, library quick-log) and applies, in order:
+
+1. **Meat/fish carb correction** — plain meat or fish claiming carbs gets auto-corrected to 0g, with kcal recalculated from protein+fat alone.
+2. **Pure-fat under-scaling correction** — oils/butter/lard etc. with fat% too low for the stated amount get corrected to ~90-100% fat by weight.
+3. **Atwater consistency** — kcal must roughly equal protein×4 + carbs×4 + fat×9 (tolerance: greater of 30kcal or 15%). Auto-corrects kcal to match the macros. Explicitly excludes alcohol (beer/wine/spirits etc.), since alcohol carries real calories this formula can't see.
+4. **Low-carb-fruit warning** — a fruit-named item claiming under 2g carbs gets flagged (not auto-corrected, since there's no reliable universal fruit-carb table to correct to).
+5. **Implausible portion size** — under 1g or over 2000g gets flagged.
+6. **Macro-mass plausibility** — protein+fat+carbs (grams) cannot exceed the food's own stated weight; this is a hard physical constraint, not a judgement call, so it's flagged prominently (🔴) rather than as a routine warning.
+
+Checks 1-2 auto-correct silently with a visible explanation; checks 3-6 either auto-correct (3) or warn (4-6). `confirmMealLog()` re-runs these checks immediately before the actual log commit and shows an explicit "are you sure?" gate for anything flagged by checks 5-6, rather than blocking outright — accommodates genuine large-batch cooking while still surfacing the issue.
+
+---
+
+## Fuzzy library matching
+
+`fuzzyFindInLibrary(name)` — used for both "did you mean X?" confirmation and duplicate-detection before saving. Strips stopwords, then requires word-overlap ≥50% (≥99% for 2-word queries, to prevent a single shared generic word like "mince" or "chicken" from false-matching completely different products — found via a real case: "chicken mince" matching "beef mince" on the shared word "mince" alone).
+
+**Brand and meat-type disqualification:** if the query names a specific supermarket brand (Asda, Tesco, Sainsbury's, Lidl, etc.) or meat/protein type (chicken, beef, pork, etc.) that genuinely differs from a candidate's, that candidate is disqualified outright regardless of overall word-overlap score — these are treated as definitive mismatch signals, not just words to strip as noise. `canonicalBrand()`/`canonicalMeatType()` normalize spelling variants (Lidl/Lidl's, Sainsbury/Sainsburys/Sainsbury's) to the same identity before comparing, so two different spellings of the same brand never falsely register as a mismatch.
+
+`findLibrarySubstitutes(name, excludeName, limit)` is the looser cousin used for the substitution flow — deliberately allows brand differences (that's the point: offering a real Lidl alternative when the query asks for Asda), returning up to 3 candidates from the same broad food category.
+
+---
+
+## Recipe-aware library suggestions
+
+`suggestMealFromLibrary()` sends both the raw Food Library and saved Recipes (shown per-serving, not just totals) to the AI alongside today's actual remaining macros. The AI's role is limited to choosing which real items/recipes fit — it never computes final totals itself. `renderLibraryComboSuggestions()` resolves each suggestion against real library/recipe data and computes totals deterministically in JS (recipe servings math reuses the exact same formula as `logRecipe()` itself, so a suggested recipe logs identically to manually applying it).
+
+---
+
+
 
 - Tab bleeding — occasional, cosmetic only
 - Cloudflare Worker cannot be updated from Android (use dashboard or laptop)

@@ -4,25 +4,32 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.39
+**Version:** v3.10.133
 
 ---
 
 ## What it does
 
 - **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for GBM/Epilepsy. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
+- **Library-aware meal suggestions** — "📚 From my library" proposes real combinations of saved ingredients and Recipes (proper per-serving math) against today's actual remaining macros, never inventing values. One-tap logging straight from the suggestion.
+- **Ingredient substitution** — if a described food doesn't exactly match your library (wrong brand, etc.), offers real alternatives from what you actually have instead of a silent fresh AI guess. Includes a "save as new item" path for when a flagged duplicate turns out to be a genuinely different product.
+- **Recipes vs Meals** — Recipes support proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly); Meals are simpler single-instance saves for anything eaten in one sitting. Each section explains which fits which use case.
+- **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
+- **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
+- **Nutrition logging sanity checks** — beyond the original meat-carbs and pure-fat plausibility checks: Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight. Flags rather than silently logging bad data; an explicit "are you sure?" gate for genuinely unusual (but real, e.g. batch-cooked) amounts rather than blocking them outright.
 - **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
 - **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
 - **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
-- **Food library** — Meals and Ingredients. Search, A-Z nav (ingredients only), long-press to log, recently scanned items.
+- **Food library** — Meals, Recipes, and Ingredients. Search, A-Z nav (ingredients only), long-press to log, recently scanned items.
 - **Condition/Protocol** — Settings dropdown (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports adapt framing, evidence categorisation and thresholds.
-- **Activity card** — Walking, Resistance + custom exercises. Distance-aware effort auto-calculation. All macro targets adjust dynamically.
+- **Activity card** — Walking, Resistance + custom exercises. Distance-aware effort auto-calculation. All macro targets adjust dynamically. Strength Training log and Routine Templates for saved exercise groupings.
 - **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
 - **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
 - **Boot survival** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots, zero user interaction required.
 - **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
-- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`.
+- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
+- **Demo mode** — "Try a demo first" seeds realistic sample data across nutrition history, Library, Recipes, Routines, and Strength Training, without ever touching real user data.
 
 ---
 
@@ -122,14 +129,14 @@ Walking and any custom activity flagged distance-based also gets effort auto-cal
 
 ## Nutrition targets (current)
 
-These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, etc.) and read fresh via `getTargets()` — not hardcoded. The figures below reflect Pete's actual current settings, not the in-code fallback defaults (which exist only for first-time setup and currently sit at 3670kcal/170g, coincidentally close but not the same source of truth).
+These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, etc.) and read fresh via `getTargets()` — not hardcoded. The figures below reflect Pete's current settings, corrected this session after a height-entry error (188cm, not 178cm) had inflated the TDEE calculation.
 
 | Metric | Target |
 |--------|--------|
-| Calories | 3,670 kcal (+ activity) — raised from 3,500 after a weight plateau at the gaining-phase target; ~3,200 kcal at maintenance |
-| Protein | 165g (+ 15g resistance days) |
-| Carbs | ≤50g standard / ≤75g occasion |
-| Fat | ~248g |
+| Calories | 3,223 kcal base gain-phase (+ activity) |
+| Protein | 166g (1.8g/kg) |
+| Carbs | ≤50g standard / ≤75g occasion / ≤75g holiday |
+| Fat | ≥240g (≥65% of calories, GBM therapeutic floor) |
 | Water | 2,000ml (+ 500ml/hr exercise) |
 
 ---
