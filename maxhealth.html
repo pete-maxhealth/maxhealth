@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><!-- v3.10.121 — Phase 10: ketosis streak milestone celebrations at 7/14/30/50/100/200/365 days -->
+<meta charset="UTF-8"><!-- v3.10.123 — Phase 10: offer substitutes when declining a fuzzy match too, not just when no match is found at all -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>MaxedHealth</title>
 <meta name="theme-color" content="#0a0c0f">
@@ -4551,7 +4551,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.121'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.123'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -4959,6 +4959,24 @@ function declineFuzzyLibraryMatch() {
   const pending = window._pendingFuzzyLibraryMatch;
   if (!pending) return;
   window._pendingFuzzyLibraryMatch = null;
+  // Declining the fuzzy match previously skipped straight to a fresh AI guess,
+  // never offering other library items in the same category — meaning "no,
+  // that's not right" and "I have something else instead" were treated as the
+  // same thing, when they're not. Check for substitutes (excluding the item
+  // just declined) before falling through to a fresh estimate.
+  const substitutes = findLibrarySubstitutes(pending.originalText, pending.match.name);
+  if (substitutes.length) {
+    window._pendingSubstituteOriginalText = pending.originalText;
+    window._pendingSubstitutes = substitutes;
+    const bubble = addBubble('', 'system', 'warn');
+    bubble.innerHTML = `
+      <div style="margin-bottom:10px;">Not that one — but your library also has:</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">
+        ${substitutes.map((s, i) => `<button class="run-btn" style="text-align:left;padding:8px 10px;font-size:13px;" onclick="useLibrarySubstitute(${i})">${s.name} (${s.kcal}kcal · ${s.protein}g P · ${s.fat||0}g F · ${s.carbs}g C per ${s.portion || '100g'})</button>`).join('')}
+      </div>
+      <button class="copy-btn" style="width:100%;padding:8px;font-size:13px;" onclick="declineLibrarySubstitutes()">None of these, log fresh</button>`;
+    return;
+  }
   processMessage(pending.originalText, null, null, true);
 }
 
@@ -4994,11 +5012,18 @@ function findInLibrary(name) {
 // returns a candidate to CONFIRM, not to silently apply — a wrong fuzzy match
 // logged automatically would be worse than the AI-guess it's meant to prevent.
 const LIBRARY_STOPWORDS = new Set(['the','and','with','from','asda','tesco','sainsburys','morrisons','waitrose','aldi','lidl','of','a','an','in','on']);
-const LIBRARY_KNOWN_BRANDS = ['asda','tesco','sainsburys',"sainsbury's",'morrisons','waitrose','aldi','lidl'];
+const LIBRARY_KNOWN_BRANDS = ['asda','tesco',"tesco's",'sainsburys','sainsbury',"sainsbury's",'morrisons','morrison',"morrison's",'waitrose',"waitrose's",'aldi',"aldi's",'lidl',"lidl's"];
+// Several spelling variants (lidl / lidl's, sainsbury / sainsburys / sainsbury's)
+// all refer to the same real store — comparing the raw matched string would
+// wrongly treat "lidl" and "lidl's" as different brands. Canonicalize to a
+// single base form before ever comparing two detected brands against each other.
+function canonicalBrand(matched) {
+  return matched.replace(/'s$/, '').replace(/s$/, '');
+}
 function fuzzyFindInLibrary(name) {
   const lib = loadLibrary();
   const lowerName = name.toLowerCase();
-  const queryBrand = LIBRARY_KNOWN_BRANDS.find(b => lowerName.includes(b));
+  const queryBrand = canonicalBrand(LIBRARY_KNOWN_BRANDS.find(b => lowerName.includes(b)) || '') || null;
   const queryWords = name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
   if (!queryWords.length) return null;
   let best = null, bestScore = 0;
@@ -5010,7 +5035,7 @@ function fuzzyFindInLibrary(name) {
     // query explicitly names a brand and this item explicitly names a different
     // one, that's a real mismatch signal, not noise — skip it outright.
     const itemLower = item.name.toLowerCase();
-    const itemBrand = LIBRARY_KNOWN_BRANDS.find(b => itemLower.includes(b));
+    const itemBrand = canonicalBrand(LIBRARY_KNOWN_BRANDS.find(b => itemLower.includes(b)) || '') || null;
     if (queryBrand && itemBrand && queryBrand !== itemBrand) continue;
     const itemWords = itemLower.split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     if (!itemWords.length) continue;
