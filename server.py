@@ -46,9 +46,6 @@ COMBINED   = os.path.join(TABLES_DIR, 'combined.csv')
 MASTER_CSV      = os.path.join(TABLES_DIR, 'master.csv')
 LIBRARY_CSV     = os.path.join(TABLES_DIR, 'library.csv')
 SUPPLEMENTS_CSV = os.path.join(TABLES_DIR, 'supplements.csv')
-RECIPES_CSV     = os.path.join(TABLES_DIR, 'recipes.csv')
-ROUTINES_CSV    = os.path.join(TABLES_DIR, 'routines.csv')
-STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
@@ -252,18 +249,11 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # CSV endpoints — handle raw text directly
-        if path in ('/save-library-csv', '/save-supplements-csv', '/save-recipes-csv', '/save-routines-csv', '/save-strength-csv'):
+        if path in ('/save-library-csv', '/save-supplements-csv'):
             try:
                 csv_data = raw.decode('utf-8')
                 os.makedirs(TABLES_DIR, exist_ok=True)
-                targets = {
-                    '/save-library-csv': LIBRARY_CSV,
-                    '/save-supplements-csv': SUPPLEMENTS_CSV,
-                    '/save-recipes-csv': RECIPES_CSV,
-                    '/save-routines-csv': ROUTINES_CSV,
-                    '/save-strength-csv': STRENGTH_CSV,
-                }
-                target = targets[path]
+                target = LIBRARY_CSV if path == '/save-library-csv' else SUPPLEMENTS_CSV
                 with open(target, 'w', encoding='utf-8') as lf:
                     lf.write(csv_data)
                 rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
