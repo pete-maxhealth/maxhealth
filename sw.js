@@ -1,4 +1,4 @@
-// MaxedHealth Service Worker v2.0 - minimal, no caching
+// MaxedHealth Service Worker v2.1 - minimal, no caching, forces network-fresh fetch
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => {
   e.waitUntil(
@@ -7,5 +7,11 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 self.addEventListener('fetch', e => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  // { cache: 'no-store' } forces a genuine network round-trip every time,
+  // bypassing the browser's own HTTP cache (which otherwise can satisfy
+  // the request before this fetch handler ever runs, serving a stale
+  // maxhealth.html even though this service worker itself caches nothing).
+  e.respondWith(
+    fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(e.request))
+  );
 });
