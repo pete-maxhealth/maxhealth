@@ -3811,7 +3811,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.137</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.138</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -3836,27 +3836,29 @@ body[data-theme="light"] {
   </div>
 
   <!-- SUPPLEMENT SETTINGS -->
-  <div id="supplementSettingsSection" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="section-title" style="margin:0;cursor:pointer;" onclick="toggleSection('set-supplements','supplementSettingsContent','set-supplements-icon')">Supplements</div>
-        <span id="set-supplements-icon" style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="toggleSection('set-supplements','supplementSettingsContent','set-supplements-icon')">▾ hide</span>
-      </div>
-      <div style="display:flex;gap:6px;">
-        <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="if(confirm('Clear all supplements?')){localStorage.removeItem('mh_supplement_defs');localStorage.removeItem('mh_supplement_log');renderSupplementSettings();renderSupplements();showToast('Supplements cleared ✓')}">Clear all</button>
-        <button class="settings-save-btn" onclick="addSupplement('morning')">+ Add</button>
-      </div>
-    </div>
-    <div id="supplementSettingsContent">
-      <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
-    </div>
+  <!-- Restructured to match the flat title+wrap sibling pattern every other
+       reorderable section uses (title and wrap as direct children of
+       .dash-scroll). The previous version nested both inside an extra
+       supplementSettingsSection wrapper div — the reorder system re-parents
+       title/wrap elements by ID regardless of nesting depth, so that wrapper
+       (plus the Clear-all/+Add buttons living inside it) got left behind,
+       orphaned, whenever this section was moved via the ▲▼ reorder buttons. -->
+  <div class="section-title" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('set-supplements','supplementSettingsContent','set-supplements-icon')">
+    <span>Supplements <span id="set-supplements-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></span>
+    <span style="display:flex;gap:6px;">
+      <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="event.stopPropagation();if(confirm('Clear all supplements?')){localStorage.removeItem('mh_supplement_defs');localStorage.removeItem('mh_supplement_log');renderSupplementSettings();renderSupplements();showToast('Supplements cleared ✓')}">Clear all</button>
+      <button class="settings-save-btn" onclick="event.stopPropagation();addSupplement('morning')">+ Add</button>
+    </span>
   </div>
-
-  <!-- Scroll spacer: ensures supplementSettingsSection (last block above) can always
-       be scrolled flush to the top of the viewport via scrollIntoView, even when its
-       own content is short. Without this, scrollIntoView hits the scroll container's
-       max scrollTop before the section reaches the top and stalls partway down. -->
-  <div style="min-height:50vh;" aria-hidden="true"></div>
+  <div id="supplementSettingsContent">
+    <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
+    <!-- Scroll spacer lives inside the content wrap itself now, so it always
+         travels with this section wherever the reorder system moves it,
+         instead of being stranded as a fixed sibling at the page's original
+         bottom. Ensures scrollIntoView can still bring this section flush
+         to the top even when its own content is short. -->
+    <div style="min-height:50vh;" aria-hidden="true"></div>
+  </div>
 
   </div>
 
@@ -12103,7 +12105,7 @@ function renderSupplements() {
 
   html += `
     <div style="padding:16px 20px;">
-      <button class="copy-btn" style="width:100%;font-size:12px;" onclick="switchTabById('manage');setTimeout(()=>document.getElementById('supplementSettingsSection')?.scrollIntoView({behavior:'smooth'}),400)">
+      <button class="copy-btn" style="width:100%;font-size:12px;" onclick="switchTabById('manage');setTimeout(()=>document.getElementById('supplementSettingsContent')?.scrollIntoView({behavior:'smooth'}),400)">
         ⚙ Manage supplements
       </button>
     </div>`;
@@ -16575,12 +16577,18 @@ function generateWeeklySummary() {
   }
 
   const t = getTargets().standard;
+  const targets = getTargets();
+  // Each day may have been logged under a different carb ceiling (standard/
+  // holiday/occasion) — always check a day against its OWN mode's ceiling,
+  // never a flat one, or holiday/occasion days get misjudged against the
+  // stricter standard limit.
+  const carbCeil = d => targets[d.mode || 'standard']?.carbs ?? t.carbs;
   const avg = key => Math.round(allDays.reduce((a,d)=>a+(d.totals?.[key]||0),0)/allDays.length);
   const avgKcal = avg('kcal'), avgProt = avg('protein'), avgFat = avg('fat'), avgCarbs = avg('carbs');
 
   const treatmentKeywords = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital','infusion'];
   const chemoDays = allDays.filter(d => treatmentKeywords.some(k => (d.notes||'').toLowerCase().includes(k)));
-  const ketoDays = allDays.filter(d => (d.totals?.carbs||0) <= t.carbs);
+  const ketoDays = allDays.filter(d => (d.totals?.carbs||0) <= carbCeil(d));
 
   const barColor = (val, target, isCarbs=false) => {
     if (isCarbs) return val <= target ? '#2deb8f' : '#ff5e5e';
@@ -16592,7 +16600,8 @@ function generateWeeklySummary() {
     const isChemo = treatmentKeywords.some(k => (d.notes||'').toLowerCase().includes(k));
     const kcalW = Math.min(Math.round((d.totals?.kcal||0) / (t.kcal||3300) * 100), 100);
     const protW = Math.min(Math.round((d.totals?.protein||0) / (t.protein||165) * 100), 100);
-    const carbW = Math.min(Math.round((d.totals?.carbs||0) / (t.carbs||50) * 150), 100);
+    const dayCeil = carbCeil(d);
+    const carbW = Math.min(Math.round((d.totals?.carbs||0) / (dayCeil||50) * 150), 100);
     return `
       <div style="padding:8px 0;border-bottom:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -16602,7 +16611,7 @@ function generateWeeklySummary() {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:10px;font-family:Space Mono,monospace;">
           <div><span style="color:var(--green);">${Math.round(d.totals?.protein||0)}g P</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${protW}%;background:${barColor(d.totals?.protein||0,t.protein)};border-radius:2px;"></div></div></div>
           <div><span style="color:#a78bfa;">${Math.round(d.totals?.fat||0)}g F</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${kcalW}%;background:var(--blue);border-radius:2px;"></div></div></div>
-          <div><span style="color:var(--yellow);">${Math.round(d.totals?.carbs||0)}g C</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${carbW}%;background:${barColor(d.totals?.carbs||0,t.carbs,true)};border-radius:2px;"></div></div></div>
+          <div><span style="color:var(--yellow);">${Math.round(d.totals?.carbs||0)}g C</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${carbW}%;background:${barColor(d.totals?.carbs||0,dayCeil,true)};border-radius:2px;"></div></div></div>
         </div>
       </div>`;
   }).join('');
@@ -16772,11 +16781,13 @@ function generateOncologyView() {
   if (h.length === 0) { showToast('No data for selected period'); return; }
 
   const t = getTargets().standard;
+  const targets = getTargets();
+  const carbCeil = d => targets[d.mode || 'standard']?.carbs ?? t.carbs;
   const name = localStorage.getItem('mh_name') || 'Patient';
   const cond = localStorage.getItem('mh_condition') || 'general';
   const avg = key => Math.round(h.reduce((a,d)=>a+(d.totals?.[key]||0),0)/h.length);
   const avgKcal = avg('kcal'), avgProt = avg('protein'), avgFat = avg('fat'), avgCarbs = avg('carbs');
-  const ketoDays = h.filter(d => (d.totals?.carbs||0) <= t.carbs).length;
+  const ketoDays = h.filter(d => (d.totals?.carbs||0) <= carbCeil(d)).length;
   const ketoAdh = Math.round(ketoDays/h.length*100);
   const treatKw = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital','infusion'];
   const treatDays = h.filter(d => treatKw.some(k => (d.notes||'').toLowerCase().includes(k)));
