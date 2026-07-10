@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MARKER: SW_ROUTE_FIX_2026-07-10 — if this line is missing, you have the wrong file
 """
 MaxHealth - Local Server
 Runs on localhost:5757 in Termux (auto-started via Termux:Boot).
@@ -46,6 +47,9 @@ COMBINED   = os.path.join(TABLES_DIR, 'combined.csv')
 MASTER_CSV      = os.path.join(TABLES_DIR, 'master.csv')
 LIBRARY_CSV     = os.path.join(TABLES_DIR, 'library.csv')
 SUPPLEMENTS_CSV = os.path.join(TABLES_DIR, 'supplements.csv')
+RECIPES_CSV     = os.path.join(TABLES_DIR, 'recipes.csv')
+ROUTINES_CSV    = os.path.join(TABLES_DIR, 'routines.csv')
+STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
@@ -249,11 +253,18 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # CSV endpoints — handle raw text directly
-        if path in ('/save-library-csv', '/save-supplements-csv'):
+        if path in ('/save-library-csv', '/save-supplements-csv', '/save-recipes-csv', '/save-routines-csv', '/save-strength-csv'):
             try:
                 csv_data = raw.decode('utf-8')
                 os.makedirs(TABLES_DIR, exist_ok=True)
-                target = LIBRARY_CSV if path == '/save-library-csv' else SUPPLEMENTS_CSV
+                targets = {
+                    '/save-library-csv': LIBRARY_CSV,
+                    '/save-supplements-csv': SUPPLEMENTS_CSV,
+                    '/save-recipes-csv': RECIPES_CSV,
+                    '/save-routines-csv': ROUTINES_CSV,
+                    '/save-strength-csv': STRENGTH_CSV,
+                }
+                target = targets[path]
                 with open(target, 'w', encoding='utf-8') as lf:
                     lf.write(csv_data)
                 rows = len([l for l in csv_data.strip().split('\n') if l]) - 1
@@ -457,10 +468,33 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        elif path == '/sw.js':
+            # Service worker must be served for Chrome to consider this page
+            # installable as a PWA — this route was missing entirely, meaning
+            # every registration attempt silently 404'd and Chrome correctly
+            # refused to offer "Install" (it showed "This app cannot be
+            # installed" instead). no-store here too, matching the reasoning
+            # for maxhealth.html itself — a stuck stale service worker is
+            # exactly the kind of bug that's painful to diagnose after the fact.
+            sw_path = os.path.join(APP_DIR, 'sw.js')
+            if not os.path.exists(sw_path):
+                self.send_json({'error': 'sw.js not found at ' + sw_path}, 404)
+                return
+            with open(sw_path, 'rb') as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
+            self.send_header('Content-Length', str(len(body)))
+            for k, v in CORS.items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
         elif path.startswith('/icons/'):
             # Serve icon files from the maxhealth app directory
             icon_name = os.path.basename(path)
-            icon_path = os.path.join(APP_DIR, 'maxhealth', 'icons', icon_name)
+            icon_path = os.path.join(APP_DIR, 'icons', icon_name)
             if os.path.exists(icon_path):
                 with open(icon_path, 'rb') as f:
                     body = f.read()
