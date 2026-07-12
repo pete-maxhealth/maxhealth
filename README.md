@@ -4,19 +4,31 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.133
+**Version:** v3.10.201
 
 ---
 
 ## What it does
 
+- **Ketosis impact preview** — every "Ready to log" screen shows exactly what would happen if logged: calories/protein/fat as before → after against today's real targets, plus a clear ceiling check (still within it, or over by how much, including whether it would end a current streak). Updates live as the portion amount is adjusted.
+- **Exercise Offset for carb overage** — off by default (Settings). Distinguishes a carb overage meaningfully addressed by logged exercise that day from one left unaddressed, without ever hiding or replacing the raw over-ceiling fact.
+- **Dashboard traffic-light status** — small coloured dots on Calories/Protein/Carbs/Fat. Carbs uses ceiling logic; the other three use gaining-phase logic by default (under-eating is the real risk on a surplus protocol, not exceeding).
+- **Weight intention status** — reads the actual Goal/Phase setting and colours the 14-day weight trend by whether it's serving that goal (losing during a Lose phase is green; gaining is red). No-consequence preview mode to see other goals without changing anything real.
+- **Your Journey** — weight across the entire tracked history, always, independent of any date filter. Points coloured by ketosis status, treatment days marked along the bottom.
+- **Treatment Analysis** — nutrition/ketosis/weight on treatment days vs standard days, plus detected treatment cycles and a comparison against the immediate post-treatment recovery window.
+- **Carb Pattern breakdown** — % of days at Strict Keto/Keto/Low Carb (or neutral equivalents for non-keto conditions), framed around hitting your own chosen target, not a ranking against strict keto.
+- **GBM Research Digest** — persistent, dated home for real research findings, colour-coded Proven/Early Stage/Speculative. Deliberately not automated — the app's AI calls have no live web search, so a "Research Now" attempt was tried, confirmed unreliable, and replaced with a one-tap "Copy Research Request" for pasting into a real chat conversation instead.
+- **Formulas & Technical Reference** — every calculation the app uses, in plain language, in-app. No black boxes.
+- **Unified AI reliability** — all 9 AI call sites (Ask AI, Full Summary, GBM Summary, Oncology narrative, meal parsing, portion estimation, barcode reading, missed-day calculators) now share one function with real error surfacing instead of generic swallowed failures, and image support for vision calls.
+- **Voice logging, refined** — one-tap "Log it" directly on the transcript, real error messages instead of raw codes, subtle mic highlight on treatment-tagged days.
+- **Library duplicate protection, properly consistent** — the same category-mismatch check (a food-category word like "bread" vs "cheese" disqualifies a match, regardless of incidental word overlap) now applies across all four library-matching functions, not just one — found after a generic descriptor match ("white", "slices") slipped a wrong suggestion through three sibling functions that had never been fixed.
 - **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for GBM/Epilepsy. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
 - **Library-aware meal suggestions** — "📚 From my library" proposes real combinations of saved ingredients and Recipes (proper per-serving math) against today's actual remaining macros, never inventing values. One-tap logging straight from the suggestion.
 - **Ingredient substitution** — if a described food doesn't exactly match your library (wrong brand, etc.), offers real alternatives from what you actually have instead of a silent fresh AI guess. Includes a "save as new item" path for when a flagged duplicate turns out to be a genuinely different product.
 - **Recipes vs Meals** — Recipes support proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly); Meals are simpler single-instance saves for anything eaten in one sitting. Each section explains which fits which use case.
 - **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
 - **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
-- **Nutrition logging sanity checks** — beyond the original meat-carbs and pure-fat plausibility checks: Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight. Flags rather than silently logging bad data; an explicit "are you sure?" gate for genuinely unusual (but real, e.g. batch-cooked) amounts rather than blocking them outright.
+- **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
 - **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
 - **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
 - **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
@@ -29,7 +41,7 @@
 - **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
-- **Demo mode** — "Try a demo first" seeds realistic sample data across nutrition history, Library, Recipes, Routines, and Strength Training, without ever touching real user data.
+- **Demo mode, seeded with real data** — "Try a demo first" loads a genuinely rich, anonymised dataset (full 151-item library, 30 real days of history, real recipes/routines/strength sessions) entirely in memory — never touching real storage during a session, exiting restores real data untouched.
 
 ---
 

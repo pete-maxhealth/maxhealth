@@ -1,4 +1,111 @@
-# MaxedHealth Changelog — Phase 10 continued (v3.10.99 – v3.10.133)
+# MaxedHealth Changelog — Phase 11 (v3.10.134 – v3.10.201)
+
+## New Features
+
+**Ketosis impact preview**
+- Every "Ready to log" screen now shows the actual effect of logging: calories/protein/fat as before → after against today's real targets, and a clear carb ceiling check — still within it, over by how much, and whether it would end a current streak
+- Updates live as the portion amount is adjusted, without losing input focus
+
+**Exercise Offset for carb overage**
+- Off by default (Settings). Distinguishes a carb overage meaningfully addressed by that day's logged exercise from one left unaddressed
+- Never hides or replaces the raw over-ceiling fact — a genuinely additional layer, not a replacement
+
+**Dashboard traffic-light status dots**
+- Small coloured indicators on Calories/Protein/Carbs/Fat
+- Carbs uses ceiling logic (green under, red over); the other three use gaining-phase logic by default — under-eating is the real risk on a surplus protocol, not exceeding target
+
+**Weight intention status**
+- Derives intention from the actual Goal/Phase setting (not a separate, potentially-conflicting setting) and colours the 14-day trend by whether it's serving that goal
+- No-consequence preview mode in Settings — see how the status would read under a different goal, using real weight/trend data, without changing anything real
+
+**Your Journey (full-history view)**
+- Weight across the entire tracked history, always, independent of the Today/30/60/All filter
+- Points coloured by ketosis status; treatment days marked separately; third colour for exercise-addressed overage when that setting is enabled
+
+**Treatment Analysis (merged with the former Chemo Cycle Analysis)**
+- Nutrition, ketosis adherence, and weight compared on treatment days vs standard days
+- Detected treatment cycles and a specific comparison against the immediate 7-day recovery window folded in from the old standalone section — same information, one coherent story instead of two overlapping ones
+
+**Carb Pattern breakdown**
+- % of days at Strict Keto / Keto / Low Carb — or neutral equivalent tiers for non-keto conditions, since "keto" framing isn't meaningful for diabetes management or general health goals
+- Encouragement keyed to adherence against the user's own chosen ceiling, not a ranking against strict keto specifically
+
+**GBM Research Digest**
+- Persistent, dated, condition-gated home for real research findings, colour-coded Proven / Early Stage / Speculative matching Monthly Summary
+- A "Research Now" live-search attempt was built, tested, and found unreliable (the app's AI calls have no real web search) — replaced with "Copy Research Request", a one-tap prompt to paste into a real chat conversation instead
+
+**Formulas & Technical Reference**
+- Every calculation the app uses — BMR, TDEE, MET-based exercise calories, macro ratios, carb ceiling logic — documented in plain language, in-app
+
+**Voice logging, finished**
+- One-tap "Log it" directly on the transcript rather than needing to find the separate send button
+- Real, actionable error messages instead of raw error codes
+- Subtle mic highlight on treatment-tagged days
+
+**why-free.html reinstated**
+- Rebuilt with the real JustGiving crowdfunding link, generic (non-itemised) donation framing, and a second option (Headcase Cancer Trust)
+
+**Demo mode seeded with real anonymised data**
+- Previously generic placeholder data; now a genuinely rich dataset built from real history — full 151-item library, 30 real days of nutrition/wearable history, real recipes/routines/strength sessions
+- Sensitive specifics (weight, supplement names/doses, condition tags) fictionalised; food/exercise/recipe data kept as-is since it isn't personally sensitive
+- Found and fixed: supplements had no demo-mode protection at all (no guard on load or save) — now matches the same safe pattern as every other dataset
+
+**ℹ️ info-icon pattern**
+- Reusable tap-to-reveal explanation component for features that could be confused with a similar one, without cluttering the screen by default
+
+## AI Reliability
+
+**Unified AI calling — one function instead of nine separate copies**
+- Every AI call site (Ask AI, Full Summary, GBM Summary, Oncology narrative, portion estimation, health-context queries, both missed-day calculators, barcode reading) now shares one function
+- Real errors surfaced (HTTP status, actual message) instead of a generic swallowed "Could not generate" — this is what made it possible to actually diagnose an Anthropic billing/credit issue instead of guessing at 9 separately "broken" features
+- Image support added for vision calls (barcode reading), so that path could join the same shared function too
+- Several paths previously always hit the shared proxy regardless of a configured personal API key — now correctly respect a configured key first
+
+## Bug Fixes
+
+**Flat carb-ceiling comparison — found in 8 separate places**
+- Weekly Summary, Oncology Report, Report Summary, the ketosis streak counter, Treatment Analysis, GBM Stats, the AI Brief generator, and Sleep & Ketosis correlation were all comparing every day against a flat standard-only ceiling, regardless of that day's actual logged mode (occasion/holiday days incorrectly counted as failures)
+- Each now judges a day against its own mode's ceiling
+- The AI Brief generator specifically had a worse variant: `getTargets().carbs` doesn't exist on the object returned (it returns `{standard, occasion, holiday}`), so the comparison was always `undefined` and adherence was being reported as 0% unconditionally, every time, regardless of actual data
+
+**Library fuzzy-matching — category-mismatch, found in 4 separate functions**
+- Generic descriptor words ("white", "slices") were scoring as match evidence with no regard for whether the actual food category matched — "Warburtons white bread" could surface "white cheese" as a match purely on coincidental word overlap
+- Fixed in the strict duplicate-check finder first; found the identical bug, unfixed, in three sibling functions (substitute suggestions, Add Food comparison, the duplicate scanner) — all four now share the same food-category disqualification check
+
+**Onboarding: height/age/sex collected but never saved**
+- Used for a live TDEE preview during setup but never actually written to the persistent profile keys anywhere in onboarding — a new user would enter this data, see it work, then have it silently discarded on completion
+- Fixed at the step where it's collected, plus a defensive re-save in the final "Start Tracking" button
+
+**Print/PDF silently failing in standalone PWA mode**
+- `window.open()`-based printing has nowhere to open a new window into once the app is an installed standalone PWA — failed with zero visible error
+- Replaced with a hidden-iframe approach that works identically in a normal browser tab or the installed app
+
+**Clinical report buttons never appearing**
+- The Clinical export mode was rendering into an old "backwards compatibility" placeholder div, not the real shared output container — Print/Copy/AI-summary buttons were never actually reachable, not just visually broken
+
+**Multi-match library picker going dead after first selection**
+- Picking any item cleared the state backing the whole picker before the resulting preview was even confirmed — cancelling that preview left a list that looked interactive but did nothing
+
+**Dashboard/History layout overflow**
+- Progress tiles and History day-summary rows switched from cramped single-row layouts to proper 2-column grids after longer text (added target comparisons, percentage figures) no longer fit
+
+**History: no target comparison**
+- Added actual/target for every macro on every day, using that day's own mode-aware ceiling — not previously visible at all, only raw totals
+
+## Refactoring
+
+- `updateDashboard`: 413 → 263 lines (4 self-contained blocks extracted, animation logic deduplicated)
+- `renderTrends`: 563 → 477 lines (gap-detection extracted, two canvas helpers hoisted out of per-render redefinition, one genuinely dead function removed)
+- `processMessage`: 603 → 543 lines (6 keyword-query handlers extracted to named functions)
+- Deliberately did not touch the rollover logic, AI-parsing core, or library-matching core during any of the above — extracted only what was clearly safe and self-contained, left the delicate/central logic exactly as it was
+
+## Documentation
+
+- User guide updated with all of the above — two new sections (Dashboard intelligence, Smarter logging), Reports section extended, Demo Mode note added to Setup
+- README and this changelog brought current
+- Fixed a genuine pre-existing bug in the patient guide (a missing closing `</div>` on the opening-letter container, present since whenever that section was first written) while checking documentation more broadly
+
+---
 
 ## New Features
 

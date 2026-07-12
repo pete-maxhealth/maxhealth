@@ -88,6 +88,10 @@ date|kcal|protein|carbs|fat|notes
 | `mh_celebrated_milestones` | Ketosis streak day-counts already celebrated, so milestones fire once ever |
 | `mh_recipes` | Saved Recipes JSON (servings-based, distinct from Meals in `mh_library`) |
 | `mh_routines` | Saved Routine Templates (named exercise lists) |
+| `mh_exercise_offset_enabled` | Exercise Offset for carb overage — on/off, off by default |
+| `mh_exercise_offset_pct` | Exercise Offset threshold % (default 100 — exercise must burn at least as many calories as the excess carbs represent) |
+| `mh_gbm_research_digests` | Saved GBM Research Digest entries (JSON array, dated, newest first) |
+| `mh_height_cm` / `mh_age` / `mh_sex` | Profile basics — power `getCurrentTDEE()`; now correctly saved during onboarding, not just read for the live preview and then discarded |
 
 ---
 
@@ -355,13 +359,37 @@ Checks 1-2 auto-correct silently with a visible explanation; checks 3-6 either a
 
 `fuzzyFindInLibrary(name)` — used for both "did you mean X?" confirmation and duplicate-detection before saving. Strips stopwords, then requires word-overlap ≥50% (≥99% for 2-word queries, to prevent a single shared generic word like "mince" or "chicken" from false-matching completely different products — found via a real case: "chicken mince" matching "beef mince" on the shared word "mince" alone).
 
-**Brand and meat-type disqualification:** if the query names a specific supermarket brand (Asda, Tesco, Sainsbury's, Lidl, etc.) or meat/protein type (chicken, beef, pork, etc.) that genuinely differs from a candidate's, that candidate is disqualified outright regardless of overall word-overlap score — these are treated as definitive mismatch signals, not just words to strip as noise. `canonicalBrand()`/`canonicalMeatType()` normalize spelling variants (Lidl/Lidl's, Sainsbury/Sainsburys/Sainsbury's) to the same identity before comparing, so two different spellings of the same brand never falsely register as a mismatch.
+**Brand, meat-type, and food-category disqualification:** if the query names a specific supermarket brand, meat/protein type, or food category (bread, cheese, milk, rice, pasta, etc.) that genuinely differs from a candidate's, that candidate is disqualified outright regardless of overall word-overlap score. Food-category disqualification was added after a real case: "Warburtons white bread" matched "white cheese (triangular slices)" purely because two generic descriptor words ("white", "slices") happened to overlap, while the words that actually identify the food ("bread" vs "cheese") shared nothing. `canonicalBrand()`/`canonicalMeatType()`/`canonicalCategory()` normalize spelling/plural variants to the same identity before comparing.
+
+This same category-mismatch check exists in **four** separate matching functions — `fuzzyFindInLibrary` (strict duplicate check), `findLibrarySubstitutes` (loose substitution flow), `findComparableLibraryItems` (Add Food comparison), and the duplicate scanner's `nameScore`. All four were found to have the identical underlying vulnerability; fixing one and assuming the others were safe was itself a mistake caught mid-session — check all matching functions together when fixing this class of bug, not just the one that happened to surface first.
 
 `findLibrarySubstitutes(name, excludeName, limit)` is the looser cousin used for the substitution flow — deliberately allows brand differences (that's the point: offering a real Lidl alternative when the query asks for Asda), returning up to 3 candidates from the same broad food category.
 
 ---
 
-## Recipe-aware library suggestions
+## Unified AI calling — callHealthAI()
+
+Every AI call in the app (Ask AI, Full Summary, GBM Summary, Oncology narrative, portion estimation, health-context queries, both missed-day calculators, barcode reading) routes through one shared function, `callHealthAI(prompt, {maxTokens, system, image, webSearch})`, instead of each maintaining its own copy of the fetch/parse logic.
+
+**Why this mattered in practice:** the previous per-call-site copies each had their own fallback of the form `text = response.content?.[0]?.text || 'Could not generate X.'` — meaning any unexpected response (a proxy error, a rate limit, an empty completion) was silently swallowed into an identical generic message everywhere, with zero indication of the actual cause. When the Anthropic account backing the shared proxy ran out of credit, every AI feature appeared to fail identically and independently — the unified function's real error surfacing (HTTP status, actual error body) is what made it possible to diagnose this as one external billing issue in a single step, rather than investigating 9 separately "broken" features.
+
+Returns `{ok: true, text}` or `{ok: false, error}` — callers check `.ok` and show `.error` directly rather than a canned message. Provider selection (configured Claude/OpenAI key vs shared default proxy) happens once, inside the function, so a configured personal API key is now correctly respected by every call site — several previously always hit the shared proxy regardless.
+
+`webSearch: true` adds the Messages API's native `web_search_20250305` tool to the request. Tried for the GBM Research Digest specifically — the model correctly refused to fabricate results rather than inventing plausible-sounding citations when it turned out the proxy doesn't reliably forward this through, which is the right failure mode, just not a useful one. Replaced with a "Copy Research Request" button instead: copies a ready-made prompt for pasting into a real chat conversation, where genuine web search exists.
+
+---
+
+## Day-mode-aware ceiling comparison (recurring bug pattern)
+
+`getTargets()` returns `{standard, occasion, holiday}` — carb ceilings differ by day mode. A day should always be judged against **its own logged mode's** ceiling, not a flat standard-only one, or an occasion/holiday day within its own (wider) ceiling gets wrongly counted as a failure.
+
+This exact bug — comparing every day against `getTargets().standard.carbs` regardless of `day.mode` — was found independently in **eight** separate places over one session: Weekly Summary, Oncology Report, Report Summary, the ketosis streak counter, Treatment Analysis, GBM Stats, the AI Brief generator, and Sleep & Ketosis correlation. The AI Brief generator had a more severe variant — `getTargets().carbs` doesn't exist at all on the object returned (no top-level `.carbs`), so the comparison was always against `undefined`, meaning adherence was reported as 0% unconditionally, regardless of actual data, every time that specific report ran.
+
+The fix pattern used consistently: `const carbCeilFor = d => targetsAll[d.mode || 'standard']?.carbs ?? targetsAll.standard.carbs;` then compare each day against `carbCeilFor(day)` rather than a single flat value captured once outside the loop. Worth checking for a ninth instance if a carb-adherence percentage anywhere looks wrong on an occasion/holiday-heavy period — this was never fixed via one exhaustive sweep, only found opportunistically while working on something else each time.
+
+---
+
+
 
 `suggestMealFromLibrary()` sends both the raw Food Library and saved Recipes (shown per-serving, not just totals) to the AI alongside today's actual remaining macros. The AI's role is limited to choosing which real items/recipes fit — it never computes final totals itself. `renderLibraryComboSuggestions()` resolves each suggestion against real library/recipe data and computes totals deterministically in JS (recipe servings math reuses the exact same formula as `logRecipe()` itself, so a suggested recipe logs identically to manually applying it).
 
