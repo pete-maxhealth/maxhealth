@@ -1,0 +1,81 @@
+#!/bin/bash
+# bump_and_deploy.sh — bumps MaxHealth version string, commits, and pushes.
+# Usage: ./bump_and_deploy.sh 3.10.135 "Fix: description of change"
+#
+# There are TWO places the version lives in maxhealth.html:
+#   1. The static "MaxedHealth v3.10.X" display text (settingsVersionDisplay)
+#   2. const APP_VERSION = 'v3.10.X'  — a separate JS constant that OVERWRITES
+#      #1 at runtime via initSettings(). These drifted apart for a long time
+#      because only #1 was ever being bumped — the live app kept showing the
+#      old APP_VERSION no matter what the file said. Both must always be
+#      updated together, in the same commit, or this happens again.
+
+set -e
+
+NEW_VERSION="$1"
+MESSAGE="$2"
+
+if [ -z "$NEW_VERSION" ] || [ -z "$MESSAGE" ]; then
+  echo "Usage: ./bump_and_deploy.sh <version> \"<commit message>\""
+  echo "Example: ./bump_and_deploy.sh 3.10.135 \"Fix: whatever\""
+  exit 1
+fi
+
+FILE="maxhealth.html"
+
+# Safety: confirm the current version in the file before changing anything
+CURRENT=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE" || echo "NOT FOUND")
+APP_VER_CURRENT=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE" || echo "NOT FOUND")
+echo "Current display version:     v$CURRENT"
+echo "Current APP_VERSION const:   v$APP_VER_CURRENT"
+if [ "$CURRENT" != "$APP_VER_CURRENT" ]; then
+  echo "WARNING: display version and APP_VERSION constant are already out of sync!"
+  echo "This bump will bring both back in line at v$NEW_VERSION, but flagging it so you know it happened."
+fi
+echo "New version will be:         v$NEW_VERSION"
+read -p "Proceed? (y/n) " CONFIRM
+if [ "$CONFIRM" != "y" ]; then
+  echo "Aborted."
+  exit 1
+fi
+
+# Update the static display string — must be exactly one occurrence
+DISPLAY_COUNT=$(grep -c "MaxedHealth v$CURRENT" "$FILE")
+if [ "$DISPLAY_COUNT" != "1" ]; then
+  echo "WARNING: expected exactly 1 occurrence of the display version string, found $DISPLAY_COUNT. Aborting — check manually."
+  exit 1
+fi
+sed -i "s/MaxedHealth v$CURRENT/MaxedHealth v$NEW_VERSION/" "$FILE"
+
+# Update the APP_VERSION constant — must also be exactly one occurrence
+APPVER_COUNT=$(grep -c "const APP_VERSION = 'v$APP_VER_CURRENT'" "$FILE")
+if [ "$APPVER_COUNT" != "1" ]; then
+  echo "WARNING: expected exactly 1 occurrence of the APP_VERSION constant, found $APPVER_COUNT. Aborting — check manually."
+  exit 1
+fi
+sed -i "s/const APP_VERSION = 'v$APP_VER_CURRENT'/const APP_VERSION = 'v$NEW_VERSION'/" "$FILE"
+
+# Div balance check (mandatory per project convention)
+OPEN=$(grep -o '<div' "$FILE" | wc -l)
+CLOSE=$(grep -o '</div>' "$FILE" | wc -l)
+if [ "$OPEN" != "$CLOSE" ]; then
+  echo "WARNING: div mismatch — open=$OPEN close=$CLOSE. Aborting, do not commit."
+  exit 1
+fi
+echo "Div balance OK: $OPEN open / $CLOSE close"
+
+# Final sanity check: both version references now actually match the new version
+FINAL_DISPLAY=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE")
+FINAL_APPVER=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE")
+if [ "$FINAL_DISPLAY" != "$NEW_VERSION" ] || [ "$FINAL_APPVER" != "$NEW_VERSION" ]; then
+  echo "WARNING: post-update check failed — display=$FINAL_DISPLAY, APP_VERSION=$FINAL_APPVER, expected=$NEW_VERSION. Aborting, do not commit."
+  exit 1
+fi
+echo "Version sync confirmed: both display text and APP_VERSION now read v$NEW_VERSION"
+
+git add "$FILE"
+git commit -m "v$NEW_VERSION: $MESSAGE"
+git push
+
+echo "Done. Deployed v$NEW_VERSION."
+

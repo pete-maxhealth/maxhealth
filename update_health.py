@@ -391,7 +391,7 @@ def run_extractor(device, inbox, password=None, dry_run=False):
     Run a device extractor. Returns {date: row_dict} or {} on failure.
     Extractors live in extractors/ subdirectory.
     """
-    extractor_path = os.path.join(os.path.dirname(__file__), 'extractors', f'{device}.py')
+    extractor_path = os.path.join(BASE, 'extractors', f'{device}.py')
 
     if not os.path.exists(extractor_path):
         log(device, 'extract', 'warn',  f"No extractor found at {extractor_path}")

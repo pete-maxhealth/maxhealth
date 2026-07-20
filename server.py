@@ -569,23 +569,24 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json([])
 
 
-        elif path == '/library':
-            if os.path.exists(LIBRARY_CSV):
-                with open(LIBRARY_CSV, 'r', encoding='utf-8') as lf:
-                    body = lf.read().encode('utf-8')
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/csv')
-                self.send_header('Content-Length', str(len(body)))
-                for k, v in CORS.items():
-                    self.send_header(k, v)
-                self.end_headers()
-                self.wfile.write(body)
-            else:
-                self.send_json({'status': 'empty'})
-
-        elif path == '/supplements':
-            if os.path.exists(SUPPLEMENTS_CSV):
-                with open(SUPPLEMENTS_CSV, 'r', encoding='utf-8') as lf:
+        elif path in ('/library', '/supplements', '/recipes', '/routines', '/strength'):
+            # Mirrors the save side's dict-driven approach exactly (see the
+            # /save-*-csv handler above). Previously library/supplements/
+            # strength each had their own near-identical GET handler, while
+            # recipes and routines had NONE at all — meaning anything saved
+            # there could never be read back once lost from localStorage,
+            # even though it was safely sitting in the CSV the whole time.
+            # One table, one handler, all five datasets treated consistently.
+            csv_sources = {
+                '/library':     LIBRARY_CSV,
+                '/supplements': SUPPLEMENTS_CSV,
+                '/recipes':     RECIPES_CSV,
+                '/routines':    ROUTINES_CSV,
+                '/strength':    STRENGTH_CSV,
+            }
+            source = csv_sources[path]
+            if os.path.exists(source):
+                with open(source, 'r', encoding='utf-8') as lf:
                     body = lf.read().encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'text/csv')
