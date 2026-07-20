@@ -23,7 +23,6 @@ fi
 
 FILE="maxhealth.html"
 
-# Safety: confirm the current version in the file before changing anything
 CURRENT=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE" || echo "NOT FOUND")
 APP_VER_CURRENT=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE" || echo "NOT FOUND")
 echo "Current display version:     v$CURRENT"
@@ -39,7 +38,6 @@ if [ "$CONFIRM" != "y" ]; then
   exit 1
 fi
 
-# Update the static display string — must be exactly one occurrence
 DISPLAY_COUNT=$(grep -c "MaxedHealth v$CURRENT" "$FILE")
 if [ "$DISPLAY_COUNT" != "1" ]; then
   echo "WARNING: expected exactly 1 occurrence of the display version string, found $DISPLAY_COUNT. Aborting — check manually."
@@ -47,7 +45,6 @@ if [ "$DISPLAY_COUNT" != "1" ]; then
 fi
 sed -i "s/MaxedHealth v$CURRENT/MaxedHealth v$NEW_VERSION/" "$FILE"
 
-# Update the APP_VERSION constant — must also be exactly one occurrence
 APPVER_COUNT=$(grep -c "const APP_VERSION = 'v$APP_VER_CURRENT'" "$FILE")
 if [ "$APPVER_COUNT" != "1" ]; then
   echo "WARNING: expected exactly 1 occurrence of the APP_VERSION constant, found $APPVER_COUNT. Aborting — check manually."
@@ -55,7 +52,6 @@ if [ "$APPVER_COUNT" != "1" ]; then
 fi
 sed -i "s/const APP_VERSION = 'v$APP_VER_CURRENT'/const APP_VERSION = 'v$NEW_VERSION'/" "$FILE"
 
-# Div balance check (mandatory per project convention)
 OPEN=$(grep -o '<div' "$FILE" | wc -l)
 CLOSE=$(grep -o '</div>' "$FILE" | wc -l)
 if [ "$OPEN" != "$CLOSE" ]; then
@@ -64,7 +60,6 @@ if [ "$OPEN" != "$CLOSE" ]; then
 fi
 echo "Div balance OK: $OPEN open / $CLOSE close"
 
-# Final sanity check: both version references now actually match the new version
 FINAL_DISPLAY=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE")
 FINAL_APPVER=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE")
 if [ "$FINAL_DISPLAY" != "$NEW_VERSION" ] || [ "$FINAL_APPVER" != "$NEW_VERSION" ]; then
@@ -75,7 +70,28 @@ echo "Version sync confirmed: both display text and APP_VERSION now read v$NEW_V
 
 git add "$FILE"
 git commit -m "v$NEW_VERSION: $MESSAGE"
-git push
 
-echo "Done. Deployed v$NEW_VERSION."
+if ! git push; then
+  echo ""
+  echo "❌ PUSH FAILED — the commit exists locally but was NOT sent to GitHub."
+  echo "The cloud version has NOT been updated. Fix the error above, then run:"
+  echo "  git push"
+  echo "manually, and verify with: git log origin/main -1"
+  exit 1
+fi
 
+git fetch origin main --quiet
+LOCAL_HEAD=$(git rev-parse HEAD)
+REMOTE_HEAD=$(git rev-parse origin/main)
+if [ "$LOCAL_HEAD" != "$REMOTE_HEAD" ]; then
+  echo ""
+  echo "❌ PUSH VERIFICATION FAILED"
+  echo "Local HEAD:  $LOCAL_HEAD"
+  echo "Remote HEAD: $REMOTE_HEAD"
+  echo "These don't match — something is wrong even though git push didn't error."
+  echo "Do NOT assume the cloud version updated. Investigate before continuing."
+  exit 1
+fi
+
+echo "✓ Push verified — origin/main now matches local HEAD ($LOCAL_HEAD)"
+echo "Done. Deployed v$NEW_VERSION to cloud."
