@@ -94,11 +94,17 @@ For anything other than `maxhealth.html` itself (worker.js, docs, scripts), comm
 
 ## Full backup
 
+Two separate layers need covering — a filesystem backup can't reach into the browser's storage, and the browser can't back up server files.
+
+**1. In the app itself: Settings → Data & Backup → 📦 EXPORT ALL DATA** — captures everything living only in browser storage (today's log, full history, library, recipes, routines, settings). Nothing else backs this up automatically; it only exists if this button gets tapped.
+
+**2. Filesystem (local install only):**
 ```bash
 pkg install zip -y
 cd /storage/emulated/0/maxhealth
-zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/maxhealth/ data/tables/
+zip -r "/storage/emulated/0/Download/maxhealth_full_backup_$(date +%Y%m%d).zip" app/maxhealth/ data/tables/ data/backup/
 ```
+(`data/backup/` holds the pipeline's own rolling 7-day backups of the CSV/JSON files — previously missed by this command, meaning a restore from an older version of this zip alone would have current data but no historical fallback.)
 
 ---
 
