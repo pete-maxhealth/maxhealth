@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.201
+**Version:** v3.10.272
 
 ---
 
@@ -42,6 +42,10 @@
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
 - **Demo mode, seeded with real data** — "Try a demo first" loads a genuinely rich, anonymised dataset (full 151-item library, 30 real days of history, real recipes/routines/strength sessions) entirely in memory — never touching real storage during a session, exiting restores real data untouched.
+- **Log food to a past day** — from History, add a forgotten or mis-logged item to any previous day through the exact same AI-parsing pipeline used for today (text, photo, barcode, library). Recalculates that day's totals from its full log automatically, no manual arithmetic.
+- **Multi-AI consensus check** — verify any logged item against Claude, Gemini, and ChatGPT independently, one tap. Three estimates agreeing is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as worth finding a real label rather than trusting any of them. Each provider's own numbers are checked for internal consistency before comparing. Per-provider checkboxes let you exclude an outlier before applying an average to a single item.
+- **Activity Credit Balance** — rolling-window tracking (Insights → Trends) of exercise calorie credit earned vs actually eaten back, built from real stored history. A single day under an exercise-boosted target is harmless; this surfaces the pattern if it's happening often enough to compound into something real, with interpretation tailored to your actual Goal/Phase setting.
+- **Phase-aware calorie context** — Remaining Today distinguishes harmless unclaimed exercise credit from genuine under-eating against your actual base target, worded differently for maintain/gain/lose goals.
 
 ---
 
@@ -81,8 +85,12 @@ If you already have an older shortcut pointing at the GitHub Pages URL, delete i
 ```bash
 cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html
 cd /storage/emulated/0/maxhealth/app/maxhealth
-git add -A && git commit -m "vX.X.X — description" && git push
+bash bump_and_deploy.sh X.X.X "description"
 ```
+
+`bump_and_deploy.sh` bumps both version references, checks div balance, commits, pushes, and — critically — verifies the push actually landed on `origin/main` rather than trusting that `git push` printing something reassuring means it worked (this was silently failing for roughly 100 versions before the check existed). A `.gitignore` now excludes `__pycache__/`, backup files, and trash artifacts, so `git status` stays meaningful.
+
+For anything other than `maxhealth.html` itself (worker.js, docs, scripts), commit manually and selectively — avoid `git add -A`, which will happily stage pycache and stray backup files alongside real changes.
 
 ## Full backup
 
@@ -98,8 +106,9 @@ zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/m
 
 ```
 maxhealth/
-├── maxhealth.html      # Complete PWA (~900KB)
-├── worker.js           # Cloudflare Worker proxy
+├── maxhealth.html      # Complete PWA (~1.3MB)
+├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
+├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
 ├── why-free.html       # Why MaxedHealth is free
 ├── user-guide.html     # User guide
 ├── server.py           # Local HTTP server (Termux)
@@ -141,7 +150,7 @@ Walking and any custom activity flagged distance-based also gets effort auto-cal
 
 ## Nutrition targets (current)
 
-These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, etc.) and read fresh via `getTargets()` — not hardcoded. The figures below reflect Pete's current settings, corrected this session after a height-entry error (188cm, not 178cm) had inflated the TDEE calculation.
+These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, etc.) and read fresh via `getTargets()` — not hardcoded.
 
 | Metric | Target |
 |--------|--------|
@@ -156,7 +165,7 @@ These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, et
 ## Tech stack
 
 - Single-file HTML/CSS/JS PWA (~900KB)
-- Claude (Anthropic) via Cloudflare Worker proxy
+- Claude (Anthropic), Gemini (Google), and ChatGPT (OpenAI) via a shared Cloudflare Worker proxy — Claude for all standard AI features, all three in parallel for the multi-AI consensus check
 - Open Food Facts API (barcode)
 - Web Speech API (voice input)
 - Python HTTP server (Termux/Android)
@@ -166,6 +175,6 @@ These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, et
 
 ## Why it exists
 
-Built by Pete following a GBM diagnosis. Therapeutic ketogenic protocol requires precise macro tracking — this makes that possible daily. See [why-free.html](why-free.html).
+Built following a GBM diagnosis. My therapeutic ketogenic protocol requires precise macro tracking — this makes that possible daily. See [why-free.html](why-free.html).
 
 *Built with Claude by Anthropic.*

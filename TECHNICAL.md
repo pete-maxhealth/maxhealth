@@ -92,6 +92,10 @@ date|kcal|protein|carbs|fat|notes
 | `mh_exercise_offset_pct` | Exercise Offset threshold % (default 100 — exercise must burn at least as many calories as the excess carbs represent) |
 | `mh_gbm_research_digests` | Saved GBM Research Digest entries (JSON array, dated, newest first) |
 | `mh_height_cm` / `mh_age` / `mh_sex` | Profile basics — power `getCurrentTDEE()`; now correctly saved during onboarding, not just read for the live preview and then discarded |
+| `mh_goal` | Goal/Phase — `lose` / `maintain` / `gain`. Drives the Suggested Targets calculator, Weight Phase History, and phase-aware calorie/activity-credit messaging |
+| `mh_provider` | AI provider selection — `none` (proxy) / `claude` / `openai`. Determines whether `callHealthAI()` calls Anthropic/OpenAI directly with a personal key, or falls through to the shared Cloudflare Worker proxy |
+| `mh_apikey` | Personal API key, used only when `mh_provider` is `claude` or `openai` |
+| `mh_activity_credit_window` | Activity Credit Balance's rolling window size in days (default 14, adjustable 7-90 directly in the card) |
 
 ---
 
@@ -150,18 +154,33 @@ Fires in `updateDashboard()` when `state.lastDate !== todayStr()`.
 
 ## Cloudflare Worker
 
+Two request modes, one `worker.js` file:
+
+**Normal path** — forwards whatever the client actually requests rather than hardcoding anything. Previously silently forced `claude-haiku-4-5` and `max_tokens: 500` regardless of the client's request, meaning every proxy-routed call (the default for anyone without their own API key, including the entire cloud version) ran on a smaller model with a harder cap than any feature was designed around. Now:
+
 ```javascript
-// worker.js — passes model and max_tokens through from app
-body: JSON.stringify({
-  model: body.model || 'claude-sonnet-4-6',
-  max_tokens: body.max_tokens || 1024,
-  system: body.system,
-  messages: body.messages
-})
+const model = body.model || 'claude-sonnet-4-6';
+const maxTokens = body.max_tokens || 800;
+const anthropicBody = { model, max_tokens: maxTokens, system: body.system, messages: body.messages };
+if (body.tools) anthropicBody.tools = body.tools; // web search etc. — previously dropped silently too
 ```
 
-Update via Cloudflare dashboard → Workers & Pages → maxhealth-ai → Edit code.
-Cannot be deployed from Android (Wrangler requires x86_64).
+**`multiCheck` path** — triggered by `body.multiCheck === true`. Fans out the same prompt to Claude, Gemini (`gemini-3.5-flash`), and OpenAI (`gpt-5.4-mini`) via `Promise.allSettled`, so one provider failing (bad key, quota, safety block) doesn't take down the other two. Returns `{claude, gemini, openai}`, each `{ok: true, text}` or `{ok: false, error}` — no averaging or merging happens server-side, since disagreement between providers is itself the useful signal the client displays.
+
+Requires `GEMINI_API_KEY` and `OPENAI_API_KEY` as Worker secrets (Settings → Variables and Secrets), alongside the existing `ANTHROPIC_API_KEY`. The Gemini call includes one automatic retry after a short delay specifically for 503 "high demand" errors, per Google's own documented guidance for that error class — genuinely common right after a model's release as everyone piles onto it at once.
+
+**Deployment — from Android, without Wrangler:**
+
+Wrangler requires glibc (macOS/Windows/Linux); Termux uses Android's Bionic libc, so it cannot run there at all, with no workaround. The actual solution is Cloudflare's REST API directly via `curl`, which Termux already has:
+
+```bash
+curl -X PUT "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/maxhealth-ai" \
+  -H "Authorization: Bearer API_TOKEN" \
+  -F 'metadata={"main_module":"worker.js","compatibility_date":"2024-01-01"};type=application/json' \
+  -F "worker.js=@worker.js;type=application/javascript+module"
+```
+
+The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard → profile → My Profile → API Tokens). The `metadata`/`type=application/javascript+module` combination matters — a plain `Content-Type: application/javascript` PUT only works for the legacy "service worker" syntax (`addEventListener('fetch', ...)`), not the ES module syntax (`export default { async fetch... }`) this worker actually uses.
 
 ---
 
@@ -180,6 +199,7 @@ Cannot be deployed from Android (Wrangler requires x86_64).
 | v3.3.x | 9 | Activity layout, water dynamic, rollover guard |
 | v3.4.x | 9 | Custom modals, intelligence analysis, rollover rewrite |
 | v3.10.x | 10 | Library-aware meal suggestions, ingredient substitution, recipe-aware suggestions, dashboard/tab reordering, ketosis milestones, four new nutrition sanity checks, demo mode overhaul, corrected TDEE (height fix: 188cm not 178cm) |
+| v3.10.202-272 | 12 | Multi-AI consensus check (Claude/Gemini/OpenAI), log food to a past day, Activity Credit Balance, phase-aware calorie context — plus a large infrastructure/reliability pass: Worker request-forwarding, direct-API-key path (missing body, missing CORS header), sleep pipeline extractors-path bug, cloud deploy silently ~100 versions behind, fuzzy-match apostrophe/brand fixes, activity-credit duplicate-calculation unification |
 
 ---
 
@@ -189,8 +209,9 @@ Cannot be deployed from Android (Wrangler requires x86_64).
 ```bash
 cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html
 cd /storage/emulated/0/maxhealth/app/maxhealth
-git add -A && git commit -m "vX.X.X — description" && git push
+bash bump_and_deploy.sh X.X.X "description"
 ```
+Handles version bump (both references), div-balance check, commit, push, and push verification (confirms `origin/main` actually matches local HEAD after pushing — this was silently failing for ~100 versions before the verification step existed). For anything other than `maxhealth.html` (worker.js, docs), commit manually and selectively; avoid `git add -A`, which stages pycache/backup noise alongside real changes.
 
 **Full backup:**
 ```bash
@@ -257,6 +278,8 @@ Zepp exports are AES-encrypted zip files. Python's stdlib `zipfile` cannot decry
 - All other fields follow fill-only merge — Withings owns weight/body comp, RingConn owns HRV/sleep/SpO2/HR.
 
 `fix_amazfit_steps.py` — one-off retroactive correction tool. Run manually after fixing the pipeline to backfill historical data.
+
+**Extractors-path bug — sleep data stalled at a fixed date for over a week.** A folder restructure moved `server.py`/`maxhealth.html` a level deeper (`app/` → `app/maxhealth/`) without updating the extractors path inside the *copy* of `update_health.py` that the in-app Sync Now button actually calls. That path was computed relative to the script's own file location (`os.path.dirname(__file__)`), so after the restructure it silently pointed at a folder that didn't exist — every sync reported "no extractor found" for every device and returned zero new data, with nothing visibly wrong from the UI. A second, older, disconnected copy of `update_health.py` also existed one level up, resolving its `BASE` constant to a completely different (non-existent) data folder if ever run manually. Fixed by deleting the stray copy and correcting the extractors path in the one canonical script to resolve from `BASE` (which was already correct) rather than the script's own directory. Worth checking for this same class of bug — a path computed relative to `__file__` rather than a shared, correct base constant — anywhere else a folder restructure might have silently broken.
 
 ---
 
@@ -365,6 +388,11 @@ This same category-mismatch check exists in **four** separate matching functions
 
 `findLibrarySubstitutes(name, excludeName, limit)` is the looser cousin used for the substitution flow — deliberately allows brand differences (that's the point: offering a real Lidl alternative when the query asks for Asda), returning up to 3 candidates from the same broad food category.
 
+**Two further false-positive causes found this session, both in the same class of bug:**
+
+1. **Unrecognized brand on one side.** The existing brand-mismatch protection only works when *both* names have a brand recognized from `LIBRARY_KNOWN_BRANDS`. If the query names a real, recognized brand but the candidate's own brand isn't in that list at all (an unusual or misspelled name), the protection silently doesn't apply — the match falls through to generic word-overlap scoring. This let "turkey sausage Asda" match "Turkey Sausages x2 Oakhahen" on 2 of 3 words, missing only the brand itself, since "Oakhahen" wasn't a recognized brand and so couldn't be flagged as a mismatch. Fix: when the query names a real brand but the candidate's brand can't be identified at all, require every query word to match rather than the normal partial threshold, since the one disqualifying signal (brand) is precisely the one that can't be verified either way.
+2. **Apostrophes break substring matching entirely.** As raw text, `"tennent's".includes("tennents")` is false — the apostrophe interrupts the character sequence, so a query typed without it ("Tennents") never matches a library name that has it ("Tennent's"), regardless of how similar they otherwise are. Affects any possessive brand name (McDonald's, Cadbury's, Warburton's). Fixed by stripping both straight and curly apostrophes (`/['\u2019]/g`) from both the query and item words before splitting into comparison tokens, in both `fuzzyFindInLibrary` and `findLibrarySubstitutes`.
+
 ---
 
 ## Unified AI calling — callHealthAI()
@@ -376,6 +404,13 @@ Every AI call in the app (Ask AI, Full Summary, GBM Summary, Oncology narrative,
 Returns `{ok: true, text}` or `{ok: false, error}` — callers check `.ok` and show `.error` directly rather than a canned message. Provider selection (configured Claude/OpenAI key vs shared default proxy) happens once, inside the function, so a configured personal API key is now correctly respected by every call site — several previously always hit the shared proxy regardless.
 
 `webSearch: true` adds the Messages API's native `web_search_20250305` tool to the request. Tried for the GBM Research Digest specifically — the model correctly refused to fabricate results rather than inventing plausible-sounding citations when it turned out the proxy doesn't reliably forward this through, which is the right failure mode, just not a useful one. Replaced with a "Copy Research Request" button instead: copies a ready-made prompt for pasting into a real chat conversation, where genuine web search exists.
+
+**Two structural bugs found this session, specific to the direct-API-key path** (provider set to Claude/OpenAI with a personal key configured, rather than the shared proxy):
+
+1. **Missing request body entirely.** The direct-Claude branch's `fetch()` call had no `body:` field at all — sending Anthropic a genuinely empty request every time. Surfaced as "The request body is not valid JSON: zero-length, empty document" once the API key itself was confirmed valid, which is what made it identifiable rather than looking like another key/connectivity issue.
+2. **Missing CORS header.** Direct browser calls to Anthropic's API require `anthropic-dangerous-direct-browser-access: true` — without it, the browser silently blocks the response as a CORS violation, surfacing only as a generic `TypeError: Failed to fetch` with no other detail. This meant the direct-key path had likely never worked from a browser context since it was first built, masked because an invalid key failed at a different, more informative stage before ever reaching the CORS check.
+
+Both fixed in `callHealthAI()`. Two other functions (`suggestMealFromLibrary`, `_processLabelEstimate`) had their own separate, older request-building code instead of using this shared helper, and read the API key from the wrong localStorage key (`mh_api_key` instead of `mh_apikey`) — always behaving as if no direct key was configured. Consolidated onto `callHealthAI()`, closing both the wrong-key bug and the two structural ones above for these paths at the same time.
 
 ---
 
@@ -389,18 +424,74 @@ The fix pattern used consistently: `const carbCeilFor = d => targetsAll[d.mode |
 
 ---
 
+## Duplicate activity-calorie calculations (found and unified this session)
 
+Two genuinely separate implementations existed for "how many extra calories does today's exercise earn": `updateActivityNudge()` / `calcActivityKcal()` (a proper `MET × weight(kg) × hours` calculation, feeding the real dashboard total) and `getActivityNudge()` (an older, cruder function powering the pinned-tag banner specifically, which just checked whether any tag *text* contained a word like "cardio" or "walking" and added a flat `+150kcal` regardless of actual logged duration — a 10-minute walk and a 3-hour walk scored identically).
+
+Because these operated on entirely different data (structured `getActivities()` duration/effort vs raw tag string matching), they could — and did — disagree by an order of magnitude for the same real day's exercise (150kcal vs 1241kcal for the same 100 minutes of walking). Fixed by rewriting `getActivityNudge()` to call `calcActivityKcal()` the same way the dashboard total does, so the banner and the dashboard can no longer show two different numbers for the same day again. Both functions also had `getTargets().standard` hardcoded regardless of the actual current day mode — fixed to read `getTargets()[state.dayMode]`, though this doesn't currently change any real output since `kcal` targets are presently identical across day modes (only the carb ceiling varies by mode).
+
+---
+
+## Library-aware meal suggestions
 
 `suggestMealFromLibrary()` sends both the raw Food Library and saved Recipes (shown per-serving, not just totals) to the AI alongside today's actual remaining macros. The AI's role is limited to choosing which real items/recipes fit — it never computes final totals itself. `renderLibraryComboSuggestions()` resolves each suggestion against real library/recipe data and computes totals deterministically in JS (recipe servings math reuses the exact same formula as `logRecipe()` itself, so a suggested recipe logs identically to manually applying it).
 
 ---
 
+## Log food to a past day
+
+`runMultiAICheck` and past-day logging share the same underlying principle: reuse the existing pipeline rather than build a parallel one. Triggered from History's "🍽 + Add food to this day", which sets `window._logTargetDate` and switches to the normal Log tab — the exact same chat interface, AI parsing, photo/barcode/library support as logging today.
+
+`logFoods()` — the single choke point every logging path already funnels through — checks this flag early: if set and not today, it takes a simplified path that appends the entry to that historical day's `log` array (rather than `state.todayLog`), recomputes `day.totals` by summing the full log (the same pattern already used by `editHistEntry`/`deleteHistEntry`), and skips every today-only side effect (water auto-add, weight-stamping, the "today's remaining" confirmation bubble, save-to-library prompts) since none of those make sense for a day that isn't today. A persistent yellow banner shows which day is currently targeted, cleared automatically once the log commits.
+
+---
+
+## Multi-AI consensus check
+
+`runMultiAICheck(targetIndex)` — an optional index scopes the check to a single item within a larger pending meal (the common real case: verify the roast beef specifically, not the whole plate); omitted, it checks the whole pending list.
+
+Sends a strict-format prompt (`KCAL: / PROTEIN: / FAT: / CARBS:`, nothing else) to the Worker's `multiCheck` endpoint, which fans it out to Claude/Gemini/OpenAI in parallel. Each provider's raw response is checked two ways:
+
+1. **Cross-provider disagreement** — a >25% spread between the highest and lowest calorie estimate is flagged as worth finding a real label, not trusted as-is.
+2. **Internal (Atwater) consistency** — each provider's own stated kcal is checked against what its own reported macros actually add up to (`protein×4 + fat×9 + carbs×4`). A >15% gap flags that specific estimate as internally sloppy, independent of how it compares to the others.
+
+Averaging only applies when checking a single item (`isSingleItem`) — a whole multi-item meal has no single field a blended number could apply to. Per-provider checkboxes (rendered per result, `id="{checkId}-{providerKey}"`) let a wildly-off provider be excluded before applying the average; read at click time via `applyMultiAIAverage()`, not baked in when the results first rendered, so unchecking something genuinely excludes it. If an edit form for a different item happens to be open when a check starts, it's closed explicitly with a toast rather than silently disappearing later when the preview re-renders.
+
+---
+
+## Activity Credit Balance
+
+`getUnclaimedActivityCredit(windowDays)` — reads real stored history (`day.exercises`, already precomputed per-exercise `kcal`; `day.totals.kcal` for actual intake; `day.mode` for that day's base target via `TARGETS[day.mode]`). For each day with logged exercise credit, computes how much of that credit was actually "claimed" by eating above base target (`surplusAboveBase = max(0, actual - baseTarget)`), and how much went unclaimed (`max(0, dayCredit - surplusAboveBase)`) — if intake didn't even reach base that day, none of the credit was claimed at all.
+
+Rendered in Insights → Trends via `renderActivityCreditBalance()`, called from `renderTrends()`. Window defaults to 14 days, adjustable 7–90 via an input in the card itself (`mh_activity_credit_window` in localStorage) — deliberately kept as a simple in-card control rather than a separate Settings entry, since it's the only real "tuning" this feature needs. Interpretation text differs by `mh_goal` (maintain/gain/lose), since "25%+ of earned credit went unclaimed" means a different thing depending on which direction the user is actually trying to move.
+
+---
+
+## Phase-aware calorie context
+
+Added to `updateDashboard()`'s Remaining Today section (`#calorieContextNote`), populated whenever `activityExtra > 0` for the day. Computes `vsBase = totals.kcal - targets.kcal` (surplus/deficit against the *base*, non-exercise-adjusted target) and `vsBoosted = totals.kcal - adjustedKcalTarget` (the same, against the exercise-boosted target), then picks wording based on `mh_goal`:
+
+- **Above base already**: the gap to the boosted number is framed as unclaimed activity credit, not a real shortfall — wording differs slightly for maintain (reassuring) vs gain (still worth closing if maximising gain pace matters) vs lose (fine either way).
+- **Below base**: flagged regardless of goal, since this isn't about unclaimed exercise room at all — it's genuine under-eating.
+
+This is the single-day companion to Activity Credit Balance above — this note explains what *today's* number means; the Insights card tracks whether the same pattern is recurring often enough to matter.
+
+---
 
 
-- Tab bleeding — occasional, cosmetic only
-- Cloudflare Worker cannot be updated from Android (use dashboard or laptop)
-- Monthly summary may truncate if Cloudflare Worker caps `max_tokens` — check Worker script if this occurs
+
+---
+
+## Known issues
+
 - Water target celebration not firing
+- `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
+- OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
+
+**Resolved this session, previously listed here:**
+- ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)
+- ~~Monthly summary may truncate if Cloudflare Worker caps `max_tokens`~~ — this was the Worker's hardcoded `max_tokens: 500`, now forwards the client's actual request
+- ~~Tab bleeding — occasional, cosmetic only~~ — was specifically the Reset button's text overflowing its container once a 6th hydration button was added; fixed with overflow/ellipsis safety on the button style
 
 ---
 

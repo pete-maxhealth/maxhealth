@@ -1,4 +1,150 @@
-# MaxedHealth Changelog — Phase 11 (v3.10.134 – v3.10.201)
+# MaxedHealth Changelog — Phase 12 (v3.10.202 – v3.10.272)
+
+The biggest single session in the app's history — roughly 70 versions. Most of it was infrastructure and reliability work that doesn't show up as a visible feature, but fixes a genuine, sometimes months-old bug underneath something that looked fine on the surface.
+
+## New Features
+
+**Log food to a past day**
+- History → any day → "🍽 + Add food to this day" routes into the exact same AI-parsing pipeline used for today's logging (text, photo, barcode, library — all of it), with a persistent yellow banner making clear which day is being targeted
+- Recalculates that day's totals from its full log automatically — no manual arithmetic
+- Solves the recurring problem of a missed or mis-logged item on a previous day requiring the day's totals to be hand-adjusted
+
+**Multi-AI consensus check**
+- "🔍 Verify across 3 AIs" on any logged item — Claude, Gemini, and ChatGPT independently estimate the same food in parallel via the Cloudflare Worker, one round-trip
+- Deliberately does not average or pick a winner by default — three estimates agreeing closely is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as "find a real label, don't trust any of these"
+- Each provider's own numbers are checked for internal consistency (protein×4 + fat×9 + carbs×4 against its own stated kcal) — catches an estimate that's internally sloppy even before comparing it to the others
+- Per-provider checkboxes let you exclude an outlier before applying an average to a single item; works per-item within a multi-item meal, not just on a whole plate at once
+- Requires Gemini and OpenAI API keys configured as Worker secrets in addition to the existing Anthropic one — genuinely free on Gemini's tier for occasional use, small real cost on OpenAI (no persistent free tier)
+
+**Activity Credit Balance**
+- New card in Insights → Trends: rolling-window (default 14 days, adjustable) tracking of exercise calorie credit earned vs actually eaten back, built from real stored history (`day.exercises`, already precomputed), not an estimate
+- Goal-aware interpretation — under 25% unclaimed is treated as noise regardless of goal; above that, framed differently for maintain (a real compounding deficit), gain (quietly eating into the intended surplus), and lose (expected in moderation, flagged if it's grown larger than intended)
+- Exists because a single day running under an exercise-boosted target is genuinely harmless, but the same pattern repeating often compounds into something real without ever tripping a single day's warning
+
+**Phase-aware calorie context**
+- Remaining Today now distinguishes being under the exercise-boosted target (harmless unclaimed activity credit) from genuinely being under the base target (real under-eating) — the two were previously indistinguishable from the headline number alone
+- Worded differently depending on the actual Goal/Phase setting (maintain/gain/lose), since "under the boosted number" means something different for each
+
+**440ml Pint water preset**
+- Added alongside Glass/Can/Bottle/Custom on the hydration bar
+
+**find_orphans.py**
+- Standalone maintenance script (not part of the app) — flags functions/variables that appear only at their own declaration and never anywhere else, plus duplicate function names, as a manual review checklist
+- Deliberately a heuristic, not an auto-delete tool — a name showing up here can still be genuinely needed (a reserved feature, something called in a way static text-matching can't see)
+
+## AI Infrastructure — found this session, most of it long-standing
+
+**Cloudflare Worker was silently overriding every request**
+- Hardcoded `claude-haiku-4-5` and `max_tokens: 500` regardless of what the app actually requested, for every proxy-routed call — meaning anyone without their own API key (the cloud version's default) had been running on a smaller model with a harder token cap than any individual feature was ever designed around
+- Fixed to forward `model`/`max_tokens`/`tools` from the actual request, falling back to sensible defaults only if the client omits them
+
+**Direct-API-key path was structurally broken since it was built**
+- Missing the `anthropic-dangerous-direct-browser-access` header required for any direct browser call to Anthropic's API — without it, every direct-key request was silently blocked as a CORS violation, surfacing only as a generic, unhelpful "Failed to fetch"
+- Separately, `callHealthAI()`'s direct-Claude branch had **no request body at all** in the fetch call — sending Anthropic a genuinely empty request every time a direct key was configured, which Anthropic reported back as "zero-length, empty document"
+- Both fixed; this was likely the actual cause of "Check what fits from my library" failing intermittently for weeks, previously misdiagnosed as an exposed/invalid key several times over
+
+**Wrong localStorage key bypassing the shared AI helper**
+- Two functions (`suggestMealFromLibrary`, `_processLabelEstimate`) read `mh_api_key` (with an underscore) instead of the actual key name `mh_apikey`, so they always behaved as if no direct key was configured regardless of what was actually set — consolidated onto the same shared `callHealthAI()` helper every other AI call already used correctly
+
+**App Health Check now tests the real function**
+- The AI-connection live test was previously a separately hand-built request that happened to be constructed correctly — meaning it could never have caught the missing-body bug above, since it never actually exercised the buggy code path
+- Now calls `callHealthAI()` directly, plus a new live multi-AI test section
+
+**Gemini model — settled after two wrong guesses**
+- First attempt (`gemini-3.5-flash`) hit genuine "high demand" 503s; switched to `gemini-2.5-flash` believing an older model would be more stable — turned out Google was actively restricting 2.5-flash for new API keys ahead of its official shutdown date
+- Reverted to `gemini-3.5-flash` (confirmed current GA flagship, Google's own recommended replacement), with one automatic retry on a 503 after a short delay, matching Google's own documented guidance for this error class
+
+## Data Pipeline
+
+**Sleep data stalled at a fixed date for over a week**
+- A folder restructure moved `server.py`/`maxhealth.html` a level deeper without updating the extractors path inside the copy of `update_health.py` that Sync Now actually calls — every sync silently found zero extractors and reported "no data" without ever touching the real ones
+- A second, older, disconnected copy of `update_health.py` existed one level up, resolving `BASE` to a completely different (non-existent) data folder — deleted; one canonical script remains
+- Amazfit/Zepp AES-256 decryption fixed — `zipfile` cannot decrypt AES regardless of password; `pyzipper` required. Password flows correctly through the existing CLI arg / `ZEPP_PASSWORD` env var plumbing once the decryption library itself was correct
+
+**Cloud deployment found ~100 versions behind**
+- `git push` had been silently failing with no error surfaced for an extended period — added explicit push verification to `bump_and_deploy.sh` (confirms local HEAD matches `origin/main` after pushing, not just that the command ran without throwing)
+- `.gitignore` added for `__pycache__/`, backup files, and trash artifacts, which had been accumulating as noise in every `git status`
+
+## Logging & Library
+
+**Whole-item scaling bug**
+- A food with a non-numeric amount (e.g. "1 can") defaulted its scaling baseline to 100g — correcting the displayed amount to the item's true size (e.g. 440ml) multiplied already-correct total values by the wrong factor instead of leaving them alone
+- Fixed to also check the food's name for an embedded size before falling back to a guess, and to warn explicitly when no real size can be found anywhere rather than silently assuming one
+- Live auto-scaling added to the per-ingredient edit modal separately — previously had zero connection between the amount field and the macro fields at all
+
+**Fuzzy-match false positives, two distinct causes found**
+- An unrecognized brand on one side let generic word overlap alone trigger a false match ("turkey sausage Asda" matched "Turkey Sausages x2 Oakhahen" on 2 of 3 words, missing only the brand) — now requires every word to match when one side's brand can't be identified at all, rather than falling back to a partial threshold
+- Apostrophes broke matching entirely as raw text — "Tennents" (typed) never matched "Tennent's" (library) since the apostrophe interrupts the character sequence; affects any possessive brand name (McDonald's, Cadbury's, etc.), fixed by normalizing apostrophes out of both sides before comparing
+
+**Fuzzy-match confirmation UI was hiding its own real choices**
+- Both actual options ("Overwrite" and "save separately") existed in the code but sat behind an unlabeled tap-to-reveal step with nothing signalling it was interactive — looked exactly like only one action existed. Now shows both choices and the value comparison immediately
+
+**Carb auto-correction wrongly zeroing processed meat products**
+- Sausage, chorizo, black pudding, pâté and similar were being treated as "plain meat" (definitionally zero carbs) when they're compound products with real fillers/binders that do carry carbs — a turkey sausage's genuine 8.6g label carbs were being zeroed to 0g
+- Added these to the exclusion list the correction already used for breaded/battered/sauced items
+
+**"Haven't eaten this" wasn't actually being honoured**
+- Tapping "Just add to library (haven't eaten this)" showed a toast reminder but still presented the normal Log It / Save / Cancel choice, relying on a second correct tap — one wrong tap logged food that was never eaten as if it had been
+- Fixed: once that intent is declared, Log It is no longer offered at all for that preview, with a note explaining why
+
+**Silent failure saving to library with no pending item**
+- A completely silent early exit if the item hadn't finished loading when "save to library" was tapped — now shows a real message, plus diagnostic logging throughout the whole save path for any future case
+
+**Impossible-mass warning now suggests a number**
+- Previously flagged that protein+fat+carbs exceeded a food's stated weight without saying what the weight should actually be — now states the real minimum plausible weight, calculated from the same numbers already on screen
+
+**Photo portion-estimation prompt rewritten**
+- Now prioritises visible cutlery/glassware as a size reference over the plate itself (a fork is ~18-20cm almost universally; plates vary 23-32cm+ across venues)
+- Explicit guidance to account for stacked/overlapping food (sliced meat, piled sides) rather than judging only the visible top-down area
+- Asks the AI to flag its own estimates as approximate (~±20%) instead of stating them with false precision
+
+**Raw JSON leaking into chat on AI self-correction**
+- When the AI second-guessed itself mid-response (e.g. logging something as water, then catching that it has real calories and correcting to food), the existing JSON-recovery regex was greedy — it swallowed both JSON blocks *and* the English commentary between them into one invalid blob, which failed every repair attempt and fell back to dumping the raw text as-is
+- Fixed with proper brace-depth-counted extraction of each complete JSON object individually, preferring the last valid one (since a self-correction means that one is the real answer)
+
+## Dashboard & Activity
+
+**Exercise credit banner disconnected from the real calculation**
+- The "+Xkcal from activity" banner was a flat-rate guess based on tag text alone (+150 for any "cardio" tag, whether it represented a 10-minute walk or 3 hours) — completely different from the proper MET-based calculation (`MET × weight × hours`) already powering the dashboard's own total, which could show a wildly different, larger number for the same day
+- Unified onto the same real calculation the dashboard already used, so the banner and the dashboard can no longer disagree
+
+**Misleading "below baseline" headline**
+- On a day with a substantial logged walk, the headline compared only the *incidental* (non-walk) step remainder against the daily baseline and phrased it as if it were a verdict on the whole day's activity — reworded to make clear it's only describing steps outside the logged walk when one exists
+
+## Settings & Dashboard Polish
+
+**Manage screen defaulting every section open**
+- A collapse-by-default mechanism already existed but had every section wired to default open regardless — defeating the entire purpose and making Manage a wall of expanded cards on every visit
+- Fixed to default closed except Profile; also found 3 sections missing from the list entirely, meaning they could never even remember a manually-collapsed state
+
+**Dismissible dashboard warnings**
+- Goal Check and the Ketosis Zone alert can now be dismissed — deliberately session-only (not persisted to localStorage), so a genuinely ongoing issue reappears next reload/day rather than being silenced forever by one dismissal
+
+**Reset button text bleeding**
+- Adding a 6th button (Pint) to the hydration row caused Reset's text to overflow past its own container — added overflow/ellipsis safety to the button style so this can't recur regardless of button count
+
+**Demo Mode reachable from Settings**
+- Previously only offered on first-run onboarding; added a link under Settings → About, confirmed safe to trigger mid-session (snapshots real state in memory, never touches localStorage during the swap)
+
+## Website
+
+**Donation messaging corrected to be actually honest**
+- "It cost nothing to make it free" was simply false — real API and Claude subscription costs land on Pete, not end users; corrected across `story.html`, and the donation ask on `why-free.html` reframed from "support my costs" to "keep the project running"
+
+**Third-person self-reference converted to first person**
+- Across `story.html` and the patient guide's narrative prose — structural elements (bylines, signatures, section headings, table-of-contents entries) deliberately left as-is, since those function as attribution/navigation rather than narrative voice
+
+**Wearables list clarified**
+- Was worded like a hard requirement list; now states these are the *tested* devices specifically, and the underlying pipeline works with any export giving one row per day
+
+## Process
+
+**Div-balance validation methodology corrected**
+- Had been stripping `<script>` content before counting balance, which misses the vast majority of this app's actual HTML (built dynamically inside JavaScript template literals) — now validates the full file, matching what the deploy script itself checks, after this exact gap let a real deploy-blocking imbalance go undetected for one release
+
+---
+
+
 
 ## New Features
 
