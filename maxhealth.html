@@ -2445,6 +2445,11 @@ body[data-theme="light"] {
       <div id="goalMismatchBanner" style="display:none;"></div>
     </div>
 
+    <!-- BACKUP REMINDER — shows on the main dashboard (not just the occasional EOD
+    summary) since that's the one place guaranteed to be seen daily, including by
+    cloud-only users who have no automatic server-side backup at all -->
+    <div id="backupReminderBanner" style="display:none;"></div>
+
     <!-- ACTIVITY CARD (now includes Strength Training — merged per user feedback that
          two separate cards for exercise-related logging read as confusing duplication) -->
     <div class="activity-card" id="activityCard">
@@ -4040,7 +4045,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.278</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.279</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4788,7 +4793,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.278'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.279'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -12669,6 +12674,45 @@ function dismissWarning(el) {
   if (el.parentElement) el.parentElement.style.display = 'none';
 }
 
+// Surfaces the same backup reminder the EOD summary already uses (same
+// mh_last_export_nudge key, same 7-day threshold) on the main dashboard
+// instead — the EOD summary only appears in an occasional specific flow,
+// which a cloud-only user (no automatic server-side backup at all) might
+// rarely trigger. The dashboard is the one place guaranteed to be seen
+// every single day.
+function checkBackupReminder() {
+  const el = document.getElementById('backupReminderBanner');
+  if (!el) return;
+
+  const lastExport = localStorage.getItem('mh_last_export_nudge');
+  const today = new Date().toISOString().slice(0,10);
+  const daysSince = lastExport
+    ? Math.floor((new Date(today) - new Date(lastExport)) / 86400000)
+    : 999;
+
+  if (daysSince < 14) {
+    el.style.display = 'none';
+    return;
+  }
+
+  const msg = lastExport
+    ? `It's been ${daysSince} days since your last export — your data lives only in this browser, with nothing backing it up automatically.`
+    : `You haven't exported a backup yet — your data lives only in this browser, with nothing backing it up automatically.`;
+
+  window._dismissedWarnings = window._dismissedWarnings || new Set();
+  if (window._dismissedWarnings.has(msg)) {
+    el.style.display = 'none';
+    return;
+  }
+
+  el.style.display = 'block';
+  el.innerHTML = `<div style="position:relative;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);border-radius:10px;padding:12px 30px 12px 14px;margin-bottom:12px;font-size:12px;color:var(--yellow);line-height:1.6;">
+    💾 <strong>Back up your data:</strong> ${msg}
+    <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';" style="display:block;width:100%;margin-top:8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.35);color:var(--yellow);border-radius:6px;padding:7px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">📦 Export now</button>
+    <span onclick="dismissWarning(this)" data-warning-key="${msg.replace(/"/g,'&quot;')}" data-rerender="checkBackupReminder" style="position:absolute;top:8px;right:10px;cursor:pointer;color:var(--yellow);opacity:0.6;font-size:16px;line-height:1;padding:4px;">×</span>
+  </div>`;
+}
+
 function checkGoalMismatch() {
   const el = document.getElementById('goalMismatchBanner');
   if (!el) return;
@@ -13186,6 +13230,7 @@ function updateDashboard(skipActivityRender) {
   updateOccasionBanner();
   applyDashboardOrder();
   checkGoalMismatch();
+  checkBackupReminder();
   if (!skipActivityRender) renderActivityCard();
   renderStrengthCard();
   // Restore the Daily Steps input from its saved value, and apply its collapse state —
