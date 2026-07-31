@@ -4045,7 +4045,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.279</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.280</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4793,7 +4793,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.279'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.280'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -11834,12 +11834,15 @@ function showSaveIngredientsDialog(foods, saveBar) {
     // product, so it silently created a second entry instead of ever offering
     // to overwrite. Real fuzzy word-overlap matching catches this properly.
     const dupe = fuzzyFindInLibrary(f.name);
+    // A flagged possible match previously only ever offered to overwrite it -
+    // no way to say "this is genuinely a different product, keep both" short
+    // of unchecking the item entirely and losing it. Now toggleable.
     const dupeLabel = dupe
-      ? `<span style="font-size:10px;color:var(--yellow);margin-left:4px;">(possibly already saved as "${dupe.name}" — tick to compare &amp; overwrite)</span>`
+      ? `<span style="font-size:10px;color:var(--yellow);margin-left:4px;">(possibly already saved as "${dupe.name}" — <span onclick="event.preventDefault();toggleSaveSeparately(this)" style="text-decoration:underline;cursor:pointer;">save as new instead</span>)</span>`
       : '';
     const checked = !dupe ? 'checked' : '';
     return `
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" data-existing-name="${dupe ? dupe.name.replace(/"/g,'&quot;') : ''}">
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;" data-existing-name="${dupe ? dupe.name.replace(/"/g,'&quot;') : ''}" data-save-separately="false">
         <input type="checkbox" data-idx="${i}" ${checked}
           style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
         <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}${dupeLabel}</span>
@@ -11860,6 +11863,19 @@ function showSaveIngredientsDialog(foods, saveBar) {
     </div>`;
 }
 
+// Flips a flagged item between "overwrite the existing match" and "this is
+// genuinely different, save separately" - auto-checks the checkbox too,
+// since explicitly choosing how to save something implies wanting to save it.
+function toggleSaveSeparately(span) {
+  const label = span.closest('label');
+  if (!label) return;
+  const checkbox = label.querySelector('input[type="checkbox"]');
+  const isSeparate = label.dataset.saveSeparately === 'true';
+  label.dataset.saveSeparately = isSeparate ? 'false' : 'true';
+  if (checkbox) checkbox.checked = true;
+  span.textContent = isSeparate ? 'save as new instead' : 'overwrite instead';
+}
+
 function confirmSaveIngredients(btn) {
   const saveBar = btn.closest('[data-savebar]');
   const foods = saveBar?._saveFoods;
@@ -11877,8 +11893,9 @@ function confirmSaveIngredients(btn) {
     if (!f) return;
     const label = cb.closest('label');
     const existingName = label?.dataset.existingName || '';
+    const saveSeparately = label?.dataset.saveSeparately === 'true';
     const entry = {
-      name:    existingName || f.name, // keep the existing library name when overwriting a fuzzy match, not the newly-typed one
+      name:    (existingName && !saveSeparately) ? existingName : f.name, // keep the existing library name when overwriting a fuzzy match, not the newly-typed one - unless explicitly saving separately
       kcal:    Math.round(f.kcal * 100) / 100,
       protein: Math.round(f.protein * 100) / 100,
       fat:     Math.round((f.fat || 0) * 100) / 100,
@@ -11891,9 +11908,12 @@ function confirmSaveIngredients(btn) {
     // previously this used only exact-name matching, missing fuzzy matches like
     // "Elmlea whipping cream" against an existing "Elmlea Double Cream" entry,
     // which silently created a second entry instead of ever offering to overwrite.
-    const existingIdx = existingName
-      ? lib.findIndex(l => l.name.toLowerCase() === existingName.toLowerCase())
-      : lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
+    // Skipped entirely when the user explicitly chose "save as new instead".
+    const existingIdx = saveSeparately
+      ? -1
+      : (existingName
+        ? lib.findIndex(l => l.name.toLowerCase() === existingName.toLowerCase())
+        : lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase()));
     if (existingIdx > -1) {
       const old = lib[existingIdx];
       const diff = `${old.name}: ${old.kcal}→${entry.kcal}kcal, ${old.protein}→${entry.protein}g P, ${old.fat}→${entry.fat}g F, ${old.carbs}→${entry.carbs}g C`;
