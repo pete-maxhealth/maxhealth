@@ -4045,7 +4045,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.284</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.285</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4793,7 +4793,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.284'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.285'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -17432,6 +17432,7 @@ function getFullBodyCompositionHistory() {
     const headers = lines[0].replace(/\r/g,'').split(',').map(h => h.trim());
     const idx = h => headers.indexOf(h);
     const iDate = idx('date');
+    const iWeight = idx('weight');
     const iMuscleKg = idx('muscle_mass_kg');
     const iFatKg = idx('fat_mass_kg');
     const iMusclePct = idx('muscle_pct');
@@ -17444,6 +17445,7 @@ function getFullBodyCompositionHistory() {
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',');
       const dateIso = (cols[iDate] || '').trim();
+      const weightKg = iWeight >= 0 ? parseFloat(cols[iWeight]) : NaN;
       const muscleKg = iMuscleKg >= 0 ? parseFloat(cols[iMuscleKg]) : NaN;
       const fatKg = iFatKg >= 0 ? parseFloat(cols[iFatKg]) : NaN;
       if (!dateIso || (isNaN(muscleKg) && isNaN(fatKg))) continue;
@@ -17453,6 +17455,7 @@ function getFullBodyCompositionHistory() {
       out.push({
         date: ddmmyy,
         isoDate: dateIso,
+        weight: isNaN(weightKg) ? null : weightKg, // same smart-scale reading as muscle/fat below - lets weight/muscle/fat deltas all be computed from one consistent measurement pair, instead of weight being sourced separately from daily manual logs on potentially different dates
         muscle_mass_kg: isNaN(muscleKg) ? null : muscleKg,
         fat_mass_kg: isNaN(fatKg) ? null : fatKg,
         muscle_pct: iMusclePct >= 0 ? cols[iMusclePct]?.trim() : null,
@@ -19180,14 +19183,30 @@ function getReferenceEventComparisons() {
     const mostRecent = days[days.length - 1];
     const daysSince = Math.round((new Date() - mostRecent.dt) / 86400000);
 
-    const wThen = nearestWeightOnOrBefore(mostRecent.dt);
-    const weightDelta = (wThen && latestWeight && wThen.date !== latestWeight.date)
-      ? +(latestWeight.weight - wThen.weight).toFixed(1) : null;
-
     const bThen = nearestBodyCompOnOrBefore(mostRecent.dt);
-    const muscleDelta = (bThen?.muscle_mass_kg != null && latestBodyComp?.muscle_mass_kg != null)
+
+    // Prefer weight from the SAME smart-scale reading as muscle/fat, when
+    // available - this is what keeps all three deltas comparing the exact
+    // same measurement pair, rather than weight (from daily manual logs)
+    // and muscle/fat (from Withings) potentially spanning different dates
+    // entirely while being presented as one aligned "since X" comparison.
+    const alignedWeightAvailable = bThen?.weight != null && latestBodyComp?.weight != null;
+
+    const weightDelta = alignedWeightAvailable
+      ? +(latestBodyComp.weight - bThen.weight).toFixed(1)
+      : (() => {
+          const wThen = nearestWeightOnOrBefore(mostRecent.dt);
+          return (wThen && latestWeight && wThen.date !== latestWeight.date)
+            ? +(latestWeight.weight - wThen.weight).toFixed(1) : null;
+        })();
+
+    // Muscle/fat only reported when there's a genuine aligned reading pair -
+    // never computed against a body-comp date that doesn't match whichever
+    // weight figure ended up being used above, which would silently
+    // reintroduce the same mismatched-dates problem this fix exists to avoid.
+    const muscleDelta = alignedWeightAvailable && bThen?.muscle_mass_kg != null && latestBodyComp?.muscle_mass_kg != null
       ? +(latestBodyComp.muscle_mass_kg - bThen.muscle_mass_kg).toFixed(1) : null;
-    const fatDelta = (bThen?.fat_mass_kg != null && latestBodyComp?.fat_mass_kg != null)
+    const fatDelta = alignedWeightAvailable && bThen?.fat_mass_kg != null && latestBodyComp?.fat_mass_kg != null
       ? +(latestBodyComp.fat_mass_kg - bThen.fat_mass_kg).toFixed(1) : null;
 
     results[key] = { label, mostRecentDate: mostRecent.date, daysSince, weightDelta, muscleDelta, fatDelta, occurrences: days.length };
@@ -19534,17 +19553,27 @@ function renderWeightProtocol() {
   if (!section || !el) return;
 
   const h = state.history || [];
-  const weightDays = h.filter(d => d.weight > 0).sort((a,b) => {
+  const weightDaysManual = h.filter(d => d.weight > 0).sort((a,b) => {
     const [ad,am,ay]=a.date.split('/'); const [bd,bm,by]=b.date.split('/');
     return new Date(`20${ay}-${am}-${ad}`) - new Date(`20${by}-${bm}-${bd}`);
   });
+
+  // Trend analysis uses Withings (third-party) weight readings, not daily
+  // manual log entries - manual entry is for today's dashboard number only;
+  // trend/reports use the smart-scale history, which is what this section is.
+  // Falls back to manual entries only if there's genuinely no Withings weight
+  // history at all, so this still works for anyone without a smart scale.
+  const bodyCompFull = getFullBodyCompositionHistory();
+  const weightDaysThirdParty = bodyCompFull.filter(d => d.weight != null);
+  const usingThirdParty = weightDaysThirdParty.length >= 7;
+  const weightDays = usingThirdParty ? weightDaysThirdParty : weightDaysManual;
 
   if (weightDays.length < 7) { section.style.display = 'none'; return; }
   section.style.display = 'block';
 
   const wtLow = getWeightTargetLow();
   const wtHigh = getWeightTargetHigh();
-  const current = state.weight || weightDays[weightDays.length-1].weight;
+  const current = state.weight || weightDaysManual[weightDaysManual.length-1]?.weight || weightDays[weightDays.length-1].weight;
   const oldest = weightDays[0].weight;
   const totalChange = Math.round((current - oldest) * 10) / 10;
   const weeks = Math.max(1, Math.round(weightDays.length / 7));
@@ -19559,8 +19588,8 @@ function renderWeightProtocol() {
       start: block[0].date,
       end: block[block.length-1].date,
       avgWeight: Math.round(block.reduce((a,d)=>a+d.weight,0)/block.length * 10) / 10,
-      avgKcal: block.filter(d=>d.totals?.kcal>0).length ?
-        Math.round(block.filter(d=>d.totals?.kcal>0).reduce((a,d)=>a+(d.totals?.kcal||0),0)/block.filter(d=>d.totals?.kcal>0).length) : null
+      avgKcal: usingThirdParty ? null : (block.filter(d=>d.totals?.kcal>0).length ?
+        Math.round(block.filter(d=>d.totals?.kcal>0).reduce((a,d)=>a+(d.totals?.kcal||0),0)/block.filter(d=>d.totals?.kcal>0).length) : null)
     });
   }
 
