@@ -4045,7 +4045,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.290</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.291</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4793,7 +4793,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.290'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.291'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -15056,7 +15056,17 @@ function recipeAddManual() {
 // mic button / Save is tapped directly.
 let _recipeVoiceActive = false;
 let _recipeVoiceRecognition = null;
-const RECIPE_VOICE_DONE_PHRASES = /^(done|finished|that'?s (it|all|everything)|stop|save( the)?( recipe)?|i'?m done|no more|nothing else)\.?$/i;
+// Not anchored to the whole utterance - natural speech rarely comes out as
+// the bare phrase alone ("okay, I'm done" / "yeah that's finished now"),
+// and requiring an exact full match meant only short, simple words like
+// "stop" reliably triggered it while "done"/"finished" often didn't, since
+// any surrounding word broke the match entirely. A short-utterance length
+// guard avoids this accidentally firing mid-ingredient (e.g. an ingredient
+// description that happens to mention "done" as part of a longer sentence).
+const RECIPE_VOICE_DONE_PHRASES = /\b(done|finished|that'?s (it|all|everything)|stop|save( the)?( recipe)?|i'?m done|no more|nothing else)\b/i;
+function isRecipeVoiceDonePhrase(text) {
+  return text.trim().split(/\s+/).length <= 5 && RECIPE_VOICE_DONE_PHRASES.test(text);
+}
 
 function toggleRecipeVoiceInput() {
   if (_recipeVoiceActive) {
@@ -15101,7 +15111,7 @@ function _startRecipeVoiceListening() {
 
   _recipeVoiceRecognition.onresult = async (e) => {
     const text = e.results[0][0].transcript.trim();
-    if (RECIPE_VOICE_DONE_PHRASES.test(text)) {
+    if (isRecipeVoiceDonePhrase(text)) {
       stopRecipeVoiceInput(`✓ Finished — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} added`);
       return;
     }
@@ -15150,6 +15160,18 @@ async function _addRecipeIngredientFromVoice(text) {
       const hasCleanGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(amountStr);
       const baseG = hasCleanGrams ? parseFloat(amountStr) : 100;
 
+      // Logs the full pipeline (raw speech transcript -> AI's amount field ->
+      // parsed result) so a wrong weight can be traced to its actual cause -
+      // mis-heard speech, the AI not returning a clean amount, or a genuine
+      // parsing bug here - rather than guessing again from the end result alone.
+      console.log('[recipe voice]', {
+        heardAsTranscript: text,
+        aiReturnedName: item.name,
+        aiReturnedAmount: item.amount,
+        parsedAsCleanGrams: hasCleanGrams,
+        finalBaseG: baseG
+      });
+
       const base = {
         kcal: Math.round(item.kcal || 0),
         protein: Math.round((item.protein || 0) * 10) / 10,
@@ -15167,7 +15189,15 @@ async function _addRecipeIngredientFromVoice(text) {
       renderRecipeIngredients();
       updateRecipeTotals();
       const status = document.getElementById('recipeVoiceStatus');
-      if (status && _recipeVoiceActive) status.textContent = `✓ Added "${item.name}" (${baseG}g) — say the next one, or "done" to finish`;
+      if (status && _recipeVoiceActive) {
+        // Previously showed "(100g)" identically whether that was genuinely
+        // spoken or just the fallback default - now flagged explicitly so a
+        // fallback is visible immediately, not just discovered later scrolling
+        // the ingredient list.
+        status.textContent = hasCleanGrams
+          ? `✓ Added "${item.name}" (${baseG}g) — say the next one, or "done" to finish`
+          : `⚠ Added "${item.name}" — couldn't catch a clear weight, defaulted to 100g (heard: "${item.amount || 'nothing'}"). Check/correct it after.`;
+      }
     } else {
       const status = document.getElementById('recipeVoiceStatus');
       if (status && _recipeVoiceActive) status.textContent = `Didn't catch a clear ingredient in "${text}" — try again`;
