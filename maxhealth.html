@@ -4045,7 +4045,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.288</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.289</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4793,7 +4793,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.288'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.289'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -15021,6 +15021,7 @@ function openRecipeBuilder(editId = null) {
 }
 
 function closeRecipeBuilder() {
+  if (_recipeVoiceActive) stopRecipeVoiceInput(null);
   document.getElementById('recipeBuilderModal').style.display = 'none';
 }
 
@@ -15034,6 +15035,121 @@ function recipeAddManual() {
     document.getElementById('recipeIngCarb').value = '';
     document.getElementById('recipeIngFibre').value = '';
     document.getElementById('recipeIngName').focus();
+  }
+}
+
+// ─── Recipe voice input — stays listening across multiple ingredients ──────
+// Different from the general chat voice button (one utterance, then stops) -
+// this restarts itself automatically after each ingredient is added, so
+// someone can just keep talking through a whole recipe ("200g chicken
+// breast... one onion... two tablespoons olive oil...") without tapping the
+// mic again between each one. Ends when a finishing phrase is heard, or the
+// mic button / Save is tapped directly.
+let _recipeVoiceActive = false;
+let _recipeVoiceRecognition = null;
+const RECIPE_VOICE_DONE_PHRASES = /^(done|finished|that'?s (it|all|everything)|stop|save( the)?( recipe)?|i'?m done|no more|nothing else)\.?$/i;
+
+function toggleRecipeVoiceInput() {
+  if (_recipeVoiceActive) {
+    stopRecipeVoiceInput('Stopped');
+    return;
+  }
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  _recipeVoiceActive = true;
+  _startRecipeVoiceListening();
+}
+
+function stopRecipeVoiceInput(message) {
+  _recipeVoiceActive = false;
+  _recipeVoiceRecognition?.stop();
+  const btn = document.getElementById('recipeVoiceBtn');
+  if (btn) { btn.style.background = ''; btn.style.borderColor = ''; btn.textContent = '🎤 Voice add'; }
+  const status = document.getElementById('recipeVoiceStatus');
+  if (status) {
+    if (message) { status.style.display = 'block'; status.textContent = message; }
+    else status.style.display = 'none';
+  }
+}
+
+function _startRecipeVoiceListening() {
+  if (!_recipeVoiceActive) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _recipeVoiceRecognition = new SpeechRecognition();
+  _recipeVoiceRecognition.lang = 'en-GB';
+  _recipeVoiceRecognition.continuous = false; // one utterance per cycle - continuous mode is unreliable on mobile Chrome; auto-restart below achieves the same "stays listening" effect more reliably
+  _recipeVoiceRecognition.interimResults = false;
+
+  const btn = document.getElementById('recipeVoiceBtn');
+  const status = document.getElementById('recipeVoiceStatus');
+
+  _recipeVoiceRecognition.onstart = () => {
+    if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; btn.textContent = '🎤 Listening…'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Say an ingredient, or "done" to finish'; }
+  };
+
+  _recipeVoiceRecognition.onresult = async (e) => {
+    const text = e.results[0][0].transcript.trim();
+    if (RECIPE_VOICE_DONE_PHRASES.test(text)) {
+      stopRecipeVoiceInput(`✓ Finished — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} added`);
+      return;
+    }
+    if (status) status.textContent = `🎤 Adding "${text}"…`;
+    await _addRecipeIngredientFromVoice(text);
+  };
+
+  _recipeVoiceRecognition.onerror = (e) => {
+    // no-speech/aborted are routine (silence between ingredients, or a
+    // deliberate stop) - not real errors, and onend below handles restarting.
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) {
+      stopRecipeVoiceInput(messages[e.error]);
+    }
+  };
+
+  _recipeVoiceRecognition.onend = () => {
+    // Auto-restart if still active - this is the mechanism that makes it
+    // "stay in recipe creation mode" rather than needing the mic tapped
+    // again before every single ingredient.
+    if (_recipeVoiceActive) {
+      setTimeout(() => _startRecipeVoiceListening(), 300);
+    }
+  };
+
+  _recipeVoiceRecognition.start();
+}
+
+async function _addRecipeIngredientFromVoice(text) {
+  try {
+    const result = await parseWithAI(text, null, null);
+    const item = result?.items?.[0];
+    if (result?.type === 'food' && item) {
+      _recipeIngredients.push({
+        name: item.name,
+        kcal: Math.round(item.kcal || 0),
+        protein: Math.round((item.protein || 0) * 10) / 10,
+        carbs: Math.round((item.carbs || 0) * 10) / 10,
+        fibre: Math.round((item.fibre || 0) * 10) / 10
+      });
+      renderRecipeIngredients();
+      updateRecipeTotals();
+      const status = document.getElementById('recipeVoiceStatus');
+      if (status && _recipeVoiceActive) status.textContent = `✓ Added "${item.name}" — say the next one, or "done" to finish`;
+    } else {
+      const status = document.getElementById('recipeVoiceStatus');
+      if (status && _recipeVoiceActive) status.textContent = `Didn't catch a clear ingredient in "${text}" — try again`;
+    }
+  } catch (err) {
+    console.error('Recipe voice ingredient parse failed:', err);
+    const status = document.getElementById('recipeVoiceStatus');
+    if (status && _recipeVoiceActive) status.textContent = 'Something went wrong adding that — try again';
   }
 }
 
@@ -15227,6 +15343,7 @@ function updateRecipeTotals() {
 }
 
 function saveRecipe() {
+  if (_recipeVoiceActive) stopRecipeVoiceInput(null);
   const name = document.getElementById('recipeName').value.trim();
   if (!name) { showToast('Enter a recipe name'); return; }
   if (!_recipeIngredients.length) { showToast('Add at least one ingredient'); return; }
@@ -22721,7 +22838,9 @@ function dismissInsight() {
         <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="recipeOpenSearch()">🔍 Online Search</button>
         <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="document.getElementById('recipeBarcodeInput').click()">▦ Barcode</button>
         <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="recipeAddManual()">✏ Manual</button>
+        <button class="copy-btn" id="recipeVoiceBtn" style="font-size:11px;padding:6px 10px;" onclick="toggleRecipeVoiceInput()">🎤 Voice add</button>
       </div>
+      <div id="recipeVoiceStatus" style="display:none;font-size:11px;color:var(--accent);margin-bottom:8px;line-height:1.5;"></div>
       <input type="file" id="recipeBarcodeInput" accept="image/*" capture="environment" style="display:none" onchange="handleRecipeBarcode(this)">
       <div id="recipeAddForm" style="display:none;flex-direction:column;gap:6px;">
         <input id="recipeIngName" class="modal-input" placeholder="Ingredient name" style="font-size:13px;padding:8px 10px;">
