@@ -2357,43 +2357,13 @@ body[data-theme="light"] {
         <div class="bar" id="fatBar" style="width:0%;background:#a78bfa;"></div>
       </div>
     </div>
-    </div>
-
-
-
-    <div class="remaining-card" id="dashSection-remaining">
-      <div class="remaining-title" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>Remaining Today</span>
-        <span>
-          <span onclick="moveDashboardSection('remaining','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▲</span>
-          <span onclick="moveDashboardSection('remaining','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▼</span>
-        </span>
-      </div>
-      <div class="remaining-row">
-        <div class="rem-name">Calories</div>
-        <div class="rem-val good" id="remCal">0 / 3,670 kcal (3,670 remaining)</div>
-      </div>
-      <div id="calorieContextNote" style="font-size:11px;color:var(--text3);line-height:1.5;padding:0 0 8px 0;"></div>
-      <div class="remaining-row">
-        <div class="rem-name">Protein</div>
-        <div class="rem-val good" id="remProt">165g</div>
-      </div>
-      <div class="remaining-row">
-        <div class="rem-name">Carbs remaining</div>
-        <div class="rem-val good" id="remCarb">50g</div>
-      </div>
-      <div class="remaining-row">
-        <div class="rem-name">Fat today</div>
-        <div class="rem-val" id="remFat" style="color:#a78bfa;">0g / 247g</div>
-      </div>
-      <div class="remaining-row">
-
-      </div>
-      <div class="remaining-row">
-        <div class="rem-name">Water</div>
-        <div class="rem-val" id="remWater" style="color:#38bdf8;">0ml</div>
-      </div>
-
+    <!-- Calories/Protein/Carbs/Fat used to be repeated a second time just
+         below, in a separate "Remaining Today" list - genuinely the exact
+         same four numbers, just worded differently ("165g remaining" vs
+         "165g"). Removed that duplication; this note (the one piece of
+         information from that card that wasn't shown anywhere else) now
+         sits directly under the numbers it's actually explaining. -->
+    <div id="calorieContextNote" style="font-size:11px;color:var(--text3);line-height:1.5;padding:4px 0 8px;"></div>
     </div>
 
     <!-- MACRO RATIO BAR -->
@@ -4072,7 +4042,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.319</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.320</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4839,7 +4809,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.319'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.320'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10205,10 +10175,10 @@ function startNextMealFlow() {
 }
 
 // ─── RECIPE DISCOVERY (Library area) ─────────────────────────────────────────
-// Deliberately separate from quickRecipeIdea (the old Log-tab pills) - same
-// underlying mechanism (must route through Query mode, see the comment on
-// quickRecipeIdea for why), but lives in the Library/Recipes area since this
-// is for browsing a genuinely new idea, not a daily quick-log action.
+// Calls the AI directly (see submitRecipeDiscover below) rather than routing
+// through the shared chat pipeline, which runs local keyword shortcuts on
+// any text regardless of mode - a freeform search box needs a guaranteed
+// path to the AI, not one that depends on avoiding the right words.
 let _recipeDiscoverKind = null;
 
 function openRecipeDiscoverModal() {
@@ -10227,25 +10197,62 @@ async function submitRecipeDiscover() {
   const kind = _recipeDiscoverKind;
   closeRecipeDiscoverModal();
 
-  let text;
+  let request;
   if (freeform) {
-    text = `Give me a recipe for ${freeform}, with full ingredients, weights and method.`;
+    request = `a recipe for ${freeform}`;
   } else if (kind) {
-    text = `Give me a surprising ${kind} recipe idea, with full ingredients, weights and method.`;
+    request = `a surprising ${kind} recipe idea`;
   } else {
-    text = `Give me an interesting keto recipe idea, with full ingredients, weights and method.`;
+    request = `an interesting recipe idea suited to a strict ketogenic diet`;
   }
 
-  // Land on the chat view so the result (a recipe card, same format as
-  // asking directly) is actually visible - it renders into the same chat
-  // scroll area "Create Recipe from this" already uses, there's no separate
-  // rendering path to build for the Library area specifically.
   switchTabById('chat');
   addBubble(freeform ? `🆕 ${freeform}` : `🆕 Surprise ${kind || ''} recipe`, 'user');
-  const wasLogMode = _chatMode === 'log';
-  if (wasLogMode) setChatMode('query');
-  await processMessage(text, null, null);
-  if (wasLogMode) setChatMode('log');
+  const thinkingBubble = addBubble('Thinking…', 'system');
+
+  // Calls the AI directly rather than going through processMessage() - that
+  // shared router runs several local keyword shortcuts (ketosis status,
+  // remaining macros, weight, etc.) on ANY text before the AI ever sees it,
+  // regardless of chat mode. A freeform search box will eventually contain
+  // one of those trigger words by pure chance ("Keto Custard" hit the
+  // ketosis-status shortcut; this function's own previous fallback text
+  // ("interesting keto recipe idea") hit the exact same one on itself) -
+  // patching around individual words isn't sustainable for free text, so
+  // this bypasses that router entirely and talks to the AI on its own terms.
+  const systemPrompt = `You are a recipe assistant for someone on a strict ketogenic diet. The user wants ${request}.
+
+Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
+{
+  "title": "Recipe name",
+  "intro": "one-line tip or description, omit if nothing useful to add",
+  "servings": 4,
+  "ingredients": [
+    { "name": "lean beef mince (5% fat)", "amount": 600, "unit": "g" },
+    { "name": "garlic", "amount": 3, "unit": "clove" }
+  ],
+  "method": ["Fry onion and garlic in olive oil, 5 mins.", "Brown the mince.", "..."]
+}
+Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch - use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: never include calories, protein, fat or carbs in the ingredients list - name, amount and unit ONLY. Nutrition figures are looked up separately from the user's real food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol. Keep the recipe genuinely low-carb/ketogenic - no grains, sugar, starchy veg, or high-carb fruit.`;
+
+  try {
+    const result = await callHealthAI(systemPrompt, { maxTokens: 900 });
+    thinkingBubble.remove();
+    if (!result.ok) { addBubble(`Couldn't reach the AI: ${result.error || 'unknown error'}`, 'system', 'warn'); return; }
+    let raw = result.text.trim().replace(/^```json\s*|\s*```$/g, '').trim();
+    let recipe;
+    try {
+      recipe = JSON.parse(raw);
+    } catch (parseErr) {
+      const m = raw.match(/\{[\s\S]*\}/);
+      if (m) recipe = JSON.parse(m[0]);
+      else throw parseErr;
+    }
+    addRecipeBubble(recipe);
+  } catch (e) {
+    thinkingBubble.remove();
+    console.error('submitRecipeDiscover failed:', e);
+    addBubble(`Couldn't generate a recipe: ${e.message || 'unknown error'} — try again, or phrase it differently.`, 'system', 'warn');
+  }
 }
 
 async function suggestMealFromLibrary(kind = 'both') {
@@ -10477,39 +10484,6 @@ function logSuggestedCombo(comboIndex) {
 function quickPrompt(text) {
   addBubble(text, 'user');
   processMessage(text, null, null);
-}
-
-// Deliberately avoids the words "suggest"/"suggestion"/"next meal"/"what
-// should I eat" - handleNextMealQuery() intercepts those BEFORE the message
-// ever reaches the AI at all, returning generic canned macro guidance
-// instead of a real recipe. "recipe" is the actual trigger word the AI's
-// own system prompt looks for (see the RECIPE type instructions), so
-// phrasing has to route around the local shortcut deliberately, not just
-// happen to avoid it.
-//
-// Soft library-awareness: passes along the names of foods already in the
-// Library as a preference, not a hard constraint - a brand new recipe idea
-// should still be allowed to include something not yet saved if that's what
-// makes it a good recipe, but leaning toward what's actually in the fridge
-// beats a recipe built entirely from things that would need a shopping trip.
-async function quickRecipeIdea(kind) {
-  const lib = loadLibrary();
-  const libNames = lib.map(f => f.name).slice(0, 40).join(', '); // capped - this rides along in the message text itself, not worth sending the entire library for a soft preference
-  const kindText = kind === 'sweet' ? 'sweet' : 'savoury';
-  const libLine = libNames ? ` Where sensible, lean toward ingredients from this list of foods I already have: ${libNames}. Other common ingredients are fine too if needed for a genuinely good recipe.` : '';
-  const text = `Give me a ${kindText} recipe to help cover today's protein and fat shortfall, with full ingredients, weights and method.${libLine}`;
-  addBubble(`${kind === 'sweet' ? '🍰' : '🥘'} ${kindText[0].toUpperCase()}${kindText.slice(1)} recipe idea`, 'user');
-  // MUST go through query mode - Log mode tries to parse the message as food
-  // to log FIRST, before the AI ever sees it as a question, and a whole
-  // sentence like this gets treated as "a long meal" and itemised/split,
-  // failing with "Couldn't parse the meal" rather than ever reaching the
-  // recipe-suggestion branch. Query mode skips food-parsing entirely and
-  // sends straight to the AI, which is the only path that can return the
-  // structured recipe-card format at all.
-  const wasLogMode = _chatMode === 'log';
-  if (wasLogMode) setChatMode('query');
-  await processMessage(text, null, null);
-  if (wasLogMode) setChatMode('log'); // restore - this button lives on the Log tab, shouldn't strand the person on Ask afterward
 }
 
 // ─── MANUAL ENTRY FORM (offline fallback) ────────────────────────────────────
@@ -13306,7 +13280,7 @@ function renderActivityCreditBalance() {
 // This gets the same real value — cards in whatever order you actually want —
 // at a fraction of the risk.
 const DASHBOARD_SECTIONS_KEY = 'mh_dashboard_order';
-const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'remaining', 'macroratio', 'goalcheck', 'steps', 'activity', 'water', 'log', 'guides'];
+const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'steps', 'activity', 'water', 'log', 'guides'];
 // Some sections are more than one DOM element (a card plus its own paired verdict
 // or tooltip) — these must move together as a unit, or you'd end up with a card
 // separated from its own conclusion. Each key can list multiple ids in order.
@@ -13932,25 +13906,6 @@ function updateDashboard(skipActivityRender) {
   }
   const _hasRes = getActivities().some(a => a.enabled && a.duration && a.type === 'resistance');
   const _adjProt = targets.protein + (_hasRes ? 15 : 0);
-  const remProt = _adjProt - totals.protein;
-  const remCarb = targets.carbs - totals.carbs;
-
-  const remCalEl = document.getElementById('remCal');
-  // Matches the used/total format Fat and Water already use ("112g / 260g")
-  // instead of showing only the bare remaining number, which was the odd one
-  // out among these four rows.
-  const usedOfTotal = `${Math.round(totals.kcal)} / ${Math.round(adjustedKcalTarget)} kcal`;
-  const remainingPart = remCal >= 0 ? `${Math.round(remCal)} remaining` : `${Math.abs(Math.round(remCal))} OVER`;
-  remCalEl.textContent = `${usedOfTotal} (${remainingPart})`;
-  remCalEl.className = 'rem-val ' + (remCal < 0 ? 'over' : remCal < 300 ? 'warn' : 'good');
-
-  const remProtEl = document.getElementById('remProt');
-  remProtEl.textContent = remProt >= 0 ? `${Math.round(remProt * 100)/100}g remaining` : `${Math.round(Math.abs(remProt)*100)/100}g OVER`;
-  remProtEl.className = 'rem-val ' + (remProt < 0 ? 'over' : remProt < 20 ? 'warn' : 'good');
-
-  const remCarbEl = document.getElementById('remCarb');
-  remCarbEl.textContent = remCarb >= 0 ? `${Math.round(remCarb * 100)/100}g left` : `${Math.round(Math.abs(remCarb)*100)/100}g OVER`;
-  remCarbEl.className = 'rem-val ' + (remCarb < 0 ? 'over' : remCarb < 10 ? 'warn' : 'good');
 
 // Ketosis streak milestones — the counter previously just ticked up silently
 // with no acknowledgment of the days that actually mean something. Tied to
