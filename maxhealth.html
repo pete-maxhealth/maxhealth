@@ -4065,7 +4065,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.307</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.309</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4832,7 +4832,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.307'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.309'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -15457,7 +15457,6 @@ function openRecipeBuilder(editId = null) {
 function closeRecipeBuilder() {
   if (_recipeVoiceActive) stopRecipeVoiceInput(null);
   if (_recipeStepVoiceActive) stopRecipeStepVoiceInput(null, false);
-  if (_recipeVoiceControlActive) _stopRecipeVoiceControl(null, false);
   _builderReleaseWakeLock();
   document.getElementById('recipeBuilderModal').style.display = 'none';
 }
@@ -16633,13 +16632,8 @@ if ('speechSynthesis' in window) {
 // "start, name, pause, resume, end and save" as one command stack, not
 // realising at the time that ingredients/steps needed their own separate
 // continuous-listening modes to avoid one giant ambiguous grammar).
-let _recipeVoiceControlActive = false;
-let _recipeVoiceControlRecognition = null;
-
 const RVC_CMD_PAUSE    = /^\s*(pause|stop)\s*$/i; // exact/near-exact only - a "pause" heard mid-name would wrongly interrupt
-const RVC_CMD_RESUME   = /\b(resume|continue|carry on)\b/i;
 const RVC_CMD_SAVE     = /\b(save( the)?( recipe)?|that'?s (it|everything|done)|finished)\b/i;
-const RVC_CMD_END      = /\b(end|stop control|cancel voice)\b/i;
 const RVC_CMD_NAME     = /\b(?:name it|call it|recipe name is|recipe name|name this)\s+(.+)/i;
 const RVC_CMD_SERVINGS = /\b(?:servings?|serves)\s*(?:is|are|of)?\s*(\d+)\b|\b(\d+)\s*servings?\b/i;
 
@@ -16693,8 +16687,6 @@ function openVoiceCommandHelp(context) {
       <li><strong>"pause"</strong> / "stop" — pauses listening (tap 🎤 to resume)</li>
       <li><strong>"save"</strong> — saves the whole recipe and closes</li>
     </ul>
-    <div style="font-weight:700;color:var(--text);margin-bottom:4px;">🎤 Voice control button</div>
-    <div>Same name/servings/pause/save commands as above, without needing to be mid-way through adding ingredients or steps.</div>
   `;
   const cookHtml = `
     <div style="margin-bottom:12px;">Always listening while Cook Mode is open (except while a step is actually being read aloud):</div>
@@ -16717,105 +16709,6 @@ function openVoiceCommandHelp(context) {
 }
 function closeVoiceCommandHelp() {
   document.getElementById('voiceHelpModal').style.display = 'none';
-}
-
-function toggleRecipeVoiceControl() {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    showToast('Voice input not supported on this browser');
-    return;
-  }
-  if (_recipeVoiceControlActive) {
-    _stopRecipeVoiceControl('⏸ Voice control paused. Tap to resume.', true);
-    return;
-  }
-  _recipeVoiceControlActive = true;
-  _startRecipeVoiceControlListening();
-}
-
-function _stopRecipeVoiceControl(message, paused) {
-  _recipeVoiceControlActive = false;
-  _recipeVoiceControlRecognition?.stop();
-  const btn = document.getElementById('recipeVoiceControlBtn');
-  if (btn) btn.textContent = paused ? '🎤 Resume voice control' : '🎤 Voice control (name / servings / pause / resume / save)';
-  const status = document.getElementById('recipeVoiceControlStatus');
-  if (status) {
-    if (message) { status.style.display = 'block'; status.textContent = message; }
-    else status.style.display = 'none';
-  }
-}
-
-function _startRecipeVoiceControlListening() {
-  if (!_recipeVoiceControlActive) return;
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  _recipeVoiceControlRecognition = new SpeechRecognition();
-  _recipeVoiceControlRecognition.lang = 'en-GB';
-  _recipeVoiceControlRecognition.continuous = false;
-  _recipeVoiceControlRecognition.interimResults = false;
-
-  const btn = document.getElementById('recipeVoiceControlBtn');
-  const status = document.getElementById('recipeVoiceControlStatus');
-
-  _recipeVoiceControlRecognition.onstart = () => {
-    if (btn) btn.textContent = '🎤 Listening…';
-    if (status) { status.style.display = 'block'; status.textContent = 'Try: "name it Chicken Curry", "4 servings", "save", or "pause"'; }
-  };
-
-  _recipeVoiceControlRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript.trim();
-    let matched = false;
-
-    if (RVC_CMD_END.test(text)) {
-      _stopRecipeVoiceControl(null, false);
-      return;
-    }
-    if (RVC_CMD_PAUSE.test(text)) {
-      _stopRecipeVoiceControl('⏸ Voice control paused. Tap to resume.', true);
-      return;
-    }
-    let m = text.match(RVC_CMD_NAME);
-    if (m) {
-      const name = m[1].trim().replace(/[.?!]+$/, '');
-      document.getElementById('recipeName').value = name;
-      if (status) status.textContent = `✓ Named "${name}" — keep going, or say "save"`;
-      matched = true;
-    }
-    if (!matched) {
-      m = text.match(RVC_CMD_SERVINGS);
-      if (m) {
-        const n = parseInt(m[1] || m[2], 10);
-        if (n > 0) {
-          document.getElementById('recipeServings').value = n;
-          updateRecipeTotals();
-          if (status) status.textContent = `✓ Set to ${n} serving${n === 1 ? '' : 's'} — keep going, or say "save"`;
-          matched = true;
-        }
-      }
-    }
-    if (!matched && RVC_CMD_SAVE.test(text)) {
-      if (status) status.textContent = 'Saving…';
-      saveRecipe(); // saveRecipe() itself validates name/ingredients and toasts if something's missing
-      return;
-    }
-    if (!matched && !RVC_CMD_SAVE.test(text)) {
-      if (status) status.textContent = `Didn't recognise "${text}" — try "name it...", "N servings", "save", or "pause"`;
-    }
-  };
-
-  _recipeVoiceControlRecognition.onerror = (e) => {
-    if (e.error === 'no-speech' || e.error === 'aborted') return;
-    const messages = {
-      'audio-capture': 'No microphone found — check your device settings',
-      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
-      'network': 'Voice recognition needs an internet connection',
-    };
-    if (messages[e.error]) _stopRecipeVoiceControl(messages[e.error], false);
-  };
-
-  _recipeVoiceControlRecognition.onend = () => {
-    if (_recipeVoiceControlActive) setTimeout(() => _startRecipeVoiceControlListening(), 300);
-  };
-
-  _recipeVoiceControlRecognition.start();
 }
 
 function updateRecipeTotals() {
@@ -24542,6 +24435,11 @@ function dismissInsight() {
       <button class="copy-btn" id="recipeStepVoiceBtn" style="width:100%;font-size:11px;padding:6px 10px;" onclick="toggleRecipeStepVoiceInput()">🎤 Voice add steps</button>
       <div id="recipeStepVoiceStatus" style="display:none;font-size:11px;color:var(--accent);margin-top:6px;line-height:1.5;"></div>
       <button class="copy-btn" style="width:100%;font-size:11px;padding:6px 10px;margin-top:6px;color:var(--accent);border-color:var(--accent-glow);" onclick="openCookModeFromDraft()">🍳 Test Cook this draft (before saving)</button>
+      <!-- Help repeated here, not just at the top of the modal - by the time
+           you're down at the Steps section deciding which of several similar
+           buttons to tap, the top-right ❓ is already scrolled out of view,
+           which was the actual problem, not a missing feature. -->
+      <div onclick="openVoiceCommandHelp('builder')" style="text-align:center;font-size:11px;color:var(--text3);cursor:pointer;margin-top:8px;text-decoration:underline;">❓ What can I say? (voice command list)</div>
     </div>
 
     <!-- Totals -->
@@ -24550,13 +24448,6 @@ function dismissInsight() {
       <div id="recipeTotalsText" style="font-size:14px;color:var(--text);font-family:Space Mono,monospace;"></div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px;" id="recipePerServingText"></div>
     </div>
-
-    <!-- Recipe-level voice control - separate from the ingredient/step voice-add
-         buttons above (which only add items) - this one controls the recipe
-         itself: naming it, setting servings, pausing/resuming the session, and
-         saving, all by voice. -->
-    <button class="copy-btn" id="recipeVoiceControlBtn" style="width:100%;font-size:12px;padding:8px;margin-bottom:6px;" onclick="toggleRecipeVoiceControl()">🎤 Voice control (name / servings / pause / resume / save)</button>
-    <div id="recipeVoiceControlStatus" style="display:none;font-size:11px;color:var(--accent);margin-bottom:8px;text-align:center;line-height:1.5;"></div>
 
     <div style="display:flex;gap:8px;">
       <button class="modal-btn cancel" style="flex:1;" onclick="closeRecipeBuilder()">Cancel</button>
