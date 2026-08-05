@@ -2598,6 +2598,12 @@ body[data-theme="light"] {
       <div class="food-results" id="foodResults">
         <div class="food-result-loading">Type to search…</div>
       </div>
+      <!-- Matching saved recipes - shown underneath the online product
+           results, so searching "chicken" surfaces both individual chicken
+           products AND any of your own recipes that use chicken, rather than
+           only ever finding one or the other depending which search you
+           happened to open from. Local data, renders instantly, no network wait. -->
+      <div id="foodResultsRecipes" style="margin-top:10px;"></div>
     </div>
     <!-- Amount view -->
     <div class="food-amount-panel" id="foodAmountView">
@@ -4059,7 +4065,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.302</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.307</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4826,7 +4832,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.302'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.307'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9717,10 +9723,51 @@ function onFoodSearchInput(val) {
   const res = document.getElementById('foodResults');
   if (!val || val.length < 2) {
     res.innerHTML = '<div class="food-result-loading">Type to search…</div>';
+    document.getElementById('foodResultsRecipes').innerHTML = '';
     return;
   }
   res.innerHTML = '<div class="food-result-loading">Searching…</div>';
+  _renderMatchingRecipes(val); // local + instant, doesn't need to wait on the debounced online search below
   _foodSearchTimer = setTimeout(() => searchOpenFoodFacts(val), 400);
+}
+
+// Matches on the recipe's own name OR any of its ingredient names - "chicken"
+// should find both a recipe called "Chicken Curry" and one called "Sunday
+// Roast" that happens to contain chicken as an ingredient.
+function _renderMatchingRecipes(query) {
+  const el = document.getElementById('foodResultsRecipes');
+  if (!el) return;
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) { el.innerHTML = ''; return; }
+  const recipes = loadRecipes().filter(r =>
+    r.name.toLowerCase().includes(q) ||
+    (r.ingredients || []).some(ing => ing.name.toLowerCase().includes(q))
+  ).slice(0, 5);
+  if (!recipes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;margin:10px 0 6px;text-transform:uppercase;letter-spacing:0.05em;">📋 Your Recipes</div>
+    ${recipes.map(r => {
+      const total = (r.total && typeof r.total === 'object') ? r.total : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+      const servings = r.servings || 1;
+      const per = Math.round(total.kcal / servings);
+      return `<div class="food-result-item" onclick="_goToRecipeFromSearch('${r.id}')">
+        <div class="food-result-name">${r.name}</div>
+        <div class="food-result-macros">${(r.ingredients||[]).length} ingredients · ${servings} serving${servings > 1 ? 's' : ''} · ${per}kcal/serving</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+// Rather than build a separate recipe-logging path here (recipes already log
+// via their own Log 1 serving / Cook / Edit buttons, which have their own
+// review steps), searching just takes you straight to the real recipe card
+// in the Library, where all of that already works properly.
+function _goToRecipeFromSearch(recipeId) {
+  closeFoodSearch();
+  switchTabById('library'); // maps to ['log','library'] directly - no separate sub-tab click needed
+  setTimeout(() => {
+    document.getElementById(`recipe-row-${recipeId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
 }
 
 async function searchOpenFoodFacts(query) {
@@ -15404,14 +15451,35 @@ function openRecipeBuilder(editId = null) {
   renderRecipeIngredients();
   renderRecipeSteps();
   updateRecipeTotals();
+  _builderRequestWakeLock(); // dictating a full recipe hands-free shouldn't get cut short by the screen sleeping mid-sentence
 }
 
 function closeRecipeBuilder() {
   if (_recipeVoiceActive) stopRecipeVoiceInput(null);
   if (_recipeStepVoiceActive) stopRecipeStepVoiceInput(null, false);
   if (_recipeVoiceControlActive) _stopRecipeVoiceControl(null, false);
+  _builderReleaseWakeLock();
   document.getElementById('recipeBuilderModal').style.display = 'none';
 }
+
+// Separate wake lock instance from Cook Mode's (_cookWakeLock) since the two
+// screens can each be open independently and shouldn't fight over the same
+// handle or release each other's lock early.
+let _builderWakeLock = null;
+async function _builderRequestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { _builderWakeLock = await navigator.wakeLock.request('screen'); } catch(e) { console.log('[recipe builder] wake lock failed:', e); }
+}
+function _builderReleaseWakeLock() {
+  try { _builderWakeLock?.release(); } catch(e) {}
+  _builderWakeLock = null;
+}
+document.addEventListener('visibilitychange', async () => {
+  const builderOpen = document.getElementById('recipeBuilderModal')?.style.display === 'flex';
+  if (builderOpen && document.visibilityState === 'visible' && !_builderWakeLock) {
+    await _builderRequestWakeLock();
+  }
+});
 
 function recipeAddManual() {
   const form = document.getElementById('recipeAddForm');
@@ -15499,15 +15567,27 @@ function _startRecipeVoiceListening() {
 
   _recipeVoiceRecognition.onstart = () => {
     if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; btn.textContent = '🎤 Listening…'; }
-    if (status) { status.style.display = 'block'; status.textContent = 'Say an ingredient, or "done" to finish'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Say an ingredient, "pause", "name it...", "N servings", "save", or "done" to finish'; }
   };
 
   _recipeVoiceRecognition.onresult = async (e) => {
     const text = e.results[0][0].transcript.trim();
+    // Explicit save checked FIRST - the generic done-phrase pattern below
+    // also treats bare "save"/"save the recipe" as merely "finish this
+    // ingredient list" (its original, narrower meaning from before
+    // whole-recipe voice control existed) - explicit save has to win here,
+    // or saying "save the recipe" while adding ingredients would just end
+    // the list and never actually save anything.
+    if (RVC_CMD_SAVE.test(text)) { saveRecipe(); return; }
     if (isRecipeVoiceDonePhrase(text)) {
       stopRecipeVoiceInput(`✓ Finished — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} added`);
       return;
     }
+    if (RVC_CMD_PAUSE.test(text)) {
+      stopRecipeVoiceInput(`⏸ Paused — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} so far. Tap 🎤 to resume.`, true);
+      return;
+    }
+    if (_checkRecipeMetaCommand(text)) return; // name/servings handled — not added as an ingredient
     if (status) status.textContent = `🎤 Adding "${text}"…`;
     await _addRecipeIngredientFromVoice(text);
   };
@@ -16037,7 +16117,7 @@ function _startRecipeStepVoiceListening() {
 
   _recipeStepVoiceRecognition.onstart = () => {
     if (btn) btn.textContent = '🎤 Listening…';
-    if (status) { status.style.display = 'block'; status.textContent = 'Describe each step, then say "done" to finish. Reorder with ▲▼ afterward if needed.'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Describe each step, or say "pause", "name it...", "N servings", "save", or "done" to finish. Reorder with ▲▼ afterward if needed.'; }
   };
 
   _recipeStepVoiceRecognition.onresult = (e) => {
@@ -16047,10 +16127,19 @@ function _startRecipeStepVoiceListening() {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (!e.results[i].isFinal) continue;
       const text = e.results[i][0].transcript.trim();
+      // Same ordering fix as ingredient-add: explicit "save" must be checked
+      // before the generic done-phrase, which would otherwise treat it as
+      // just "finish this step list" and never actually save the recipe.
+      if (RVC_CMD_SAVE.test(text)) { saveRecipe(); return; }
       if (isRecipeVoiceDonePhrase(text)) {
         stopRecipeStepVoiceInput(`✓ Done — ${_recipeSteps.length} step${_recipeSteps.length === 1 ? '' : 's'} added`);
         return;
       }
+      if (RVC_CMD_PAUSE.test(text)) {
+        stopRecipeStepVoiceInput(`⏸ Paused — ${_recipeSteps.length} step${_recipeSteps.length === 1 ? '' : 's'} so far. Tap 🎤 to resume.`, true);
+        return;
+      }
+      if (_checkRecipeMetaCommand(text)) continue; // name/servings handled — not added as a step; keep processing any further results in this batch
       _recipeSteps.push({ id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2), text });
     }
     renderRecipeSteps();
@@ -16099,18 +16188,52 @@ const COOK_CMD_PAUSE    = /\b(pause|stop|hold on|wait)\b/i;
 const COOK_CMD_RESUME   = /\b(resume|continue|carry on|keep going|unpause)\b/i;
 const COOK_CMD_REPEAT   = /\b(repeat|say (that|it) again|read (that|it) again|what was that)\b/i;
 const COOK_CMD_INGREDIENTS = /\bingredients?\b/i;
+// "read step 3" / "repeat step 3" / "go to step 3" - jumps directly to a
+// numbered step, distinct from bare "repeat" (current step) and next/back
+// (one step at a time). This is the thing actually missing for the "I've
+// dished up and now realise I need to check what step 2 said" scenario -
+// next/back alone means counting steps backward one at a time instead of
+// just naming the one you want.
+const COOK_CMD_GOTO_STEP = /\b(?:read|repeat|go to|jump to|say)\s+step\s+(\d+)\b/i;
+const COOK_CMD_SERVINGS_QUERY = /\bhow many servings\b/i;
+const COOK_CMD_RESCALE = /\b(?:make it for|scale (?:it )?(?:to|for)|cook (?:it )?for)\s+(\d+)\b/i;
+const COOK_CMD_TIMER_EXPLICIT = /\b(?:start (?:a )?timer|set (?:a )?timer|timer)\s+(?:for\s+)?(.+)/i;
+const COOK_CMD_TIMER_BARE = /\b(?:start (?:the )?timer|set (?:a )?timer)\b/i;
+const COOK_CMD_HELP = /\bhelp\b/i;
 const COOK_CMD_NEXT     = /\b(next|next step|okay next|forward|move on)\b/i;
 const COOK_CMD_PREV     = /\b(back|previous|go back|last step|go back a step)\b/i;
 
 function openCookMode(recipeId) {
   const recipe = loadRecipes().find(r => r.id === recipeId);
   if (!recipe || !recipe.steps || !recipe.steps.length) { showToast('This recipe has no steps yet — add some in Edit first'); return; }
+  _openCookModeForRecipe(recipe);
+}
+
+// Lets Cook Mode run directly off whatever's currently in the builder - the
+// actual bridge between "creating/editing" and "cooking", since previously
+// you could only cook a recipe that was already saved. Now you can
+// test-read steps while still mid-edit, exactly the same interface either way.
+function openCookModeFromDraft() {
+  if (!_recipeSteps.length) { showToast('Add at least one step first'); return; }
+  _openCookModeForRecipe({
+    name: document.getElementById('recipeName').value.trim() || 'Untitled recipe',
+    servings: parseInt(document.getElementById('recipeServings').value) || 1,
+    ingredients: _recipeIngredients,
+    steps: _recipeSteps,
+  });
+}
+
+function _openCookModeForRecipe(recipe) {
   _cookRecipe = recipe;
   _cookStepIndex = 0;
   _cookPlaying = false;
   _cookReadAloud = document.getElementById('cookModeReadAloud')?.checked ?? true;
+  _cookOriginalServings = recipe.servings || 1;
+  _cookCurrentServings = _cookOriginalServings;
+  cookModeTimerCancel();
 
   document.getElementById('cookModeRecipeName').textContent = recipe.name;
+  document.getElementById('cookModeServingsLabel').textContent = `${_cookOriginalServings} serving${_cookOriginalServings === 1 ? '' : 's'}`;
   document.getElementById('cookModeIngredientsPanel').innerHTML = (recipe.ingredients || []).map(ing =>
     `<div style="padding:4px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
       <strong style="color:var(--text);">${ing.name}</strong>${ing.amount ? ` — ${ing.amount}g` : ''}
@@ -16137,6 +16260,7 @@ function cookModeEnd() {
   _cookListening = false;
   _cookRecognition?.stop();
   _cookReleaseWakeLock();
+  cookModeTimerCancel();
   document.getElementById('cookModeOverlay').style.display = 'none';
 }
 
@@ -16184,7 +16308,12 @@ function cookModeNext() {
   if (_cookStepIndex < _cookRecipe.steps.length - 1) {
     _cookStepIndex++;
     _renderCookStep();
-    if (_cookPlaying) _cookSpeakCurrentStep();
+    // Always reads it aloud - asking for "next" is itself a request to hear
+    // it, whether or not auto-advance ("Start") was ever toggled on. The
+    // previous "only speaks if _cookPlaying" gate meant "next"/"back" silently
+    // moved the step counter with nothing read out unless you'd separately
+    // said "start" first, which wasn't an obvious thing to have to do.
+    _cookSpeakCurrentStep();
   } else {
     _setCookMicStatus('That\'s the last step. Say "end" or "save" to finish, or "repeat" to hear it again.');
   }
@@ -16195,8 +16324,153 @@ function cookModePrev() {
   if (_cookStepIndex > 0) {
     _cookStepIndex--;
     _renderCookStep();
-    if (_cookPlaying) _cookSpeakCurrentStep();
+    _cookSpeakCurrentStep();
   }
+}
+
+// Jumps straight to a named step number - e.g. "read step 2" after you've
+// already plated up and want to double-check something earlier, rather
+// than having to say "back" repeatedly to count your way there.
+function cookModeGotoStep(n) {
+  if (!_cookRecipe) return;
+  if (n < 1 || n > _cookRecipe.steps.length) {
+    _setCookMicStatus(`This recipe only has ${_cookRecipe.steps.length} step${_cookRecipe.steps.length === 1 ? '' : 's'}.`);
+    return;
+  }
+  _cookStepIndex = n - 1;
+  _renderCookStep();
+  _cookSpeakCurrentStep(); // always speaks, even if not "playing" - asking for a specific step is itself the request to hear it
+}
+
+// ── Servings query / on-the-fly rescale ─────────────────────────────────────
+// _cookOriginalServings never changes once cooking starts - it's the fixed
+// reference point every rescale multiplies from, so saying "make it for 8"
+// twice in a row (or "make it for 6" then changing your mind to "make it for
+// 8") always scales from the recipe's real base amounts, never compounding
+// off a previous rescale by mistake.
+let _cookOriginalServings = 1;
+let _cookCurrentServings = 1;
+
+function _cookSpeakServings() {
+  const text = `This makes ${_cookCurrentServings} serving${_cookCurrentServings === 1 ? '' : 's'}.`;
+  if (!_cookReadAloud || !('speechSynthesis' in window)) { _setCookMicStatus(text); return; }
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
+// Rescales the COOK MODE VIEW ONLY - deliberately never touches the saved
+// recipe itself (loadRecipes()/saveRecipes()). "Make it for 6" while cooking
+// is a one-off for tonight, not a permanent edit to the recipe's real serving
+// size - that stays a deliberate Edit-screen action, not something a
+// misheard voice command should be able to silently change.
+function cookModeRescale(newServings) {
+  if (!_cookRecipe || newServings < 1) return;
+  _cookCurrentServings = newServings;
+  const ratio = newServings / _cookOriginalServings;
+  document.getElementById('cookModeServingsLabel').textContent = `${newServings} serving${newServings === 1 ? '' : 's'}${ratio !== 1 ? ` (×${ratio.toFixed(2).replace(/\.?0+$/,'')})` : ''}`;
+  document.getElementById('cookModeIngredientsPanel').innerHTML = (_cookRecipe.ingredients || []).map(ing => {
+    const scaledAmount = ing.amount ? Math.round(ing.amount * ratio) : null;
+    return `<div style="padding:4px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+      <strong style="color:var(--text);">${ing.name}</strong>${scaledAmount ? ` — ${scaledAmount}g` : ''}
+      ${ing.note ? `<div style="color:var(--accent);font-style:italic;margin-top:2px;">${ing.note}</div>` : ''}
+    </div>`;
+  }).join('') || '<div style="color:var(--text3);font-size:12px;">No ingredients listed</div>';
+  const text = `Scaled to ${newServings} serving${newServings === 1 ? '' : 's'}.`;
+  if (!_cookReadAloud || !('speechSynthesis' in window)) { _setCookMicStatus(text); return; }
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
+// ── Step timer ──────────────────────────────────────────────────────────────
+// Directly answers the pasta-boiling-too-late scenario that started this
+// whole feature: a step that needs watching in the background, visibly and
+// audibly, not just read out once and left to memory.
+let _cookTimerSeconds = 0;
+let _cookTimerRemaining = 0;
+let _cookTimerInterval = null;
+let _cookTimerPaused = false;
+
+// Finds a spoken duration in text - "for 10 minutes", "5 min", "30 seconds",
+// "1 hour" - used both to auto-detect a duration from the step's own wording
+// and to parse an explicit spoken duration like "timer for 5 minutes".
+function _parseDurationFromText(text) {
+  const t = text.toLowerCase();
+  let m = t.match(/(\d+)\s*(?:hours?|hrs?)\b/);
+  if (m) return parseInt(m[1], 10) * 3600;
+  m = t.match(/(\d+)\s*(?:minutes?|mins?)\b/);
+  if (m) return parseInt(m[1], 10) * 60;
+  m = t.match(/(\d+)\s*(?:seconds?|secs?)\b/);
+  if (m) return parseInt(m[1], 10);
+  return null;
+}
+
+function _cookFormatTimer(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// seconds=null means "auto-detect from the current step's own text" - the
+// normal voice path ("start timer" with no number said). An explicit number
+// is used when the command itself specified one ("timer for 5 minutes").
+function cookModeStartTimer(seconds = null) {
+  if (!_cookRecipe) return;
+  if (seconds == null) {
+    seconds = _parseDurationFromText(_cookRecipe.steps[_cookStepIndex]?.text || '');
+    if (seconds == null) {
+      _setCookMicStatus('Couldn\'t find a time in this step — try "timer for 10 minutes" instead.');
+      return;
+    }
+  }
+  cookModeTimerCancel(); // clear any timer already running before starting a new one
+  _cookTimerSeconds = seconds;
+  _cookTimerRemaining = seconds;
+  _cookTimerPaused = false;
+  document.getElementById('cookModeTimerBar').style.display = 'flex';
+  document.getElementById('cookModeTimerPauseBtn').textContent = 'Pause';
+  _renderCookTimer();
+  _cookTimerInterval = setInterval(_cookTimerTick, 1000);
+  _setCookMicStatus(`⏱ Timer started for ${_cookFormatTimer(seconds)}`);
+}
+
+function _renderCookTimer() {
+  const el = document.getElementById('cookModeTimerDisplay');
+  if (el) el.textContent = _cookFormatTimer(_cookTimerRemaining);
+}
+
+function _cookTimerTick() {
+  if (_cookTimerPaused) return;
+  _cookTimerRemaining--;
+  _renderCookTimer();
+  if (_cookTimerRemaining <= 0) _cookTimerComplete();
+}
+
+function _cookTimerComplete() {
+  clearInterval(_cookTimerInterval);
+  _cookTimerInterval = null;
+  document.getElementById('cookModeTimerBar').style.display = 'none';
+  // Vibration + speech together - the point of a kitchen timer is being
+  // noticeable from across the room, not just a silent screen change.
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]);
+  const text = "Timer's up!";
+  if (_cookReadAloud && 'speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  }
+  _setCookMicStatus("⏱ Timer's up!");
+  showToast("⏱ Timer's up!");
+}
+
+function cookModeTimerPauseResume() {
+  if (!_cookTimerInterval && _cookTimerRemaining <= 0) return;
+  _cookTimerPaused = !_cookTimerPaused;
+  document.getElementById('cookModeTimerPauseBtn').textContent = _cookTimerPaused ? 'Resume' : 'Pause';
+}
+
+function cookModeTimerCancel() {
+  clearInterval(_cookTimerInterval);
+  _cookTimerInterval = null;
+  document.getElementById('cookModeTimerBar').style.display = 'none';
 }
 
 function cookModeToggleReadAloud() {
@@ -16288,15 +16562,29 @@ function _startCookVoiceListening() {
 
   _cookRecognition.onresult = (e) => {
     const text = e.results[0][0].transcript.trim();
+    let m;
     if (COOK_CMD_END.test(text))            { cookModeEnd(); return; }
     else if (COOK_CMD_START.test(text))      { if (!_cookPlaying) cookModeStart(); }
     else if (COOK_CMD_PAUSE.test(text))      { if (_cookPlaying) cookModePause(); }
     else if (COOK_CMD_RESUME.test(text))     { if (!_cookPlaying) cookModeResume(); }
+    // Checked before bare COOK_CMD_REPEAT, which "repeat step 3" would also
+    // match on the word "repeat" alone - the numbered form has to win, or
+    // it'd just re-read whatever step you're currently on instead of
+    // jumping to the one you actually asked for.
+    else if ((m = text.match(COOK_CMD_GOTO_STEP)))  { cookModeGotoStep(parseInt(m[1], 10)); }
+    else if (COOK_CMD_SERVINGS_QUERY.test(text)) { _cookSpeakServings(); }
+    else if ((m = text.match(COOK_CMD_RESCALE)))  { cookModeRescale(parseInt(m[1], 10)); }
+    // Explicit-duration form checked before the bare form ("timer" alone) -
+    // "timer for 5 minutes" has to win over just treating it as "start timer
+    // using whatever's in the current step's own text".
+    else if ((m = text.match(COOK_CMD_TIMER_EXPLICIT)) && _parseDurationFromText(m[1]) != null) { cookModeStartTimer(_parseDurationFromText(m[1])); }
+    else if (COOK_CMD_TIMER_BARE.test(text)) { cookModeStartTimer(null); }
+    else if (COOK_CMD_HELP.test(text))       { openVoiceCommandHelp('cook'); }
     else if (COOK_CMD_REPEAT.test(text))     { _cookSpeakCurrentStep(); }
     else if (COOK_CMD_INGREDIENTS.test(text)) { _cookSpeakIngredients(); }
     else if (COOK_CMD_NEXT.test(text))       { cookModeNext(); }
     else if (COOK_CMD_PREV.test(text))       { cookModePrev(); }
-    else { _setCookMicStatus(`Didn't recognise "${text}" as a command — try "next", "back", "pause", "repeat", "ingredients", or "end"`); }
+    else { _setCookMicStatus(`Didn't recognise "${text}" — say "help" to see everything you can say`); }
   };
 
   _cookRecognition.onerror = (e) => {
@@ -16354,6 +16642,82 @@ const RVC_CMD_SAVE     = /\b(save( the)?( recipe)?|that'?s (it|everything|done)|
 const RVC_CMD_END      = /\b(end|stop control|cancel voice)\b/i;
 const RVC_CMD_NAME     = /\b(?:name it|call it|recipe name is|recipe name|name this)\s+(.+)/i;
 const RVC_CMD_SERVINGS = /\b(?:servings?|serves)\s*(?:is|are|of)?\s*(\d+)\b|\b(\d+)\s*servings?\b/i;
+
+// Shared across ALL THREE recipe voice modes - ingredient-add, step-add, and
+// the standalone voice-control button - so "name it...", "4 servings", or
+// "save" work no matter which mic you're currently talking to. These come up
+// naturally mid-flow ("actually, call it Sausage Casserole") rather than as a
+// separate thing you remember to switch buttons for first, which is exactly
+// the gap flagged: naming/servings genuinely happens before or during adding
+// ingredients in real use, not as an isolated step afterward.
+function _checkRecipeMetaCommand(text) {
+  let m = text.match(RVC_CMD_NAME);
+  if (m) {
+    const name = m[1].trim().replace(/[.?!]+$/, '');
+    document.getElementById('recipeName').value = name;
+    showToast(`✓ Named "${name}"`);
+    return true;
+  }
+  m = text.match(RVC_CMD_SERVINGS);
+  if (m) {
+    const n = parseInt(m[1] || m[2], 10);
+    if (n > 0) {
+      document.getElementById('recipeServings').value = n;
+      updateRecipeTotals();
+      showToast(`✓ Set to ${n} serving${n === 1 ? '' : 's'}`);
+      return true;
+    }
+  }
+  if (RVC_CMD_SAVE.test(text)) {
+    saveRecipe(); // saveRecipe() itself stops all three voice modes cleanly and closes the builder
+    return true;
+  }
+  return false;
+}
+
+// ─── VOICE COMMAND HELP ───────────────────────────────────────────────────────
+// One shared reference for every voice mode in the Recipe Builder / Cook Mode
+// family - "what can I actually say" previously had four different answers
+// depending which of four mic buttons you'd tapped, discoverable only by
+// trial and error. Reachable via the ❓ in both the builder and Cook Mode.
+function openVoiceCommandHelp(context) {
+  const builderHtml = `
+    <div style="font-weight:700;color:var(--text);margin-bottom:4px;">🎤 Voice add (ingredients)</div>
+    <div style="margin-bottom:12px;">Say each ingredient with its amount, e.g. <em>"200 grams chicken breast"</em>. Say <strong>"done"</strong> (or "finished", "that's everything", "stop") when through.</div>
+    <div style="font-weight:700;color:var(--text);margin-bottom:4px;">🎤 Voice add steps</div>
+    <div style="margin-bottom:12px;">Describe each step in order, e.g. <em>"heat the oil for two minutes"</em>. Say <strong>"done"</strong> to finish. Reorder afterward with ▲▼.</div>
+    <div style="font-weight:700;color:var(--text);margin-bottom:4px;">Available in BOTH the above, any time:</div>
+    <ul style="margin:0 0 12px 18px;padding:0;">
+      <li><strong>"name it [X]"</strong> / "call it [X]" — sets the recipe name</li>
+      <li><strong>"[N] servings"</strong> / "servings [N]" — sets serving count</li>
+      <li><strong>"pause"</strong> / "stop" — pauses listening (tap 🎤 to resume)</li>
+      <li><strong>"save"</strong> — saves the whole recipe and closes</li>
+    </ul>
+    <div style="font-weight:700;color:var(--text);margin-bottom:4px;">🎤 Voice control button</div>
+    <div>Same name/servings/pause/save commands as above, without needing to be mid-way through adding ingredients or steps.</div>
+  `;
+  const cookHtml = `
+    <div style="margin-bottom:12px;">Always listening while Cook Mode is open (except while a step is actually being read aloud):</div>
+    <ul style="margin:0 0 14px 18px;padding:0;">
+      <li><strong>"start"</strong> — begins reading from step 1</li>
+      <li><strong>"next"</strong> / "back" — moves a step, always reads it aloud</li>
+      <li><strong>"read step 3"</strong> / "repeat step 3" — jumps straight to any numbered step</li>
+      <li><strong>"repeat"</strong> — reads the current step again</li>
+      <li><strong>"pause"</strong> / "resume" — pauses/resumes auto-advance (resume only works by tap, since pausing genuinely stops the mic listening)</li>
+      <li><strong>"ingredients"</strong> — reads the full ingredient list, with any notes</li>
+      <li><strong>"how many servings"</strong> — reads the current serving count</li>
+      <li><strong>"make it for 6"</strong> / "scale to 6" — rescales the ingredient amounts shown (this session only — never changes the saved recipe)</li>
+      <li><strong>"start timer"</strong> / "timer for 10 minutes" — starts a countdown; with no number said, it looks for one in the current step's own text</li>
+      <li><strong>"end"</strong> / "finished cooking" / "save" — closes Cook Mode</li>
+    </ul>
+    <div>On-screen ◀ ▶ Start/Pause buttons work identically for anything voice doesn't catch cleanly.</div>
+  `;
+  document.getElementById('voiceHelpContent').innerHTML = context === 'cook' ? cookHtml : builderHtml;
+  document.getElementById('voiceHelpModal').style.display = 'flex';
+}
+function closeVoiceCommandHelp() {
+  document.getElementById('voiceHelpModal').style.display = 'none';
+}
 
 function toggleRecipeVoiceControl() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -16539,7 +16903,7 @@ function renderRecipeList() {
       carbs:   Math.round(total.carbs   / servings * 10) / 10,
       fat:     Math.round((total.fat||0) / servings * 10) / 10,
     };
-    return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:10px;">
+    return `<div id="recipe-row-${r.id}" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--text);">${r.name}</div>
@@ -24105,7 +24469,10 @@ function dismissInsight() {
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
       <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;" id="recipeBuilderTitle">NEW RECIPE</div>
-      <div onclick="closeRecipeBuilder()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+      <div style="display:flex;align-items:center;gap:14px;">
+        <span onclick="openVoiceCommandHelp('builder')" style="color:var(--text3);cursor:pointer;font-size:16px;" title="Voice commands">❓</span>
+        <div onclick="closeRecipeBuilder()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+      </div>
     </div>
 
     <!-- Recipe name + servings -->
@@ -24165,12 +24532,16 @@ function dismissInsight() {
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
       <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:8px;">STEPS <span style="color:var(--text3);text-transform:none;font-family:inherit;">— drag order with ▲▼, e.g. move "boil pasta" earlier so it's not started too late</span></div>
       <div id="recipeStepsList" style="margin-bottom:10px;"></div>
-      <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <input id="recipeStepInput" class="modal-input" placeholder="Add a step…" style="flex:1 1 0%;width:auto;min-width:0;font-size:13px;padding:8px 10px;text-align:left;margin-bottom:0;" onkeydown="if(event.key==='Enter'){event.preventDefault();addRecipeStepManual();}">
-        <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="addRecipeStepManual()">+ Add</button>
-      </div>
+      <!-- Stacked, not side-by-side - a flex row here previously collapsed the
+           input to a sliver on-device (a real, confirmed bug across two fix
+           attempts, not just a stale-version issue) - a block-level input on
+           its own row sidesteps whatever flex-sizing quirk was causing it
+           entirely, guaranteeing full width regardless of the cause. -->
+      <input id="recipeStepInput" placeholder="Add a step…" style="display:block;width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;color:var(--text);font-size:13px;font-family:'Space Mono',monospace;text-align:left;outline:none;margin-bottom:6px;" onkeydown="if(event.key==='Enter'){event.preventDefault();addRecipeStepManual();}">
+      <button class="run-btn" style="width:100%;font-size:12px;padding:8px;margin-bottom:6px;" onclick="addRecipeStepManual()">+ Add Step</button>
       <button class="copy-btn" id="recipeStepVoiceBtn" style="width:100%;font-size:11px;padding:6px 10px;" onclick="toggleRecipeStepVoiceInput()">🎤 Voice add steps</button>
       <div id="recipeStepVoiceStatus" style="display:none;font-size:11px;color:var(--accent);margin-top:6px;line-height:1.5;"></div>
+      <button class="copy-btn" style="width:100%;font-size:11px;padding:6px 10px;margin-top:6px;color:var(--accent);border-color:var(--accent-glow);" onclick="openCookModeFromDraft()">🍳 Test Cook this draft (before saving)</button>
     </div>
 
     <!-- Totals -->
@@ -24216,13 +24587,33 @@ function dismissInsight() {
 <div id="cookModeOverlay" style="display:none;position:fixed;inset:0;z-index:400;background:#0a0e14;flex-direction:column;">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px 8px;">
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.06em;" id="cookModeStepCounter">Step 1 of 1</div>
-    <div onclick="closeCookMode()" style="color:var(--text3);cursor:pointer;font-size:22px;padding:4px 8px;">×</div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <span onclick="openVoiceCommandHelp('cook')" style="color:var(--text3);cursor:pointer;font-size:16px;" title="Voice commands">❓</span>
+      <div onclick="closeCookMode()" style="color:var(--text3);cursor:pointer;font-size:22px;padding:4px 8px;">×</div>
+    </div>
   </div>
-  <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--accent);padding:0 20px 12px;" id="cookModeRecipeName"></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 20px 12px;">
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--accent);" id="cookModeRecipeName"></div>
+    <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;" id="cookModeServingsLabel"></div>
+  </div>
 
   <div style="padding:0 20px;">
     <div onclick="toggleCookModeIngredients()" style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;padding:6px 0;cursor:pointer;">▾ INGREDIENTS <span id="cookModeIngToggleLabel">(tap to show)</span></div>
     <div id="cookModeIngredientsPanel" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:10px;max-height:30vh;overflow-y:auto;"></div>
+  </div>
+
+  <!-- Timer - tied to whatever duration is mentioned in the current step's own
+       text ("boil for 10 minutes"), voice-started via "start timer", or a
+       spoken duration directly ("timer for 5 minutes"). This is the actual
+       fix for the original pain point that kicked all of this off: a step
+       that needs watching in the background while genuinely showing on
+       screen and audible when it's done, not just read out once and forgotten. -->
+  <div id="cookModeTimerBar" style="display:none;margin:0 20px 10px;background:rgba(250,204,21,0.1);border:1px solid var(--yellow);border-radius:var(--radius-sm);padding:10px 14px;display:none;align-items:center;justify-content:space-between;">
+    <div style="font-family:Space Mono,monospace;font-size:20px;color:var(--yellow);font-weight:700;" id="cookModeTimerDisplay">00:00</div>
+    <div style="display:flex;gap:8px;">
+      <button class="copy-btn" style="font-size:11px;padding:5px 10px;" onclick="cookModeTimerPauseResume()" id="cookModeTimerPauseBtn">Pause</button>
+      <button class="copy-btn" style="font-size:11px;padding:5px 10px;color:var(--red);" onclick="cookModeTimerCancel()">Cancel</button>
+    </div>
   </div>
 
   <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:20px 28px;overflow-y:auto;">
@@ -24242,6 +24633,20 @@ function dismissInsight() {
       </label>
       <button class="copy-btn" style="flex:1;font-size:12px;padding:8px;" onclick="cookModeEnd()">End &amp; Close</button>
     </div>
+  </div>
+</div>
+
+<!-- VOICE COMMAND HELP — one shared reference for every voice mode in the
+     Recipe Builder / Cook Mode family, so "what can I actually say" has one
+     obvious answer instead of needing to remember four separate command
+     sets by trial and error. -->
+<div class="modal-overlay" id="voiceHelpModal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.8);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:80vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">VOICE COMMANDS</div>
+      <div onclick="closeVoiceCommandHelp()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+    </div>
+    <div id="voiceHelpContent" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
   </div>
 </div>
 
