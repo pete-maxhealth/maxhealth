@@ -4065,7 +4065,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.309</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.311</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4832,7 +4832,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.309'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.311'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -16123,6 +16123,7 @@ function _startRecipeStepVoiceListening() {
     // With continuous:true, e.results accumulates for the whole session -
     // resultIndex marks where the NEW results in this event start, so only
     // those are processed rather than re-adding earlier phrases again.
+    let showedWarning = false;
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (!e.results[i].isFinal) continue;
       const text = e.results[i][0].transcript.trim();
@@ -16139,10 +16140,22 @@ function _startRecipeStepVoiceListening() {
         return;
       }
       if (_checkRecipeMetaCommand(text)) continue; // name/servings handled — not added as a step; keep processing any further results in this batch
+      // "repeat step 2" / "read step 1" are Cook Mode commands, not step
+      // content - but this recognizer has no way to know that's what you
+      // meant, so it adds it as a literal step like anything else you say.
+      // Still added (better than silently discarding something you might
+      // genuinely have meant as a step), but flagged immediately so the mix-up
+      // is obvious rather than only discovered later scrolling the step list.
+      const looksLikeCookCommand = COOK_CMD_GOTO_STEP.test(text) || /^\s*repeat\s*$/i.test(text);
       _recipeSteps.push({ id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2), text });
+      if (looksLikeCookCommand) showedWarning = true;
     }
     renderRecipeSteps();
-    if (status && _recipeStepVoiceActive) status.textContent = `✓ Added step ${_recipeSteps.length} — next step, or "done" to finish`;
+    if (status && _recipeStepVoiceActive) {
+      status.textContent = showedWarning
+        ? `⚠ That sounds like a Cook Mode command ("repeat"/"read step N") — those only work inside Cook Mode (🍳 Test Cook), not here. Added as a step anyway; delete it below if that wasn't intended.`
+        : `✓ Added step ${_recipeSteps.length} — next step, or "done" to finish`;
+    }
   };
 
   _recipeStepVoiceRecognition.onerror = (e) => {
@@ -16256,6 +16269,7 @@ function cookModeEnd() {
   _cookModeOpen = false;
   _cookPlaying = false;
   window.speechSynthesis?.cancel();
+  _clearCookAutoAdvance();
   _cookListening = false;
   _cookRecognition?.stop();
   _cookReleaseWakeLock();
@@ -16293,6 +16307,7 @@ function cookModeStart() {
 function cookModePause() {
   _cookPlaying = false;
   window.speechSynthesis?.cancel();
+  _clearCookAutoAdvance();
   document.getElementById('cookModePlayPauseBtn').textContent = '▶ Resume';
   _setCookMicStatus('⏸ Paused. Say "resume" or tap ▶ to continue.');
 }
@@ -16487,8 +16502,14 @@ function _setCookMicStatus(text) {
 // deliberately stopped while speech is actually playing (see
 // _startCookVoiceListening's onstart/onend wiring below) so the phone doesn't
 // hear its own voice through the mic and misfire a command from it.
+let _cookAutoAdvanceTimer = null;
+function _clearCookAutoAdvance() {
+  if (_cookAutoAdvanceTimer) { clearTimeout(_cookAutoAdvanceTimer); _cookAutoAdvanceTimer = null; }
+}
+
 function _cookSpeakCurrentStep() {
   if (!_cookRecipe) return;
+  _clearCookAutoAdvance(); // a fresh read always supersedes whatever advance was previously queued
   const text = _cookRecipe.steps[_cookStepIndex]?.text || '';
   if (!_cookReadAloud || !('speechSynthesis' in window)) {
     _setCookMicStatus('Say "next", "back", "pause", or "end" any time.');
@@ -16499,7 +16520,19 @@ function _cookSpeakCurrentStep() {
   utter.rate = 0.95;
   utter.onend = () => {
     if (_cookPlaying && _cookStepIndex < _cookRecipe.steps.length - 1) {
-      setTimeout(() => { if (_cookPlaying) cookModeNext(); }, 1400);
+      // A genuinely usable gap before auto-advancing, not a race the mic can
+      // never win. The previous 1.4s meant the mic barely finished
+      // restarting before the NEXT step's speech started and cut it off
+      // again - in practice there was no real window to say "pause" at all.
+      // 6s gives an actual chance to speak and be heard before it moves on
+      // by itself, and this timer is cleared (see _clearCookAutoAdvance)
+      // the instant any command changes state, so saying "pause" a moment
+      // before it would've fired can't be undone by a stale advance landing late.
+      _setCookMicStatus('🎤 Say "next", "pause", "repeat"... or it continues automatically in a few seconds');
+      _cookAutoAdvanceTimer = setTimeout(() => {
+        _cookAutoAdvanceTimer = null;
+        if (_cookPlaying) cookModeNext();
+      }, 6000);
     } else if (_cookPlaying) {
       _setCookMicStatus('That\'s the last step. Say "end" or "save" to finish, or "repeat" to hear it again.');
     }
