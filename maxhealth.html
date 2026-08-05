@@ -4065,7 +4065,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.312</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.314</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4832,7 +4832,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.312'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.314'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -9632,7 +9632,7 @@ function _startVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _voiceRecognition = new SpeechRecognition();
   _voiceRecognition.lang = 'en-GB';
-  _voiceRecognition.continuous = false; // auto-restart below, same reasoning as Recipe voice-add
+  _voiceRecognition.continuous = true; // was false with per-phrase restart - each restart plays an audible tone, sounding like "lots of beeping" across a multi-item log
   _voiceRecognition.interimResults = false;
 
   const btn = document.getElementById('voiceBtn');
@@ -9643,16 +9643,21 @@ function _startVoiceListening() {
   };
 
   _voiceRecognition.onresult = e => {
-    const text = e.results[0][0].transcript.trim();
-    if (isRecipeVoiceDonePhrase(text)) {
-      _pauseOrFinishVoiceInput();
-      if (!_voiceMultiItems.length) showToast('No items captured');
-      _voiceMultiItems = [];
-      return;
+    // continuous:true accumulates results for the whole session - only the
+    // newly-finalised ones (from resultIndex onward) need handling here.
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      const text = e.results[ri][0].transcript.trim();
+      if (isRecipeVoiceDonePhrase(text)) {
+        _pauseOrFinishVoiceInput();
+        if (!_voiceMultiItems.length) showToast('No items captured');
+        _voiceMultiItems = [];
+        return;
+      }
+      _voiceMultiItems.push(text);
+      showToast(`✓ "${text}" — say the next item, or "done" to finish`, null, null, 3000);
     }
-    _voiceMultiItems.push(text);
     _setVoiceLogStatus(`🎤 Captured so far: ${_voiceMultiItems.join(', ')} — say the next item, or "done" to finish.`);
-    showToast(`✓ "${text}" — say the next item, or "done" to finish`, null, null, 3000);
   };
 
   _voiceRecognition.onerror = e => {
@@ -14523,7 +14528,7 @@ function _startSupplementVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _supplementVoiceRecognition = new SpeechRecognition();
   _supplementVoiceRecognition.lang = 'en-GB';
-  _supplementVoiceRecognition.continuous = false;
+  _supplementVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across several supplements
   _supplementVoiceRecognition.interimResults = false;
 
   const btn = document.getElementById('supplementVoiceBtn');
@@ -14535,36 +14540,44 @@ function _startSupplementVoiceListening() {
   };
 
   _supplementVoiceRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript.trim();
-    if (isRecipeVoiceDonePhrase(text)) {
-      _stopSupplementVoiceInput(null, false);
-      return;
-    }
-    const defs = loadSupplementDefs().filter(s => s.active !== false);
-    const match = _fuzzyMatchSupplement(text, defs);
-    if (!match) {
-      if (status) status.textContent = `Didn't recognise "${text}" in your supplement list — try the name again`;
-      return;
-    }
-    const period = _currentSupplementPeriod();
-    const suppPeriods = match.periods || [match.period];
-    const targetPeriod = suppPeriods.includes(period) ? period : suppPeriods[0]; // falls back to its first scheduled period if it isn't actually due right now
-    const log = loadSupplementLog();
-    const key = match.id + '_' + targetPeriod;
-    if (log[key]) {
-      if (status) status.textContent = `"${match.name}" already marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod})`;
-      return;
-    }
-    log[key] = true;
-    saveSupplementLog(log);
-    renderSupplements();
-    // renderSupplements() rebuilds #supplementVoiceStatus too, so this has to
-    // re-fetch the element and re-show it rather than reuse the stale `status` reference.
-    const status2 = document.getElementById('supplementVoiceStatus');
-    if (status2) { status2.style.display = 'block'; status2.textContent = `✓ "${match.name}" marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod}) — next one, or "done"`; }
-    if (_supplementVoiceActive) {
-      const btn2 = document.getElementById('supplementVoiceBtn');
-      if (btn2) { btn2.style.background = 'rgba(45,235,143,0.2)'; btn2.style.borderColor = 'var(--green)'; }
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      const text = e.results[ri][0].transcript.trim();
+      if (isRecipeVoiceDonePhrase(text)) {
+        _stopSupplementVoiceInput(null, false);
+        return;
+      }
+      const defs = loadSupplementDefs().filter(s => s.active !== false);
+      const match = _fuzzyMatchSupplement(text, defs);
+      if (!match) {
+        // renderSupplements() may have rebuilt the DOM on a previous
+        // iteration of this same loop - always re-fetch rather than trust
+        // a reference captured before the loop started.
+        const s = document.getElementById('supplementVoiceStatus');
+        if (s) s.textContent = `Didn't recognise "${text}" in your supplement list — try the name again`;
+        continue;
+      }
+      const period = _currentSupplementPeriod();
+      const suppPeriods = match.periods || [match.period];
+      const targetPeriod = suppPeriods.includes(period) ? period : suppPeriods[0]; // falls back to its first scheduled period if it isn't actually due right now
+      const log = loadSupplementLog();
+      const key = match.id + '_' + targetPeriod;
+      if (log[key]) {
+        const s = document.getElementById('supplementVoiceStatus');
+        if (s) s.textContent = `"${match.name}" already marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod})`;
+        continue;
+      }
+      log[key] = true;
+      saveSupplementLog(log);
+      renderSupplements();
+      // renderSupplements() rebuilds #supplementVoiceStatus too, so this has to
+      // re-fetch the element and re-show it rather than reuse the stale `status` reference.
+      const status2 = document.getElementById('supplementVoiceStatus');
+      if (status2) { status2.style.display = 'block'; status2.textContent = `✓ "${match.name}" marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod}) — next one, or "done"`; }
+      if (_supplementVoiceActive) {
+        const btn2 = document.getElementById('supplementVoiceBtn');
+        if (btn2) { btn2.style.background = 'rgba(45,235,143,0.2)'; btn2.style.borderColor = 'var(--green)'; }
+      }
     }
   };
 
@@ -15558,7 +15571,7 @@ function _startRecipeVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _recipeVoiceRecognition = new SpeechRecognition();
   _recipeVoiceRecognition.lang = 'en-GB';
-  _recipeVoiceRecognition.continuous = false; // one utterance per cycle - continuous mode is unreliable on mobile Chrome; auto-restart below achieves the same "stays listening" effect more reliably
+  _recipeVoiceRecognition.continuous = true; // was false with per-phrase restart - each restart plays an audible tone, sounding like beeping across a multi-ingredient recipe
   _recipeVoiceRecognition.interimResults = false;
 
   const btn = document.getElementById('recipeVoiceBtn');
@@ -15570,25 +15583,29 @@ function _startRecipeVoiceListening() {
   };
 
   _recipeVoiceRecognition.onresult = async (e) => {
-    const text = e.results[0][0].transcript.trim();
-    // Explicit save checked FIRST - the generic done-phrase pattern below
-    // also treats bare "save"/"save the recipe" as merely "finish this
-    // ingredient list" (its original, narrower meaning from before
-    // whole-recipe voice control existed) - explicit save has to win here,
-    // or saying "save the recipe" while adding ingredients would just end
-    // the list and never actually save anything.
-    if (RVC_CMD_SAVE.test(text)) { saveRecipe(); return; }
-    if (isRecipeVoiceDonePhrase(text)) {
-      stopRecipeVoiceInput(`✓ Finished — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} added`);
-      return;
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      const text = e.results[ri][0].transcript.trim();
+      // Explicit save checked FIRST - the generic done-phrase pattern below
+      // also treats bare "save"/"save the recipe" as merely "finish this
+      // ingredient list" (its original, narrower meaning from before
+      // whole-recipe voice control existed) - explicit save has to win here,
+      // or saying "save the recipe" while adding ingredients would just end
+      // the list and never actually save anything.
+      if (RVC_CMD_SAVE.test(text)) { saveRecipe(); return; }
+      if (isRecipeVoiceDonePhrase(text)) {
+        stopRecipeVoiceInput(`✓ Finished — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} added`);
+        return;
+      }
+      if (RVC_CMD_PAUSE.test(text)) {
+        stopRecipeVoiceInput(`⏸ Paused — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} so far. Tap 🎤 to resume.`, true);
+        return;
+      }
+      if (_checkRecipeMetaCommand(text)) continue; // name/servings handled — not added as an ingredient
+      const s = document.getElementById('recipeVoiceStatus');
+      if (s) s.textContent = `🎤 Adding "${text}"…`;
+      await _addRecipeIngredientFromVoice(text);
     }
-    if (RVC_CMD_PAUSE.test(text)) {
-      stopRecipeVoiceInput(`⏸ Paused — ${_recipeIngredients.length} ingredient${_recipeIngredients.length === 1 ? '' : 's'} so far. Tap 🎤 to resume.`, true);
-      return;
-    }
-    if (_checkRecipeMetaCommand(text)) return; // name/servings handled — not added as an ingredient
-    if (status) status.textContent = `🎤 Adding "${text}"…`;
-    await _addRecipeIngredientFromVoice(text);
   };
 
   _recipeVoiceRecognition.onerror = (e) => {
@@ -15685,9 +15702,11 @@ async function _addRecipeIngredientFromVoice(text) {
 let _libraryVoiceActive = false;
 let _libraryVoiceRecognition = null;
 let _libraryVoiceSaved = []; // {name, kcal, protein, fat, carbs, portion} for the on-screen running list
+let _libraryVoiceLastEntryId = null; // set only when the last item needs a weight correction - see _tryLibraryAmountCorrection
 
 function openLibraryVoiceModal() {
   _libraryVoiceSaved = [];
+  _libraryVoiceLastEntryId = null;
   document.getElementById('libraryVoiceStatus').style.display = 'none';
   document.getElementById('libraryVoiceList').innerHTML = '';
   document.getElementById('libraryVoiceModal').style.display = 'flex';
@@ -15732,7 +15751,7 @@ function _startLibraryVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _libraryVoiceRecognition = new SpeechRecognition();
   _libraryVoiceRecognition.lang = 'en-GB';
-  _libraryVoiceRecognition.continuous = false;
+  _libraryVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across a batch of foods
   _libraryVoiceRecognition.interimResults = false;
 
   const btn = document.getElementById('libraryVoiceBtn');
@@ -15744,13 +15763,27 @@ function _startLibraryVoiceListening() {
   };
 
   _libraryVoiceRecognition.onresult = async (e) => {
-    const text = e.results[0][0].transcript.trim();
-    if (isRecipeVoiceDonePhrase(text)) {
-      _stopLibraryVoiceInput(`✓ Done — ${_libraryVoiceSaved.length} item${_libraryVoiceSaved.length === 1 ? '' : 's'} added to library`);
-      return;
+    // Each item is an awaited AI call, so these are processed one at a time
+    // in order rather than fired off in parallel - a batch of several
+    // results landing in one event (more likely now with continuous:true)
+    // still gets added correctly, one after another.
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      const text = e.results[ri][0].transcript.trim();
+      if (isRecipeVoiceDonePhrase(text)) {
+        _stopLibraryVoiceInput(`✓ Done — ${_libraryVoiceSaved.length} item${_libraryVoiceSaved.length === 1 ? '' : 's'} added to library`);
+        return;
+      }
+      // If the last item added defaulted to 100g because a clean weight wasn't
+      // caught, and this next utterance is JUST a bare number (no food name at
+      // all - "150 grams", "150g"), treat it as correcting that amount rather
+      // than trying to parse it as a whole new food. Directly answers "any way
+      // to shore up the weight warnings" - a quick correction right after,
+      // instead of having to go find and fix it in the Library later.
+      if (_libraryVoiceLastEntryId && _tryLibraryAmountCorrection(text)) continue;
+      if (status) status.textContent = `🎤 Adding "${text}"…`;
+      await _addLibraryItemFromVoice(text);
     }
-    if (status) status.textContent = `🎤 Adding "${text}"…`;
-    await _addLibraryItemFromVoice(text);
   };
 
   _libraryVoiceRecognition.onerror = (e) => {
@@ -15806,18 +15839,48 @@ async function _addLibraryItemFromVoice(text) {
     validateAndSaveLibraryEntry(entry);
     _libraryVoiceSaved.push(entry);
     renderLibraryVoiceList();
+    // Only tracked when a correction is actually possible - a clean answer
+    // clears it, so a random later utterance that happens to be a bare
+    // number can't accidentally "correct" an item that never needed it.
+    _libraryVoiceLastEntryId = hasCleanGrams ? null : entry.id;
 
     const status = document.getElementById('libraryVoiceStatus');
     if (status && _libraryVoiceActive) {
       status.textContent = hasCleanGrams
         ? `✓ Added "${item.name}" (${baseG}g) — next food, or "done" to finish`
-        : `⚠ Added "${item.name}" — couldn't catch a clear weight, defaulted to 100g (heard: "${item.amount || 'nothing'}"). Check/correct it in the library after.`;
+        : `⚠ Added "${item.name}" — couldn't catch a clear weight, defaulted to 100g (heard: "${item.amount || 'nothing'}"). Say just the correct weight now (e.g. "150 grams") to fix it, or move on to the next food.`;
     }
   } catch (err) {
     console.error('Library voice item parse failed:', err);
     const status = document.getElementById('libraryVoiceStatus');
     if (status && _libraryVoiceActive) status.textContent = 'Something went wrong adding that — try again';
   }
+}
+
+// Bare "150 grams" / "150g" / "150" alone (no food name) right after a
+// defaulted-to-100g warning - corrects that specific item's portion both in
+// the on-screen running list and in the actual saved Library entry (it's
+// already been saved by this point, not just a draft).
+function _tryLibraryAmountCorrection(text) {
+  const m = text.trim().match(/^(\d+(\.\d+)?)\s*(g|grams?|ml)?$/i);
+  if (!m) return false;
+  const grams = Math.round(parseFloat(m[1]));
+  if (grams <= 0) return false;
+
+  const savedItem = _libraryVoiceSaved.find(f => f.id === _libraryVoiceLastEntryId);
+  if (!savedItem) { _libraryVoiceLastEntryId = null; return false; }
+
+  savedItem.portion = `${grams}g`;
+  renderLibraryVoiceList();
+
+  const lib = loadLibrary();
+  const idx = lib.findIndex(f => f.id === _libraryVoiceLastEntryId);
+  if (idx > -1) { lib[idx].portion = `${grams}g`; saveLibrary(lib); }
+
+  const status = document.getElementById('libraryVoiceStatus');
+  if (status && _libraryVoiceActive) status.textContent = `✓ Corrected "${savedItem.name}" to ${grams}g — next food, or "done" to finish`;
+  _libraryVoiceLastEntryId = null; // one correction only - a further bare number is a genuinely new (oddly-named) food, not a second correction to the same item
+  return true;
 }
 
 function renderLibraryVoiceList() {
@@ -16601,6 +16664,36 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ── Voice command recognizer ────────────────────────────────────────────────
+// Extracted to its own function (rather than inline in onresult) since with
+// continuous:true a single recognition event can carry several finalised
+// phrases at once - each one needs the exact same command-matching logic
+// applied independently, in order, same as the old single-phrase version did.
+function _handleCookVoiceCommand(text) {
+  let m;
+  if (COOK_CMD_END.test(text))            { cookModeEnd(); return; }
+  else if (COOK_CMD_START.test(text))      { if (!_cookPlaying) cookModeStart(); else _setCookMicStatus('Already reading — say "pause" to stop.'); }
+  else if (COOK_CMD_PAUSE.test(text))      { if (_cookPlaying) cookModePause(); else _setCookMicStatus('Already paused — say "resume" or tap ▶.'); }
+  else if (COOK_CMD_RESUME.test(text))     { if (!_cookPlaying) cookModeResume(); else _setCookMicStatus('Already playing.'); }
+  // Checked before bare COOK_CMD_REPEAT, which "repeat step 3" would also
+  // match on the word "repeat" alone - the numbered form has to win, or
+  // it'd just re-read whatever step you're currently on instead of
+  // jumping to the one you actually asked for.
+  else if ((m = text.match(COOK_CMD_GOTO_STEP)))  { cookModeGotoStep(_parseSpokenNumber(m[1])); }
+  else if (COOK_CMD_SERVINGS_QUERY.test(text)) { _cookSpeakServings(); }
+  else if ((m = text.match(COOK_CMD_RESCALE)))  { cookModeRescale(_parseSpokenNumber(m[1])); }
+  // Explicit-duration form checked before the bare form ("timer" alone) -
+  // "timer for 5 minutes" has to win over just treating it as "start timer
+  // using whatever's in the current step's own text".
+  else if ((m = text.match(COOK_CMD_TIMER_EXPLICIT)) && _parseDurationFromText(m[1]) != null) { cookModeStartTimer(_parseDurationFromText(m[1])); }
+  else if (COOK_CMD_TIMER_BARE.test(text)) { cookModeStartTimer(null); }
+  else if (COOK_CMD_HELP.test(text))       { openVoiceCommandHelp('cook'); }
+  else if (COOK_CMD_REPEAT.test(text))     { _cookSpeakCurrentStep(); }
+  else if (COOK_CMD_INGREDIENTS.test(text)) { _cookSpeakIngredients(); }
+  else if (COOK_CMD_NEXT.test(text))       { cookModeNext(); }
+  else if (COOK_CMD_PREV.test(text))       { cookModePrev(); }
+  else { _setCookMicStatus(`Didn't recognise "${text}" — say "help" to see everything you can say`); }
+}
+
 function _startCookVoiceListening() {
   if (!_cookModeOpen) return;
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -16611,40 +16704,27 @@ function _startCookVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _cookRecognition = new SpeechRecognition();
   _cookRecognition.lang = 'en-GB';
-  _cookRecognition.continuous = false;
+  // continuous:true, and (see the speak() override further down) the mic is
+  // no longer switched off while a step is being read - "pause" said mid-
+  // sentence genuinely needs to be heard, not just in the gaps between
+  // steps. Previously the mic was deliberately stopped whenever speech was
+  // playing to avoid the phone hearing its own voice - which meant "pause"
+  // said WHILE a step was talking was never heard at all, and reading just
+  // continued as normal once the mic (mistakenly) looked like it should be
+  // listening again. That's what "auto-resumes after pausing" actually was -
+  // pause was said during the one window it could never be heard in.
+  _cookRecognition.continuous = true;
   _cookRecognition.interimResults = false;
 
   _cookRecognition.onstart = () => {
-    if (!window.speechSynthesis?.speaking) {
-      _setCookMicStatus(_cookPlaying ? '🎤 Listening — say "next", "back", "pause", "repeat", or "end"' : '🎤 Say "start" to begin, or tap ▶');
-    }
+    _setCookMicStatus(_cookPlaying ? '🎤 Listening — say "next", "back", "pause", "repeat", or "end" any time, even mid-step' : '🎤 Say "start" to begin, or tap ▶');
   };
 
   _cookRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript.trim();
-    let m;
-    if (COOK_CMD_END.test(text))            { cookModeEnd(); return; }
-    else if (COOK_CMD_START.test(text))      { if (!_cookPlaying) cookModeStart(); else _setCookMicStatus('Already reading — say "pause" to stop.'); }
-    else if (COOK_CMD_PAUSE.test(text))      { if (_cookPlaying) cookModePause(); else _setCookMicStatus('Already paused — say "resume" or tap ▶.'); }
-    else if (COOK_CMD_RESUME.test(text))     { if (!_cookPlaying) cookModeResume(); else _setCookMicStatus('Already playing.'); }
-    // Checked before bare COOK_CMD_REPEAT, which "repeat step 3" would also
-    // match on the word "repeat" alone - the numbered form has to win, or
-    // it'd just re-read whatever step you're currently on instead of
-    // jumping to the one you actually asked for.
-    else if ((m = text.match(COOK_CMD_GOTO_STEP)))  { cookModeGotoStep(_parseSpokenNumber(m[1])); }
-    else if (COOK_CMD_SERVINGS_QUERY.test(text)) { _cookSpeakServings(); }
-    else if ((m = text.match(COOK_CMD_RESCALE)))  { cookModeRescale(_parseSpokenNumber(m[1])); }
-    // Explicit-duration form checked before the bare form ("timer" alone) -
-    // "timer for 5 minutes" has to win over just treating it as "start timer
-    // using whatever's in the current step's own text".
-    else if ((m = text.match(COOK_CMD_TIMER_EXPLICIT)) && _parseDurationFromText(m[1]) != null) { cookModeStartTimer(_parseDurationFromText(m[1])); }
-    else if (COOK_CMD_TIMER_BARE.test(text)) { cookModeStartTimer(null); }
-    else if (COOK_CMD_HELP.test(text))       { openVoiceCommandHelp('cook'); }
-    else if (COOK_CMD_REPEAT.test(text))     { _cookSpeakCurrentStep(); }
-    else if (COOK_CMD_INGREDIENTS.test(text)) { _cookSpeakIngredients(); }
-    else if (COOK_CMD_NEXT.test(text))       { cookModeNext(); }
-    else if (COOK_CMD_PREV.test(text))       { cookModePrev(); }
-    else { _setCookMicStatus(`Didn't recognise "${text}" — say "help" to see everything you can say`); }
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      _handleCookVoiceCommand(e.results[ri][0].transcript.trim());
+    }
   };
 
   _cookRecognition.onerror = (e) => {
@@ -16653,10 +16733,9 @@ function _startCookVoiceListening() {
   };
 
   _cookRecognition.onend = () => {
-    // Don't restart while speech is actively playing - _cookSpeakCurrentStep's
-    // utterance handlers below are responsible for pausing/resuming listening
-    // around actual TTS playback, not this generic restart loop.
-    if (_cookModeOpen && !window.speechSynthesis?.speaking) {
+    // With continuous:true this should rarely fire except on a genuine
+    // error or an OS-level session limit - restart as a safety net either way.
+    if (_cookModeOpen) {
       setTimeout(() => { if (_cookModeOpen) _startCookVoiceListening(); }, 300);
     }
   };
@@ -16674,12 +16753,16 @@ if ('speechSynthesis' in window) {
     const origOnStart = utterance.onstart;
     const origOnEnd = utterance.onend;
     utterance.onstart = function(e) {
-      if (_cookModeOpen) { _cookRecognition?.stop(); _setCookMicStatus('🔈 Reading step aloud…'); }
+      // No longer stops the recognizer here - the whole point of the fix
+      // above is that "pause" needs to be heard WHILE a step is talking, not
+      // just in the gap after. Relying on the device's own echo cancellation
+      // (standard on phone mic+speaker audio pipelines) rather than
+      // proactively silencing the mic during every utterance.
+      if (_cookModeOpen) _setCookMicStatus('🔈 Reading step aloud… (say "pause" any time)');
       if (origOnStart) origOnStart(e);
     };
     utterance.onend = function(e) {
       if (origOnEnd) origOnEnd(e);
-      if (_cookModeOpen) setTimeout(() => { if (_cookModeOpen) _startCookVoiceListening(); }, 200);
     };
     _origSpeak(utterance);
   };
@@ -17105,7 +17188,7 @@ function _startMissedDayVoiceListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _missedDayVoiceRecognition = new SpeechRecognition();
   _missedDayVoiceRecognition.lang = 'en-GB';
-  _missedDayVoiceRecognition.continuous = false;
+  _missedDayVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across several meals
   _missedDayVoiceRecognition.interimResults = false;
 
   const btn = document.getElementById('missedDayVoiceBtn');
@@ -17117,17 +17200,20 @@ function _startMissedDayVoiceListening() {
   };
 
   _missedDayVoiceRecognition.onresult = (e) => {
-    const text = e.results[0][0].transcript.trim();
-    if (isRecipeVoiceDonePhrase(text)) {
-      _stopMissedDayVoiceInput(null, false);
-      calculateMissedDayConv();
-      return;
+    for (let ri = e.resultIndex; ri < e.results.length; ri++) {
+      if (!e.results[ri].isFinal) continue;
+      const text = e.results[ri][0].transcript.trim();
+      if (isRecipeVoiceDonePhrase(text)) {
+        _stopMissedDayVoiceInput(null, false);
+        calculateMissedDayConv();
+        return;
+      }
+      const ta = document.getElementById('missedDayConvMeals');
+      if (ta) {
+        ta.value = ta.value.trim() ? `${ta.value.trim()}, ${text}` : text;
+      }
+      if (status) status.textContent = `✓ Added "${text}" — next meal, or "done" to calculate`;
     }
-    const ta = document.getElementById('missedDayConvMeals');
-    if (ta) {
-      ta.value = ta.value.trim() ? `${ta.value.trim()}, ${text}` : text;
-    }
-    if (status) status.textContent = `✓ Added "${text}" — next meal, or "done" to calculate`;
   };
 
   _missedDayVoiceRecognition.onerror = (e) => {
