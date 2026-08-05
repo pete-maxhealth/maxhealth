@@ -2522,6 +2522,7 @@ body[data-theme="light"] {
         <div class="water-btn" onclick="logWater(440)">+ Pint<br><span style="font-size:10px;">440ml</span></div>
         <div class="water-btn" onclick="logWater(500)">+ Bottle<br><span style="font-size:10px;">500ml</span></div>
         <div class="water-btn" onclick="logWaterCustom()">+ Custom<br><span style="font-size:10px;">ml</span></div>
+        <div class="water-btn" id="waterVoiceBtn" onclick="toggleWaterVoiceInput()">🎤 Voice<br><span style="font-size:10px;">say amount</span></div>
         <div class="water-btn" onclick="resetWater()" style="color:var(--text3);border-color:var(--border);background:transparent;">Reset</div>
       </div>
     </div>
@@ -2678,7 +2679,7 @@ body[data-theme="light"] {
       <button id="searchBtn" onclick="openFoodSearch()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Search food database">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
-      <button id="voiceBtn" onclick="toggleVoiceInput()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Voice input">
+      <button id="voiceBtn" onclick="toggleVoiceInput()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Voice log — say each item, then 'done' to review before logging">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
       </button>
       <button id="barcodeBtn" onclick="openLiveBarcodeScanner()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Scan barcode">
@@ -2690,6 +2691,7 @@ body[data-theme="light"] {
       </button>
       </div>
     </div>
+    <div id="voiceLogStatus" style="display:none;font-size:11px;color:var(--text3);padding:0 4px 8px;line-height:1.5;"></div>
 
     <!-- LIVE BARCODE SCANNER — point-and-scan, no manual photo needed.
          Falls back to the existing file-capture flow (barcodeInput) automatically
@@ -2762,6 +2764,7 @@ body[data-theme="light"] {
         <span onclick="moveLibrarySection('food','up')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▲</span>
         <span onclick="moveLibrarySection('food','down')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;">▼</span>
         <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
+        <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openLibraryVoiceModal()">🎤 Voice add</button>
         <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openDuplicateScanModal()">🔍 Find Duplicates</button>
       </div>
     </div>
@@ -4045,7 +4048,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.292</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.296</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4793,7 +4796,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.292'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.296'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6678,6 +6681,42 @@ function getAIConfig() {
   };
 }
 
+// ── Shared-proxy daily cap ──────────────────────────────────────────────────
+// Anyone using the app on the default "none" provider (i.e. everyone who
+// hasn't deliberately gone into Settings and added their own API key) runs
+// every AI call through Pete's own Cloudflare Worker, on Pete's own account.
+// This caps how many of those shared-proxy calls a single device can make in
+// a day, purely so one household member's normal use — or a stuck loop
+// retrying a failed call — can't quietly run up real cost unnoticed. It's
+// stored in that device's own localStorage, so it's a courtesy speed bump,
+// not a security boundary — a real per-device/per-IP limit that can't be
+// cleared away needs to live on the Worker itself.
+const PROXY_DAILY_CAP = 60;
+
+function _proxyCapState() {
+  try {
+    const raw = localStorage.getItem('mh_proxy_cap');
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s.date === todayStr()) return s;
+    }
+  } catch(e) {}
+  return { date: todayStr(), count: 0 };
+}
+
+function _checkProxyDailyCap() {
+  const s = _proxyCapState();
+  if (s.count >= PROXY_DAILY_CAP) {
+    return {
+      ok: false,
+      error: `Daily AI limit reached for this device (${PROXY_DAILY_CAP} calls) — this device is using the shared account, which Pete pays for directly. Add your own free Claude or OpenAI API key in Settings to remove this limit, or try again tomorrow.`
+    };
+  }
+  s.count += 1;
+  localStorage.setItem('mh_proxy_cap', JSON.stringify(s));
+  return { ok: true };
+}
+
 function setProvider(p) {
   localStorage.setItem('mh_provider', p);
   document.querySelectorAll('.provider-btn').forEach(b => b.classList.remove('active'));
@@ -7315,6 +7354,70 @@ function resetWater() {
     updateDashboard();
     showToast('Water reset');
   });
+}
+
+// ─── VOICE INPUT (water) ──────────────────────────────────────────────────────
+// Single utterance, direct log — matches the existing preset buttons
+// (+Glass/+Can/+Pint/+Bottle), which already log immediately with no
+// confirm step. Voice doing the same thing is consistent, not a new risk:
+// worst case is a wrong amount added, corrected the same way a mis-tap on
+// a preset button already would be - there's no undo on those either.
+// The keyword→ml mapping matches this app's own existing button values
+// exactly (e.g. "pint" = 440ml here, not the true 568ml UK pint) rather
+// than a generic real-world figure, since that's the locked convention
+// already in use on the dashboard.
+function _parseWaterAmount(text) {
+  const t = text.toLowerCase();
+  let m = t.match(/(\d+(\.\d+)?)\s*(ml|millilit\w*)/);
+  if (m) return Math.round(parseFloat(m[1]));
+  m = t.match(/(\d+(\.\d+)?)\s*(l|lit\w*)\b/);
+  if (m) return Math.round(parseFloat(m[1]) * 1000);
+  if (/\bglass\w*\b/.test(t)) return 250;
+  if (/\bcan\w*\b/.test(t)) return 330;
+  if (/\bpint\w*\b/.test(t)) return 440;
+  if (/\bbottle\w*\b/.test(t)) return 500;
+  // A bare number with no unit/keyword - only accept it if it's in a
+  // plausible ml range, so a misheard word that happens to contain a
+  // digit (e.g. a time or a quantity from an unrelated sentence) doesn't
+  // silently log nonsense.
+  m = t.match(/(\d+(\.\d+)?)/);
+  if (m) { const v = parseFloat(m[1]); if (v >= 50 && v <= 3000) return Math.round(v); }
+  return null;
+}
+
+function toggleWaterVoiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SpeechRecognition();
+  rec.lang = 'en-GB';
+  rec.continuous = false;
+  rec.interimResults = false;
+  const btn = document.getElementById('waterVoiceBtn');
+
+  rec.onstart = () => { if (btn) btn.style.background = 'rgba(45,235,143,0.2)'; };
+  rec.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    const ml = _parseWaterAmount(text);
+    if (ml === null) { showToast(`Didn't catch an amount in "${text}" - try "250ml" or "a glass"`); return; }
+    state.waterToday = (state.waterToday || 0) + ml;
+    saveState();
+    updateDashboard();
+    showToast(`🎤 +${ml}ml added`);
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) showToast(messages[e.error]);
+  };
+  rec.onend = () => { if (btn) btn.style.background = ''; };
+  rec.start();
 }
 
 function saveWaterTarget() {
@@ -9416,9 +9519,31 @@ function setPortionSuggestion(grams) {
   document.getElementById('foodAmountGrams').focus();
 }
 
-// ─── VOICE INPUT ─────────────────────────────────────────────────────────────
+// ─── VOICE INPUT (meal logging) ──────────────────────────────────────────────
+// Continuous multi-item capture, same shape as Recipe voice-add: stays
+// listening across several spoken meals/items rather than one utterance per
+// tap. Deliberately does NOT auto-log on "done" — this logs straight to
+// today's real totals (unlike a recipe draft or a missed-day estimate), so
+// the accumulated text is dropped into chatInput and offered via the same
+// one-tap "Log it" toast used before, which still routes through the
+// existing sendChat() → AI parse → preview pipeline. That preview screen
+// (with its own Edit/Log it/Save-only choices) is the actual review step —
+// voice never bypasses it, no matter how many items were captured.
+//
+// A persistent status line (#voiceLogStatus) runs alongside the toasts —
+// toasts alone disappear in a few seconds and leave no visible sign the mic
+// is in a different mode than before, which made this hard to actually use
+// without already knowing what to say and when.
 let _voiceRecognition = null;
 let _voiceListening = false;
+let _voiceMultiItems = [];
+
+function _setVoiceLogStatus(text) {
+  const el = document.getElementById('voiceLogStatus');
+  if (!el) return;
+  if (text) { el.style.display = 'block'; el.textContent = text; }
+  else el.style.display = 'none';
+}
 
 function toggleVoiceInput() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -9426,54 +9551,86 @@ function toggleVoiceInput() {
     return;
   }
   if (_voiceListening) {
-    _voiceRecognition?.stop();
+    // Manual mic-tap while listening is a pause, not a cancel — captured
+    // items are kept, AND (unlike before) immediately offered for logging
+    // via the same toast "done" gives, since previously pausing left you
+    // with no way to log what you'd said short of resuming and saying "done".
+    _pauseOrFinishVoiceInput();
     return;
   }
+  _voiceListening = true;
+  _startVoiceListening();
+}
+
+// Shared by both the "done" phrase and a manual pause-tap, so either way of
+// stopping gets the same result: captured items dropped into chatInput and
+// a "Log it" toast offered, never a dead end that only resume+"done" escapes.
+function _pauseOrFinishVoiceInput() {
+  const items = _voiceMultiItems.slice();
+  _voiceListening = false;
+  _voiceRecognition?.stop();
+  const btn = document.getElementById('voiceBtn');
+  if (btn) { btn.style.background = ''; btn.style.borderColor = ''; }
+  if (!items.length) { _setVoiceLogStatus(null); return; }
+  const input = document.getElementById('chatInput');
+  const combined = items.join(', ');
+  if (input) { input.value = combined; autoResize(input); }
+  _setVoiceLogStatus(`🎤 ${items.length} item${items.length === 1 ? '' : 's'} captured and put in the message box below — tap 🎤 again to add more, or Log it to send.`);
+  showToast(`🎤 ${items.length} item${items.length === 1 ? '' : 's'} captured — review & tap Log it`, 'Log it', () => { _voiceMultiItems = []; _setVoiceLogStatus(null); sendChat(); }, 10000);
+}
+
+function _startVoiceListening() {
+  if (!_voiceListening) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _voiceRecognition = new SpeechRecognition();
   _voiceRecognition.lang = 'en-GB';
-  _voiceRecognition.continuous = false;
+  _voiceRecognition.continuous = false; // auto-restart below, same reasoning as Recipe voice-add
   _voiceRecognition.interimResults = false;
 
   const btn = document.getElementById('voiceBtn');
 
   _voiceRecognition.onstart = () => {
-    _voiceListening = true;
     if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; }
-    showToast('🎤 Listening…');
+    _setVoiceLogStatus('🎤 Listening — say each item you ate, then "done" to review & log. Tap 🎤 any time to stop and log what you\'ve said so far.');
   };
+
   _voiceRecognition.onresult = e => {
-    const text = e.results[0][0].transcript;
-    const input = document.getElementById('chatInput');
-    if (input) {
-      input.value = text;
-      input.focus();
+    const text = e.results[0][0].transcript.trim();
+    if (isRecipeVoiceDonePhrase(text)) {
+      _pauseOrFinishVoiceInput();
+      if (!_voiceMultiItems.length) showToast('No items captured');
+      _voiceMultiItems = [];
+      return;
     }
-    // One-tap "Log it" right on the toast itself — the actual point of voice
-    // logging on a low-energy day is cutting effort to the bare minimum: tap
-    // mic, speak, tap once more to confirm. The transcript stays visible in
-    // the input too, so a mis-hearing can still be caught and edited by hand
-    // instead, rather than committing blindly.
-    showToast(`🎤 "${text}"`, 'Log it', () => sendChat(), 8000);
+    _voiceMultiItems.push(text);
+    _setVoiceLogStatus(`🎤 Captured so far: ${_voiceMultiItems.join(', ')} — say the next item, or "done" to finish.`);
+    showToast(`✓ "${text}" — say the next item, or "done" to finish`, null, null, 3000);
   };
+
   _voiceRecognition.onerror = e => {
-    // Raw error codes ("Voice error: no-speech") aren't actionable — these
-    // are the errors someone's actually likely to hit, translated into
-    // something that tells them what to actually do next.
+    // no-speech/aborted are routine (silence between items, or a deliberate
+    // stop) — not real errors, and onend below handles restarting.
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
     const messages = {
-      'no-speech': "Didn't catch that — try again, a bit closer to the mic",
       'audio-capture': 'No microphone found — check your device settings',
       'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
       'network': 'Voice recognition needs an internet connection',
-      'aborted': null // user-initiated stop, not a real error — no message needed
     };
-    const msg = messages[e.error];
-    if (msg) showToast(msg);
+    if (messages[e.error]) {
+      _voiceListening = false;
+      _voiceRecognition?.stop();
+      if (btn) { btn.style.background = ''; btn.style.borderColor = ''; }
+      showToast(messages[e.error]);
+      _setVoiceLogStatus(null);
+    }
   };
+
   _voiceRecognition.onend = () => {
-    _voiceListening = false;
-    if (btn) { btn.style.background = ''; btn.style.borderColor = ''; }
+    // Auto-restart if still active — the mechanism that keeps it listening
+    // across multiple items without re-tapping the mic each time.
+    if (_voiceListening) setTimeout(() => _startVoiceListening(), 300);
   };
+
   _voiceRecognition.start();
 }
 
@@ -14130,11 +14287,15 @@ function renderSupplements() {
     <div style="padding:16px 20px 8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;">Supplements</div>
-        <div style="font-size:12px;color:${takenCount===totalCount?'var(--green)':'var(--text3)'};">${takenCount}/${totalCount} taken</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:12px;color:${takenCount===totalCount?'var(--green)':'var(--text3)'};">${takenCount}/${totalCount} taken</div>
+          <button id="supplementVoiceBtn" onclick="toggleSupplementVoiceInput()" title="Voice check-off — say each supplement name as you take it" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:'Space Mono',monospace;">🎤 Voice</button>
+        </div>
       </div>
       <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:4px;">
         <div style="height:4px;background:var(--green);border-radius:2px;width:${totalCount?Math.round(takenCount/totalCount*100):0}%;transition:width 0.3s;"></div>
       </div>
+      <div id="supplementVoiceStatus" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;"></div>
     </div>`;
 
   for (const period of periods) {
@@ -14168,6 +14329,136 @@ function renderSupplements() {
     </div>`;
 
   el.innerHTML = html;
+}
+
+// ─── VOICE INPUT (supplements) ────────────────────────────────────────────────
+// Different shape from the other 3 (recipe/meal/library): this doesn't
+// accumulate text for an AI call, it's a direct action per recognised name —
+// "vitamin D... magnesium... fish oil" ticks each one off the existing list
+// as it's heard, same as tapping the row by hand. Only ever marks TAKEN, never
+// un-marks — a misheard repeat of a name already ticked is a safe no-op
+// rather than accidentally toggling it back off.
+let _supplementVoiceActive = false;
+let _supplementVoiceRecognition = null;
+
+// Simple time-of-day bucket matching the same 4 periods supplements are
+// already organised into — used only to pick which period a voice-confirmed
+// dose gets logged against, not a nutrition estimate of any kind.
+function _currentSupplementPeriod() {
+  const h = new Date().getHours();
+  if (h < 11) return 'morning';
+  if (h < 15) return 'midday';
+  if (h < 21) return 'evening';
+  return 'bedtime';
+}
+
+// Word-overlap match against the user's own confirmed supplement list only —
+// never invents or guesses a supplement that isn't already in their library.
+function _fuzzyMatchSupplement(transcript, defs) {
+  const t = transcript.toLowerCase().replace(/['\u2019]/g, '');
+  let best = null, bestScore = 0;
+  defs.forEach(s => {
+    const name = s.name.toLowerCase().replace(/['\u2019]/g, '');
+    if (t.includes(name)) { if (name.length > bestScore) { bestScore = name.length; best = s; } return; }
+    const words = name.split(/\s+/).filter(w => w.length > 2);
+    if (!words.length) return;
+    const hits = words.filter(w => t.includes(w)).length;
+    const score = hits / words.length;
+    if (score >= 0.6 && hits > bestScore) { bestScore = hits; best = s; }
+  });
+  return best;
+}
+
+function toggleSupplementVoiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  if (_supplementVoiceActive) {
+    _stopSupplementVoiceInput('⏸ Paused. Tap 🎤 to resume.', true);
+    return;
+  }
+  _supplementVoiceActive = true;
+  _startSupplementVoiceListening();
+}
+
+function _stopSupplementVoiceInput(message, paused) {
+  _supplementVoiceActive = false;
+  _supplementVoiceRecognition?.stop();
+  const btn = document.getElementById('supplementVoiceBtn');
+  if (btn) { btn.style.background = ''; btn.style.borderColor = ''; }
+  const status = document.getElementById('supplementVoiceStatus');
+  if (status) {
+    if (message) { status.style.display = 'block'; status.textContent = message; }
+    else if (!paused) status.style.display = 'none';
+  }
+}
+
+function _startSupplementVoiceListening() {
+  if (!_supplementVoiceActive) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _supplementVoiceRecognition = new SpeechRecognition();
+  _supplementVoiceRecognition.lang = 'en-GB';
+  _supplementVoiceRecognition.continuous = false;
+  _supplementVoiceRecognition.interimResults = false;
+
+  const btn = document.getElementById('supplementVoiceBtn');
+  const status = document.getElementById('supplementVoiceStatus');
+
+  _supplementVoiceRecognition.onstart = () => {
+    if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Say each supplement name, or "done" to finish'; }
+  };
+
+  _supplementVoiceRecognition.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    if (isRecipeVoiceDonePhrase(text)) {
+      _stopSupplementVoiceInput(null, false);
+      return;
+    }
+    const defs = loadSupplementDefs().filter(s => s.active !== false);
+    const match = _fuzzyMatchSupplement(text, defs);
+    if (!match) {
+      if (status) status.textContent = `Didn't recognise "${text}" in your supplement list — try the name again`;
+      return;
+    }
+    const period = _currentSupplementPeriod();
+    const suppPeriods = match.periods || [match.period];
+    const targetPeriod = suppPeriods.includes(period) ? period : suppPeriods[0]; // falls back to its first scheduled period if it isn't actually due right now
+    const log = loadSupplementLog();
+    const key = match.id + '_' + targetPeriod;
+    if (log[key]) {
+      if (status) status.textContent = `"${match.name}" already marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod})`;
+      return;
+    }
+    log[key] = true;
+    saveSupplementLog(log);
+    renderSupplements();
+    // renderSupplements() rebuilds #supplementVoiceStatus too, so this has to
+    // re-fetch the element and re-show it rather than reuse the stale `status` reference.
+    const status2 = document.getElementById('supplementVoiceStatus');
+    if (status2) { status2.style.display = 'block'; status2.textContent = `✓ "${match.name}" marked taken (${PERIOD_LABELS[targetPeriod] || targetPeriod}) — next one, or "done"`; }
+    if (_supplementVoiceActive) {
+      const btn2 = document.getElementById('supplementVoiceBtn');
+      if (btn2) { btn2.style.background = 'rgba(45,235,143,0.2)'; btn2.style.borderColor = 'var(--green)'; }
+    }
+  };
+
+  _supplementVoiceRecognition.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) _stopSupplementVoiceInput(messages[e.error], false);
+  };
+
+  _supplementVoiceRecognition.onend = () => {
+    if (_supplementVoiceActive) setTimeout(() => _startSupplementVoiceListening(), 300);
+  };
+
+  _supplementVoiceRecognition.start();
 }
 
 // ── Supplement settings UI ────────────────────────────────
@@ -15222,6 +15513,156 @@ async function _addRecipeIngredientFromVoice(text) {
   }
 }
 
+// ─── VOICE INPUT (batch library build) ───────────────────────────────────────
+let _libraryVoiceActive = false;
+let _libraryVoiceRecognition = null;
+let _libraryVoiceSaved = []; // {name, kcal, protein, fat, carbs, portion} for the on-screen running list
+
+function openLibraryVoiceModal() {
+  _libraryVoiceSaved = [];
+  document.getElementById('libraryVoiceStatus').style.display = 'none';
+  document.getElementById('libraryVoiceList').innerHTML = '';
+  document.getElementById('libraryVoiceModal').style.display = 'flex';
+}
+
+function closeLibraryVoiceModal() {
+  if (_libraryVoiceActive) _stopLibraryVoiceInput(null, false);
+  document.getElementById('libraryVoiceModal').style.display = 'none';
+  renderLibrary(); // pick up anything saved this session
+}
+
+function toggleLibraryVoiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  if (_libraryVoiceActive) {
+    _stopLibraryVoiceInput(
+      `⏸ Paused — ${_libraryVoiceSaved.length} saved so far. Tap 🎤 to resume.`,
+      true
+    );
+    return;
+  }
+  _libraryVoiceActive = true;
+  _startLibraryVoiceListening();
+}
+
+function _stopLibraryVoiceInput(message, paused) {
+  _libraryVoiceActive = false;
+  _libraryVoiceRecognition?.stop();
+  const btn = document.getElementById('libraryVoiceBtn');
+  if (btn) btn.textContent = paused ? `🎤 Resume (${_libraryVoiceSaved.length})` : '🎤 Start';
+  const status = document.getElementById('libraryVoiceStatus');
+  if (status) {
+    if (message) { status.style.display = 'block'; status.textContent = message; }
+    else status.style.display = 'none';
+  }
+}
+
+function _startLibraryVoiceListening() {
+  if (!_libraryVoiceActive) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _libraryVoiceRecognition = new SpeechRecognition();
+  _libraryVoiceRecognition.lang = 'en-GB';
+  _libraryVoiceRecognition.continuous = false;
+  _libraryVoiceRecognition.interimResults = false;
+
+  const btn = document.getElementById('libraryVoiceBtn');
+  const status = document.getElementById('libraryVoiceStatus');
+
+  _libraryVoiceRecognition.onstart = () => {
+    if (btn) btn.textContent = '🎤 Listening…';
+    if (status) { status.style.display = 'block'; status.textContent = 'Say a food and its amount, or "done" to finish'; }
+  };
+
+  _libraryVoiceRecognition.onresult = async (e) => {
+    const text = e.results[0][0].transcript.trim();
+    if (isRecipeVoiceDonePhrase(text)) {
+      _stopLibraryVoiceInput(`✓ Done — ${_libraryVoiceSaved.length} item${_libraryVoiceSaved.length === 1 ? '' : 's'} added to library`);
+      return;
+    }
+    if (status) status.textContent = `🎤 Adding "${text}"…`;
+    await _addLibraryItemFromVoice(text);
+  };
+
+  _libraryVoiceRecognition.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) _stopLibraryVoiceInput(messages[e.error], false);
+  };
+
+  _libraryVoiceRecognition.onend = () => {
+    if (_libraryVoiceActive) setTimeout(() => _startLibraryVoiceListening(), 300);
+  };
+
+  _libraryVoiceRecognition.start();
+}
+
+// Reuses the exact same AI parse + amount-detection approach proven in Recipe
+// voice-add (v3.10.289–292: 6/6 correct), then routes into
+// validateAndSaveLibraryEntry() — the same plausibility-check and
+// compare-to-existing path manual "+ Add Food" entries go through — so a
+// voice-built item can still surface a duplicate/implausible-value prompt
+// exactly like typing it in would, rather than silently skipping that check.
+async function _addLibraryItemFromVoice(text) {
+  try {
+    const result = await parseWithAI(text, null, null);
+    const item = result?.items?.[0];
+    if (result?.type !== 'food' || !item) {
+      const status = document.getElementById('libraryVoiceStatus');
+      if (status && _libraryVoiceActive) status.textContent = `Didn't catch a clear food in "${text}" — try again`;
+      return;
+    }
+    const amountStr = (item.amount || '').toString().toLowerCase();
+    const hasCleanGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(amountStr);
+    const baseG = hasCleanGrams ? parseFloat(amountStr) : 100;
+
+    console.log('[library voice]', { heardAsTranscript: text, aiReturnedName: item.name, aiReturnedAmount: item.amount, parsedAsCleanGrams: hasCleanGrams, finalBaseG: baseG });
+
+    const entry = {
+      id: 'voice_' + Date.now(),
+      name: item.name,
+      kcal: Math.round(item.kcal || 0),
+      protein: Math.round((item.protein || 0) * 10) / 10,
+      fat: Math.round((item.fat || 0) * 10) / 10,
+      carbs: Math.round((item.carbs || 0) * 10) / 10,
+      portion: `${baseG}g`,
+      per100g: false,
+      locked: false,
+      source: 'voice'
+    };
+    validateAndSaveLibraryEntry(entry);
+    _libraryVoiceSaved.push(entry);
+    renderLibraryVoiceList();
+
+    const status = document.getElementById('libraryVoiceStatus');
+    if (status && _libraryVoiceActive) {
+      status.textContent = hasCleanGrams
+        ? `✓ Added "${item.name}" (${baseG}g) — next food, or "done" to finish`
+        : `⚠ Added "${item.name}" — couldn't catch a clear weight, defaulted to 100g (heard: "${item.amount || 'nothing'}"). Check/correct it in the library after.`;
+    }
+  } catch (err) {
+    console.error('Library voice item parse failed:', err);
+    const status = document.getElementById('libraryVoiceStatus');
+    if (status && _libraryVoiceActive) status.textContent = 'Something went wrong adding that — try again';
+  }
+}
+
+function renderLibraryVoiceList() {
+  const el = document.getElementById('libraryVoiceList');
+  if (!el) return;
+  el.innerHTML = _libraryVoiceSaved.map(f => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+      <span style="color:var(--text);">${f.name}</span>
+      <span style="color:var(--text3);font-family:'Space Mono',monospace;">${f.kcal}kcal · ${f.portion}</span>
+    </div>
+  `).join('');
+}
+
 function addRecipeIngredient() {
   const name  = document.getElementById('recipeIngName').value.trim();
   const kcal  = parseFloat(document.getElementById('recipeIngKcal').value) || 0;
@@ -15598,7 +16039,9 @@ function _showMissedDayMealsPrompt(dateStr) {
   bubble.innerHTML = `
     <div style="font-size:11px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Missed Day — ${dateStr}</div>
     <div style="font-size:13px;color:var(--text);margin-bottom:10px;">What did you eat that day? Describe your meals as you normally would.</div>
-    <textarea id="missedDayConvMeals" class="modal-input" rows="3" placeholder="e.g. Heylo bread x3 with PB for breakfast, chicken curry for dinner, cream shake, handful of nuts" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;margin-bottom:10px;box-sizing:border-box;"></textarea>
+    <textarea id="missedDayConvMeals" class="modal-input" rows="3" placeholder="e.g. Heylo bread x3 with PB for breakfast, chicken curry for dinner, cream shake, handful of nuts" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;margin-bottom:6px;box-sizing:border-box;"></textarea>
+    <button id="missedDayVoiceBtn" onclick="toggleMissedDayVoiceInput()" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;color:var(--text2);cursor:pointer;font-family:'Space Mono',monospace;margin-bottom:10px;">🎤 Voice add</button>
+    <div id="missedDayVoiceStatus" style="display:none;font-size:11px;color:var(--text3);margin-bottom:10px;"></div>
     <div style="display:flex;gap:8px;">
       <button class="run-btn" style="flex:2;" onclick="calculateMissedDayConv()">Calculate with AI →</button>
       <button class="copy-btn" style="flex:1;font-size:12px;" onclick="cancelMissedDayFlow()">Cancel</button>
@@ -15670,6 +16113,88 @@ async function calculateMissedDayConv() {
   }
 }
 
+// ─── VOICE INPUT (missed day) ────────────────────────────────────────────────
+// Same continuous multi-item shape as Recipe/meal voice — appends each spoken
+// meal into the textarea live so it can still be read and hand-edited before
+// calculating, then "done" auto-runs calculateMissedDayConv(), which already
+// stops at its own result bubble (kcal/protein/fat/carbs + Save/Cancel) rather
+// than writing to history directly — that bubble is the review step, so voice
+// here still can't commit anything to History without an explicit tap.
+let _missedDayVoiceActive = false;
+let _missedDayVoiceRecognition = null;
+
+function toggleMissedDayVoiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  if (_missedDayVoiceActive) {
+    _stopMissedDayVoiceInput('⏸ Paused. Tap 🎤 to resume, or say "done" to calculate.', true);
+    return;
+  }
+  _missedDayVoiceActive = true;
+  _startMissedDayVoiceListening();
+}
+
+function _stopMissedDayVoiceInput(message, paused) {
+  _missedDayVoiceActive = false;
+  _missedDayVoiceRecognition?.stop();
+  const btn = document.getElementById('missedDayVoiceBtn');
+  if (btn) { btn.style.background = ''; btn.style.borderColor = ''; btn.textContent = '🎤 Voice add'; }
+  const status = document.getElementById('missedDayVoiceStatus');
+  if (status) {
+    if (message) { status.style.display = 'block'; status.textContent = message; }
+    else status.style.display = 'none';
+  }
+}
+
+function _startMissedDayVoiceListening() {
+  if (!_missedDayVoiceActive) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  _missedDayVoiceRecognition = new SpeechRecognition();
+  _missedDayVoiceRecognition.lang = 'en-GB';
+  _missedDayVoiceRecognition.continuous = false;
+  _missedDayVoiceRecognition.interimResults = false;
+
+  const btn = document.getElementById('missedDayVoiceBtn');
+  const status = document.getElementById('missedDayVoiceStatus');
+
+  _missedDayVoiceRecognition.onstart = () => {
+    if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; btn.textContent = '🎤 Listening…'; }
+    if (status) { status.style.display = 'block'; status.textContent = 'Describe each meal, then say "done" to calculate'; }
+  };
+
+  _missedDayVoiceRecognition.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    if (isRecipeVoiceDonePhrase(text)) {
+      _stopMissedDayVoiceInput(null, false);
+      calculateMissedDayConv();
+      return;
+    }
+    const ta = document.getElementById('missedDayConvMeals');
+    if (ta) {
+      ta.value = ta.value.trim() ? `${ta.value.trim()}, ${text}` : text;
+    }
+    if (status) status.textContent = `✓ Added "${text}" — next meal, or "done" to calculate`;
+  };
+
+  _missedDayVoiceRecognition.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) _stopMissedDayVoiceInput(messages[e.error], false);
+  };
+
+  _missedDayVoiceRecognition.onend = () => {
+    if (_missedDayVoiceActive) setTimeout(() => _startMissedDayVoiceListening(), 300);
+  };
+
+  _missedDayVoiceRecognition.start();
+}
+
 function saveMissedDayConv(kcal, protein, carbs, fat) {
   const dateVal = _missedDayConvDate;
   const notes = document.getElementById('missedDayConvNotes')?.value.trim() || 'missed day entry';
@@ -15705,6 +16230,7 @@ function saveMissedDayConv(kcal, protein, carbs, fat) {
 }
 
 function cancelMissedDayFlow() {
+  if (_missedDayVoiceActive) _stopMissedDayVoiceInput(null, false); // don't leave the mic listening into a closed flow
   ['missedDayConvBubble','missedDayMealsBubble','missedDayResultBubble'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.remove();
@@ -16251,6 +16777,48 @@ function confirmWeight() {
   updateDashboard();
   closeWeightModal();
   showToast(`Weight updated: ${val}kg`);
+}
+
+// ─── VOICE INPUT (weight) ─────────────────────────────────────────────────────
+// Single utterance, not continuous — a weight reading is one number, not a
+// list to build up. Only ever fills the input field; confirmWeight() still
+// requires its own explicit tap, same as typing it in by hand.
+function toggleWeightVoiceInput() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported on this browser');
+    return;
+  }
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const rec = new SpeechRecognition();
+  rec.lang = 'en-GB';
+  rec.continuous = false;
+  rec.interimResults = false;
+  const btn = document.getElementById('weightVoiceBtn');
+
+  rec.onstart = () => { if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; } };
+  rec.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    // Matches "92.3", "92.3 kilos", "ninety two point three kg" (after speech-to-text
+    // has already turned spoken numbers into digits, which it reliably does) -
+    // just needs the first decimal number in the phrase.
+    const match = text.match(/(\d+(\.\d+)?)/);
+    if (!match) { showToast(`Didn't catch a number in "${text}" - try again`); return; }
+    const val = parseFloat(match[1]);
+    const input = document.getElementById('weightInput');
+    if (input) input.value = val;
+    showToast(`🎤 Heard ${val}kg - check the field, then tap Confirm`);
+  };
+  rec.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    const messages = {
+      'audio-capture': 'No microphone found — check your device settings',
+      'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
+      'network': 'Voice recognition needs an internet connection',
+    };
+    if (messages[e.error]) showToast(messages[e.error]);
+  };
+  rec.onend = () => { if (btn) { btn.style.background = ''; btn.style.borderColor = ''; } };
+  rec.start();
 }
 
 function switchTab(tab, el) {
@@ -20733,6 +21301,21 @@ Keep each section to 3-4 sentences. Prose only. Clinical and direct.`;
 async function callHealthAI(prompt, { maxTokens = 800, system = null, image = null, webSearch = false } = {}) {
   const { provider, apiKey } = getAIConfig();
   const PROXY = 'https://maxhealth-ai.bogginsuk.workers.dev';
+  const usingSharedProxy = !((provider === 'claude' || provider === 'openai') && apiKey);
+
+  // ── Shared-proxy daily cap ──────────────────────────────────────────────
+  // Every call that ISN'T using someone's own stored key goes through the
+  // shared Worker, which bills against Pete's own account regardless of who
+  // is actually using the app. This is a client-side speed bump only — it
+  // stops one device's honest daily use (or a stuck retry loop) from running
+  // away unnoticed; it can't stop someone who deliberately clears
+  // localStorage, which is what the real fix (a cap on the Worker itself,
+  // which sees every device and can't be bypassed client-side) is for.
+  if (usingSharedProxy) {
+    const capCheck = _checkProxyDailyCap();
+    if (!capCheck.ok) return capCheck;
+  }
+
   // Claude-format user content: plain text, or an image+text array when a
   // photo is supplied (e.g. reading a barcode from a picture).
   const claudeContent = image
@@ -23101,11 +23684,30 @@ function dismissInsight() {
   </div>
 </div>
 
+<!-- BATCH-BUILD LIBRARY BY VOICE — talk through several new foods in one
+     sitting rather than opening + Add Food repeatedly. Each item still goes
+     through the exact same validateAndSaveLibraryEntry() path as manual
+     entry (plausibility check + comparison-to-existing), so nothing here
+     skips a review step — it only skips the retyping. -->
+<div class="modal-overlay" id="libraryVoiceModal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);align-items:flex-end;">
+  <div class="modal" style="width:100%;border-radius:16px 16px 0 0;padding:20px;">
+    <div class="modal-title">VOICE ADD TO LIBRARY</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Say each food with its amount, e.g. "ASDA mixed nuts, 100 grams". Say "done" when finished — nothing outside your library is affected.</div>
+    <button id="libraryVoiceBtn" class="run-btn" style="width:100%;margin-bottom:10px;" onclick="toggleLibraryVoiceInput()">🎤 Start</button>
+    <div id="libraryVoiceStatus" style="display:none;font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.6;"></div>
+    <div id="libraryVoiceList" style="margin-bottom:12px;"></div>
+    <button class="modal-btn cancel" style="width:100%;" onclick="closeLibraryVoiceModal()">Close</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="weightModal">
   <div class="modal">
     <div class="modal-title">UPDATE WEIGHT</div>
     <div class="modal-label">Enter today's weight (kg)</div>
-    <input class="modal-input" type="number" id="weightInput" step="0.1" placeholder="90.6">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input class="modal-input" type="number" id="weightInput" step="0.1" placeholder="90.6" style="flex:1;">
+      <button id="weightVoiceBtn" onclick="toggleWeightVoiceInput()" title="Say your weight" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:44px;height:44px;flex-shrink:0;cursor:pointer;font-size:16px;">🎤</button>
+    </div>
     <div class="modal-row">
       <button class="modal-btn cancel" onclick="closeWeightModal()">Cancel</button>
       <button class="modal-btn confirm-new" onclick="confirmWeight()">Confirm</button>
