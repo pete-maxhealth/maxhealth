@@ -4065,7 +4065,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.311</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.312</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4832,7 +4832,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.311'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.312'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -16206,9 +16206,28 @@ const COOK_CMD_INGREDIENTS = /\bingredients?\b/i;
 // dished up and now realise I need to check what step 2 said" scenario -
 // next/back alone means counting steps backward one at a time instead of
 // just naming the one you want.
-const COOK_CMD_GOTO_STEP = /\b(?:read|repeat|go to|jump to|say)\s+step\s+(\d+)\b/i;
+// Speech recognition doesn't reliably convert spoken numbers to digits in
+// every phrase - "step 4" and "step for" are identical sounds, and it can
+// return either. Digit-only regexes (\d+) then silently fail to match at
+// all. This covers both: a digit if one comes through, or the number spelled
+// as a word (including its common homophone, "for" -> 4), one through twenty
+// - enough range for any realistic step count or serving size.
+const _NUMBER_WORDS = {
+  zero:0, one:1, two:2, to:2, too:2, three:3, four:4, for:4, five:5, six:6, seven:7,
+  eight:8, ate:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14,
+  fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20
+};
+const _NUM_PATTERN = `(\\d+|${Object.keys(_NUMBER_WORDS).join('|')})`;
+function _parseSpokenNumber(str) {
+  if (str == null) return null;
+  const s = str.toLowerCase().trim();
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  return _NUMBER_WORDS[s] ?? null;
+}
+
+const COOK_CMD_GOTO_STEP = new RegExp(`\\b(?:read|repeat|go to|jump to|say)\\s+step\\s+${_NUM_PATTERN}\\b`, 'i');
 const COOK_CMD_SERVINGS_QUERY = /\bhow many servings\b/i;
-const COOK_CMD_RESCALE = /\b(?:make it for|scale (?:it )?(?:to|for)|cook (?:it )?for)\s+(\d+)\b/i;
+const COOK_CMD_RESCALE = new RegExp(`\\b(?:make it for|scale (?:it )?(?:to|for)|cook (?:it )?for)\\s+${_NUM_PATTERN}\\b`, 'i');
 const COOK_CMD_TIMER_EXPLICIT = /\b(?:start (?:a )?timer|set (?:a )?timer|timer)\s+(?:for\s+)?(.+)/i;
 const COOK_CMD_TIMER_BARE = /\b(?:start (?:the )?timer|set (?:a )?timer)\b/i;
 const COOK_CMD_HELP = /\bhelp\b/i;
@@ -16347,6 +16366,10 @@ function cookModePrev() {
 // than having to say "back" repeatedly to count your way there.
 function cookModeGotoStep(n) {
   if (!_cookRecipe) return;
+  if (n == null) {
+    _setCookMicStatus('Didn\'t catch which step number — try "read step 3" clearly.');
+    return;
+  }
   if (n < 1 || n > _cookRecipe.steps.length) {
     _setCookMicStatus(`This recipe only has ${_cookRecipe.steps.length} step${_cookRecipe.steps.length === 1 ? '' : 's'}.`);
     return;
@@ -16378,7 +16401,12 @@ function _cookSpeakServings() {
 // size - that stays a deliberate Edit-screen action, not something a
 // misheard voice command should be able to silently change.
 function cookModeRescale(newServings) {
-  if (!_cookRecipe || newServings < 1) return;
+  if (!_cookRecipe) return;
+  if (newServings == null) {
+    _setCookMicStatus('Didn\'t catch a number — try "make it for 6" clearly.');
+    return;
+  }
+  if (newServings < 1) return;
   _cookCurrentServings = newServings;
   const ratio = newServings / _cookOriginalServings;
   document.getElementById('cookModeServingsLabel').textContent = `${newServings} serving${newServings === 1 ? '' : 's'}${ratio !== 1 ? ` (×${ratio.toFixed(2).replace(/\.?0+$/,'')})` : ''}`;
@@ -16596,16 +16624,16 @@ function _startCookVoiceListening() {
     const text = e.results[0][0].transcript.trim();
     let m;
     if (COOK_CMD_END.test(text))            { cookModeEnd(); return; }
-    else if (COOK_CMD_START.test(text))      { if (!_cookPlaying) cookModeStart(); }
-    else if (COOK_CMD_PAUSE.test(text))      { if (_cookPlaying) cookModePause(); }
-    else if (COOK_CMD_RESUME.test(text))     { if (!_cookPlaying) cookModeResume(); }
+    else if (COOK_CMD_START.test(text))      { if (!_cookPlaying) cookModeStart(); else _setCookMicStatus('Already reading — say "pause" to stop.'); }
+    else if (COOK_CMD_PAUSE.test(text))      { if (_cookPlaying) cookModePause(); else _setCookMicStatus('Already paused — say "resume" or tap ▶.'); }
+    else if (COOK_CMD_RESUME.test(text))     { if (!_cookPlaying) cookModeResume(); else _setCookMicStatus('Already playing.'); }
     // Checked before bare COOK_CMD_REPEAT, which "repeat step 3" would also
     // match on the word "repeat" alone - the numbered form has to win, or
     // it'd just re-read whatever step you're currently on instead of
     // jumping to the one you actually asked for.
-    else if ((m = text.match(COOK_CMD_GOTO_STEP)))  { cookModeGotoStep(parseInt(m[1], 10)); }
+    else if ((m = text.match(COOK_CMD_GOTO_STEP)))  { cookModeGotoStep(_parseSpokenNumber(m[1])); }
     else if (COOK_CMD_SERVINGS_QUERY.test(text)) { _cookSpeakServings(); }
-    else if ((m = text.match(COOK_CMD_RESCALE)))  { cookModeRescale(parseInt(m[1], 10)); }
+    else if ((m = text.match(COOK_CMD_RESCALE)))  { cookModeRescale(_parseSpokenNumber(m[1])); }
     // Explicit-duration form checked before the bare form ("timer" alone) -
     // "timer for 5 minutes" has to win over just treating it as "start timer
     // using whatever's in the current step's own text".
