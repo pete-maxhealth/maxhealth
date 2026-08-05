@@ -2177,24 +2177,30 @@ body[data-theme="light"] {
   <div class="onboard-step" id="step6" style="display:none;">
     <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px;">AI Meal Logging</div>
 
-    <!-- Built-in AI notice -->
+    <!-- AI provider notice — was previously worded as "built in, no key required",
+         which read like a free feature of the app itself. In reality this
+         routes every call through Pete's own paid Cloudflare Worker by
+         default - transparent about that now, since people should know whose
+         account they're using before they start logging, not discover it by
+         accident later. -->
     <div style="background:rgba(45,235,143,0.07);border:1px solid rgba(45,235,143,0.25);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:20px;">
-      <div style="font-size:11px;color:var(--green);font-family:Space Mono,monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">✓ Claude AI is built in — no key required</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6;">MaxedHealth connects to Claude AI automatically. Log meals by text or photo with no setup needed.</div>
+      <div style="font-size:11px;color:var(--green);font-family:Space Mono,monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">✓ Works immediately — shared account</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6;">Log meals by text or photo with no setup — this uses a shared account (capped daily/monthly to keep it fair for everyone), not your own. Prefer your own API key instead? Choose it below — same features, unlimited use, billed to you rather than shared.</div>
     </div>
 
     <div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.6;">
-      Optionally, you can connect your own OpenAI key if you prefer GPT for meal logging.
+      Want your own key instead of the shared account? Pick a provider below.
     </div>
     <div style="margin-bottom:14px;">
-      <div class="provider-btns" style="justify-content:center;gap:10px;margin-bottom:16px;">
-        <div class="provider-btn active" id="ob-provBtn-claude" onclick="obSetProvider('claude')">Claude (built in)</div>
+      <div class="provider-btns" style="justify-content:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <div class="provider-btn active" id="ob-provBtn-claude" onclick="obSetProvider('claude')">Shared account</div>
+        <div class="provider-btn" id="ob-provBtn-claude-own" onclick="obSetProvider('claude-own')">Claude (own key)</div>
         <div class="provider-btn" id="ob-provBtn-openai" onclick="obSetProvider('openai')">OpenAI (own key)</div>
       </div>
       <div id="obApiKeyRow" style="display:none;">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:Space Mono,monospace;" id="obApiKeyLabel">OpenAI API Key</div>
-        <input class="settings-input" type="password" id="obApiKeyInput" placeholder="Paste your OpenAI key here" autocomplete="off" style="width:100%;margin-bottom:6px;">
-        <div style="font-size:11px;color:var(--text3);" id="obApiKeyHint">Get your key at platform.openai.com</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;font-family:Space Mono,monospace;" id="obApiKeyLabel">API Key</div>
+        <input class="settings-input" type="password" id="obApiKeyInput" placeholder="Paste your key here" autocomplete="off" style="width:100%;margin-bottom:6px;">
+        <div style="font-size:11px;color:var(--text3);" id="obApiKeyHint"></div>
       </div>
     </div>
     <button class="run-btn" onclick="onboardFinish()">Start Tracking →</button>
@@ -4048,7 +4054,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.296</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.297</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4675,6 +4681,10 @@ function obSetProvider(p) {
     keyRow.style.display = 'block';
     document.getElementById('obApiKeyLabel').textContent = 'OpenAI API Key';
     document.getElementById('obApiKeyHint').textContent = 'Get your key at platform.openai.com';
+  } else if (p === 'claude-own') {
+    keyRow.style.display = 'block';
+    document.getElementById('obApiKeyLabel').textContent = 'Claude API Key';
+    document.getElementById('obApiKeyHint').textContent = 'Get your key at console.anthropic.com';
   } else {
     keyRow.style.display = 'none';
   }
@@ -4710,12 +4720,27 @@ function onboardFinish() {
       localStorage.setItem('mh_provider', 'openai');
       localStorage.setItem('mh_apikey', key);
     } else {
-      // No key provided — fall back to built-in Claude
+      // No key provided — fall back to the shared account
       localStorage.setItem('mh_provider', 'claude');
+      localStorage.removeItem('mh_apikey');
+    }
+  } else if (_obProvider === 'claude-own') {
+    const key = document.getElementById('obApiKeyInput').value.trim();
+    if (key) {
+      localStorage.setItem('mh_provider', 'claude');
+      localStorage.setItem('mh_apikey', key);
+    } else {
+      // No key provided — this still resolves to the shared account, since
+      // provider='claude' with no stored key is exactly what routes through
+      // the Worker proxy (see callHealthAI's usingSharedProxy check) - not a
+      // separate state, just the natural fallback of the same setting.
+      localStorage.setItem('mh_provider', 'claude');
+      localStorage.removeItem('mh_apikey');
     }
   } else {
-    // Claude via built-in proxy — no key needed
+    // Shared account via the Worker proxy — no key needed
     localStorage.setItem('mh_provider', 'claude');
+    localStorage.removeItem('mh_apikey');
   }
 
   // Mark onboarded
@@ -4796,7 +4821,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.296'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.297'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6735,8 +6760,20 @@ function setProvider(p) {
     const existing = localStorage.getItem('mh_apikey') || '';
     document.getElementById('apiKeyInput').value = existing ? '••••••••••••••••' : '';
     const hasKey = !!existing;
-    hint.textContent = hasKey ? '✓ API key saved — AI parsing active' : 'No API key saved yet.';
-    hint.style.color = hasKey ? 'var(--green)' : 'var(--text3)';
+    if (hasKey) {
+      hint.textContent = `✓ Using your own ${AI_PROVIDERS[p].label} API key — unlimited use, billed to you.`;
+      hint.style.color = 'var(--green)';
+    } else if (p === 'claude') {
+      // No key stored + provider is Claude = falls through to the shared
+      // Worker proxy (Pete's own account, daily/monthly capped) - say so
+      // plainly rather than leaving it looking like a plain "no key yet"
+      // state indistinguishable from something not working.
+      hint.textContent = 'No key added — using the shared account instead (works now, capped daily/monthly). Add your own key above for unlimited use at your own cost.';
+      hint.style.color = 'var(--yellow)';
+    } else {
+      hint.textContent = 'No API key saved yet — add one above to enable this provider.';
+      hint.style.color = 'var(--text3)';
+    }
   }
 }
 
