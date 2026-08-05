@@ -2649,9 +2649,7 @@ body[data-theme="light"] {
       <div class="mode-btn" id="modeQuery" onclick="setChatMode('query')">💬 Ask</div>
     </div>
     <div class="quick-btns" id="quickBtnsLog">
-      <div class="quick-btn" style="border-color:#60a5fa;" onclick="quickPrompt('what should I eat next?')">Next meal idea</div>
-      <div class="quick-btn" style="border-color:#ec4899;" onclick="quickRecipeIdea('sweet')">🍰 Sweet recipe</div>
-      <div class="quick-btn" style="border-color:#f59e0b;" onclick="quickRecipeIdea('savoury')">🥘 Savoury recipe</div>
+      <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
       <div class="quick-btn" style="border-color:#facc15;" onclick="startMissedDayFlow()">+ Missed day</div>
       <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
@@ -2764,6 +2762,13 @@ body[data-theme="light"] {
     <div class="settings-card" style="padding:12px 16px;margin-bottom:10px;">
       <div style="font-size:12px;color:var(--text3);line-height:1.6;">For anything you batch-cook or eat across multiple sittings — set the number of servings once, then log any portion (1, 2, half) with the maths done for you. If you always eat something in one go, save it as a Meal in your Food Library below instead — simpler, no servings step.</div>
     </div>
+    <!-- Discovery, not logging - a genuinely new recipe idea (may need
+         ingredients you don't have yet), deliberately separate from the
+         daily quick-log flow. That's what "Next meal idea" is for (fast,
+         constrained to what's actually in the Library); this is for
+         browsing/trying something new, worth its own moment rather than
+         being squeezed into a chat quick-action. -->
+    <button class="copy-btn" style="width:100%;font-size:13px;padding:10px;margin-bottom:10px;color:var(--accent);border-color:var(--accent-glow);" onclick="openRecipeDiscoverModal()">🆕 Try something new</button>
     <div id="recipeList" style="margin-bottom:20px;">
       <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No recipes yet — tap + New Recipe to create one.</div>
     </div>
@@ -4067,7 +4072,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.317</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.319</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4834,7 +4839,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.317'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.319'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10182,7 +10187,68 @@ async function _processLabelEstimate(b64, mime, systemPrompt) {
 // awareness of what's actually in the cupboard or what today specifically
 // still needs. This does the same manual check done together in chat, but
 // as a real, repeatable in-app feature.
-async function suggestMealFromLibrary() {
+// Entry point for the "Next meal idea" pill - offers a genuine sweet/
+// savoury/both choice up front, then goes STRAIGHT to the real
+// library-constrained AI suggestion (suggestMealFromLibrary), skipping the
+// old two-tap flow (generic canned guidance, then a separate "check my
+// library" button) that handleNextMealQuery still gives for anyone who
+// types the same request instead of tapping the pill.
+function startNextMealFlow() {
+  addBubble('Next meal idea', 'user');
+  const bubble = addBubble('What kind of thing are you after?', 'system');
+  bubble.innerHTML += `
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('sweet')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid #ec4899;border-radius:6px;color:#ec4899;font-size:12px;font-weight:600;cursor:pointer;">🍰 Sweet</button>
+      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('savoury')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid #f59e0b;border-radius:6px;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;">🥘 Savoury</button>
+      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('both')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">🤷 Either</button>
+    </div>`;
+}
+
+// ─── RECIPE DISCOVERY (Library area) ─────────────────────────────────────────
+// Deliberately separate from quickRecipeIdea (the old Log-tab pills) - same
+// underlying mechanism (must route through Query mode, see the comment on
+// quickRecipeIdea for why), but lives in the Library/Recipes area since this
+// is for browsing a genuinely new idea, not a daily quick-log action.
+let _recipeDiscoverKind = null;
+
+function openRecipeDiscoverModal() {
+  document.getElementById('recipeDiscoverInput').value = '';
+  _recipeDiscoverKind = null;
+  document.getElementById('recipeDiscoverModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('recipeDiscoverInput')?.focus(), 100);
+}
+
+function closeRecipeDiscoverModal() {
+  document.getElementById('recipeDiscoverModal').style.display = 'none';
+}
+
+async function submitRecipeDiscover() {
+  const freeform = document.getElementById('recipeDiscoverInput').value.trim();
+  const kind = _recipeDiscoverKind;
+  closeRecipeDiscoverModal();
+
+  let text;
+  if (freeform) {
+    text = `Give me a recipe for ${freeform}, with full ingredients, weights and method.`;
+  } else if (kind) {
+    text = `Give me a surprising ${kind} recipe idea, with full ingredients, weights and method.`;
+  } else {
+    text = `Give me an interesting keto recipe idea, with full ingredients, weights and method.`;
+  }
+
+  // Land on the chat view so the result (a recipe card, same format as
+  // asking directly) is actually visible - it renders into the same chat
+  // scroll area "Create Recipe from this" already uses, there's no separate
+  // rendering path to build for the Library area specifically.
+  switchTabById('chat');
+  addBubble(freeform ? `🆕 ${freeform}` : `🆕 Surprise ${kind || ''} recipe`, 'user');
+  const wasLogMode = _chatMode === 'log';
+  if (wasLogMode) setChatMode('query');
+  await processMessage(text, null, null);
+  if (wasLogMode) setChatMode('log');
+}
+
+async function suggestMealFromLibrary(kind = 'both') {
   const lib = loadLibrary();
   const recipes = loadRecipes();
   if (!lib.length && !recipes.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
@@ -10265,6 +10331,7 @@ Rules:
 - Aim for exactly 3 distinct suggestions, mixing recipes and ingredient-combos as appropriate. Only return fewer than 3 if the library genuinely can't support three reasonably different options that fit the budget — check this properly before giving up, rather than defaulting to 1.
 - CRITICAL — VARIETY: the 3 suggestions should feel like genuinely different meals, not near-duplicates of each other. Repeating a versatile protein like chicken across 2 of the 3 is completely fine if the actual dish/preparation and fat source differ meaningfully (e.g. chicken + salad vs. chicken in a cream sauce) — the goal is avoiding "same meal, barely reworded" three times over, not forcing artificial diversity for its own sake.
 - PATTERN AWARENESS: use what's actually been eaten today (and yesterday, for lighter context) as a soft signal, not a rule. If today's been entirely savoury, a sweet-leaning option is worth including if one genuinely fits the macros. If today's been mostly small snacks with no proper meal yet, a more substantial combo may suit better than another snack. If something very similar has already been eaten multiple times today, lean toward a different option instead — but never let this override what the remaining macro budget actually allows.
+${kind === 'sweet' ? '- SWEET REQUESTED: all 3 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 3 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 3 suggestions should be savoury - fewer than 3 is fine if the library can\'t genuinely support three, rather than forcing a sweet option in.' : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
 - Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
 - Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
@@ -10425,14 +10492,24 @@ function quickPrompt(text) {
 // should still be allowed to include something not yet saved if that's what
 // makes it a good recipe, but leaning toward what's actually in the fridge
 // beats a recipe built entirely from things that would need a shopping trip.
-function quickRecipeIdea(kind) {
+async function quickRecipeIdea(kind) {
   const lib = loadLibrary();
   const libNames = lib.map(f => f.name).slice(0, 40).join(', '); // capped - this rides along in the message text itself, not worth sending the entire library for a soft preference
   const kindText = kind === 'sweet' ? 'sweet' : 'savoury';
   const libLine = libNames ? ` Where sensible, lean toward ingredients from this list of foods I already have: ${libNames}. Other common ingredients are fine too if needed for a genuinely good recipe.` : '';
   const text = `Give me a ${kindText} recipe to help cover today's protein and fat shortfall, with full ingredients, weights and method.${libLine}`;
   addBubble(`${kind === 'sweet' ? '🍰' : '🥘'} ${kindText[0].toUpperCase()}${kindText.slice(1)} recipe idea`, 'user');
-  processMessage(text, null, null);
+  // MUST go through query mode - Log mode tries to parse the message as food
+  // to log FIRST, before the AI ever sees it as a question, and a whole
+  // sentence like this gets treated as "a long meal" and itemised/split,
+  // failing with "Couldn't parse the meal" rather than ever reaching the
+  // recipe-suggestion branch. Query mode skips food-parsing entirely and
+  // sends straight to the AI, which is the only path that can return the
+  // structured recipe-card format at all.
+  const wasLogMode = _chatMode === 'log';
+  if (wasLogMode) setChatMode('query');
+  await processMessage(text, null, null);
+  if (wasLogMode) setChatMode('log'); // restore - this button lives on the Log tab, shouldn't strand the person on Ask afterward
 }
 
 // ─── MANUAL ENTRY FORM (offline fallback) ────────────────────────────────────
@@ -10574,7 +10651,11 @@ function handleNextMealQuery(lower, totals, targets) {
   // Embedded directly in this bubble rather than a separate standing button —
   // this is the natural next step after generic guidance: check what actually
   // fits from what's really in the cupboard, not just abstract advice.
-  const libButtonHtml = `<div style="margin-top:10px;"><button onclick="suggestMealFromLibrary()" style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">📚 Check what fits from my library</button></div>`;
+  // A typed request like "sweet next meal idea" should bias the library
+  // check the same way tapping 🍰 Sweet on the pill's picker does, rather
+  // than only the dedicated pill flow knowing about sweet/savoury at all.
+  const _typedKind = lower.includes('sweet') ? 'sweet' : (lower.includes('savoury') || lower.includes('savory')) ? 'savoury' : 'both';
+  const libButtonHtml = `<div style="margin-top:10px;"><button onclick="suggestMealFromLibrary('${_typedKind}')" style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">📚 Check what fits from my library</button></div>`;
   const bubble = addBubble(guidanceText, 'system');
   bubble.innerHTML += libButtonHtml;
   return true;
@@ -24718,6 +24799,25 @@ function dismissInsight() {
   </div>
 </div>
 
+<!-- RECIPE DISCOVERY — a new recipe idea worth browsing, deliberately separate
+     from "Next meal idea" (which only ever draws from what's actually saved).
+     This can suggest ingredients you don't have yet - it's for trying
+     something new, not for what's ready right now. -->
+<div class="modal-overlay" id="recipeDiscoverModal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.7);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:80vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">🆕 TRY SOMETHING NEW</div>
+      <div onclick="closeRecipeDiscoverModal()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">A genuinely new recipe idea, full ingredients/weights/method — may need things you don't have yet. For what's ready right now from what's already in, use "Next meal idea" instead.</div>
+    <input id="recipeDiscoverInput" class="modal-input" placeholder="e.g. Keto Custard — or leave blank for a surprise" style="width:100%;font-size:14px;padding:12px;margin-bottom:10px;box-sizing:border-box;text-align:left;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitRecipeDiscover();}">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='sweet';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #ec4899;border-radius:8px;color:#ec4899;font-size:12px;font-weight:600;cursor:pointer;">🍰 Surprise sweet</button>
+      <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='savoury';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #f59e0b;border-radius:8px;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;">🥘 Surprise savoury</button>
+    </div>
+    <button class="run-btn" style="width:100%;padding:12px;font-size:13px;" onclick="_recipeDiscoverKind=null;submitRecipeDiscover();">Get recipe idea →</button>
+  </div>
+</div>
 
 <div class="modal-overlay" id="missedDayModal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);align-items:flex-end;">
   <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:90vh;overflow-y:auto;animation:slideUp 0.25s ease;">
