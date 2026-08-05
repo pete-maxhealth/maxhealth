@@ -2371,7 +2371,7 @@ body[data-theme="light"] {
       </div>
       <div class="remaining-row">
         <div class="rem-name">Calories</div>
-        <div class="rem-val good" id="remCal">3,670 kcal</div>
+        <div class="rem-val good" id="remCal">0 / 3,670 kcal (3,670 remaining)</div>
       </div>
       <div id="calorieContextNote" style="font-size:11px;color:var(--text3);line-height:1.5;padding:0 0 8px 0;"></div>
       <div class="remaining-row">
@@ -2649,10 +2649,12 @@ body[data-theme="light"] {
       <div class="mode-btn" id="modeQuery" onclick="setChatMode('query')">💬 Ask</div>
     </div>
     <div class="quick-btns" id="quickBtnsLog">
-      <div class="quick-btn" onclick="quickPrompt('what should I eat next?')">Next meal idea</div>
-      <div class="quick-btn" onclick="startMissedDayFlow()">+ Missed day</div>
-      <div class="quick-btn" onclick="quickPrompt('ketosis check')">Ketosis check</div>
-      <div class="quick-btn" onclick="quickPrompt('show today summary')">Today summary</div>
+      <div class="quick-btn" style="border-color:#60a5fa;" onclick="quickPrompt('what should I eat next?')">Next meal idea</div>
+      <div class="quick-btn" style="border-color:#ec4899;" onclick="quickRecipeIdea('sweet')">🍰 Sweet recipe</div>
+      <div class="quick-btn" style="border-color:#f59e0b;" onclick="quickRecipeIdea('savoury')">🥘 Savoury recipe</div>
+      <div class="quick-btn" style="border-color:#facc15;" onclick="startMissedDayFlow()">+ Missed day</div>
+      <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
+      <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
     <div class="quick-btns" id="quickBtnsQuery" style="display:none;">
       <div class="quick-btn" onclick="quickPrompt('What do I still need today?')">What's remaining?</div>
@@ -4065,7 +4067,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.314</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.317</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4832,7 +4834,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.314'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.317'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -10410,6 +10412,29 @@ function quickPrompt(text) {
   processMessage(text, null, null);
 }
 
+// Deliberately avoids the words "suggest"/"suggestion"/"next meal"/"what
+// should I eat" - handleNextMealQuery() intercepts those BEFORE the message
+// ever reaches the AI at all, returning generic canned macro guidance
+// instead of a real recipe. "recipe" is the actual trigger word the AI's
+// own system prompt looks for (see the RECIPE type instructions), so
+// phrasing has to route around the local shortcut deliberately, not just
+// happen to avoid it.
+//
+// Soft library-awareness: passes along the names of foods already in the
+// Library as a preference, not a hard constraint - a brand new recipe idea
+// should still be allowed to include something not yet saved if that's what
+// makes it a good recipe, but leaning toward what's actually in the fridge
+// beats a recipe built entirely from things that would need a shopping trip.
+function quickRecipeIdea(kind) {
+  const lib = loadLibrary();
+  const libNames = lib.map(f => f.name).slice(0, 40).join(', '); // capped - this rides along in the message text itself, not worth sending the entire library for a soft preference
+  const kindText = kind === 'sweet' ? 'sweet' : 'savoury';
+  const libLine = libNames ? ` Where sensible, lean toward ingredients from this list of foods I already have: ${libNames}. Other common ingredients are fine too if needed for a genuinely good recipe.` : '';
+  const text = `Give me a ${kindText} recipe to help cover today's protein and fat shortfall, with full ingredients, weights and method.${libLine}`;
+  addBubble(`${kind === 'sweet' ? '🍰' : '🥘'} ${kindText[0].toUpperCase()}${kindText.slice(1)} recipe idea`, 'user');
+  processMessage(text, null, null);
+}
+
 // ─── MANUAL ENTRY FORM (offline fallback) ────────────────────────────────────
 function showManualEntryForm(prefillName) {
   const bubble = document.createElement('div');
@@ -13830,7 +13855,12 @@ function updateDashboard(skipActivityRender) {
   const remCarb = targets.carbs - totals.carbs;
 
   const remCalEl = document.getElementById('remCal');
-  remCalEl.textContent = remCal >= 0 ? `${remCal} kcal` : `${Math.abs(remCal)} kcal OVER`;
+  // Matches the used/total format Fat and Water already use ("112g / 260g")
+  // instead of showing only the bare remaining number, which was the odd one
+  // out among these four rows.
+  const usedOfTotal = `${Math.round(totals.kcal)} / ${Math.round(adjustedKcalTarget)} kcal`;
+  const remainingPart = remCal >= 0 ? `${Math.round(remCal)} remaining` : `${Math.abs(Math.round(remCal))} OVER`;
+  remCalEl.textContent = `${usedOfTotal} (${remainingPart})`;
   remCalEl.className = 'rem-val ' + (remCal < 0 ? 'over' : remCal < 300 ? 'warn' : 'good');
 
   const remProtEl = document.getElementById('remProt');
