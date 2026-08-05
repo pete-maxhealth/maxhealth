@@ -1,3 +1,36 @@
+# MaxedHealth Changelog
+
+## Phase 13 (v3.10.289 – v3.10.296)
+
+Continuous voice input, extended from Recipe Builder (built last phase) out to everywhere it genuinely fits, plus a proper look at what the shared Cloudflare Worker actually costs as usage scales.
+
+### New Features
+
+**Continuous voice input — meal logging, missed-day, library batch-add, supplements**
+- Same pattern throughout: mic stays listening across several spoken items, "done" (or plain English — "I've finished now", "that's everything", "stop") wraps up, tapping the mic mid-flow pauses rather than cancels
+- Meal logging: captured items populate the chat input and require the same explicit "Log it" tap as typed entries — never auto-logs to today's real totals, no matter how many items were captured by voice
+- Missed-day: auto-runs the existing Calculate step on "done", which itself stops at a result bubble requiring Save — voice never bypasses that review
+- Library batch-add: new panel on the Library tab, each spoken item routes through the same `validateAndSaveLibraryEntry()` plausibility-check-and-compare-to-existing path manual entry already uses
+- Supplements: different shape from the other three — a direct, immediate, idempotent action per recognised name (only ever marks *taken*, never un-marks), matched against the person's own saved list only, time-of-day period inferred from the clock
+
+**Single-shot voice — weight, water**
+- One utterance, no "done" phrase needed since there's only ever one value. Weight fills the input field (still requires the manual Confirm tap); water logs directly, matching the existing preset buttons' own zero-friction directness
+
+### Fixed
+
+**Meal-voice pause dead-end**
+- Manually tapping the mic to stop (rather than saying "done") previously left captured items with no way to actually log them short of resuming and saying "done" — now offers the same "Log it" prompt either way
+- Added a persistent on-screen status line alongside the existing toast feedback, since toasts alone left no lasting sign the mic was in a different (continuous, multi-item) mode than before
+
+### Infrastructure — Cloudflare Worker cost containment
+
+- Every AI call from anyone without their own stored API key runs through the shared Worker on Pete's own account — previously unbounded, scaling linearly with adoption with no ceiling at all
+- Added two independent caps via Workers KV: per-IP daily cap (80 calls) and a hard global monthly cap (5,000 calls, ≈£24-30/month worst case regardless of user count) — `multiCheck` requests weight 3x against both, since they fan out to three provider calls each
+- A softer, client-side-only daily cap also added directly in the app (`localStorage`-based) — protects nothing against a determined bypass, but stops one device's honest runaway retry loop from being invisible
+- Deployed via Cloudflare's REST API from Termux (no Wrangler — incompatible with Android's Bionic libc); documented the gotcha that a full script re-upload replaces the *entire* binding config, including secrets, which must be re-supplied with real values every time rather than referenced by name alone
+
+---
+
 # MaxedHealth Changelog — Phase 12 (v3.10.202 – v3.10.272)
 
 The biggest single session in the app's history — roughly 70 versions. Most of it was infrastructure and reliability work that doesn't show up as a visible feature, but fixes a genuine, sometimes months-old bug underneath something that looked fine on the surface.

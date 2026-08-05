@@ -152,6 +152,20 @@ Fires in `updateDashboard()` when `state.lastDate !== todayStr()`.
 
 ---
 
+## Voice input — continuous vs single-shot
+
+Two distinct patterns, both built on the Web Speech API (`webkitSpeechRecognition`/`SpeechRecognition`), chosen per-feature based on whether the input is naturally one value or a list.
+
+**Continuous** — Recipe Builder, Meal Logging, Missed-Day Logging, Library Batch-Add, Supplements. `continuous = false` on the recognizer instance, but `onend` immediately restarts listening (`setTimeout(() => _startXVoiceListening(), 300)`) as long as an active flag is still true — so from the user's perspective it never stops, one utterance rotates into the next automatically. Ends only when:
+- The transcript matches `isRecipeVoiceDonePhrase()` (shared across all continuous features, not recipe-specific despite the name) — a plain-English regex (`RECIPE_VOICE_DONE_PHRASES`) covering "done", "finished", "that's it/all/everything", "stop", "I'm done", "no more", "nothing else", etc.
+- The user taps the mic manually — this is always a *pause*, not a cancel: whatever's been captured so far is kept (ingredient list, water/library queue, chat text), the button/status reflects "paused", and tapping again resumes rather than restarting.
+
+Each continuous feature routes its captured items through whatever review step already exists for that data — Recipe/Library through their own AI-parse-then-confirm flow, Meal Logging by populating `chatInput` and requiring an explicit "Log it" tap (never auto-sends), Missed-Day by auto-triggering `calculateMissedDayConv()` which itself stops at a result bubble requiring Save. Supplements is the one exception to "accumulate then review" — each recognized name is a direct, immediate, idempotent action (`toggleSupplement`-equivalent that only ever sets *taken*, never un-sets), since ticking off a supplement doesn't carry the same log-to-real-totals risk a meal does.
+
+**Single-shot** — Weight, Water. `continuous = false`, no restart on `onend`. One utterance, parsed immediately, done. Weight only fills the input field (still requires the existing manual Confirm tap); Water logs directly, matching the zero-friction directness the existing preset buttons (+Glass/+Can/+Pint/+Bottle) already have.
+
+---
+
 ## Cloudflare Worker
 
 Two request modes, one `worker.js` file:
@@ -169,18 +183,46 @@ if (body.tools) anthropicBody.tools = body.tools; // web search etc. — previou
 
 Requires `GEMINI_API_KEY` and `OPENAI_API_KEY` as Worker secrets (Settings → Variables and Secrets), alongside the existing `ANTHROPIC_API_KEY`. The Gemini call includes one automatic retry after a short delay specifically for 503 "high demand" errors, per Google's own documented guidance for that error class — genuinely common right after a model's release as everyone piles onto it at once.
 
+**Cost containment (added Phase 13)** — every call that isn't using someone's own stored API key runs through this shared Worker on Pete's own account, which scales with usage: no cap meant no ceiling as adoption grows. Two independent caps, both backed by Workers KV (`RATE_LIMIT_KV` binding → namespace `maxhealth-rate-limit`, id `a7f31fea0d224ba787cd402790934827`):
+
+```javascript
+const PER_IP_DAILY_CAP = 80;    // stops one device/household running away
+const MONTHLY_CALL_CAP = 5000;  // hard ceiling on total spend regardless of scale — ~£24-30/mo worst case
+```
+
+`multiCheck` requests weight 3 against both caps (three provider calls per request) rather than counting as 1. Both keys are date-scoped (`calls:day:YYYY-MM-DD:{ip}`, `calls:month:YYYY-MM`) with matching TTLs so they self-expire rather than needing manual resets. KV is eventually-consistent, not atomic — acceptable for a cost *ceiling* with headroom, not something to rely on as an exact security boundary. If `RATE_LIMIT_KV` isn't bound, caps are silently skipped rather than erroring every request.
+
+The app itself also has a much softer, client-side-only version of the daily cap (`PROXY_DAILY_CAP` in `maxhealth.html`, `localStorage`-based) — that one protects nothing against a determined bypass (clearing localStorage resets it instantly), it just stops an honest device's runaway retry loop from being invisible. The Worker-side caps above are the ones that actually bound worst-case cost.
+
 **Deployment — from Android, without Wrangler:**
 
-Wrangler requires glibc (macOS/Windows/Linux); Termux uses Android's Bionic libc, so it cannot run there at all, with no workaround. The actual solution is Cloudflare's REST API directly via `curl`, which Termux already has:
+Wrangler requires glibc (macOS/Windows/Linux); Termux uses Android's Bionic libc, so it cannot run there at all, with no workaround. The actual solution is Cloudflare's REST API directly via `curl`, which Termux already has. Uploading a new script version replaces the *entire* binding configuration in one request — it is not additive — so every existing binding (including secrets) must be listed in `metadata.bindings` every time, or it gets dropped:
 
 ```bash
 curl -X PUT "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/workers/scripts/maxhealth-ai" \
   -H "Authorization: Bearer API_TOKEN" \
-  -F 'metadata={"main_module":"worker.js","compatibility_date":"2024-01-01"};type=application/json' \
+  -F "metadata=@metadata.json;type=application/json" \
   -F "worker.js=@worker.js;type=application/javascript+module"
 ```
 
-The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard → profile → My Profile → API Tokens). The `metadata`/`type=application/javascript+module` combination matters — a plain `Content-Type: application/javascript` PUT only works for the legacy "service worker" syntax (`addEventListener('fetch', ...)`), not the ES module syntax (`export default { async fetch... }`) this worker actually uses.
+Where `metadata.json` lists every binding, secrets included with their real `text` value each time (Cloudflare requires re-supplying secret values on every script upload — it does not accept "keep existing" by name alone):
+
+```json
+{
+  "main_module": "worker.js",
+  "compatibility_date": "2024-01-01",
+  "bindings": [
+    {"name": "ANTHROPIC_API_KEY", "type": "secret_text", "text": "..."},
+    {"name": "GEMINI_API_KEY", "type": "secret_text", "text": "..."},
+    {"name": "OPENAI_API_KEY", "type": "secret_text", "text": "..."},
+    {"name": "RATE_LIMIT_KV", "type": "kv_namespace", "namespace_id": "a7f31fea0d224ba787cd402790934827"}
+  ]
+}
+```
+
+Better as a real file than an inline `-F` string — a giant one-line JSON blob typed into a phone keyboard is exactly the kind of thing that produces a stray-comma syntax error at 2am. Validate with `python3 -m json.tool metadata.json` before uploading, and delete the file straight after (`rm metadata.json`) since it briefly holds real key values in plaintext. Confirm success with a settings GET (shows binding *names*, never values) and then an actual live AI call in the app — the settings check alone doesn't prove the secret *values* survived, only that the names did.
+
+The API Token needs the "Edit Cloudflare Workers" template, or a custom token with Workers Scripts + Workers KV Storage edit permissions (they're separate scopes — a token created only for KV namespace creation will fail Workers Scripts calls with a 400, not a helpful "wrong scope" message). The `metadata`/`type=application/javascript+module` combination matters — a plain `Content-Type: application/javascript` PUT only works for the legacy "service worker" syntax (`addEventListener('fetch', ...)`), not the ES module syntax (`export default { async fetch... }`) this worker actually uses.
 
 ---
 
@@ -200,6 +242,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.4.x | 9 | Custom modals, intelligence analysis, rollover rewrite |
 | v3.10.x | 10 | Library-aware meal suggestions, ingredient substitution, recipe-aware suggestions, dashboard/tab reordering, ketosis milestones, four new nutrition sanity checks, demo mode overhaul, corrected TDEE (height fix: 188cm not 178cm) |
 | v3.10.202-272 | 12 | Multi-AI consensus check (Claude/Gemini/OpenAI), log food to a past day, Activity Credit Balance, phase-aware calorie context — plus a large infrastructure/reliability pass: Worker request-forwarding, direct-API-key path (missing body, missing CORS header), sleep pipeline extractors-path bug, cloud deploy silently ~100 versions behind, fuzzy-match apostrophe/brand fixes, activity-credit duplicate-calculation unification |
+| v3.10.289-296 | 13 | Continuous voice input extended across meal logging, missed-day, library batch-add, and supplements (plus single-shot voice for weight/water); fixed a meal-voice pause dead-end (manual mic-tap now offers Log-it, not just resume); Cloudflare Worker server-side rate limiting (per-IP daily cap + hard monthly cost ceiling via Workers KV) to bound shared-proxy cost regardless of user scale |
 
 ---
 
