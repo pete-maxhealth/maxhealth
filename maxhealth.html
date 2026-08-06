@@ -2021,6 +2021,20 @@ body[data-theme="light"] {
 </head>
 <body>
 
+<!-- TEMPORARY DEBUG LOG PANEL — round 2, this time for the "up" direction
+     specifically, which wasn't covered by the earlier round of down-only
+     testing. -->
+<div id="debugLogPanel" style="display:none;position:fixed;top:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.92);border-bottom:2px solid var(--accent);z-index:99999;padding:10px 12px;font-family:'Space Mono',monospace;font-size:11px;color:#0f0;box-sizing:border-box;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;position:sticky;top:0;background:rgba(0,0,0,0.92);">
+    <span style="color:var(--accent);font-weight:700;">DEBUG LOG</span>
+    <span>
+      <span onclick="clearDebugLog()" style="color:var(--red);cursor:pointer;padding:4px 8px;">Clear</span>
+      <span onclick="document.getElementById('debugLogPanel').style.display='none'" style="color:var(--text3);cursor:pointer;padding:4px 8px;">×</span>
+    </span>
+  </div>
+  <div id="debugLogContent" style="white-space:pre-wrap;word-break:break-all;"></div>
+</div>
+
 <!-- ONBOARDING WIZARD -->
 <div id="onboardingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:500;overflow-y:auto;box-sizing:border-box;">
   <div style="max-width:480px;margin:0 auto;padding:32px 24px 48px;box-sizing:border-box;">
@@ -4092,7 +4106,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.335</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.336</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4859,7 +4873,37 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.335'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.336'; // single source of truth — bump here each release
+
+function debugLog(msg) {
+  const key = 'mh_debug_log';
+  let lines = [];
+  try { lines = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
+  const time = new Date().toTimeString().slice(0,8);
+  lines.push(`[${time}] ${msg}`);
+  if (lines.length > 100) lines = lines.slice(-100);
+  localStorage.setItem(key, JSON.stringify(lines));
+  const panel = document.getElementById('debugLogPanel');
+  const content = document.getElementById('debugLogContent');
+  if (panel) panel.style.display = 'block';
+  if (content) content.textContent = lines.join('\n');
+}
+function clearDebugLog() {
+  localStorage.removeItem('mh_debug_log');
+  const content = document.getElementById('debugLogContent');
+  if (content) content.textContent = '';
+}
+(function _restoreDebugLog() {
+  try {
+    const lines = JSON.parse(localStorage.getItem('mh_debug_log') || '[]');
+    if (lines.length) {
+      const panel = document.getElementById('debugLogPanel');
+      const content = document.getElementById('debugLogContent');
+      if (panel) panel.style.display = 'block';
+      if (content) content.textContent = lines.join('\n');
+    }
+  } catch(e) {}
+})();
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 // Weight-phase auto-switch previously only ran via updateDashboard(), which
@@ -5807,12 +5851,20 @@ function applyLibraryOrder() {
 function moveLibrarySection(key, direction) {
   const order = getLibraryOrder();
   const idx = order.indexOf(key);
-  if (idx === -1) return;
+  if (idx === -1) { debugLog(`moveLibrarySection: key "${key}" NOT FOUND in order [${order.join(',')}]`); return; }
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
+  debugLog(`BEFORE: [${order.join(',')}] moving ${key} ${direction} (idx ${idx}→${swapIdx})`);
   [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
   localStorage.setItem(LIBRARY_ORDER_KEY, JSON.stringify(order));
+  debugLog(`SAVED ARRAY: [${order.join(',')}]`);
   applyLibraryOrder();
+  const domOrderAfter = order.map(k => document.getElementById(LIBRARY_SECTION_IDS[k])).filter(Boolean).map(el => el.id);
+  debugLog(`ACTUAL DOM: [${domOrderAfter.join(',')}]`);
+  // Re-read from storage fresh, exactly as the NEXT tap's getLibraryOrder()
+  // call would see it - catches any chance of the save not actually sticking.
+  const rereadFromStorage = getLibraryOrder();
+  debugLog(`RE-READ FROM STORAGE: [${rereadFromStorage.join(',')}]`);
 }
 // Confirmed via live debug log (2026-08-06) that the reorder math and DOM
 // application were both correct the whole time - what looked like a bug was
