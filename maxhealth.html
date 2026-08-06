@@ -2021,6 +2021,21 @@ body[data-theme="light"] {
 </head>
 <body>
 
+<!-- TEMPORARY DEBUG LOG PANEL — for tonight's reorder-bug investigation.
+     Persistent (unlike toasts, which move too fast to read/screenshot in
+     time) and visible on top of everything else, so it can just be
+     screenshotted whenever convenient rather than caught mid-animation. -->
+<div id="debugLogPanel" style="display:none;position:fixed;top:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.92);border-bottom:2px solid var(--accent);z-index:99999;padding:10px 12px;font-family:'Space Mono',monospace;font-size:11px;color:#0f0;box-sizing:border-box;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;position:sticky;top:0;background:rgba(0,0,0,0.92);">
+    <span style="color:var(--accent);font-weight:700;">DEBUG LOG</span>
+    <span>
+      <span onclick="clearDebugLog()" style="color:var(--red);cursor:pointer;padding:4px 8px;">Clear</span>
+      <span onclick="document.getElementById('debugLogPanel').style.display='none'" style="color:var(--text3);cursor:pointer;padding:4px 8px;">×</span>
+    </span>
+  </div>
+  <div id="debugLogContent" style="white-space:pre-wrap;word-break:break-all;"></div>
+</div>
+
 <!-- ONBOARDING WIZARD -->
 <div id="onboardingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:500;overflow-y:auto;box-sizing:border-box;">
   <div style="max-width:480px;margin:0 auto;padding:32px 24px 48px;box-sizing:border-box;">
@@ -4088,7 +4103,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.333</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.334</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4855,7 +4870,45 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.333'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.334'; // single source of truth — bump here each release
+
+// Persisted to localStorage (not just an in-memory array) specifically so
+// the log survives even if the very reorder bug being investigated causes
+// an unexpected re-render or reload - the whole point is not losing the
+// evidence to the bug itself.
+function debugLog(msg) {
+  const key = 'mh_debug_log';
+  let lines = [];
+  try { lines = JSON.parse(localStorage.getItem(key) || '[]'); } catch(e) {}
+  const time = new Date().toTimeString().slice(0,8);
+  lines.push(`[${time}] ${msg}`);
+  if (lines.length > 100) lines = lines.slice(-100); // cap so this can't grow unbounded over a long session
+  localStorage.setItem(key, JSON.stringify(lines));
+  const panel = document.getElementById('debugLogPanel');
+  const content = document.getElementById('debugLogContent');
+  if (panel) panel.style.display = 'block';
+  if (content) content.textContent = lines.join('\n');
+}
+function clearDebugLog() {
+  localStorage.removeItem('mh_debug_log');
+  const content = document.getElementById('debugLogContent');
+  if (content) content.textContent = '';
+}
+// Restore and show any log from a previous session/reload on this same load.
+// No DOMContentLoaded wait needed - this script runs after the body's
+// already been parsed (it's near the end of the document), so the panel
+// elements near the top of body already exist by the time this executes.
+(function _restoreDebugLog() {
+  try {
+    const lines = JSON.parse(localStorage.getItem('mh_debug_log') || '[]');
+    if (lines.length) {
+      const panel = document.getElementById('debugLogPanel');
+      const content = document.getElementById('debugLogContent');
+      if (panel) panel.style.display = 'block';
+      if (content) content.textContent = lines.join('\n');
+    }
+  } catch(e) {}
+})();
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 // Weight-phase auto-switch previously only ran via updateDashboard(), which
@@ -5779,11 +5832,15 @@ function moveGenericSection(scopeKey, key, direction) {
   if (idx === -1) return;
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
-  showToast(`DEBUG before: [${order.join(',')}] moving ${key} ${direction} (idx ${idx}→${swapIdx})`, null, null, 4000);
+  debugLog(`moveGenericSection[${scopeKey}] BEFORE: [${order.join(',')}] moving ${key} ${direction} (idx ${idx}→${swapIdx})`);
   [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
   localStorage.setItem('mh_reorder_' + scopeKey, JSON.stringify(order));
+  debugLog(`moveGenericSection[${scopeKey}] AFTER SWAP (pre-apply): [${order.join(',')}]`);
   applyGenericOrder(scopeKey);
-  setTimeout(() => showToast(`DEBUG after: [${order.join(',')}]`, null, null, 4000), 500);
+  const sections = window._reorderableSections[scopeKey] || [];
+  const parent = sections[0]?.titleEl?.parentNode;
+  const domOrder = parent ? Array.from(parent.children).map(c => sections.find(s => s.titleEl === c || s.wrapEl === c)?.key).filter(Boolean) : [];
+  debugLog(`moveGenericSection[${scopeKey}] ACTUAL DOM ORDER after applyGenericOrder: [${domOrder.join(',')}]`);
 }
 
 function applyLibraryOrder() {
@@ -5808,11 +5865,13 @@ function moveLibrarySection(key, direction) {
   if (idx === -1) return;
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
-  showToast(`DEBUG before: [${order.join(',')}] moving ${key} ${direction} (idx ${idx}→${swapIdx})`, null, null, 4000);
+  debugLog(`moveLibrarySection BEFORE: [${order.join(',')}] moving ${key} ${direction} (idx ${idx}→${swapIdx})`);
   [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
   localStorage.setItem(LIBRARY_ORDER_KEY, JSON.stringify(order));
+  debugLog(`moveLibrarySection AFTER SWAP (pre-apply): [${order.join(',')}]`);
   applyLibraryOrder();
-  setTimeout(() => showToast(`DEBUG after: [${order.join(',')}]`, null, null, 4000), 500);
+  const domOrderAfter = order.map(k => document.getElementById(LIBRARY_SECTION_IDS[k])).filter(Boolean).map(el => el.id);
+  debugLog(`moveLibrarySection ACTUAL DOM ORDER after applyLibraryOrder: [${domOrderAfter.join(',')}]`);
 }
 
 function renderLibrary() {
