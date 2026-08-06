@@ -4088,7 +4088,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.330</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.331</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4855,7 +4855,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.330'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.331'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -13785,7 +13785,73 @@ function renderWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChang
   el.style.display = 'block';
 }
 
+// ─── AUTO WEIGHT-PHASE SWITCHING ────────────────────────────────────────────
+// Runs at most once per calendar day (guarded below) - checks whether the
+// last 3 CONSECUTIVE calendar days' logged weight all sit on the same side
+// of the target range, and if so switches mh_goal automatically, appending
+// a matching line to Weight Phase History with today's date.
+//
+// Deliberately requires 3 full, unbroken days of real logged weight, not
+// just "the last 3 weigh-ins whenever they happened" - a gap means we can't
+// actually confirm 3 consecutive days off-target, so it skips rather than
+// guessing. This directly answers the concern already on record elsewhere
+// in this file for why intention wasn't auto-derived from weight position
+// before: "briefly sitting at/above target shouldn't suddenly be read as a
+// [different] intention" - 3 consecutive days is a real, sustained signal,
+// not a single fluctuation.
+function checkWeightPhaseAutoSwitch() {
+  const today = todayStr();
+  if (localStorage.getItem('mh_last_auto_phase_check') === today) return; // already checked today
+  localStorage.setItem('mh_last_auto_phase_check', today);
+
+  const wtLow = getWeightTargetLow();
+  const wtHigh = getWeightTargetHigh();
+  if (!wtLow && !wtHigh) return; // no target range set - nothing to compare against
+
+  // Last 3 calendar days, most recent first, requiring a genuine logged
+  // weight on each with no gap.
+  const days = [];
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yy = String(d.getFullYear()).slice(2);
+    const dateStr = `${dd}/${mm}/${yy}`;
+    const entry = state.history.find(h => h.date === dateStr && h.weight);
+    if (!entry) return; // gap - can't confirm 3 consecutive days, skip silently
+    days.push(entry.weight);
+  }
+
+  const allAbove = days.every(w => w > wtHigh);
+  const allBelow = days.every(w => w < wtLow);
+  const currentGoal = localStorage.getItem('mh_goal') || 'gain';
+
+  let newGoal = null;
+  if (allAbove && currentGoal !== 'lose') newGoal = 'lose';
+  else if (allBelow && currentGoal !== 'gain') newGoal = 'gain';
+  else if (!allAbove && !allBelow && currentGoal !== 'maintain' && days.every(w => w >= wtLow && w <= wtHigh)) newGoal = 'maintain'; // back within range for 3 days straight too
+
+  if (!newGoal) return;
+
+  setGoal(newGoal); // setGoal() already updates the goal button highlighting itself
+
+  // Append to Weight Phase History in the same format savePhaseHistory()
+  // itself uses - "loss" (not "lose") is the word that system expects.
+  const phaseWord = newGoal === 'lose' ? 'loss' : newGoal;
+  const isoToday = new Date().toISOString().slice(0,10);
+  const existing = (localStorage.getItem('mh_phase_history') || '').trim();
+  const newLine = `${isoToday} ${phaseWord}`;
+  if (!existing.endsWith(newLine)) { // avoid a duplicate line if this somehow runs twice for the same day
+    localStorage.setItem('mh_phase_history', existing ? `${existing}\n${newLine}` : newLine);
+    const el = document.getElementById('settingsPhaseHistory');
+    if (el) el.value = localStorage.getItem('mh_phase_history');
+  }
+
+  showToast(`Goal auto-switched to ${newGoal === 'lose' ? 'Lose' : newGoal === 'gain' ? 'Gain' : 'Maintain'} — 3 days ${allAbove ? 'above' : allBelow ? 'below' : 'back within'} your ${wtLow}-${wtHigh}kg target`);
+}
+
 function updateDashboard(skipActivityRender) {
+  checkWeightPhaseAutoSwitch(); // no-ops after the first call each day, see its own guard
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
