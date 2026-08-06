@@ -2695,7 +2695,10 @@ body[data-theme="light"] {
     <div style="padding:16px 20px 8px;border-bottom:1px solid var(--border);margin-bottom:4px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--text);">Nutrition History</div>
-        <button class="settings-save-btn" onclick="openMissedDayModal()" style="font-size:11px;padding:6px 12px;">+ Missed day</button>
+        <div style="display:flex;gap:8px;">
+          <button class="copy-btn" onclick="openHistoryCalendar()" style="font-size:11px;padding:6px 12px;">📅 Go to date</button>
+          <button class="settings-save-btn" onclick="openMissedDayModal()" style="font-size:11px;padding:6px 12px;">+ Missed day</button>
+        </div>
       </div>
       <div style="font-size:12px;color:var(--text3);">Daily nutrition logs from meal tracking. Wearable data is in Trends.</div>
     </div>
@@ -4069,7 +4072,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.326</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.327</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4836,7 +4839,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.326'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.327'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -14974,7 +14977,7 @@ function renderHistory() {
       return desc && !_modeWords.includes(desc);
     });
     return `
-    <div class="hist-day">
+    <div class="hist-day" id="hist-day-${day.date.replace(/\//g,'-')}">
       <div class="hist-day-header" onclick="toggleHistDay(${i})">
         <div style="display:flex;flex-direction:column;gap:2px;">
           <div style="display:flex;align-items:center;gap:6px;">
@@ -17451,14 +17454,19 @@ function cancelMissedDayFlow() {
   _missedDayConvDate = null;
 }
 
-function openMissedDayModal() {
+function openMissedDayModal(presetDate = null) {
   try {
-  // Default to yesterday
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const dd = String(yesterday.getDate()).padStart(2,'0');
-  const mm = String(yesterday.getMonth()+1).padStart(2,'0');
-  const yy = String(yesterday.getFullYear()).slice(2);
+  let dd, mm, yy;
+  if (presetDate) {
+    [dd, mm, yy] = presetDate.split('/');
+  } else {
+    // Default to yesterday
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    dd = String(yesterday.getDate()).padStart(2,'0');
+    mm = String(yesterday.getMonth()+1).padStart(2,'0');
+    yy = String(yesterday.getFullYear()).slice(2);
+  }
   document.getElementById('missedDayDate').value = `${dd}/${mm}/${yy}`;
   document.getElementById('missedDayMeals').value = '';
   document.getElementById('missedDayAIResult').style.display = 'none';
@@ -17471,6 +17479,99 @@ function openMissedDayModal() {
   const modal = document.getElementById('missedDayModal');
   modal.style.display = 'flex';
   } catch(e) { showToast('Modal err: ' + e.message); alert('Modal err: ' + e.message); }
+}
+
+// ─── HISTORY CALENDAR ─────────────────────────────────────────────────────
+let _historyCalendarDate = new Date(); // which month is currently displayed
+
+function openHistoryCalendar() {
+  _historyCalendarDate = new Date();
+  renderHistoryCalendar();
+  document.getElementById('historyCalendarModal').style.display = 'flex';
+}
+function closeHistoryCalendar() {
+  document.getElementById('historyCalendarModal').style.display = 'none';
+}
+function shiftHistoryCalendarMonth(delta) {
+  _historyCalendarDate = new Date(_historyCalendarDate.getFullYear(), _historyCalendarDate.getMonth() + delta, 1);
+  renderHistoryCalendar();
+}
+
+function renderHistoryCalendar() {
+  const year = _historyCalendarDate.getFullYear();
+  const month = _historyCalendarDate.getMonth(); // 0-indexed
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('historyCalendarMonthLabel').textContent = `${monthNames[month]} ${year}`;
+
+  const weekdayRow = document.getElementById('historyCalendarWeekdayRow');
+  if (weekdayRow) weekdayRow.innerHTML = ['S','M','T','W','T','F','S'].map(d => `<div>${d}</div>`).join('');
+
+  // A "logged" day is anything with a genuine kcal>0 entry - matches the
+  // same dedup/ghost-filtering logic renderHistory() itself uses, so a day
+  // showing green here is guaranteed to actually have a visible card to
+  // scroll to.
+  const loggedDates = new Set();
+  (state.history || []).forEach(d => {
+    if ((d.totals?.kcal || 0) > 0) loggedDates.add(d.date);
+  });
+
+  const firstOfMonth = new Date(year, month, 1);
+  const startWeekday = firstOfMonth.getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push('<div></div>');
+  for (let day = 1; day <= daysInMonth; day++) {
+    const cellDate = new Date(year, month, day);
+    const dd = String(day).padStart(2,'0');
+    const mm = String(month+1).padStart(2,'0');
+    const yy = String(year).slice(2);
+    const dateStr = `${dd}/${mm}/${yy}`;
+    const isFuture = cellDate > today;
+    const isToday = cellDate.getTime() === today.getTime();
+    const isLogged = loggedDates.has(dateStr);
+    // "Missed" only applies to genuinely past, unlogged days - today and the
+    // future can't have been missed yet, so they get a neutral style instead
+    // of being flagged red.
+    const isMissed = !isFuture && !isToday && !isLogged;
+    let bg = 'transparent', color = 'var(--text2)', border = '1px solid var(--border)';
+    if (isLogged)      { bg = 'rgba(45,235,143,0.15)'; border = '1px solid var(--green)'; color = 'var(--green)'; }
+    else if (isMissed) { bg = 'rgba(255,94,94,0.12)';  border = '1px solid var(--red)';   color = 'var(--red)'; }
+    else if (isFuture) { color = 'var(--text3)'; }
+    if (isToday) border = '2px solid var(--accent)';
+    cells.push(`<div onclick="_historyCalendarSelectDate('${dateStr}', ${isLogged}, ${isFuture})" style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:8px;background:${bg};border:${border};color:${color};font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">${day}</div>`);
+  }
+  const grid = document.getElementById('historyCalendarGrid');
+  if (grid) grid.innerHTML = cells.join('');
+}
+
+// A tapped date does one of two things: jump to it if it's already logged,
+// or go straight into the missed-day flow pre-filled with that date if it
+// isn't - either way the calendar's whole point (find a gap, then fix it)
+// is a single tap away, not a separate "now go find + Missed day and retype
+// the date" step after closing the calendar.
+function _historyCalendarSelectDate(dateStr, isLogged, isFuture) {
+  closeHistoryCalendar();
+  if (isFuture) { showToast("That's in the future — nothing to show yet"); return; }
+  if (isLogged) {
+    histFilter = 'all';
+    document.querySelectorAll('.hist-filter-btn').forEach(b => b.classList.remove('active'));
+    const allBtn = Array.from(document.querySelectorAll('.hist-filter-btn')).find(b => b.textContent.trim() === 'All');
+    if (allBtn) allBtn.classList.add('active');
+    renderHistory();
+    setTimeout(() => {
+      const target = document.getElementById(`hist-day-${dateStr.replace(/\//g,'-')}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.style.transition = 'background 0.3s';
+        target.style.background = 'rgba(45,235,143,0.15)';
+        setTimeout(() => { target.style.background = ''; }, 1500);
+      }
+    }, 150);
+  } else {
+    openMissedDayModal(dateStr);
+  }
 }
 
 function closeMissedDayModal() {
@@ -24880,6 +24981,29 @@ function dismissInsight() {
       <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='savoury';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #f59e0b;border-radius:8px;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;">🥘 Surprise savoury</button>
     </div>
     <button class="run-btn" style="width:100%;padding:12px;font-size:13px;" onclick="_recipeDiscoverKind=null;submitRecipeDiscover();">Get recipe idea →</button>
+  </div>
+</div>
+
+<!-- HISTORY CALENDAR — jump straight to any date, with missed days (no
+     logged entry, in the past) visually flagged so gaps are obvious at a
+     glance rather than having to scroll the whole list looking for them. -->
+<div class="modal-overlay" id="historyCalendarModal" style="display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.7);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">GO TO DATE</div>
+      <div onclick="closeHistoryCalendar()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span onclick="shiftHistoryCalendarMonth(-1)" style="cursor:pointer;color:var(--text2);font-size:18px;padding:6px 12px;">‹</span>
+      <div id="historyCalendarMonthLabel" style="font-family:Space Mono,monospace;font-size:14px;color:var(--text);font-weight:700;"></div>
+      <span onclick="shiftHistoryCalendarMonth(1)" style="cursor:pointer;color:var(--text2);font-size:18px;padding:6px 12px;">›</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;font-size:10px;color:var(--text3);font-family:Space Mono,monospace;text-align:center;" id="historyCalendarWeekdayRow"></div>
+    <div id="historyCalendarGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+    <div style="display:flex;gap:14px;margin-top:14px;font-size:11px;color:var(--text3);">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--red);margin-right:5px;"></span>Missed day</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green);margin-right:5px;"></span>Logged</span>
+    </div>
   </div>
 </div>
 
