@@ -2382,6 +2382,18 @@ body[data-theme="light"] {
     <div id="calorieContextNote" style="font-size:11px;color:var(--text3);line-height:1.5;padding:4px 0 8px;"></div>
     </div>
 
+    <!-- Proactive recipe nudge - surfaces unprompted late in the day if
+         protein/fat are still meaningfully short, rather than only ever
+         appearing when someone thinks to tap "Next meal idea" themselves.
+         Dismissible per-day so it doesn't nag once seen. -->
+    <div id="recipeNudgeBanner" style="display:none;background:rgba(45,235,143,0.08);border:1px solid var(--accent-glow);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;flex:1;" id="recipeNudgeText"></div>
+        <span onclick="dismissRecipeNudge()" style="color:var(--text3);cursor:pointer;font-size:16px;padding:0 2px;">×</span>
+      </div>
+      <button class="run-btn" style="width:100%;margin-top:8px;font-size:12px;padding:8px;" onclick="dismissRecipeNudge();switchTabById('chat');startNextMealFlow();">🍽 Get a suggestion</button>
+    </div>
+
     <!-- MACRO RATIO BAR -->
     <div id="macroRatioCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:none;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2963,7 +2975,8 @@ body[data-theme="light"] {
 
     <!-- Wellness summary -->
     <div class="wellness-card" id="wellnessCard" style="display:none;">
-      <div class="wellness-title">Today's Wellness</div>
+      <div class="wellness-title" style="cursor:pointer;" onclick="toggleSection('trends-wellness','trends-wellness-wrap','trends-wellness-icon')">Today's Wellness <span id="trends-wellness-icon" style="font-size:11px;color:var(--text3);font-weight:400;">▾ hide</span></div>
+      <div id="trends-wellness-wrap">
       <div class="wellness-grid">
         <div class="wellness-metric">
           <canvas class="wellness-arc" id="arcSleep" style="cursor:pointer;" onclick="openChartLightbox('sleep')"></canvas>
@@ -2989,6 +3002,7 @@ body[data-theme="light"] {
           <div class="wellness-status neutral" id="wellnessNutritionStatus">—</div>
           <div class="wellness-label">Nutrition</div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -4130,7 +4144,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.339</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.341</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4897,7 +4911,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.339'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.341'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13890,6 +13904,44 @@ function renderWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChang
 // before: "briefly sitting at/above target shouldn't suddenly be read as a
 // [different] intention" - 3 consecutive days is a real, sustained signal,
 // not a single fluctuation.
+// ─── PROACTIVE RECIPE NUDGE ──────────────────────────────────────────────────
+// Runs once per day, only past a "late enough that it's genuinely worth
+// flagging" hour - checked separately from checkWeightPhaseAutoSwitch()
+// since this one needs to keep re-checking through the evening (the hour
+// threshold hasn't been reached YET earlier in the day, so it shouldn't
+// mark itself "done for today" until it's actually had a fair chance to fire).
+function checkProactiveRecipeNudge() {
+  const hour = new Date().getHours();
+  if (hour < 19) return; // not late enough yet - check again on a later render today, don't mark as done
+  const today = todayStr();
+  if (localStorage.getItem('mh_nudge_shown_' + today)) return; // already shown (or dismissed) today
+
+  const t = TARGETS[state.dayMode];
+  const totals = calcTotals(state.todayLog);
+  const fatTarget = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  const remainProt = t.protein - (totals.protein || 0);
+  const remainFat = fatTarget - (totals.fat || 0);
+  // "Meaningfully short" - a genuine gap worth a suggestion, not a couple of
+  // grams left that'll close itself with whatever's already planned for dinner.
+  const protShortfall = remainProt > t.protein * 0.2;
+  const fatShortfall = remainFat > fatTarget * 0.2;
+  if (!protShortfall && !fatShortfall) return;
+
+  const parts = [];
+  if (protShortfall) parts.push(`${Math.round(remainProt)}g protein`);
+  if (fatShortfall) parts.push(`${Math.round(remainFat)}g fat`);
+  const el = document.getElementById('recipeNudgeText');
+  const banner = document.getElementById('recipeNudgeBanner');
+  if (el) el.textContent = `Still ${parts.join(' and ')} short today, with evening underway — worth a suggestion?`;
+  if (banner) banner.style.display = 'block';
+  localStorage.setItem('mh_nudge_shown_' + today, '1');
+}
+
+function dismissRecipeNudge() {
+  const banner = document.getElementById('recipeNudgeBanner');
+  if (banner) banner.style.display = 'none';
+}
+
 function checkWeightPhaseAutoSwitch() {
   const today = todayStr();
   if (localStorage.getItem('mh_last_auto_phase_check') === today) return; // already checked today
@@ -13943,6 +13995,7 @@ function checkWeightPhaseAutoSwitch() {
 
 function updateDashboard(skipActivityRender) {
   checkWeightPhaseAutoSwitch(); // no-ops after the first call each day, see its own guard
+  checkProactiveRecipeNudge(); // same pattern - no-ops if already shown today, or before 7pm
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
@@ -18438,7 +18491,7 @@ function switchSubTab(parent, tab, el) {
     ['view-trends','view-reports'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
     const el2 = document.getElementById('view-' + tab);
     if (el2) el2.classList.add('active');
-    if (tab === 'trends') { const dayNav=document.getElementById('trendsDayNav'); if(typeof trendsWindow!=='undefined'&&trendsWindow==='today'&&dayNav) dayNav.style.display='flex'; updateTrendsDayLabel(); renderTrends(); }
+    if (tab === 'trends') { const dayNav=document.getElementById('trendsDayNav'); if(typeof trendsWindow!=='undefined'&&trendsWindow==='today'&&dayNav) dayNav.style.display='flex'; updateTrendsDayLabel(); renderTrends(); setTimeout(() => makeContainerReorderable(document.getElementById('view-trends'), 'trends'), 100); }
     if (tab === 'reports') { renderReports(); setTimeout(() => makeContainerReorderable(document.getElementById('view-reports'), 'reports'), 100); }
   } else if (parent === 'settings') {
     ['view-manage','view-customise','view-import'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
