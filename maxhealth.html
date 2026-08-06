@@ -4144,7 +4144,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.341</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.342</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4911,7 +4911,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.341'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.342'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17170,26 +17170,45 @@ function _startCookVoiceListening() {
   _cookRecognition.start();
 }
 
-// Stop listening the instant speech starts (so the mic can't hear the
-// phone's own voice), resume the instant it stops - patched onto
-// speechSynthesis globally rather than per-utterance, since Cook Mode is the
-// only place in the app that uses speech synthesis at all.
+// Keeps the mic listening throughout Cook Mode speech (not stopped during
+// utterances - "pause" needs to be heard WHILE a step is talking, not just
+// in the gap after), and works around a real, well-documented Chrome/Android
+// bug: speechSynthesis silently stops producing audio on utterances longer
+// than roughly 10-15 seconds unless something keeps the engine alive. That
+// bug is almost certainly what "narration restarts after ~10 seconds" was -
+// not a bug in this app's own logic, but Chrome's TTS engine itself losing
+// its connection mid-utterance on anything longer than a short sentence,
+// which most real cooking steps are. Patched onto speechSynthesis globally
+// rather than per-utterance, since Cook Mode is the only place in the app
+// that uses speech synthesis at all.
 if ('speechSynthesis' in window) {
   const _origSpeak = window.speechSynthesis.speak.bind(window.speechSynthesis);
+  let _ttsKeepAliveTimer = null;
   window.speechSynthesis.speak = function(utterance) {
     const origOnStart = utterance.onstart;
     const origOnEnd = utterance.onend;
     utterance.onstart = function(e) {
-      // No longer stops the recognizer here - the whole point of the fix
-      // above is that "pause" needs to be heard WHILE a step is talking, not
-      // just in the gap after. Relying on the device's own echo cancellation
-      // (standard on phone mic+speaker audio pipelines) rather than
-      // proactively silencing the mic during every utterance.
       if (_cookModeOpen) _setCookMicStatus('🔈 Reading step aloud… (say "pause" any time)');
+      // The actual fix: nudge the engine every 8s (safely under the ~10-15s
+      // cutoff) via pause+resume, which keeps it alive without restarting
+      // the utterance or losing the listener's place in it.
+      clearInterval(_ttsKeepAliveTimer);
+      _ttsKeepAliveTimer = setInterval(() => {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        } else {
+          clearInterval(_ttsKeepAliveTimer);
+        }
+      }, 8000);
       if (origOnStart) origOnStart(e);
     };
     utterance.onend = function(e) {
+      clearInterval(_ttsKeepAliveTimer);
       if (origOnEnd) origOnEnd(e);
+    };
+    utterance.onerror = function(e) {
+      clearInterval(_ttsKeepAliveTimer);
     };
     _origSpeak(utterance);
   };
