@@ -4042,7 +4042,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.321</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.323</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4809,7 +4809,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.321'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.323'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -6249,6 +6249,8 @@ function confirmSaveToLibrary() {
 }
 
 // Add food manually
+let _addFoodRecipeContext = null; // index into _recipeIngredients, when Add Food was opened from a flagged recipe ingredient rather than standalone
+
 function openAddFoodModal() {
   document.getElementById('addFoodName').value = '';
   document.getElementById('addFoodKcal').value = '';
@@ -6259,7 +6261,49 @@ function openAddFoodModal() {
   document.getElementById('addFoodPer').value = 'portion';
   document.getElementById('addFoodModal').classList.add('open');
 }
-function closeAddFoodModal() { document.getElementById('addFoodModal').classList.remove('open'); }
+function closeAddFoodModal() {
+  document.getElementById('addFoodModal').classList.remove('open');
+  _addFoodRecipeContext = null; // cancelling clears it; a successful save reads it first, before this runs
+}
+
+// Opens the exact same manual Add Food form used everywhere else, pre-filled
+// from an unmatched (⚠) recipe ingredient - the whole missing piece Pete
+// flagged: those rows had no way to actually enter nutrition at all, and
+// even filling them in some other way wouldn't have gone through the
+// duplicate-check every other "add to library" path already gets.
+function openAddFoodModalForRecipeIngredient(index) {
+  const ing = _recipeIngredients[index];
+  if (!ing) return;
+  openAddFoodModal();
+  // Strip the "⚠️ " prefix and any "(...) — add nutrition..." suffix this
+  // placeholder name was given, back to just the plain ingredient name.
+  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*\([^)]*\)\s*—.*$/, '').trim();
+  document.getElementById('addFoodName').value = cleanName;
+  document.getElementById('addFoodPortion').value = `${ing.amount || 100}g`;
+  document.getElementById('addFoodPer').value = 'portion';
+  _addFoodRecipeContext = index;
+}
+
+// Called from both successful save paths (new item, or overwrite existing) -
+// if this Add Food session was opened from a flagged recipe ingredient,
+// updates that specific ingredient's real macros/name now that they exist,
+// scaled to whatever amount the ingredient row already had (already
+// gram-converted from the recipe's original tsp/tbsp/etc unit).
+function _applyPendingLibraryEntryToRecipe(entry) {
+  if (_addFoodRecipeContext == null) return;
+  const ing = _recipeIngredients[_addFoodRecipeContext];
+  if (!ing) return;
+  const baseG = entry.per100g ? 100 : (parseFloat(entry.portion) || ing.amount || 100);
+  const ratio = (ing.amount || baseG) / baseG;
+  ing.name = entry.name;
+  ing.kcal = Math.round(entry.kcal * ratio);
+  ing.protein = Math.round(entry.protein * ratio * 10) / 10;
+  ing.fat = Math.round((entry.fat || 0) * ratio * 10) / 10;
+  ing.carbs = Math.round(entry.carbs * ratio * 10) / 10;
+  ing._base = { kcal: entry.kcal, protein: entry.protein, carbs: entry.carbs, fat: entry.fat || 0, fibre: entry.fibre || 0, baseG };
+  renderRecipeIngredients();
+  updateRecipeTotals();
+}
 
 // Deliberately the OPPOSITE intent of fuzzyFindInLibrary — that one excludes
 // brand-differing items on purpose, to avoid treating "Asda double cream" and
@@ -6460,6 +6504,7 @@ function _saveNewLibraryItem(entry) {
   const lib = loadLibrary();
   lib.push(entry);
   saveLibrary(lib);
+  _applyPendingLibraryEntryToRecipe(entry); // before closeAddFoodModal() clears the context below
   // Safe to call both regardless of which flow this entry came from —
   // closing an already-closed modal is a harmless no-op.
   closeAddFoodModal();
@@ -6526,6 +6571,7 @@ function confirmOverwriteExistingLibraryItem(existingId) {
     lib.push(entry);
   }
   saveLibrary(lib);
+  _applyPendingLibraryEntryToRecipe(entry); // before closeAddFoodModal() clears the context below
   closeAddFoodModal();
   closeSaveLibraryModal();
   renderLibrary();
@@ -13023,28 +13069,52 @@ function createRecipeFromAISuggestion(recipeKey) {
   _recipeSteps = (recipe.method || []).map(text => ({ id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2), text }));
   renderRecipeSteps();
 
-  const massUnits = { g: 1, kg: 1000, ml: 1, l: 1000 };
+  // Approximate gram equivalents for common cooking-measure units, not just
+  // weight/volume units. Genuinely imprecise (a tsp of salt isn't a tsp of
+  // vanilla extract) - but landing within a gram or two of the real amount,
+  // automatically, beats defaulting to 100g regardless of whether the real
+  // amount was 1 pinch or 3 tablespoons, which was wrong by 20-100x rather
+  // than a rounding approximation. "whole"/count-based items (egg, onion)
+  // are deliberately NOT in here - those genuinely vary too much (a "whole"
+  // egg vs a "whole" onion) for any single conversion to be more useful than
+  // flagging it for a real check.
+  const massUnits = {
+    g: 1, kg: 1000, ml: 1, l: 1000,
+    tsp: 5, teaspoon: 5,
+    tbsp: 15, tablespoon: 15,
+    pinch: 0.5,
+    cap: 5, // bottle-cap measure, roughly teaspoon-equivalent
+    clove: 3, // garlic
+    cup: 240,
+  };
   let matched = 0, unmatched = 0;
   (recipe.ingredients || []).forEach(ing => {
     const libItem = fuzzyFindInLibrary(ing.name);
-    const cleanConvert = massUnits[ing.unit] != null;
+    const unitKey = (ing.unit || '').toLowerCase().replace(/s$/, ''); // "cloves"→"clove", "tsps"→"tsp"
+    const cleanConvert = massUnits[unitKey] != null;
+    const convertedAmount = cleanConvert ? Math.round(ing.amount * massUnits[unitKey] * 10) / 10 : null;
     if (libItem) {
       matched++;
       const _ps = (libItem.portion || '').toLowerCase();
       const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
       const baseG = _pg ? (parseFloat(libItem.portion) || 100) : 100;
-      const amount = cleanConvert ? Math.round(ing.amount * massUnits[ing.unit]) : baseG;
+      const amount = convertedAmount != null ? convertedAmount : baseG;
       _recipeIngredients.push({
-        name: libItem.name + (cleanConvert ? '' : ` (${ing.amount} ${ing.unit} — check amount)`),
+        name: libItem.name + (convertedAmount != null ? '' : ` (${ing.amount} ${ing.unit} — check amount)`),
         amount,
         kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0,
         _base: { kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, baseG }
       });
     } else {
       unmatched++;
+      // Amount field now reflects the actual requested quantity (converted
+      // to grams where a reasonable conversion exists) rather than always
+      // defaulting to 100g - only nutrition values need adding by hand now,
+      // not the weight too.
       _recipeIngredients.push({
-        name: `⚠️ ${ing.name} (${ing.amount}${ing.unit}) — add nutrition`,
-        amount: 100, kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0
+        name: convertedAmount != null ? `⚠️ ${ing.name} — add nutrition` : `⚠️ ${ing.name} (${ing.amount} ${ing.unit}) — add nutrition & check amount`,
+        amount: convertedAmount != null ? convertedAmount : 100,
+        kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0
       });
     }
   });
@@ -16115,13 +16185,15 @@ function renderRecipeIngredients() {
   }
   el.innerHTML = _recipeIngredients.map((ing, i) => {
     const scaled = getScaledIngredient(ing);
+    const isFlagged = ing.name.startsWith('⚠️'); // unmatched-to-library placeholder, still needs real nutrition entered
     return `
-    <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+    <div style="padding:8px 0;border-bottom:1px solid var(--border);${isFlagged ? 'background:rgba(250,204,21,0.06);border-radius:6px;' : ''}">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="flex:1;">
-          <div style="font-size:13px;color:var(--text);">${ing.name}</div>
+        <div style="flex:1;${isFlagged ? 'cursor:pointer;' : ''}" ${isFlagged ? `onclick="openAddFoodModalForRecipeIngredient(${i})"` : ''}>
+          <div style="font-size:13px;color:${isFlagged ? 'var(--yellow)' : 'var(--text)'};">${ing.name}</div>
           <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;" id="recipe-ing-macros-${i}">${Math.round(scaled.kcal)}kcal · ${Math.round(scaled.protein*10)/10}g P · ${Math.round((scaled.fat||0)*10)/10}g F · ${Math.round(scaled.carbs*10)/10}g C${ing._base ? ` <span style="color:var(--text3);font-size:10px;">(per ${ing._base.baseG}g)</span>` : ''}</div>
-          ${ing.note ? `<div style="font-size:11px;color:var(--accent);margin-top:3px;line-height:1.4;font-style:italic;cursor:pointer;" onclick="editRecipeIngredientNote(${i})">📝 ${ing.note}</div>` : `<div style="font-size:11px;color:var(--text3);margin-top:3px;cursor:pointer;" onclick="editRecipeIngredientNote(${i})">+ add note</div>`}
+          ${isFlagged ? `<div style="font-size:11px;color:var(--yellow);margin-top:3px;text-decoration:underline;">Tap to add nutrition — saves to Library too</div>` : ''}
+          ${ing.note ? `<div style="font-size:11px;color:var(--accent);margin-top:3px;line-height:1.4;font-style:italic;cursor:pointer;" onclick="event.stopPropagation();editRecipeIngredientNote(${i})">📝 ${ing.note}</div>` : `<div style="font-size:11px;color:var(--text3);margin-top:3px;cursor:pointer;" onclick="event.stopPropagation();editRecipeIngredientNote(${i})">+ add note</div>`}
         </div>
         <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;">
           <input type="number" value="${ing.amount || 100}" min="1" max="5000"
