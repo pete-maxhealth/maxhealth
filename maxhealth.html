@@ -10357,6 +10357,23 @@ async function suggestMealFromLibrary(kind = 'both') {
     fat:     Math.round((fatTarget - (totals.fat || 0)) * 10) / 10,
   };
 
+  // Target macro RATIO (percentage of calories from each), not just absolute
+  // grams remaining - same calculation the dashboard's own macro-ratio bar
+  // uses, so "on protocol" here means the same thing it means there. Two
+  // days can have identical grams-remaining but very different ratio
+  // problems (e.g. plenty of protein room left either because fat's been
+  // running high all day, or because nothing's been eaten yet at all) - the
+  // ratio context lets a suggestion actually correct a drifting day, not
+  // just fill in whatever grams are numerically left.
+  const tgtFatTotal = t.protein * 4 + fatTarget * 9 + t.carbs * 4 || 1;
+  const tgtFatPct  = Math.round(fatTarget * 9 / tgtFatTotal * 100);
+  const tgtProtPct = Math.round(t.protein * 4 / tgtFatTotal * 100);
+  const tgtCarbPct = 100 - tgtFatPct - tgtProtPct;
+  const consumedKcalForRatio = (totals.protein||0)*4 + (totals.fat||0)*9 + (totals.carbs||0)*4;
+  const currentFatPct  = consumedKcalForRatio > 0 ? Math.round((totals.fat||0)*9 / consumedKcalForRatio * 100) : null;
+  const currentProtPct = consumedKcalForRatio > 0 ? Math.round((totals.protein||0)*4 / consumedKcalForRatio * 100) : null;
+  const currentCarbPct = consumedKcalForRatio > 0 ? 100 - currentFatPct - currentProtPct : null;
+
   // Soft time-of-day steer — a preference the AI weighs against the real macro
   // budget, not a hard filter. Still only ever draws from the real library below.
   const _hour = new Date().getHours();
@@ -10404,6 +10421,12 @@ async function suggestMealFromLibrary(kind = 'both') {
 
 TODAY'S REMAINING BUDGET:
 Calories: ${remaining.kcal}kcal | Protein: ${remaining.protein}g | Carbs: ${remaining.carbs}g | Fat: ${remaining.fat}g
+
+TARGET MACRO RATIO (% of calories): ${tgtFatPct}% fat / ${tgtProtPct}% protein / ${tgtCarbPct}% carbs
+${currentFatPct != null
+  ? `TODAY'S ACTUAL RATIO SO FAR: ${currentFatPct}% fat / ${currentProtPct}% protein / ${currentCarbPct}% carbs${Math.abs(currentFatPct - tgtFatPct) >= 8 ? ` — ${currentFatPct < tgtFatPct ? 'running LOW on fat as a share of calories' : 'running HIGH on fat as a share of calories'} relative to protocol, by a meaningful margin` : ' — close to protocol ratio, no correction needed beyond the usual remaining-grams fit'}`
+  : `Nothing logged yet today, so no ratio drift to correct yet — just work from the remaining grams and target ratio above.`}
+IMPORTANT: two days can have identical grams remaining for very different reasons — prioritise suggestions that pull today's ACTUAL ratio back toward the target ratio, not just whichever items numerically fit the remaining grams. If fat is running meaningfully low as a % of calories so far today, favour higher-fat items even where a leaner option would also technically fit the remaining grams. This is a genuine priority alongside the remaining-grams budget, not just a tiebreaker — never at the cost of actually exceeding the remaining carb/protein/fat budget itself, which stays the hard limit.
 
 CURRENT TIME OF DAY: ${timeOfDay}
 Where reasonable, prefer combos/recipes that suit this time of day (e.g. breakfast-style items — cereal, toast, eggs, bagels, jam, marmite, cheese, yoghurt — in the morning; lighter snack-style options in the late evening). This is a preference, not a rule — if the best-fitting items for the remaining macro budget genuinely aren't a natural fit for the time of day, still suggest them rather than forcing a worse macro match just to suit the clock.
