@@ -4072,7 +4072,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.327</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.328</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4839,7 +4839,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.327'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.328'; // single source of truth — bump here each release
 let state = loadState();
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 
@@ -17496,12 +17496,42 @@ function shiftHistoryCalendarMonth(delta) {
   _historyCalendarDate = new Date(_historyCalendarDate.getFullYear(), _historyCalendarDate.getMonth() + delta, 1);
   renderHistoryCalendar();
 }
+// Either argument can be null - e.g. changing just the year dropdown passes
+// (null, 2024), keeping whatever month was already selected.
+function jumpHistoryCalendarTo(month, year) {
+  const targetMonth = month != null ? month : _historyCalendarDate.getMonth();
+  const targetYear  = year  != null ? year  : _historyCalendarDate.getFullYear();
+  _historyCalendarDate = new Date(targetYear, targetMonth, 1);
+  renderHistoryCalendar();
+}
 
 function renderHistoryCalendar() {
   const year = _historyCalendarDate.getFullYear();
   const month = _historyCalendarDate.getMonth(); // 0-indexed
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  document.getElementById('historyCalendarMonthLabel').textContent = `${monthNames[month]} ${year}`;
+
+  // Month/year dropdowns - direct jump instead of stepping one month at a
+  // time via ‹ › repeatedly, especially painful going back several years.
+  const monthSelect = document.getElementById('historyCalMonthSelect');
+  if (monthSelect) {
+    monthSelect.innerHTML = monthNames.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+    monthSelect.value = month;
+  }
+  const yearSelect = document.getElementById('historyCalYearSelect');
+  if (yearSelect) {
+    // Range covers every year with real history, plus a little padding
+    // either side so jumping slightly outside logged history still works.
+    const historyYears = (state.history || [])
+      .map(d => { const parts = (d.date||'').split('/'); return parts[2] ? 2000 + parseInt(parts[2], 10) : null; })
+      .filter(y => y != null);
+    const thisYear = new Date().getFullYear();
+    const minYear = Math.min(thisYear - 1, ...(historyYears.length ? historyYears : [thisYear]));
+    const maxYear = Math.max(thisYear + 1, ...(historyYears.length ? historyYears : [thisYear]));
+    let opts = '';
+    for (let y = maxYear; y >= minYear; y--) opts += `<option value="${y}">${y}</option>`;
+    yearSelect.innerHTML = opts;
+    yearSelect.value = year;
+  }
 
   const weekdayRow = document.getElementById('historyCalendarWeekdayRow');
   if (weekdayRow) weekdayRow.innerHTML = ['S','M','T','W','T','F','S'].map(d => `<div>${d}</div>`).join('');
@@ -24995,7 +25025,10 @@ function dismissInsight() {
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <span onclick="shiftHistoryCalendarMonth(-1)" style="cursor:pointer;color:var(--text2);font-size:18px;padding:6px 12px;">‹</span>
-      <div id="historyCalendarMonthLabel" style="font-family:Space Mono,monospace;font-size:14px;color:var(--text);font-weight:700;"></div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="historyCalMonthSelect" onchange="jumpHistoryCalendarTo(parseInt(this.value),null)" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Space Mono,monospace;font-size:13px;font-weight:700;padding:6px 6px;"></select>
+        <select id="historyCalYearSelect" onchange="jumpHistoryCalendarTo(null,parseInt(this.value))" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:Space Mono,monospace;font-size:13px;font-weight:700;padding:6px 6px;"></select>
+      </div>
       <span onclick="shiftHistoryCalendarMonth(1)" style="cursor:pointer;color:var(--text2);font-size:18px;padding:6px 12px;">›</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;font-size:10px;color:var(--text3);font-family:Space Mono,monospace;text-align:center;" id="historyCalendarWeekdayRow"></div>
