@@ -2394,6 +2394,21 @@ body[data-theme="light"] {
       <button class="run-btn" style="width:100%;margin-top:8px;font-size:12px;padding:8px;" onclick="dismissRecipeNudge();switchTabById('chat');startNextMealFlow();">🍽 Get a suggestion</button>
     </div>
 
+    <!-- First-log nudge - "you usually log by ~9am, nothing yet today",
+         computed from YOUR OWN recent median first-log time (not a fixed
+         rule), only once at least 7 days of real data exist to base it on.
+         Deliberately no shared-priority system with the recipe nudge above -
+         they naturally don't collide in practice (this fires in the morning
+         gap, the recipe one after 7pm), so building that infrastructure for
+         a collision that likely never happens would be solving a problem
+         that doesn't exist yet. -->
+    <div id="firstLogNudgeBanner" style="display:none;background:rgba(45,235,143,0.08);border:1px solid var(--accent-glow);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;flex:1;" id="firstLogNudgeText"></div>
+        <span onclick="dismissFirstLogNudge()" style="color:var(--text3);cursor:pointer;font-size:16px;padding:0 2px;">×</span>
+      </div>
+    </div>
+
     <!-- MACRO RATIO BAR -->
     <div id="macroRatioCard" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:none;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -2937,6 +2952,22 @@ body[data-theme="light"] {
           <canvas id="journeyCanvas"></canvas>
         </div>
         <div id="journeyStats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px;"></div>
+      </div>
+    </div>
+
+    <!-- PATTERNS — real correlation checks, deliberately bounded to a fixed,
+         specific list rather than open-ended pattern-mining (which isn't
+         trustworthy on a personal-sized dataset anyway). Each check requires
+         a genuine minimum group size before it's allowed to say anything at
+         all, and always shows the real day-counts alongside any finding -
+         the honesty is in showing your own sample size, not hiding behind a
+         confident-sounding percentage. "Tend to" language throughout, never
+         causal claims - this app doesn't know WHY a pattern exists, only
+         that it's there in the data so far. -->
+    <div class="metric-card" id="patternsCard" style="display:none;margin-bottom:16px;">
+      <div class="section-title" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-patterns','trends-patterns-wrap','trends-patterns-icon')">🔍 Patterns <span id="trends-patterns-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="trends-patterns-wrap">
+        <div id="patternsContent" style="font-size:12px;color:var(--text2);line-height:1.6;"></div>
       </div>
     </div>
 
@@ -4144,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.342</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.343</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4911,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.342'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.343'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13942,6 +13973,54 @@ function dismissRecipeNudge() {
   if (banner) banner.style.display = 'none';
 }
 
+// ─── FIRST-LOG PATTERN NUDGE ──────────────────────────────────────────────────
+// "You usually log by ~9am, nothing yet today" - computed from your own
+// recent median first-log time, not a fixed clock-based rule. Requires at
+// least 7 days of real data before it's allowed to claim a pattern exists -
+// two or three data points isn't a "usual" time, it's a coincidence.
+function checkFirstLogNudge() {
+  const today = todayStr();
+  if (localStorage.getItem('mh_firstlog_nudge_' + today)) return; // already shown/dismissed today
+  if (state.todayLog && state.todayLog.length > 0) return; // already logged something today - nothing to nudge about
+
+  // Most recent 30 days (state.history is sorted newest-first) with a real
+  // first entry - only genuine logged days count, not gaps.
+  const recentDays = state.history.slice(0, 30);
+  const firstLogTimes = [];
+  recentDays.forEach(day => {
+    if (day.log && day.log.length > 0) {
+      const times = day.log.map(e => e.time).filter(Boolean).sort(); // "HH:MM" strings sort correctly as plain strings
+      if (times.length) firstLogTimes.push(times[0]);
+    }
+  });
+  if (firstLogTimes.length < 7) return; // not enough history to confidently know a "usual" time yet
+
+  const toMinutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const minutesList = firstLogTimes.map(toMinutes).sort((a, b) => a - b);
+  const medianMinutes = minutesList[Math.floor(minutesList.length / 2)];
+
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const bufferMinutes = 90; // a genuine grace period, not a hair-trigger the moment the usual time technically passes
+  if (nowMinutes < medianMinutes + bufferMinutes) return;
+
+  const mh = Math.floor(medianMinutes / 60);
+  const mm = medianMinutes % 60;
+  const displayHour = mh % 12 === 0 ? 12 : mh % 12;
+  const medianTimeStr = `${displayHour}:${String(mm).padStart(2, '0')}${mh < 12 ? 'am' : 'pm'}`;
+
+  const el = document.getElementById('firstLogNudgeText');
+  const banner = document.getElementById('firstLogNudgeBanner');
+  if (el) el.textContent = `You're usually logging something by around ${medianTimeStr} — nothing yet today.`;
+  if (banner) banner.style.display = 'block';
+  localStorage.setItem('mh_firstlog_nudge_' + today, '1');
+}
+
+function dismissFirstLogNudge() {
+  const banner = document.getElementById('firstLogNudgeBanner');
+  if (banner) banner.style.display = 'none';
+}
+
 function checkWeightPhaseAutoSwitch() {
   const today = todayStr();
   if (localStorage.getItem('mh_last_auto_phase_check') === today) return; // already checked today
@@ -13996,6 +14075,7 @@ function checkWeightPhaseAutoSwitch() {
 function updateDashboard(skipActivityRender) {
   checkWeightPhaseAutoSwitch(); // no-ops after the first call each day, see its own guard
   checkProactiveRecipeNudge(); // same pattern - no-ops if already shown today, or before 7pm
+  checkFirstLogNudge(); // same pattern - no-ops if already logged today, already shown, or not enough history yet
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
@@ -19168,6 +19248,91 @@ function renderJourneyCard() {
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
 }
 
+// ─── PATTERNS — bounded correlation checks ───────────────────────────────────
+// Three fixed, specific comparisons, not open-ended pattern-mining. Each one
+// requires a genuine minimum group size before it's allowed to render
+// anything at all - and even then, always shows the real day-counts next to
+// the finding, so the honesty is visible, not just asserted. "Tend to"
+// language throughout - this only knows what's in the data so far, never why.
+function renderPatternsCard() {
+  const card = document.getElementById('patternsCard');
+  const content = document.getElementById('patternsContent');
+  if (!card || !content) return;
+  const MIN_GROUP = 5; // fewer than this in either group and the comparison isn't shown at all
+  const targets = getTargets();
+  const carbCeilFor = d => targets[d.mode || 'standard']?.carbs ?? targets.standard.carbs;
+  const protTargetFor = d => targets[d.mode || 'standard']?.protein ?? targets.standard.protein;
+  const days = state.history.filter(d => d.totals && (d.totals.kcal || 0) > 0); // genuinely logged days only
+
+  const findings = [];
+
+  // 1. Sleep quality → NEXT day's ketosis adherence. Uses the person's own
+  // median sleep duration as the good/poor split point, not an arbitrary
+  // fixed hour count that may not suit them.
+  (function sleepVsKetosis() {
+    const byDate = {}; days.forEach(d => byDate[d.date] = d);
+    const sleepDurations = days.filter(d => d.sleep_duration > 0).map(d => d.sleep_duration);
+    if (sleepDurations.length < MIN_GROUP * 2) return;
+    const sortedDur = [...sleepDurations].sort((a,b) => a-b);
+    const medianDur = sortedDur[Math.floor(sortedDur.length / 2)];
+
+    const pairs = []; // {sleptWell, nextDayInCeiling}
+    days.forEach(d => {
+      if (!(d.sleep_duration > 0)) return;
+      // Find the calendar day immediately after this one
+      const [dd, mm, yy] = d.date.split('/').map(Number);
+      const nd = new Date(2000 + yy, mm - 1, dd + 1);
+      const nextDateStr = `${String(nd.getDate()).padStart(2,'0')}/${String(nd.getMonth()+1).padStart(2,'0')}/${String(nd.getFullYear()).slice(2)}`;
+      const nextDay = byDate[nextDateStr];
+      if (!nextDay) return;
+      pairs.push({ sleptWell: d.sleep_duration >= medianDur, nextInCeiling: (nextDay.totals.carbs || 0) <= carbCeilFor(nextDay) });
+    });
+    const wellGroup = pairs.filter(p => p.sleptWell);
+    const poorGroup = pairs.filter(p => !p.sleptWell);
+    if (wellGroup.length < MIN_GROUP || poorGroup.length < MIN_GROUP) return;
+    const wellPct = Math.round(wellGroup.filter(p => p.nextInCeiling).length / wellGroup.length * 100);
+    const poorPct = Math.round(poorGroup.filter(p => p.nextInCeiling).length / poorGroup.length * 100);
+    if (Math.abs(wellPct - poorPct) < 15) return; // not a meaningful enough difference to be worth mentioning
+    const medianHrs = Math.round(medianDur / 60 * 10) / 10;
+    findings.push(`After a night of ${medianHrs}h+ sleep, you stayed within your carb ceiling the next day <strong>${wellPct}%</strong> of the time (${wellGroup.length} nights) — after shorter sleep, <strong>${poorPct}%</strong> (${poorGroup.length} nights).`);
+  })();
+
+  // 2. Activity level (same day) → protein target hit that day.
+  (function activityVsProtein() {
+    const stepDays = days.filter(d => d.steps > 0);
+    if (stepDays.length < MIN_GROUP * 2) return;
+    const sortedSteps = [...stepDays.map(d => d.steps)].sort((a,b) => a-b);
+    const medianSteps = sortedSteps[Math.floor(sortedSteps.length / 2)];
+    const highGroup = stepDays.filter(d => d.steps >= medianSteps);
+    const lowGroup = stepDays.filter(d => d.steps < medianSteps);
+    if (highGroup.length < MIN_GROUP || lowGroup.length < MIN_GROUP) return;
+    const hitRate = arr => Math.round(arr.filter(d => (d.totals.protein || 0) >= protTargetFor(d)).length / arr.length * 100);
+    const highPct = hitRate(highGroup), lowPct = hitRate(lowGroup);
+    if (Math.abs(highPct - lowPct) < 15) return;
+    findings.push(`On your more active days (${medianSteps.toLocaleString()}+ steps), you hit your protein target <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on lower-activity days, <strong>${lowPct}%</strong> (${lowGroup.length} days).`);
+  })();
+
+  // 3. Weekend vs weekday carb ceiling adherence.
+  (function weekendVsWeekday() {
+    const dayOfWeek = d => { const [dd, mm, yy] = d.date.split('/').map(Number); return new Date(2000 + yy, mm - 1, dd).getDay(); };
+    const weekend = days.filter(d => [0, 6].includes(dayOfWeek(d)));
+    const weekday = days.filter(d => ![0, 6].includes(dayOfWeek(d)));
+    if (weekend.length < MIN_GROUP || weekday.length < MIN_GROUP) return;
+    const inCeilRate = arr => Math.round(arr.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d)).length / arr.length * 100);
+    const wePct = inCeilRate(weekend), wdPct = inCeilRate(weekday);
+    if (Math.abs(wePct - wdPct) < 15) return;
+    findings.push(`Weekends: within your carb ceiling <strong>${wePct}%</strong> of days (${weekend.length} logged) — weekdays: <strong>${wdPct}%</strong> (${weekday.length} logged).`);
+  })();
+
+  if (!findings.length) {
+    card.style.display = 'block';
+    content.innerHTML = `<div style="color:var(--text3);">Not enough history yet to surface a genuine pattern — needs at least ${MIN_GROUP} days in each comparison group before it'll say anything. Keep logging and check back.</div>`;
+    return;
+  }
+  card.style.display = 'block';
+  content.innerHTML = findings.map(f => `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${f}</div>`).join('');
+}
+
 // Extracted verbatim from renderTrends — fully self-contained, only reads
 // the data array (already computed by the caller) and writes to its own
 // single DOM element.
@@ -19260,6 +19425,7 @@ function drawSparkline(canvasId, vals, color) {
 
 function renderTrends() {
   renderJourneyCard();
+  renderPatternsCard();
   renderActivityCreditBalance();
   const data = getTrendsData();
   const noData = document.getElementById('trendsNoData');
