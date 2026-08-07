@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.348</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.349</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.348'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.349'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7101,9 +7101,19 @@ function renderSuggestedTargets() {
   const { bmr, weight, heightCm, age, sex, avgSteps } = tdeeData;
   const tdee = manualTdee || tdeeData.tdee;
 
-  // Phase-based calorie target
+  // Phase-based calorie target — now weight-aware for Maintain specifically.
+  // Previously always suggested pure TDEE for Maintain regardless of where
+  // actual weight sat relative to target, which could directly disagree with
+  // the AI-generated Monthly Summary (which DOES look at real weight drift
+  // and recommend a temporary correction) - same 150kcal figure already used
+  // in the goal-check banner's own explainer text, so the two sources of
+  // truth actually agree with each other now instead of quietly diverging.
+  const wtLow = getWeightTargetLow();
+  const wtHigh = getWeightTargetHigh();
+  const isOffTargetMaintain = goal === 'maintain' && wtLow && wtHigh && (weight > wtHigh || weight < wtLow);
+  const CORRECTION_KCAL = 150;
   const calTarget = goal === 'lose'     ? tdee - 500
-                  : goal === 'maintain' ? tdee
+                  : goal === 'maintain' ? (isOffTargetMaintain ? tdee + (weight > wtHigh ? -CORRECTION_KCAL : CORRECTION_KCAL) : tdee)
                   :                       tdee + 400; // gain
 
   // Protein — condition-specific
@@ -7137,9 +7147,9 @@ function renderSuggestedTargets() {
         <div style="font-size:10px;color:var(--text3);">${manualTdee ? 'Your confirmed figure' : `${Math.round(avgSteps).toLocaleString()} avg steps/day`}</div>
       </div>
       <div style="background:var(--surface);border-radius:8px;padding:10px;">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">TARGET (${goal.toUpperCase()})</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">TARGET (${goal.toUpperCase()}${isOffTargetMaintain ? ' — CORRECTING' : ''})</div>
         <div style="font-size:18px;font-weight:700;color:var(--blue);">${calTarget} <span style="font-size:11px;font-weight:400;">kcal</span></div>
-        <div style="font-size:10px;color:var(--text3);">${goal === 'lose' ? 'TDEE −500' : goal === 'gain' ? 'TDEE +400' : 'TDEE'}</div>
+        <div style="font-size:10px;color:var(--text3);">${goal === 'lose' ? 'TDEE −500' : goal === 'gain' ? 'TDEE +400' : isOffTargetMaintain ? `TDEE ${weight > wtHigh ? '−' : '+'}${CORRECTION_KCAL}` : 'TDEE'}</div>
       </div>
       <div style="background:var(--surface);border-radius:8px;padding:10px;">
         <div style="font-size:10px;color:var(--green);margin-bottom:2px;">PROTEIN</div>
@@ -7154,6 +7164,7 @@ function renderSuggestedTargets() {
     </div>
     <div style="font-size:11px;color:var(--text3);">Carbs: ≤${carbCeil}g (from your ceiling — unchanged)</div>
     <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${weight}kg · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
+    ${isOffTargetMaintain ? `<div style="color:var(--yellow);margin-top:6px;font-size:11px;">⚖️ Weight is currently ${weight > wtHigh ? 'above' : 'below'} your ${wtLow}–${wtHigh}kg target, so this suggests a temporary ${CORRECTION_KCAL}kcal correction rather than pure TDEE — the same adjustment recommended in your Monthly Summary. Once weight is back in range, this reverts to plain TDEE.</div>` : ''}
     ${condNotes[cond] || ''}`;
 
   if (btn) btn.style.display = 'block';
