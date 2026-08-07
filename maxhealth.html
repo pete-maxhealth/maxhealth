@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.346</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.347</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.346'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.347'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -23839,53 +23839,59 @@ function generateCarerLink() {
   const out = document.getElementById('carerLinkOutput');
   if (!out) return;
 
-  const name = localStorage.getItem('mh_name') || 'Patient';
+  const name = localStorage.getItem('mh_name') || 'MaxedHealth User';
   const t = getTargets().standard;
   const ceilings = {
     standard: parseInt(localStorage.getItem('mh_ceil_standard')) || 50,
     occasion: parseInt(localStorage.getItem('mh_ceil_occasion')) || 75,
     holiday:  parseInt(localStorage.getItem('mh_ceil_holiday'))  || 100,
   };
-  const h30 = h.slice(0, 30);
-  const avg = key => Math.round(h30.reduce((a,d)=>a+(d.totals?.[key]||0),0)/Math.max(h30.length,1));
-  const ketoAdh = Math.round(h30.filter(d => {
-    const mode = d.mode || 'standard';
-    const ceil = mode === 'holiday' ? ceilings.holiday : mode === 'occasion' ? ceilings.occasion : ceilings.standard;
-    return (d.totals?.carbs || 0) <= ceil;
-  }).length / Math.max(h30.length, 1) * 100);
-  const dayRows = h30.map(d => {
-    const mode = d.mode || 'standard';
-    const ceil = mode === 'holiday' ? ceilings.holiday : mode === 'occasion' ? ceilings.occasion : ceilings.standard;
-    const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
-    const tags = (d.notes||'').split(',').map(x=>x.trim()).filter(x=>x&&!legacy.includes(x.toLowerCase()));
-    const isChemo = tags.some(x=>x.toLowerCase().includes('chemo') || x.toLowerCase().includes('treatment') || x.toLowerCase().includes('radiotherapy') || x.toLowerCase().includes('immunotherapy'));
-    const overCarbs = (d.totals?.carbs || 0) > ceil;
-    return '<tr style="background:'+(isChemo?'#f9f0ff':'')+'"><td style="padding:4px 8px;font-size:11px;">'+d.date+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.kcal||0)+'</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.protein||0)+'g</td><td style="padding:4px 8px;font-size:11px;">'+Math.round(d.totals?.fat||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(overCarbs?'#dc2626':'#16a34a')+'">'+Math.round(d.totals?.carbs||0)+'g</td><td style="padding:4px 8px;font-size:11px;color:'+(isChemo?'#7c3aed':'#666')+'">'+tags.join(', ')+'</td></tr>';
-  }).join('');
 
-  const pageHTML = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+name+' — Health Summary</title>'
-    + '<style>body{font-family:sans-serif;max-width:640px;margin:20px auto;padding:0 16px;color:#111;}h1{font-size:18px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px;}'
-    + 'h2{font-size:12px;color:#555;text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 8px;}.stat{display:inline-block;margin:0 16px 8px 0;}.stat-val{font-size:22px;font-weight:800;}.stat-lbl{font-size:10px;color:#666;}'
-    + 'table{width:100%;border-collapse:collapse;font-size:12px;}th{text-align:left;padding:5px 8px;background:#f5f5f5;border-bottom:2px solid #ddd;}td{border-bottom:1px solid #eee;}'
-    + 'footer{font-size:9px;color:#999;margin-top:16px;padding-top:8px;border-top:1px solid #eee;}</style></head><body>'
-    + '<h1>'+name+' — Nutrition Summary</h1>'
-    + '<p style="font-size:11px;color:#666;margin-bottom:12px;">Last 30 days · Generated '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+' · Expires 7 days</p>'
-    + '<h2>Key Metrics</h2>'
-    + '<div class="stat"><div class="stat-val">'+avg('kcal')+'<span style="font-size:13px;">kcal</span></div><div class="stat-lbl">AVG CALORIES</div></div>'
-    + '<div class="stat"><div class="stat-val">'+avg('protein')+'<span style="font-size:13px;">g</span></div><div class="stat-lbl">AVG PROTEIN</div></div>'
-    + '<div class="stat"><div class="stat-val" style="color:'+(ketoAdh>=80?'#16a34a':ketoAdh>=50?'#d97706':'#dc2626')+'">'+ketoAdh+'%</div><div class="stat-lbl">KETOSIS ADHERENCE</div></div>'
-    + (state.weight ? '<div class="stat"><div class="stat-val">'+state.weight+'<span style="font-size:13px;">kg</span></div><div class="stat-lbl">CURRENT WEIGHT</div></div>' : '')
-    + '<h2>Daily Log</h2><table><thead><tr><th>Date</th><th>Calories</th><th>Protein</th><th>Fat</th><th>Carbs</th><th>Notes</th></tr></thead><tbody>'+dayRows+'</tbody></table>'
-    + '<footer>MaxedHealth · Read-only · Nutrition totals only · No personal food log</footer></body></html>';
+  // carer.html explicitly expects data.history OLDEST-FIRST - it reverses
+  // internally to build the newest-first daily log table, and uses the
+  // array as-is (no reversal) for chronological sparklines and weekly
+  // grouping. state.history itself is sorted NEWEST-first throughout the
+  // rest of this app, so it has to be reversed here specifically for this
+  // payload - this exact mismatch, passed straight through unreversed, is
+  // almost certainly what produced the scrambled, non-chronological dates
+  // seen in an old carer link (each 7-day chunk grouping together dates
+  // that were never actually adjacent in time).
+  const last30 = h.slice(0, 30);
+  const historyOldestFirst = last30.slice().reverse().map(d => ({
+    date: d.date,
+    totals: { kcal: Math.round(d.totals?.kcal||0), protein: Math.round(d.totals?.protein||0), fat: Math.round(d.totals?.fat||0), carbs: Math.round(d.totals?.carbs||0) },
+    mode: d.mode || 'standard',
+    weight: d.weight || 0
+  }));
 
-  const blob = new Blob([pageHTML], {type:'text/html'});
-  const blobUrl = URL.createObjectURL(blob);
+  const now = new Date();
+  const expires = new Date(now.getTime() + 7*24*60*60*1000);
+
+  const payload = {
+    name,
+    generated: now.toISOString(),
+    expires: expires.toISOString(),
+    targets: { kcal: t.kcal, protein: t.protein, carbs: t.carbs },
+    ceilings,
+    history: historyOldestFirst
+  };
+
+  // Whole payload lives in the URL hash fragment (never sent to any server -
+  // hash fragments aren't transmitted in HTTP requests), base64-encoded so
+  // it's a single opaque URL-safe token. This is the exact inverse of
+  // carer.html's own decode() function.
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  // Same directory as this app itself, whether that's local (localhost:5757)
+  // or the cloud GitHub Pages instance - works either way, since it's
+  // derived from wherever this page is actually being viewed from right now.
+  const base = window.location.href.replace(/[^/]*$/, '');
+  const url = base + 'carer.html#' + encoded;
+
   out.style.display = 'block';
-  out.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;font-family:Space Mono,monospace;">SUMMARY READY</div>'
-    + '<div style="display:flex;gap:8px;flex-direction:column;">'
-    + '<a href="'+blobUrl+'" target="_blank" class="run-btn" style="text-align:center;padding:10px;text-decoration:none;font-size:13px;display:block;">👁 Open summary</a>'
-    + '</div>'
-    + '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6;">Open → three dots → Share to send to your team.  Or Open → Print → Save as PDF.</div>';
+  out.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;font-family:Space Mono,monospace;">CARER LINK READY — valid 7 days</div>'
+    + '<textarea readonly style="width:100%;height:60px;font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text2);box-sizing:border-box;resize:none;" onclick="this.select()">'+url+'</textarea>'
+    + '<button class="run-btn" style="width:100%;margin-top:8px;padding:10px;" onclick="navigator.clipboard.writeText(\''+url+'\').then(()=>showToast(\'Link copied ✓\'))">📋 Copy Link</button>'
+    + '<div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.6;">Paste this into a message to share — unlike the old version, this is a genuine shareable link: anyone who opens it can view the read-only summary for 7 days, on their own device, no account needed.</div>';
 }
 
 // ─── NUTRITION CSV AUTO-EXPORT (P13) ─────────────────────
