@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.354</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.356</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.354'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.356'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6491,6 +6491,7 @@ function _applyPendingLibraryEntryToRecipe(entry) {
   ing.fat = Math.round((entry.fat || 0) * ratio * 10) / 10;
   ing.carbs = Math.round(entry.carbs * ratio * 10) / 10;
   ing._base = { kcal: entry.kcal, protein: entry.protein, carbs: entry.carbs, fat: entry.fat || 0, fibre: entry.fibre || 0, baseG };
+  ing.source = 'manual'; // drives the colour-coded badge in renderRecipeIngredients
   renderRecipeIngredients();
   updateRecipeTotals();
 }
@@ -10170,16 +10171,37 @@ function logFoodFromDatabase() {
       fibre: _selectedFoodItem.fibre || 0,
       baseG: 100 // source values are per-100g (factor = grams/100 above)
     };
-    _recipeIngredients.push({
-      name: _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name,
-      amount: grams, // was previously baked into the name as fixed text with no way to rescale later - now a real, editable amount like the library-matched path
-      kcal:    Math.round(_selectedFoodItem.kcal * factor),
-      protein: Math.round(_selectedFoodItem.prot * factor * 10) / 10,
-      fat:     Math.round(base.fat * factor * 10) / 10,
-      carbs:   Math.round(_selectedFoodItem.carb * factor * 10) / 10,
-      fibre:   Math.round((_selectedFoodItem.fibre || 0) * factor * 10) / 10,
-      _base: base
-    });
+    const newName = _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name;
+    if (_recipeSearchFixIndex != null && _recipeIngredients[_recipeSearchFixIndex]) {
+      // Launched FROM a flagged ingredient - update that exact row rather
+      // than adding a duplicate. Keeps the amount already on the row (from
+      // the original recipe's unit conversion) rather than overwriting it
+      // with whatever grams happened to be typed in the search amount field.
+      const ing = _recipeIngredients[_recipeSearchFixIndex];
+      const keepAmount = ing.amount || grams;
+      ing.name = newName;
+      ing.amount = keepAmount;
+      ing.kcal = Math.round(base.kcal * keepAmount / 100);
+      ing.protein = Math.round(base.protein * keepAmount / 100 * 10) / 10;
+      ing.fat = Math.round(base.fat * keepAmount / 100 * 10) / 10;
+      ing.carbs = Math.round(base.carbs * keepAmount / 100 * 10) / 10;
+      ing.fibre = Math.round(base.fibre * keepAmount / 100 * 10) / 10;
+      ing._base = base;
+      ing.source = 'online'; // drives the colour-coded badge in renderRecipeIngredients
+      _recipeSearchFixIndex = null;
+    } else {
+      _recipeIngredients.push({
+        name: newName,
+        amount: grams, // was previously baked into the name as fixed text with no way to rescale later - now a real, editable amount like the library-matched path
+        kcal:    Math.round(_selectedFoodItem.kcal * factor),
+        protein: Math.round(_selectedFoodItem.prot * factor * 10) / 10,
+        fat:     Math.round(base.fat * factor * 10) / 10,
+        carbs:   Math.round(_selectedFoodItem.carb * factor * 10) / 10,
+        fibre:   Math.round((_selectedFoodItem.fibre || 0) * factor * 10) / 10,
+        _base: base,
+        source: 'online'
+      });
+    }
     closeFoodSearch();
     // Also close barcode amount panel if open
     const amountView = document.getElementById('foodAmountView');
@@ -14254,7 +14276,15 @@ function updateDashboard(skipActivityRender) {
         date: _rolloverDate, log: _capturedLog, totals: _rt,
         mode: _capturedMode, notes: _capturedNotes,
         weight: _capturedWeight, water_ml: _capturedWater,
-        steps: _capturedSteps, exercises: _capturedExercises
+        steps: _capturedSteps, exercises: _capturedExercises,
+        // Freezes the ACTUAL targets in effect on this specific day, rather
+        // than relying on TARGETS[mode] at render time - that's a live Proxy
+        // that always reads CURRENT settings, meaning every past day was
+        // silently being redrawn against today's numbers any time targets
+        // changed. A day that was genuinely on-target under its own real
+        // limit could retroactively look over/under just because settings
+        // moved later - this snapshot is what actually fixes that.
+        targetsSnapshot: { kcal: TARGETS[_capturedMode]?.kcal, protein: TARGETS[_capturedMode]?.protein, carbs: TARGETS[_capturedMode]?.carbs, fat: parseInt(localStorage.getItem('mh_target_fat')) || 247 }
       });
       // Build clean notes for master.csv
       const _midLegacy = ['standard','occasion','holiday','missed day entry','missed day'];
@@ -15406,8 +15436,12 @@ function renderHistory() {
         </div>
         <div class="hist-day-macros">
           ${(() => {
-            const dayTargets = TARGETS[day.mode || 'standard'] || getTargets().standard;
-            const fatTargetVal = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+            // Prefer the frozen snapshot from when this day was actually
+            // logged - falls back to live current-settings TARGETS only for
+            // older entries that predate this fix and never got a snapshot
+            // captured, which is the best available option for those.
+            const dayTargets = day.targetsSnapshot || TARGETS[day.mode || 'standard'] || getTargets().standard;
+            const fatTargetVal = day.targetsSnapshot?.fat || parseInt(localStorage.getItem('mh_target_fat')) || 247;
             const dayFat = getEntryFat(day);
             const carbOver = day.totals.carbs > dayTargets.carbs;
             return `
@@ -16572,6 +16606,28 @@ function recipeOpenSearch() {
 }
 
 let _recipeSearchMode = false;
+let _recipeSearchFixIndex = null; // set when Search is launched FROM a flagged ingredient - tells logFoodFromDatabase() to update that specific row in place rather than push a new one
+
+// Opens the exact same food-search UI used for adding a brand-new recipe
+// ingredient, but pre-filled with a flagged ingredient's own name and wired
+// to UPDATE that specific row once a result is picked, rather than adding a
+// duplicate. Deliberately never auto-accepts a result - Open Food Facts is
+// far more reliable for branded/packaged products than generic raw
+// ingredients (spices, fresh herbs), and blind auto-matching is exactly
+// what caused the wrong Kp Peanuts / Cumberland sausages matches via the
+// fuzzy library-matcher - this keeps a real human decision in the loop.
+function openRecipeIngredientSearch(index) {
+  const ing = _recipeIngredients[index];
+  if (!ing) return;
+  _recipeSearchFixIndex = index;
+  _recipeSearchMode = true;
+  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*\([^)]*\)\s*—.*$/, '').trim();
+  const recipeModal = document.getElementById('recipeBuilderModal');
+  if (recipeModal) recipeModal.style.display = 'none';
+  openFoodSearch();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = cleanName; onFoodSearchInput(cleanName); }
+}
 
 // Recipe search mode handled inside logFoodFromDatabase directly
 
@@ -16633,13 +16689,25 @@ function renderRecipeIngredients() {
   el.innerHTML = _recipeIngredients.map((ing, i) => {
     const scaled = getScaledIngredient(ing);
     const isFlagged = ing.name.startsWith('⚠️'); // unmatched-to-library placeholder, still needs real nutrition entered
+    // Colour-coded source badge - lets you judge how much to trust a given
+    // ingredient's numbers at a glance. Library-matched already had its own
+    // AI✓/locked badges elsewhere; these three are new, covering exactly the
+    // two new fix paths plus the original unresolved state.
+    const sourceBadge = ing.source === 'online'
+      ? `<span style="font-size:9px;color:var(--blue);background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);border-radius:4px;padding:1px 5px;margin-left:6px;">🔍 online</span>`
+      : ing.source === 'manual'
+      ? `<span style="font-size:9px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px;">✏️ manual</span>`
+      : '';
     return `
     <div style="padding:8px 0;border-bottom:1px solid var(--border);${isFlagged ? 'background:rgba(250,204,21,0.06);border-radius:6px;' : ''}">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div style="flex:1;${isFlagged ? 'cursor:pointer;' : ''}" ${isFlagged ? `onclick="openAddFoodModalForRecipeIngredient(${i})"` : ''}>
-          <div style="font-size:13px;color:${isFlagged ? 'var(--yellow)' : 'var(--text)'};">${ing.name}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;color:${isFlagged ? 'var(--yellow)' : 'var(--text)'};">${ing.name}${sourceBadge}</div>
           <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;" id="recipe-ing-macros-${i}">${Math.round(scaled.kcal)}kcal · ${Math.round(scaled.protein*10)/10}g P · ${Math.round((scaled.fat||0)*10)/10}g F · ${Math.round(scaled.carbs*10)/10}g C${ing._base ? ` <span style="color:var(--text3);font-size:10px;">(per ${ing._base.baseG}g)</span>` : ''}</div>
-          ${isFlagged ? `<div style="font-size:11px;color:var(--yellow);margin-top:3px;text-decoration:underline;">Tap to add nutrition — saves to Library too</div>` : ''}
+          ${isFlagged ? `<div style="display:flex;gap:10px;margin-top:4px;">
+            <span onclick="openRecipeIngredientSearch(${i})" style="font-size:11px;color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online</span>
+            <span onclick="openAddFoodModalForRecipeIngredient(${i})" style="font-size:11px;color:var(--yellow);text-decoration:underline;cursor:pointer;">✏️ Enter manually</span>
+          </div>` : ''}
           ${ing.note ? `<div style="font-size:11px;color:var(--accent);margin-top:3px;line-height:1.4;font-style:italic;cursor:pointer;" onclick="event.stopPropagation();editRecipeIngredientNote(${i})">📝 ${ing.note}</div>` : `<div style="font-size:11px;color:var(--text3);margin-top:3px;cursor:pointer;" onclick="event.stopPropagation();editRecipeIngredientNote(${i})">+ add note</div>`}
         </div>
         <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px 8px;">
@@ -17855,7 +17923,12 @@ function saveMissedDayConv(kcal, protein, carbs, fat) {
       totals: { kcal, protein, carbs, fat },
       mode: 'standard',
       notes,
-      weight: null
+      weight: null,
+      // Best-effort snapshot at time of entry - a missed day is filled in
+      // retroactively, so there's no genuine "what was active that day" to
+      // recover; using current targets at time of entry is the most
+      // defensible available option, same reasoning as the live rollover fix.
+      targetsSnapshot: { kcal: TARGETS.standard?.kcal, protein: TARGETS.standard?.protein, carbs: TARGETS.standard?.carbs, fat: parseInt(localStorage.getItem('mh_target_fat')) || 247 }
     });
     state.history.sort((a,b) => a.date < b.date ? 1 : -1);
     showToast(`${dateVal} added to history ✓`);
@@ -18122,7 +18195,8 @@ function saveMissedDay() {
       totals: { kcal, protein, carbs },
       mode: 'standard',
       notes,
-      weight: null
+      weight: null,
+      targetsSnapshot: { kcal: TARGETS.standard?.kcal, protein: TARGETS.standard?.protein, carbs: TARGETS.standard?.carbs, fat: parseInt(localStorage.getItem('mh_target_fat')) || 247 }
     });
     state.history.sort((a,b) => a.date < b.date ? 1 : -1);
     showToast(`${dateVal} added to history ✓`);
