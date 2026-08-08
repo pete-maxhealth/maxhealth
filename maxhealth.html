@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.358</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.360</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.358'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.360'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9442,6 +9442,7 @@ function updateActivityStepsTag(acts) {
 
 let _selectedFoodItem = null;
 const RECENT_SCANS_KEY = 'mh_recent_scans';
+let _lastFoodSourceType = 'search'; // 'search' or 'barcode' - set at each selection point, read once when the item is confirmed and saved to Recently Used
 const MAX_RECENT_SCANS = 10;
 
 function _saveRecentScan(item) {
@@ -9465,7 +9466,7 @@ function renderRecentScans() {
   if (!el) return;
   if (scans.length === 0) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  el.innerHTML = '<div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:8px;letter-spacing:0.06em;">RECENTLY SCANNED</div>' +
+  el.innerHTML = '<div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:8px;letter-spacing:0.06em;">RECENTLY USED <span style="opacity:0.6;">— search &amp; barcode</span></div>' +
     scans.map(s => `
       <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="quickLogRecentScan('${s.name.replace(/'/g,"\'")}')">
         <div style="flex:1;min-width:0;">
@@ -9638,6 +9639,7 @@ async function lookupBarcode(barcode, statusBubble) {
     const servingQty = parseFloat(p.serving_quantity) || 0;
     const servingLabel = p.serving_size ? p.serving_size.trim() : '';
     _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre, satFat, sugars, salt, iron, servingQty, servingLabel };
+    _lastFoodSourceType = 'barcode'; // genuinely from a barcode scan this time, unlike text-search selections
     document.getElementById('foodSearchView').style.display = 'none';
     document.getElementById('foodAmountView').classList.add('open');
     document.getElementById('foodSearchOverlay').classList.add('open');
@@ -10024,11 +10026,19 @@ function backToFoodSearch() {
 function onFoodSearchInput(val) {
   clearTimeout(_foodSearchTimer);
   const res = document.getElementById('foodResults');
+  // Recently Scanned was only ever SHOWN when the search modal opens - nothing
+  // ever hid it again once typing started, so it sat there indefinitely,
+  // visually indistinguishable from genuine search results. Every "search
+  // result" that looked suspiciously like the user's own recent items
+  // probably was - this is what that actually was the whole time.
+  const recentScans = document.getElementById('recentScansSection');
   if (!val || val.length < 2) {
     res.innerHTML = '<div class="food-result-loading">Type to search…</div>';
     document.getElementById('foodResultsRecipes').innerHTML = '';
+    if (recentScans) renderRecentScans(); // restore it as a helpful default once the box is empty again
     return;
   }
+  if (recentScans) recentScans.style.display = 'none';
   res.innerHTML = '<div class="food-result-loading">Searching…</div>';
   _renderMatchingRecipes(val); // local + instant, doesn't need to wait on the debounced online search below
   _foodSearchTimer = setTimeout(() => searchOpenFoodFacts(val), 400);
@@ -10151,6 +10161,7 @@ function selectFoodResult(i) {
     salt:   parseFloat(item.dataset.salt)   || 0,
     iron:   parseFloat(item.dataset.iron)   || 0,
   };
+  _lastFoodSourceType = 'search'; // text search, not a barcode scan - see the matching flag in handleBarcodeCapture
   // Show amount entry panel
   document.getElementById('foodSearchView').style.display = 'none';
   document.getElementById('foodAmountView').classList.add('open');
@@ -10280,7 +10291,7 @@ function logFoodFromDatabase() {
     name: _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name,
     kcal: _selectedFoodItem.kcal, protein: _selectedFoodItem.prot,
     fat: _selectedFoodItem.fat || 0, carbs: _selectedFoodItem.carb,
-    portion: '100g', source: 'barcode', scannedAt: Date.now()
+    portion: '100g', source: _lastFoodSourceType, scannedAt: Date.now()
   });
   logFoods([food], displayName);
   closeFoodSearch();
