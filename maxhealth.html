@@ -4205,7 +4205,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.368</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.369</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4972,7 +4972,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.368'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.369'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7074,10 +7074,29 @@ function saveCondition() {
   if (typeof updateGBMSectionVisibility === 'function') updateGBMSectionVisibility();
 }
 
+// ─── WEIGHT PHASE HISTORY (with redundant storage, same pattern as Library) ──
+// Was a single unprotected localStorage key despite becoming genuinely
+// load-bearing - the History target-estimation fallback, the AI report's
+// phase-aware framing, and the auto-switch itself all now depend on this
+// being intact. Same triple-write/fallback-read pattern as the Library.
+function savePhaseHistoryRaw(text) {
+  localStorage.setItem('mh_phase_history', text);
+  localStorage.setItem('mh_phase_history_backup', text);
+  localStorage.setItem('mh_phase_history_b2', text);
+}
+function getPhaseHistoryRaw() {
+  const keys = ['mh_phase_history', 'mh_phase_history_backup', 'mh_phase_history_b2'];
+  for (const key of keys) {
+    const raw = localStorage.getItem(key);
+    if (raw && raw.trim()) return raw;
+  }
+  return '';
+}
+
 function savePhaseHistory() {
   const el = document.getElementById('settingsPhaseHistory');
   if (el) {
-    localStorage.setItem('mh_phase_history', el.value.trim());
+    savePhaseHistoryRaw(el.value.trim());
     showToast('Phase history saved');
     renderSuggestedTargets();
   }
@@ -7265,7 +7284,7 @@ function applySuggestedTargets() {
 }
 
 function getPhaseHistory() {
-  const raw = localStorage.getItem('mh_phase_history') || '';
+  const raw = getPhaseHistoryRaw();
   if (!raw) return [];
   return raw.split('\n')
     .map(line => line.trim())
@@ -7408,7 +7427,7 @@ function initSettings() {
   const condEl = document.getElementById('settingsCondition');
   if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'gbm';
   const phaseEl = document.getElementById('settingsPhaseHistory');
-  if (phaseEl) phaseEl.value = localStorage.getItem('mh_phase_history') || '2026-03-12 loss\n2026-06-21 gain';
+  if (phaseEl) phaseEl.value = getPhaseHistoryRaw() || '2026-03-12 loss\n2026-06-21 gain';
   const autoSwitchEl = document.getElementById('settingsAutoSwitchDays');
   if (autoSwitchEl) autoSwitchEl.value = parseInt(localStorage.getItem('mh_autoswitch_days')) || 14;
   const autoSwitchNotifyEl = document.getElementById('settingsAutoSwitchNotify');
@@ -7512,14 +7531,14 @@ function setGoal(goal) {
   // Auto-append to phase history so AI reports know when this phase started.
   // Only appends if the goal actually changed from what was previously stored.
   const today = new Date().toISOString().slice(0, 10);
-  const existing = localStorage.getItem('mh_phase_history') || '';
+  const existing = getPhaseHistoryRaw();
   const lines = existing.split('\n').map(l => l.trim()).filter(Boolean);
   const lastLine = lines[lines.length - 1] || '';
   const lastGoal = lastLine.split(/\s+/)[1] || '';
   if (lastGoal !== goal) {
     const newLine = `${today} ${goal}`;
     const updated = [...lines, newLine].join('\n');
-    localStorage.setItem('mh_phase_history', updated);
+    savePhaseHistoryRaw(updated);
     const phaseEl = document.getElementById('settingsPhaseHistory');
     if (phaseEl) phaseEl.value = updated;
   }
@@ -7959,8 +7978,12 @@ function exportAll() {
 
   // 1. JSON backup — now includes recipes and routines, which were previously
   // missing entirely from this export despite being real, effort-built data.
+  // Also now includes Weight Phase History and the auto-switch settings -
+  // this data has become genuinely load-bearing (History target estimates,
+  // AI report framing, the auto-switch itself all depend on it) but was
+  // never actually captured by this "backup everything" export before.
   download(
-    JSON.stringify({ state, library: loadLibrary(), recipes: loadRecipes(), routines: loadRoutines(), exportedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ state, library: loadLibrary(), recipes: loadRecipes(), routines: loadRoutines(), phaseHistory: getPhaseHistoryRaw(), autoSwitchDays: localStorage.getItem('mh_autoswitch_days'), notifAutoSwitch: localStorage.getItem('mh_notif_autoswitch'), exportedAt: new Date().toISOString() }, null, 2),
     `maxhealth_backup_${dateStr}.json`,
     'application/json'
   );
@@ -14437,12 +14460,12 @@ function checkWeightPhaseAutoSwitch() {
   // itself uses - "loss" (not "lose") is the word that system expects.
   const phaseWord = newGoal === 'lose' ? 'loss' : newGoal;
   const isoToday = new Date().toISOString().slice(0,10);
-  const existing = (localStorage.getItem('mh_phase_history') || '').trim();
+  const existing = getPhaseHistoryRaw().trim();
   const newLine = `${isoToday} ${phaseWord}`;
   if (!existing.endsWith(newLine)) { // avoid a duplicate line if this somehow runs twice for the same day
-    localStorage.setItem('mh_phase_history', existing ? `${existing}\n${newLine}` : newLine);
+    savePhaseHistoryRaw(existing ? `${existing}\n${newLine}` : newLine);
     const el = document.getElementById('settingsPhaseHistory');
-    if (el) el.value = localStorage.getItem('mh_phase_history');
+    if (el) el.value = getPhaseHistoryRaw();
   }
 
   // Toggleable in Settings > Notifications, matching the existing
