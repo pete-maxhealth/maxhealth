@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.356</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.357</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.356'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.357'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7243,6 +7243,43 @@ function getPhaseForDate(isoDate) {
     else break;
   }
   return current;
+}
+
+// Best-effort target estimate for a historical day that has no
+// targetsSnapshot (logged before that fix existed). Uses the Weight Phase
+// History log to work out which GOAL (loss/maintain/gain) was actually
+// active on that specific date, rather than assuming today's current goal
+// applied throughout every past day - a meaningfully better approximation,
+// though still an estimate: it uses TODAY's TDEE/protein-multiplier as the
+// best available proxy, since historical TDEE wasn't snapshotted either.
+// Protein specifically uses the day's own recorded weight when available,
+// since protein genuinely scales with bodyweight and that IS known for
+// that day - carbs/fat aren't phase-dependent the same way, so those still
+// just use current settings regardless of historical phase.
+function getApproxTargetsForHistoryDay(day) {
+  const mode = day.mode || 'standard';
+  const carbs = TARGETS[mode]?.carbs ?? getTargets().standard.carbs;
+  const fat = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+
+  const [dd, mm, yy] = (day.date || '').split('/');
+  const isoDate = dd && mm && yy ? `20${yy}-${mm}-${dd}` : null;
+  const historicalPhase = isoDate ? getPhaseForDate(isoDate) : null;
+
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const protMultiplier = ['gbm','epilepsy'].includes(cond) ? 1.8 : 1.6;
+  const weightForProtein = day.weight || state.weight || 0;
+  const protein = weightForProtein ? Math.round(protMultiplier * weightForProtein) : (TARGETS[mode]?.protein ?? getTargets().standard.protein);
+
+  if (!historicalPhase) {
+    // No phase history covers this date at all - fall back to today's live
+    // settings, same behaviour as before this fix existed.
+    return { kcal: TARGETS[mode]?.kcal, protein, carbs, fat, isEstimate: false };
+  }
+  const tdeeData = getCurrentTDEE();
+  const manualTdee = parseInt(localStorage.getItem('mh_tdee'));
+  const tdee = manualTdee || tdeeData?.tdee || 3670;
+  const kcal = historicalPhase === 'loss' ? tdee - 500 : historicalPhase === 'gain' ? tdee + 400 : tdee;
+  return { kcal, protein, carbs, fat, isEstimate: true };
 }
 
 function setSex(sex) {
@@ -15437,14 +15474,20 @@ function renderHistory() {
         <div class="hist-day-macros">
           ${(() => {
             // Prefer the frozen snapshot from when this day was actually
-            // logged - falls back to live current-settings TARGETS only for
-            // older entries that predate this fix and never got a snapshot
-            // captured, which is the best available option for those.
-            const dayTargets = day.targetsSnapshot || TARGETS[day.mode || 'standard'] || getTargets().standard;
-            const fatTargetVal = day.targetsSnapshot?.fat || parseInt(localStorage.getItem('mh_target_fat')) || 247;
+            // logged. For older entries without one, use the Weight Phase
+            // History to approximate what was genuinely active that day,
+            // rather than blindly assuming today's current settings applied
+            // throughout - a meaningfully better estimate when phase history
+            // covers that date, clearly marked with "~" when it's a phase-
+            // based estimate rather than a genuine recorded snapshot.
+            const approx = day.targetsSnapshot ? null : getApproxTargetsForHistoryDay(day);
+            const dayTargets = day.targetsSnapshot || approx || TARGETS[day.mode || 'standard'] || getTargets().standard;
+            const fatTargetVal = dayTargets.fat || parseInt(localStorage.getItem('mh_target_fat')) || 247;
+            const isEstimate = !day.targetsSnapshot && approx?.isEstimate;
             const dayFat = getEntryFat(day);
             const carbOver = day.totals.carbs > dayTargets.carbs;
             return `
+            ${isEstimate ? `<span style="font-size:9px;color:var(--text3);" title="Estimated from Weight Phase History, not a genuine recorded target">~</span>` : ''}
             <span class="c">${day.totals.kcal}/${dayTargets.kcal}kcal</span>
             <span class="p">${day.totals.protein}/${dayTargets.protein}g P</span>
             <span class="k" style="${carbOver ? 'color:var(--red);font-weight:700;' : ''}">${day.totals.carbs}/${dayTargets.carbs}g C</span>
