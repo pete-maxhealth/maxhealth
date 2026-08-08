@@ -23384,7 +23384,11 @@ const CONDITION_META = {
     label:        'GBM (methylated, operable, currently in remission)',
     protocol:     'Therapeutic ketogenic — target ≤20g carbs/day',
     evidenceNote: 'Ketogenic metabolic therapy for GBM: Early Stage evidence (Phase 1b Sativex trial, Meidenbauer et al). Categorise all recommendations as [Proven] / [Early Stage] / [Speculative].',
-    goalFrame:    'Gaining phase active — calorie adequacy is as important as carb control. Daily 150g double cream shake is non-negotiable.',
+    goalFrame:    (goal) => goal === 'gain'
+      ? 'Gaining phase active — calorie adequacy is as important as carb control. If a calorie-dense shake or similar tool is part of the routine, its consistent use matters for hitting the surplus.'
+      : goal === 'lose'
+      ? 'Losing phase active — deficit consistency matters as much as carb control, without compromising protein intake needed for lean mass preservation.'
+      : 'Maintenance phase active — calorie consistency at TDEE matters as much as carb control, avoiding drift in either direction.',
     flagAbove:    'standard',  // flag if standard day > ceiling
   },
   epilepsy: {
@@ -23427,7 +23431,7 @@ const CONDITION_META = {
 function patientContextBlock(ctx) {
   const meta   = CONDITION_META[ctx.cond] || CONDITION_META.general;
   const goalLbl = ctx.goal === 'gain' ? 'GAINING' : ctx.goal === 'lose' ? 'LOSING' : 'MAINTAINING';
-  const goalExtra = meta.goalFrame ? `\n${meta.goalFrame}` : '';
+  const goalExtra = meta.goalFrame ? `\n${typeof meta.goalFrame === 'function' ? meta.goalFrame(ctx.goal) : meta.goalFrame}` : '';
 
   const phases = getPhaseHistory();
   const phaseContext = phases.length
@@ -23988,6 +23992,20 @@ async function generateGBMSummary() {
 
   const ctx  = buildPatientContext(h);
   const todayDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  const fatTargetForPrompt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  // Was hardcoded to always describe a "gaining phase" and a specific
+  // "cream shake protocol" regardless of the actual current goal - stale
+  // and actively misleading once the goal genuinely changes (e.g. the
+  // switch to Maintain), since the AI would keep being told to write about
+  // a phase that isn't actually active anymore.
+  const goalPhaseLabel = ctx.goal === 'gain' ? 'GAINING PHASE' : ctx.goal === 'lose' ? 'LOSING PHASE' : 'MAINTENANCE PHASE';
+  const goalPhaseNoun = ctx.goal === 'gain' ? 'gaining goal' : ctx.goal === 'lose' ? 'losing goal' : 'maintenance goal';
+  const goalPhaseAdj = ctx.goal === 'gain' ? 'gaining' : ctx.goal === 'lose' ? 'losing' : 'maintenance';
+  const surplusOrDeficitLine = ctx.goal === 'gain'
+    ? 'whether a calorie-dense shake or similar tool is visibly supporting the surplus, if one is part of the routine'
+    : ctx.goal === 'lose'
+    ? 'whether the deficit is being held consistently without excessive restriction'
+    : 'whether intake is holding steady around TDEE without meaningful drift in either direction';
 
   const prompt = `You are a specialist health analyst supporting a GBM patient in remission following a therapeutic ketosis protocol. Write a structured monthly summary. Today: ${todayDate}. Be concise and clinical. Each section 3–4 sentences. Complete ALL sections — do not truncate.
 
@@ -23997,9 +24015,9 @@ Write 4 sections:
 
 1. KETOSIS ADHERENCE — honest assessment of carb adherence. What does ${ctx.pct}% mean metabolically? Is the pattern improving or declining? Factor in day types — a holiday day within its ceiling is fully compliant. For every non-compliant day, use the NON-COMPLIANT DAY DETAIL numbers (steps/exercise-derived kcal estimate vs overage kcal) to reason about likelihood of disruption — these are rough estimates, not measurements, so state your reasoning with appropriate hedging rather than a flat "offset" or "not offset" claim, especially the larger the gap between estimate and overage.
 
-2. CALORIE & GAINING PHASE — is ${ctx.avKcal} kcal/day adequate for the gaining goal (target ${ctx.wtLow}–${ctx.wtHigh}kg)? Comment on fat adequacy (~247g target) and whether the cream shake protocol is visibly supporting the surplus.
+2. CALORIE & ${goalPhaseLabel} — is ${ctx.avKcal} kcal/day adequate for the ${goalPhaseNoun} (target ${ctx.wtLow}–${ctx.wtHigh}kg)? Comment on fat adequacy (~${fatTargetForPrompt}g target) and ${surplusOrDeficitLine}.
 
-3. WEIGHT & BODY COMPOSITION — interpret the weight trend in context of the gaining phase and GBM protocol. Is progress toward or within the ${ctx.wtLow}–${ctx.wtHigh}kg target range? Flag if off-track.
+3. WEIGHT & BODY COMPOSITION — interpret the weight trend in context of the ${goalPhaseAdj} phase and GBM protocol. Is progress toward or within the ${ctx.wtLow}–${ctx.wtHigh}kg target range? Flag if off-track.
 
 4. RECOMMENDATIONS — 2–3 specific, actionable protocol adjustments for the next month. Categorise each as: [Proven] / [Early Stage] / [Speculative].
 
