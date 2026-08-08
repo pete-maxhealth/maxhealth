@@ -2602,7 +2602,7 @@ body[data-theme="light"] {
       <div class="food-search-header">
         <div style="position:relative;flex:1;display:flex;align-items:center;">
           <input class="food-search-input" id="foodSearchInput" placeholder="Search food or brand name…"
-            oninput="onFoodSearchInput(this.value)" autocomplete="off" autocorrect="off" spellcheck="false" style="width:100%;padding-right:28px;">
+            oninput="onFoodSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();clearTimeout(_foodSearchTimer);if(this.value.trim().length>=2)searchOpenFoodFacts(this.value.trim());}" autocomplete="off" autocorrect="off" spellcheck="false" style="width:100%;padding-right:28px;">
           <span onclick="document.getElementById('foodSearchInput').value='';onFoodSearchInput('');document.getElementById('foodSearchInput').focus();" style="position:absolute;right:8px;cursor:pointer;color:var(--text3);font-size:14px;padding:4px;">✕</span>
         </div>
         <div class="food-search-close" onclick="closeFoodSearch()">✕</div>
@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.357</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.358</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.357'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.358'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -10080,6 +10080,15 @@ async function searchOpenFoodFacts(query) {
     const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=12&fields=product_name,brands,nutriments,quantity,countries_tags`;
     const r = await fetch(url);
     const data = await r.json();
+    // Stale-response guard - if the input has changed since THIS specific
+    // request was launched (a slower earlier search resolving after a
+    // faster later one), discard it rather than overwrite the results the
+    // person is actually looking at right now. Without this, pausing
+    // mid-type (e.g. "fresh" ... then continuing to "fresh basil leaves")
+    // could let the "fresh" search's results win the race and silently
+    // replace what should have been shown for the real, final query.
+    const currentInputValue = document.getElementById('foodSearchInput')?.value;
+    if (currentInputValue !== query) return;
     const products = (data.products || [])
       .filter(p =>
         p.product_name &&
