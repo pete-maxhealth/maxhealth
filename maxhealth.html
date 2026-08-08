@@ -4175,7 +4175,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.361</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.362</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4942,7 +4942,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.361'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.362'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6467,7 +6467,7 @@ function openAddFoodModalForRecipeIngredient(index) {
   openAddFoodModal();
   // Strip the "⚠️ " prefix and any "(...) — add nutrition..." suffix this
   // placeholder name was given, back to just the plain ingredient name.
-  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*\([^)]*\)\s*—.*$/, '').trim();
+  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*(\([^)]*\))?\s*—.*$/, '').trim();
   document.getElementById('addFoodName').value = cleanName;
   document.getElementById('addFoodPortion').value = `${ing.amount || 100}g`;
   document.getElementById('addFoodPer').value = 'portion';
@@ -10141,7 +10141,11 @@ async function searchOpenFoodFacts(query) {
       </div>`;
     }).join('');
   } catch(e) {
-    res.innerHTML = '<div class="food-result-loading">Food database unavailable — try again shortly, or use manual entry.</div>';
+    // Shows the real caught error rather than a fixed generic message - so
+    // next time this happens, whether it's a genuine network/API issue or
+    // a code bug is visible directly, instead of both looking identical.
+    console.error('[searchOpenFoodFacts]', e);
+    res.innerHTML = `<div class="food-result-loading">Food database unavailable — try again shortly, or use manual entry.<br><span style="font-size:10px;opacity:0.7;">${(e.message||'unknown error').replace(/</g,'&lt;')}</span></div>`;
   }
 }
 
@@ -10594,26 +10598,51 @@ Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
   ],
   "method": ["Fry onion and garlic in olive oil, 5 mins.", "Brown the mince.", "..."]
 }
-Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch - use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: never include calories, protein, fat or carbs in the ingredients list - name, amount and unit ONLY. Nutrition figures are looked up separately from the user's real food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol. Keep the recipe genuinely low-carb/ketogenic - no grains, sugar, starchy veg, or high-carb fruit.`;
+Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch - use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: never include calories, protein, fat or carbs in the ingredients list - name, amount and unit ONLY. Nutrition figures are looked up separately from the user's real food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol. Keep the recipe genuinely low-carb/ketogenic - no grains, sugar, starchy veg, or high-carb fruit.
+CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name or method step needs a double-quote character (e.g. quoting a measurement like 2"), escape it as \\" - an unescaped quote breaks the entire response.`;
+
+  // Attempts to parse, with two layers of recovery before giving up: first a
+  // repair pass for the single most common LLM JSON mistake (trailing
+  // commas), then - if that still fails - one genuine retry to the AI
+  // itself, since a malformed response is usually a one-off formatting
+  // slip rather than something that'll happen identically twice in a row.
+  function tryParseRecipeJSON(rawText) {
+    let raw = rawText.trim().replace(/^```json\s*|\s*```$/g, '').trim();
+    const candidate = raw.match(/\{[\s\S]*\}/)?.[0] || raw;
+    try {
+      return JSON.parse(candidate);
+    } catch (parseErr) {
+      // Strip trailing commas immediately before a closing ] or } - by far
+      // the most common LLM JSON slip, and safe to fix mechanically since
+      // a trailing comma is never valid JSON regardless of context.
+      const repaired = candidate.replace(/,(\s*[\]}])/g, '$1');
+      return JSON.parse(repaired); // if this also throws, it propagates up - the retry logic above catches it
+    }
+  }
+
+  async function attemptGenerate() {
+    const result = await callHealthAI(systemPrompt, { maxTokens: 900 });
+    if (!result.ok) throw new Error(result.error || 'Could not reach the AI');
+    return tryParseRecipeJSON(result.text);
+  }
 
   try {
-    const result = await callHealthAI(systemPrompt, { maxTokens: 900 });
-    thinkingBubble.remove();
-    if (!result.ok) { addBubble(`Couldn't reach the AI: ${result.error || 'unknown error'}`, 'system', 'warn'); return; }
-    let raw = result.text.trim().replace(/^```json\s*|\s*```$/g, '').trim();
     let recipe;
     try {
-      recipe = JSON.parse(raw);
-    } catch (parseErr) {
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (m) recipe = JSON.parse(m[0]);
-      else throw parseErr;
+      recipe = await attemptGenerate();
+    } catch (firstErr) {
+      // One automatic retry before bothering the user with an error -
+      // malformed JSON from the AI is usually non-deterministic, so asking
+      // again is genuinely likely to just work the second time.
+      thinkingBubble.textContent = 'That attempt came back malformed — trying again…';
+      recipe = await attemptGenerate();
     }
+    thinkingBubble.remove();
     addRecipeBubble(recipe);
   } catch (e) {
     thinkingBubble.remove();
     console.error('submitRecipeDiscover failed:', e);
-    addBubble(`Couldn't generate a recipe: ${e.message || 'unknown error'} — try again, or phrase it differently.`, 'system', 'warn');
+    addBubble(`Couldn't generate a recipe after two attempts: ${e.message || 'unknown error'} — try again, or phrase it differently.`, 'system', 'warn');
   }
 }
 
@@ -16684,7 +16713,7 @@ function openRecipeIngredientSearch(index) {
   if (!ing) return;
   _recipeSearchFixIndex = index;
   _recipeSearchMode = true;
-  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*\([^)]*\)\s*—.*$/, '').trim();
+  const cleanName = ing.name.replace(/^⚠️\s*/, '').replace(/\s*(\([^)]*\))?\s*—.*$/, '').trim();
   const recipeModal = document.getElementById('recipeBuilderModal');
   if (recipeModal) recipeModal.style.display = 'none';
   openFoodSearch();
