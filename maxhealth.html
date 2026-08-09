@@ -3988,15 +3988,6 @@ body[data-theme="light"] {
     </div>
     </div>
 
-    <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0;" onclick="toggleSection('set-occfix','set-occfix-wrap','set-occfix-icon')">Fix Historical Occasion Days <span id="set-occfix-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
-    <div id="set-occfix-wrap">
-    <div class="settings-card">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;">Exercise (Walking, Resistance Bands, steps) should never by itself flip a day to Occasion — that's reserved for genuine occasions (Treatment, Travel, Illness, etc.). This scans your History, migrates any old "Chemotherapy" tags to "Treatment", and corrects each day's Occasion/Standard status to match its actual tags — in <strong>both</strong> directions: reverting days wrongly flipped to Occasion by exercise alone, and restoring days that had a genuine occasion tag but were wrongly demoted to Standard by an earlier version of this check. Holiday days are never touched.</div>
-      <button class="copy-btn" style="width:100%;" onclick="fixHistoricalOccasionDays()">🔧 Scan &amp; fix historical days</button>
-      <div id="occFixOutput" style="display:none;font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
-    </div>
-    </div>
-
     <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0;" onclick="toggleSection('set-rollover','set-rollover-wrap','set-rollover-icon')">Rollover Debug Log <span id="set-rollover-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-rollover-wrap">
     <div class="settings-card">
@@ -4209,7 +4200,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.371</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.372</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4976,7 +4967,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.371'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.372'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7502,7 +7493,6 @@ function initSettings() {
     ['set-exoffset',      'set-exoffset-wrap',      'set-exoffset-icon',      false],
     ['set-deviceprec',    'set-deviceprec-wrap',    'set-deviceprec-icon',    false],
     ['set-bodycompdebug', 'set-bodycompdebug-wrap', 'set-bodycompdebug-icon', false],
-    ['set-occfix',        'set-occfix-wrap',        'set-occfix-icon',        false],
     ['set-rollover',      'set-rollover-wrap',      'set-rollover-icon',      false],
     ['set-healthcheck',   'set-healthcheck-wrap',   'set-healthcheck-icon',   false],
     ['set-formulas',      'set-formulas-wrap',      'set-formulas-icon',      false],
@@ -18611,74 +18601,6 @@ function _isActivityOnlyTag(tag) {
 // since anything that isn't a recognized exercise pattern counts as genuine.
 function _hasGenuineOccasionTag(tags) {
   return tags.some(t => !_isActivityOnlyTag(t));
-}
-
-// Retroactive fix for the bare-activity-tag bug — scans History for days marked
-// Occasion and reverts any where exercise was the ONLY reason (no genuine
-// occasion tag present), using the corrected _isActivityOnlyTag logic. Genuine
-// occasion days (Chemotherapy, Travel, Illness, etc., alongside any exercise
-// tags) are left untouched — only the wrongly-flipped ones get corrected.
-function fixHistoricalOccasionDays() {
-  const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
-  let revertedCount = 0;   // wrongly Occasion -> corrected to Standard
-  let restoredCount = 0;   // wrongly Standard -> corrected to Occasion (the actual bug just found)
-  let renamedCount = 0;
-  const revertedDates = [];
-  const restoredDates = [];
-  (state.history || []).forEach(day => {
-    // Migrate the old "Chemotherapy" tag to "Treatment" first, so the occasion
-    // check below (and everything else) sees one consistent tag going forward
-    // rather than two names for the same thing.
-    // Both the detection AND replacement now use the same case-insensitive
-    // comparison - they were previously mismatched (detection case-insensitive,
-    // replacement an exact-case match only), so any tag not spelled exactly
-    // "Chemotherapy" would be correctly detected every run but never actually
-    // renamed, silently re-reporting the same days as "fixed" indefinitely.
-    if ((day.notes || '').split(',').map(t => t.trim().toLowerCase()).includes('chemotherapy')) {
-      day.notes = day.notes.split(',').map(t => t.trim().toLowerCase() === 'chemotherapy' ? 'Treatment' : t.trim()).join(', ');
-      renamedCount++;
-    }
-    // Holiday is a deliberate, separate user choice — never touched by this scan
-    // in either direction.
-    if (day.mode === 'holiday') return;
-
-    const tags = (day.notes || '').split(',').map(t => t.trim())
-      .filter(t => t && !legacy.includes(t.toLowerCase()));
-    const shouldBeOccasion = _hasGenuineOccasionTag(tags);
-
-    // Bidirectional — previously this only ever checked days already marked
-    // Occasion, which meant a day wrongly demoted to Standard by an earlier,
-    // imperfect version of this check (e.g. a genuine "Travel" tag briefly
-    // misclassified) could never be corrected by re-running the same tool: it
-    // only ever looked at Occasion-marked days, never at Standard ones that
-    // should actually be Occasion. This recomputes every day's correct state
-    // from its actual tags, regardless of what it's currently set to.
-    if (shouldBeOccasion && day.mode !== 'occasion') {
-      day.mode = 'occasion';
-      restoredCount++;
-      restoredDates.push(day.date);
-    } else if (!shouldBeOccasion && day.mode === 'occasion') {
-      day.mode = 'standard';
-      revertedCount++;
-      revertedDates.push(day.date);
-    }
-  });
-
-  const out = document.getElementById('occFixOutput');
-  const totalFixed = revertedCount + restoredCount + renamedCount;
-  if (totalFixed > 0) {
-    saveState();
-    const parts = [];
-    if (renamedCount > 0) parts.push(`Renamed "Chemotherapy" → "Treatment" on ${renamedCount} day(s)`);
-    if (restoredCount > 0) parts.push(`Restored ${restoredCount} day(s) to Occasion (genuine tag was wrongly cleared):\n` + restoredDates.join('\n'));
-    if (revertedCount > 0) parts.push(`Reverted ${revertedCount} day(s) to Standard (exercise was the only tag):\n` + revertedDates.join('\n'));
-    out.textContent = parts.join('\n\n');
-    showToast(`✓ Fixed ${totalFixed} day(s)`);
-    try { renderHistory(); } catch(e) {} // refresh History list immediately if it's already rendered somewhere in the DOM
-  } else {
-    out.textContent = 'No days needed fixing — every day\'s Occasion/Standard status already matches its actual tags, and no old "Chemotherapy" tags found.';
-  }
-  out.style.display = 'block';
 }
 
 function _getOccasionTags(excludeActivitySummaries) {
