@@ -4200,7 +4200,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.372</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.373</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4967,7 +4967,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.372'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.373'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11019,26 +11019,41 @@ Respond ONLY with JSON, no markdown, no preamble:
 }
 If nothing genuinely fits, return {"combos": []} and explain why in a "note" at the top level instead.`;
 
-  try {
+  // Same repair + automatic-retry pattern already used for the recipe
+  // generator - a response with no valid JSON at all (sometimes the model
+  // strays into a stray natural-language explanation despite being told
+  // JSON-only, especially with a prompt this long) is usually a one-off,
+  // non-deterministic slip rather than something that fails identically
+  // twice in a row.
+  function tryParseComboJSON(rawText) {
+    let raw = rawText.trim().replace(/^```json\s*|\s*```$/g, '').trim();
+    const candidate = raw.match(/\{[\s\S]*\}/)?.[0] || raw;
+    try {
+      return JSON.parse(candidate);
+    } catch (parseErr) {
+      const repaired = candidate.replace(/,(\s*[\]}])/g, '$1'); // strip trailing commas, the most common LLM JSON slip
+      return JSON.parse(repaired); // if this also throws, it propagates up and the retry logic below catches it
+    }
+  }
+
+  async function attemptSuggest() {
     const result = await callHealthAI(systemPrompt, { maxTokens: 1500 }); // was 1000 for 3 suggestions - 5 needs proportionally more room
     if (!result.ok) throw new Error(result.error || 'API error');
-    let raw = result.text.trim();
-    raw = raw.replace(/^```json\s*|\s*```$/g, '').trim();
+    return tryParseComboJSON(result.text);
+  }
+
+  try {
     let parsed;
     try {
-      parsed = JSON.parse(raw);
-    } catch (parseErr) {
-      // Same fallback used elsewhere in the app — extract the first {...} block
-      // rather than give up immediately, in case the model added any stray text
-      // around the JSON despite being told not to.
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-      else throw parseErr;
+      parsed = await attemptSuggest();
+    } catch (firstErr) {
+      addBubble('That attempt came back malformed — trying again…', 'system');
+      parsed = await attemptSuggest();
     }
     renderLibraryComboSuggestions(parsed, lib, recipes);
   } catch (e) {
     console.error('suggestMealFromLibrary failed:', e); // real reason, for diagnosis — the user-facing message stays generic
-    addBubble(`Couldn't reach the AI to check your library: ${e.message || 'unknown error'} — try again in a moment.`, 'system', 'warn');
+    addBubble(`Couldn't reach the AI to check your library after two attempts: ${e.message || 'unknown error'} — try again in a moment.`, 'system', 'warn');
   }
 }
 
@@ -24152,6 +24167,18 @@ function checkNotifications() {
 
 function sendLocalNotif(title, body, tab) {
   if (Notification.permission!=='granted') return;
+  // A page controlled by a service worker (which describes any installed
+  // PWA - exactly this app's normal running state) is not allowed to use
+  // the raw Notification constructor at all - Chrome throws "Illegal
+  // constructor" and insists on going through the service worker's own
+  // showNotification() instead. Falls back to the direct constructor only
+  // when no service worker is active (e.g. testing in a plain browser tab).
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(title, { body, icon: './icons/icon-192.png', tag: `mh-${tab}`, data: { tab } });
+    }).catch(() => {}); // fails silently rather than throwing into the chat log - a missed notification isn't worth surfacing as an error
+    return;
+  }
   const n=new Notification(title,{body,icon:'./icons/icon-192.png',tag:`mh-${tab}`});
   n.onclick=()=>{ window.focus(); switchTabById(tab); n.close(); };
 }
