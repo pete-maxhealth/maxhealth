@@ -4216,7 +4216,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.379</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.380</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4983,7 +4983,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.379'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.380'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13394,6 +13394,25 @@ function logFoods(foods, originalText, aiMessage = null) {
   // unchanged, safe even if a path also calls this upstream.
   foods = sanitiseFatValues(foods);
 
+  // Records every single logFoods() call with the ACTUAL _logTargetDate seen at
+  // that exact moment, regardless of which branch it takes - built specifically
+  // to catch a case where items appear to log successfully but don't show up
+  // later, which the shrink-tracer above can't catch (nothing shrinks if the
+  // item never landed in the right day's log in the first place).
+  (function() {
+    const log = JSON.parse(localStorage.getItem('mh_logfoods_call_trace') || '[]');
+    log.unshift({
+      timestamp: new Date().toISOString(),
+      logTargetDateAtCallTime: window._logTargetDate || null,
+      todayStr: todayStr(),
+      willUsePastDayBranch: !!(window._logTargetDate && window._logTargetDate !== todayStr()),
+      foodNames: foods.map(f => f.name || f.description || '?'),
+      originalText: originalText || null
+    });
+    if (log.length > 30) log.length = 30;
+    localStorage.setItem('mh_logfoods_call_trace', JSON.stringify(log));
+  })();
+
   // ── Logging to a past day instead of today ──────────────────────────────
   // Set via History's "+ Add food" button (window._logTargetDate). Deliberately
   // takes a much simpler path than the rest of this function: no water auto-add,
@@ -16332,10 +16351,12 @@ function renderLogMutationDebug() {
   const out = document.getElementById('logMutationDebugOutput');
   if (!out) return;
   const log = JSON.parse(localStorage.getItem('mh_log_mutation_debug') || '[]');
+  const callTrace = JSON.parse(localStorage.getItem('mh_logfoods_call_trace') || '[]');
+  let text = '';
   if (log.length === 0) {
-    out.textContent = 'No anomalies recorded yet — this only logs when a day\'s item list actually shrinks unexpectedly, not on every save.';
+    text += 'ANOMALIES (item list shrinking): none recorded yet.\n\n';
   } else {
-    out.textContent = log.map((e, i) =>
+    text += 'ANOMALIES (item list shrinking):\n\n' + log.map((e, i) =>
       `#${i+1} — ${e.timestamp}\n` +
       `  Source: ${e.source}\n` +
       `  Date: ${e.date}\n` +
@@ -16343,14 +16364,29 @@ function renderLogMutationDebug() {
       `  Totals before: ${JSON.stringify(e.totalsBefore)}\n` +
       `  Totals after: ${JSON.stringify(e.totalsAfter)}\n` +
       `  Call stack:\n${e.stack}`
+    ).join('\n\n---\n\n') + '\n\n';
+  }
+  text += '─────────────────────────────\n\n';
+  if (callTrace.length === 0) {
+    text += 'CALL TRACE (every logFoods() call): none recorded yet.';
+  } else {
+    text += 'CALL TRACE (every logFoods() call, most recent first):\n\n' + callTrace.map((e, i) =>
+      `#${i+1} — ${e.timestamp}\n` +
+      `  _logTargetDate at call time: ${e.logTargetDateAtCallTime || '(none — logging to today)'}\n` +
+      `  Today: ${e.todayStr}\n` +
+      `  Used past-day branch: ${e.willUsePastDayBranch}\n` +
+      `  Foods: ${e.foodNames.join(', ')}\n` +
+      `  Original text: ${e.originalText || '—'}`
     ).join('\n\n---\n\n');
   }
+  out.textContent = text;
   out.style.display = 'block';
 }
 
 function clearLogMutationDebug() {
   appConfirm('Clear the log mutation debug data?', () => {
     localStorage.removeItem('mh_log_mutation_debug');
+    localStorage.removeItem('mh_logfoods_call_trace');
     const out = document.getElementById('logMutationDebugOutput');
     if (out) out.style.display = 'none';
     showToast('Debug log cleared');
