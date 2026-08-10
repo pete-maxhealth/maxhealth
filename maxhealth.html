@@ -4220,7 +4220,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.381</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.382</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4987,7 +4987,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.381'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.382'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5083,14 +5083,55 @@ function saveState() {
     // no backup, straight to a blank defaultState() if it went missing.
     localStorage.setItem('maxhealth_v1_backup', stateJson);
   } catch(e) {
-    // Fallback — try saving without any logs at all
-    try {
-      const minimal = JSON.parse(JSON.stringify(state));
-      minimal.history = (minimal.history || []).map(({ log, ...rest }) => rest);
-      const minimalJson = JSON.stringify(minimal);
-      localStorage.setItem('maxhealth_v1', minimalJson);
-      localStorage.setItem('maxhealth_v1_backup', minimalJson);
-    } catch(e2) { console.warn('saveState failed:', e2); }
+    // Previously this fell straight to stripping EVERY day's items on any
+    // failure (almost always QuotaExceededError, given 780+ history days can
+    // genuinely approach localStorage's typical 5-10MB limit) - meaning even
+    // YESTERDAY's items got thrown away, not just old ones. This is the real,
+    // confirmed cause of items appearing correctly in memory during a session
+    // but vanishing after a refresh: the in-memory state was always fine, but
+    // what actually got persisted silently degraded to totals-only for
+    // everything the moment the primary save started failing.
+    // Now tries progressively more aggressive slimming first, so a quota
+    // problem costs older detail before it ever costs recent detail.
+    console.warn('[saveState] primary save failed, attempting graceful degradation:', e.name, e.message);
+    const debugLog = JSON.parse(localStorage.getItem('mh_savestate_fallback_log') || '[]');
+    debugLog.unshift({ timestamp: new Date().toISOString(), errorName: e.name, errorMessage: e.message, stage: 'primary_failed' });
+
+    let saved = false;
+    for (const keepFull of [14, 7, 3, 1]) {
+      try {
+        const degraded = JSON.parse(JSON.stringify(state));
+        degraded.history = (degraded.history || []).map((entry, i) => {
+          if (i < keepFull) return entry;
+          const { log, ...rest } = entry;
+          return rest;
+        });
+        const degradedJson = JSON.stringify(degraded);
+        localStorage.setItem('maxhealth_v1', degradedJson);
+        localStorage.setItem('maxhealth_v1_backup', degradedJson);
+        saved = true;
+        debugLog.unshift({ timestamp: new Date().toISOString(), stage: `succeeded_at_keepFull_${keepFull}` });
+        break;
+      } catch (eDegrade) { /* try the next, more aggressive level */ }
+    }
+    if (!saved) {
+      // Genuinely last resort - only reached if even keeping just today's
+      // items still doesn't fit, which would mean something else entirely is
+      // wrong (a single day's log is enormous, or quota is near-zero).
+      try {
+        const minimal = JSON.parse(JSON.stringify(state));
+        minimal.history = (minimal.history || []).map(({ log, ...rest }) => rest);
+        const minimalJson = JSON.stringify(minimal);
+        localStorage.setItem('maxhealth_v1', minimalJson);
+        localStorage.setItem('maxhealth_v1_backup', minimalJson);
+        debugLog.unshift({ timestamp: new Date().toISOString(), stage: 'last_resort_stripped_all' });
+      } catch(e2) {
+        console.warn('saveState failed completely:', e2);
+        debugLog.unshift({ timestamp: new Date().toISOString(), stage: 'total_failure', errorMessage: e2.message });
+      }
+    }
+    if (debugLog.length > 30) debugLog.length = 30;
+    localStorage.setItem('mh_savestate_fallback_log', JSON.stringify(debugLog));
   }
   // Also maintain a running master.csv cache in localStorage
   try {
@@ -16373,9 +16414,32 @@ function traceLogMutation(source, date, phase) {
 function renderLogMutationDebug() {
   const out = document.getElementById('logMutationDebugOutput');
   if (!out) return;
+  // Immediate, no-waiting diagnostic - total localStorage usage right now,
+  // since the fallback log below only fills in AFTER a save has actually
+  // failed once. This shows whether that's even plausible before it happens.
+  let totalBytes = 0;
+  try {
+    for (const k in localStorage) {
+      if (localStorage.hasOwnProperty(k)) totalBytes += (localStorage.getItem(k) || '').length + k.length;
+    }
+  } catch(e) {}
+  const totalMB = (totalBytes / 1024 / 1024).toFixed(2);
+  const mainStateBytes = (localStorage.getItem('maxhealth_v1') || '').length;
+  const mainStateMB = (mainStateBytes / 1024 / 1024).toFixed(2);
+
+  const fallbackLog = JSON.parse(localStorage.getItem('mh_savestate_fallback_log') || '[]');
+  let text = `STORAGE USAGE RIGHT NOW:\n  Total localStorage: ~${totalMB}MB (typical browser limit: 5-10MB)\n  Main state (maxhealth_v1): ~${mainStateMB}MB\n  History days: ${state.history.length}\n\n`;
+  text += '─────────────────────────────\n\n';
+  if (fallbackLog.length === 0) {
+    text += 'SAVE FALLBACK LOG: no primary-save failures recorded yet — if this stays empty, quota exhaustion is NOT what\'s causing the issue.';
+  } else {
+    text += 'SAVE FALLBACK LOG (confirms whether the primary save has actually been failing):\n\n' + fallbackLog.map((e, i) =>
+      `#${i+1} — ${e.timestamp}\n  Stage: ${e.stage}${e.errorName ? `\n  Error: ${e.errorName} - ${e.errorMessage}` : ''}`
+    ).join('\n\n---\n\n');
+  }
+  text += '\n\n─────────────────────────────\n\n';
   const log = JSON.parse(localStorage.getItem('mh_log_mutation_debug') || '[]');
   const callTrace = JSON.parse(localStorage.getItem('mh_logfoods_call_trace') || '[]');
-  let text = '';
   if (log.length === 0) {
     text += 'ANOMALIES (item list shrinking): none recorded yet.\n\n';
   } else {
