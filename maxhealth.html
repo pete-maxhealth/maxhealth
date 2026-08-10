@@ -3853,6 +3853,7 @@ body[data-theme="light"] {
           <input type="checkbox" id="settingsAutoSwitchNotify" checked onchange="localStorage.setItem('mh_notif_autoswitch', this.checked ? 'on' : 'off')" style="width:16px;height:16px;accent-color:var(--green);">
           Show a toast when this switches your goal automatically
         </label>
+        <div id="autoSwitchStatusLine" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
       </div>
       <div style="background:var(--accent-dim);border:1px solid var(--accent-glow);border-radius:10px;padding:14px;margin-bottom:12px;">
         <div style="font-size:11px;font-family:Space Mono,monospace;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">⚡ Suggested Targets</div>
@@ -4200,7 +4201,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.374</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.375</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4967,7 +4968,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.374'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.375'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7138,6 +7139,15 @@ function saveAutoSwitchDays() {
   const days = parseInt(el.value);
   if (isNaN(days) || days < 3 || days > 60) { showToast('Enter a number between 3 and 60 days'); return; }
   localStorage.setItem('mh_autoswitch_days', days);
+  // Clear the once-per-day guard and re-run immediately - without this, a
+  // new shorter threshold wouldn't actually take effect until the NEXT
+  // calendar day, since today's check may have already run (and found
+  // nothing to do) using the OLD threshold before this change. Changing the
+  // setting should mean it's checked against right away, not tomorrow.
+  localStorage.removeItem('mh_last_auto_phase_check');
+  checkWeightPhaseAutoSwitch();
+  const statusEl = document.getElementById('autoSwitchStatusLine');
+  if (statusEl) statusEl.textContent = localStorage.getItem('mh_autoswitch_status') || '';
   showToast(`Auto-switch threshold set to ${days} days`);
 }
 
@@ -7462,6 +7472,8 @@ function initSettings() {
   if (autoSwitchEl) autoSwitchEl.value = parseInt(localStorage.getItem('mh_autoswitch_days')) || 14;
   const autoSwitchNotifyEl = document.getElementById('settingsAutoSwitchNotify');
   if (autoSwitchNotifyEl) autoSwitchNotifyEl.checked = localStorage.getItem('mh_notif_autoswitch') !== 'off';
+  const autoSwitchStatusEl = document.getElementById('autoSwitchStatusLine');
+  if (autoSwitchStatusEl) autoSwitchStatusEl.textContent = localStorage.getItem('mh_autoswitch_status') || '';
   renderSuggestedTargets();
   document.getElementById('histCount').textContent = state.history.length + ' days';
   document.getElementById('todayCount').textContent = state.todayLog.length + ' entries';
@@ -14480,6 +14492,7 @@ function checkWeightPhaseAutoSwitch() {
   // deliberately want a shorter window than that default.
   const autoSwitchDays = parseInt(localStorage.getItem('mh_autoswitch_days')) || 14;
   const days = [];
+  let gapDate = null;
   for (let i = 0; i < autoSwitchDays; i++) {
     const d = new Date(); d.setDate(d.getDate() - i);
     const dd = String(d.getDate()).padStart(2,'0');
@@ -14487,8 +14500,16 @@ function checkWeightPhaseAutoSwitch() {
     const yy = String(d.getFullYear()).slice(2);
     const dateStr = `${dd}/${mm}/${yy}`;
     const entry = state.history.find(h => h.date === dateStr && h.weight);
-    if (!entry) return; // gap - can't confirm N consecutive days, skip silently
+    if (!entry) { gapDate = dateStr; break; } // gap - can't confirm N consecutive days
     days.push(entry.weight);
+  }
+  if (gapDate) {
+    // Previously silent - a missing weigh-in on even one day within the
+    // window meant this quietly did nothing with no way to tell why. Now
+    // stored so Settings can show the real reason instead of leaving it
+    // looking broken.
+    localStorage.setItem('mh_autoswitch_status', `Waiting on a weigh-in for ${gapDate} — needs ${autoSwitchDays} consecutive logged days, no gaps.`);
+    return;
   }
 
   const allAbove = days.every(w => w > wtHigh);
@@ -14500,7 +14521,16 @@ function checkWeightPhaseAutoSwitch() {
   else if (allBelow && currentGoal !== 'gain') newGoal = 'gain';
   else if (!allAbove && !allBelow && currentGoal !== 'maintain' && days.every(w => w >= wtLow && w <= wtHigh)) newGoal = 'maintain'; // back within range for the same N days straight too
 
-  if (!newGoal) return;
+  if (!newGoal) {
+    // Same idea as the gap case above - explains why nothing happened
+    // instead of leaving it looking like it just isn't working.
+    if (allAbove && currentGoal === 'lose') localStorage.setItem('mh_autoswitch_status', `${autoSwitchDays} days above range, but goal is already Lose — nothing to switch.`);
+    else if (allBelow && currentGoal === 'gain') localStorage.setItem('mh_autoswitch_status', `${autoSwitchDays} days below range, but goal is already Gain — nothing to switch.`);
+    else if (!allAbove && !allBelow) localStorage.setItem('mh_autoswitch_status', `Weight hasn't stayed consistently above or below range for all ${autoSwitchDays} days — mixed results, no switch triggered.`);
+    else localStorage.setItem('mh_autoswitch_status', `Checked — no switch needed right now.`);
+    return;
+  }
+  localStorage.removeItem('mh_autoswitch_status'); // clear any stale reason now that a switch has actually happened
 
   setGoal(newGoal); // setGoal() already updates the goal button highlighting itself
 
