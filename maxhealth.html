@@ -3272,6 +3272,10 @@ body[data-theme="light"] {
           <div class="trend-title" style="color:var(--accent);">CARBOHYDRATES ↗</div>
           <div class="trend-canvas-wrap"><canvas id="chartCarb"></canvas></div>
         </div>
+        <div class="trend-card" onclick="openChartLightbox('ketosis')" style="cursor:pointer;">
+          <div class="trend-title" style="color:var(--accent);">KETOSIS ADHERENCE ↗</div>
+          <div class="trend-canvas-wrap"><canvas id="chartKetosis"></canvas></div>
+        </div>
         <div class="trend-card" onclick="openChartLightbox('steps')" style="cursor:pointer;">
           <div class="trend-title" style="color:var(--accent);">DAILY STEPS ↗</div>
           <div class="trend-canvas-wrap"><canvas id="chartSteps"></canvas></div>
@@ -4000,6 +4004,17 @@ body[data-theme="light"] {
     </div>
     </div>
 
+    <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0;" onclick="toggleSection('set-logmutation','set-logmutation-wrap','set-logmutation-icon')">Log Mutation Debug <span id="set-logmutation-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-logmutation-wrap">
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;">Records exactly when a History day's individual items list shrinks unexpectedly (not from a normal single-item delete) — for tracing a real bug where logged items have disappeared while totals stayed intact. Last 20 anomalies, with a call stack for each.</div>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderLogMutationDebug()">🔍 View mutation log</button>
+      <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
+      <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
+    </div>
+    </div>
+
     <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0 0 8px 8px;" onclick="toggleSection('set-healthcheck','set-healthcheck-wrap','set-healthcheck-icon')">🩺 App Health Check <span id="set-healthcheck-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-healthcheck-wrap">
     <div class="settings-card">
@@ -4201,7 +4216,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.377</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.379</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4968,7 +4983,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.377'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.379'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6885,6 +6900,7 @@ function processNutritionCSV(text, outEl) {
       if (existing.has(dateStr)) {
         const existingEntry = state.history.find(h => h.date === dateStr);
         if (existingEntry) {
+          traceLogMutation('csvImport', dateStr, 'before');
           const before = existingEntry.totals || {};
           const changed = before.kcal !== kcal || before.protein !== protein || before.carbs !== carbs || (fat !== null && before.fat !== fat);
           existingEntry.totals = { kcal, protein, carbs, fat: fat !== null ? fat : (before.fat || 0) };
@@ -6892,6 +6908,7 @@ function processNutritionCSV(text, outEl) {
           if (!existingEntry.log || existingEntry.log.length === 0) {
             existingEntry.log = [{ id: i+1, time: '23:59', description: notes || 'imported', kcal, protein, carbs, fat: fat || 0 }];
           }
+          traceLogMutation('csvImport', dateStr, 'after');
           if (changed) updated++; else skipped++;
         } else {
           skipped++;
@@ -13392,6 +13409,7 @@ function logFoods(foods, originalText, aiMessage = null) {
       renderPastDayLogBanner();
       return;
     }
+    traceLogMutation('logFoods_pastDay', window._logTargetDate, 'before');
     if (!targetDay.log) targetDay.log = [];
     const mealTotals = foods.reduce((a, f) => ({
       kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0)
@@ -13420,6 +13438,7 @@ function logFoods(foods, originalText, aiMessage = null) {
     }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
     saveState();
     const dayTotals = targetDay.totals;
+    traceLogMutation('logFoods_pastDay', window._logTargetDate, 'after');
     addBubble(`✓ Added to ${window._logTargetDate}: ${entry.description} — ${entry.kcal}kcal · ${entry.protein}g P · ${entry.fat}g F · ${entry.carbs}g C<br><span style="font-size:11px;color:var(--text3);">New day total: ${Math.round(dayTotals.kcal)}kcal · ${dayTotals.protein}g P · ${dayTotals.fat}g F · ${dayTotals.carbs}g C</span>`, 'system', 'success');
     showToast(`Logged to ${window._logTargetDate} ✓`);
     return;
@@ -16270,9 +16289,78 @@ function addHistExerciseRow(dayIdx) {
   });
 }
 
+// ─── LOG MUTATION TRACER ──────────────────────────────────────────────────────
+// Built specifically to catch a real, reproducible bug: a history day's log[]
+// array (individual logged items) going empty while totals stay correctly in
+// sync with whatever was last logged - meaning something clears the item list
+// independently of the totals, without any single function in the codebase
+// appearing to do this on direct code review. Rather than guess further,
+// this traces every suspect function's before/after state and records an
+// anomaly (with a stack trace) the moment a log array shrinks unexpectedly -
+// so the NEXT time this happens live, the actual culprit is visible directly
+// instead of reconstructed after the fact from a snapshot.
+function traceLogMutation(source, date, phase) {
+  const day = state.history.find(h => h.date === date);
+  const logLength = day ? (day.log || []).length : null;
+  const totals = day ? { ...(day.totals || {}) } : null;
+
+  window._logMutationTrace = window._logMutationTrace || {};
+  const key = source + '_' + date;
+
+  if (phase === 'before') {
+    window._logMutationTrace[key] = { logLength, totals };
+    return;
+  }
+
+  const before = window._logMutationTrace[key];
+  delete window._logMutationTrace[key];
+  if (!before || logLength === null || before.logLength <= logLength) return; // no shrink, nothing to record
+
+  const log = JSON.parse(localStorage.getItem('mh_log_mutation_debug') || '[]');
+  log.unshift({
+    timestamp: new Date().toISOString(),
+    source, date,
+    logLengthBefore: before.logLength, logLengthAfter: logLength,
+    totalsBefore: before.totals, totalsAfter: totals,
+    stack: (new Error().stack || '').split('\n').slice(0, 6).join('\n') // enough frames to identify the real caller, not the whole app
+  });
+  if (log.length > 20) log.length = 20; // most recent 20 anomalies is plenty
+  localStorage.setItem('mh_log_mutation_debug', JSON.stringify(log));
+}
+
+function renderLogMutationDebug() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const log = JSON.parse(localStorage.getItem('mh_log_mutation_debug') || '[]');
+  if (log.length === 0) {
+    out.textContent = 'No anomalies recorded yet — this only logs when a day\'s item list actually shrinks unexpectedly, not on every save.';
+  } else {
+    out.textContent = log.map((e, i) =>
+      `#${i+1} — ${e.timestamp}\n` +
+      `  Source: ${e.source}\n` +
+      `  Date: ${e.date}\n` +
+      `  Log length: ${e.logLengthBefore} → ${e.logLengthAfter}\n` +
+      `  Totals before: ${JSON.stringify(e.totalsBefore)}\n` +
+      `  Totals after: ${JSON.stringify(e.totalsAfter)}\n` +
+      `  Call stack:\n${e.stack}`
+    ).join('\n\n---\n\n');
+  }
+  out.style.display = 'block';
+}
+
+function clearLogMutationDebug() {
+  appConfirm('Clear the log mutation debug data?', () => {
+    localStorage.removeItem('mh_log_mutation_debug');
+    const out = document.getElementById('logMutationDebugOutput');
+    if (out) out.style.display = 'none';
+    showToast('Debug log cleared');
+  });
+}
+
 function saveHistDayTotals(dayIdx) {
   const day = state.history[dayIdx];
   if (!day) return;
+  traceLogMutation('saveHistDayTotals', day.date, 'before');
   const kcalInput = parseFloat(document.getElementById(`hday-kcal-${dayIdx}`)?.value);
   const kcalOrig  = parseFloat(document.getElementById(`hday-kcal-orig-${dayIdx}`)?.value);
   const prot = parseFloat(document.getElementById(`hday-prot-${dayIdx}`)?.value);
@@ -16358,6 +16446,7 @@ function saveHistDayTotals(dayIdx) {
   if (Math.round(stepsOrig) !== day.steps) changes.push(`Steps: ${Math.round(stepsOrig)} → ${day.steps}`);
   if (exerciseKcalDelta !== 0) changes.push(`Exercise kcal: ${exerciseKcalDelta > 0 ? '+' : ''}${exerciseKcalDelta}`);
 
+  traceLogMutation('saveHistDayTotals', day.date, 'after');
   renderHistory();
   if (changes.length) {
     showToast(`✓ Changed:<br>${changes.join('<br>')}`, null, null, 4500);
@@ -20199,6 +20288,28 @@ function renderTrends() {
       type:'bar', data:{ labels, datasets:[{ label:'Carbs', data:carbVals, backgroundColor:carbVals.map(v=>v<=tgt?'rgba(45,235,143,0.5)':'rgba(255,94,94,0.5)'), borderRadius:3 }]},
       options:{ ...CHART_DEFAULTS }
     });
+
+    // Ketosis adherence - a genuine per-day in/out-of-ceiling bar, using each
+    // day's OWN mode-specific ceiling (carbCeilFor, same helper Patterns
+    // already uses) rather than one fixed target - a day correctly logged as
+    // Occasion with a higher ceiling shouldn't count as "failed" against the
+    // Standard number. Previously this had no dedicated chart at all despite
+    // "Ketosis Adherence" being referenced elsewhere (streak banner, Journey
+    // stat, Patterns insight) - this is the first place it's an actual trend.
+    const carbCeilForTrend = d => {
+      const t = getTargets();
+      return t[d.mode || 'standard']?.carbs ?? t.standard.carbs;
+    };
+    const ketosisVals = data.map(d => {
+      const carbs = d.totals?.carbs;
+      if (carbs == null) return null;
+      return carbs <= carbCeilForTrend(d) ? 1 : 0;
+    });
+    destroyChart('chartKetosis');
+    chartInstances['chartKetosis'] = new Chart(document.getElementById('chartKetosis'), {
+      type:'bar', data:{ labels, datasets:[{ label:'In ceiling', data:ketosisVals, backgroundColor:ketosisVals.map(v=>v===1?'rgba(45,235,143,0.6)':v===0?'rgba(255,94,94,0.6)':'rgba(255,255,255,0.05)'), borderRadius:3 }]},
+      options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales?.y, min:0, max:1, ticks:{ ...CHART_DEFAULTS.scales?.y?.ticks, stepSize:1, callback:v=>v===1?'✓':v===0?'✗':'' } } } }
+    });
   }
 
   // ── Wellness summary arcs ──
@@ -20370,6 +20481,7 @@ const DRILL_CONFIG = {
   calories: { title: 'Calories',           unit: 'kcal',  color: '#4d9fff', icon: '🔥', field: 'totals.kcal',     ref: null,     refLabel: '' },
   protein:  { title: 'Protein',            unit: 'g',     color: '#2deb8f', icon: '💪', field: 'totals.protein',  ref: null,     refLabel: '' },
   carbs:    { title: 'Carbohydrates',      unit: 'g',     color: '#f5c542', icon: '🌾', field: 'totals.carbs',    ref: null,     refLabel: '' },
+  ketosis:  { title: 'Ketosis Adherence',  unit: '%',     color: '#2deb8f', icon: '🔥', field: '_ketosisAdherence', ref: [80,100], refLabel: 'Strong adherence' },
   // These five had real, tappable trend cards in the UI but were never added
   // here — meaning both the lightbox and Deep Dive silently rendered
   // completely blank for all of them (getDrillData/renderDrill both bail out
@@ -20535,6 +20647,28 @@ function getDrillData(metric, period) {
   }
 
   const allData = getTrendsData();
+
+  // Ketosis adherence - computed per-day (within that day's own mode-specific
+  // ceiling or not), not a raw stored field like every other metric here.
+  // Same carbCeilFor reasoning as the trend-card chart: a day's own mode
+  // sets its own ceiling, not one fixed number for every day type.
+  if (metric === 'ketosis') {
+    const t = getTargets();
+    const ceilFor = d => t[d.mode || 'standard']?.carbs ?? t.standard.carbs;
+    const filtered = period > 0
+      ? allData.filter(d => {
+          const p = d.date.split('/');
+          if (p.length !== 3) return false;
+          const date = new Date(`20${p[2]}-${p[1]}-${p[0]}`);
+          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - period);
+          return date >= cutoff;
+        })
+      : allData;
+    return filtered
+      .filter(d => d.totals?.carbs != null)
+      .map(d => ({ date: d.date, val: d.totals.carbs <= ceilFor(d) ? 100 : 0, raw: d }));
+  }
+
   const filtered = period > 0
     ? allData.filter(d => {
         const p = d.date.split('/');
@@ -20784,6 +20918,15 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
   const cond = localStorage.getItem('mh_condition') || 'general';
   const isGBMorEpilepsy = ['gbm','epilepsy'].includes(cond);
   const _wtLow = getWeightTargetLow(), _wtHigh = getWeightTargetHigh();
+
+  if (metric === 'ketosis') {
+    const adherentDays = vals.filter(v => v === 100).length;
+    el.innerHTML += `
+      <div class="drill-section">
+        <div class="drill-insight">✓ In ceiling on ${adherentDays} of ${vals.length} logged days (${Math.round(avg)}%). Each day is checked against its own mode's ceiling (Standard/Occasion/Holiday), not one fixed number.</div>
+        ${cond === 't1_diabetes' ? `<div class="drill-insight" style="border-color:rgba(245,197,66,0.35);background:rgba(245,197,66,0.08);">⚠ This tracks nutritional ketosis from carb intake — a normal, intentional state on a low-carb diet. It is NOT the same as DKA (diabetic ketoacidosis), which is a dangerous, insulin-related medical emergency with a completely different cause. If you have any symptoms of DKA (nausea, vomiting, confusion, fruity-smelling breath, rapid breathing), this chart is not the tool to check — contact your diabetes team or emergency services immediately.</div>` : ''}
+      </div>`;
+  }
 
   if (metric === 'sleep') {
     // Sleep stages breakdown
