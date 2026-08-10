@@ -4221,7 +4221,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.387</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.388</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4988,7 +4988,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.387'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.388'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12019,15 +12019,16 @@ function genericExportCSV(key, silent = false) {
   if (!silent) showToast(`Exported ${items.length} ${cfg.label.toLowerCase()} item${items.length===1?'':'s'} ✓`);
 }
 
-function genericImportCSV(key, input) {
+// Core per-file import logic, extracted so both the single-dataset button
+// (genericImportCSV) and the new multi-file picker below can share it,
+// rather than duplicating the parsing logic.
+function importSingleCSVFile(key, file, callback) {
   const cfg = DATA_CONFIGS[key];
-  const file = input.files[0];
-  if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     const text = e.target.result;
     const lines = text.trim().split('\n');
-    if (lines.length < 2) { showToast('No data found in file'); return; }
+    if (lines.length < 2) { callback(0, 'No data found in file'); return; }
     const headers = lines[0].split('|');
     const dataLines = lines.slice(1).filter(l => l.trim());
     const items = cfg.multiRow
@@ -12035,11 +12036,76 @@ function genericImportCSV(key, input) {
       : dataLines.map(line => cfg.fromLine(line.split('|'), headers)).filter(cfg.filterValid);
     cfg.save(items);
     cfg.afterChange();
-    const el = document.getElementById(key + 'ImportStatus');
-    if (el) el.textContent = `✓ Imported ${items.length} item${items.length===1?'':'s'}`;
-    showToast(`${cfg.label} imported: ${items.length} item${items.length===1?'':'s'} ✓`);
+    callback(items.length, null);
   };
   reader.readAsText(file);
+}
+
+function genericImportCSV(key, input) {
+  const file = input.files[0];
+  if (!file) return;
+  importSingleCSVFile(key, file, (count, error) => {
+    if (error) { showToast(error); return; }
+    const el = document.getElementById(key + 'ImportStatus');
+    const cfg = DATA_CONFIGS[key];
+    if (el) el.textContent = `✓ Imported ${count} item${count===1?'':'s'}`;
+    showToast(`${cfg.label} imported: ${count} item${count===1?'':'s'} ✓`);
+  });
+}
+
+// Matches an uploaded filename to a dataset by checking whether the file's
+// own configured name (e.g. "library.csv") appears anywhere in what was
+// selected - deliberately loose rather than an exact match, since real
+// downloaded files often pick up date suffixes or "(1)" from the browser
+// (e.g. "library_10-08-26.csv", "recipes (1).csv") that an exact match
+// would reject for no good reason.
+function matchFilenameToDatasetKey(filename) {
+  const lower = filename.toLowerCase();
+  for (const key of Object.keys(DATA_CONFIGS)) {
+    const expected = (DATA_CONFIGS[key].filename || '').toLowerCase().replace('.csv', '');
+    if (expected && lower.includes(expected)) return key;
+  }
+  return null;
+}
+
+// Multi-file import - select several CSVs at once (browsers natively
+// support this via the file picker's own multi-select), each one
+// auto-routed to the right dataset by matching its filename, rather than
+// forcing one file at a time through separate per-dataset buttons.
+function bulkImportMultipleFiles(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const results = [];
+  let remaining = files.length;
+
+  files.forEach(file => {
+    const key = matchFilenameToDatasetKey(file.name);
+    if (!key) {
+      results.push(`✗ ${file.name} — couldn't match to a known dataset`);
+      remaining--;
+      if (remaining === 0) finishBulkImport(results);
+      return;
+    }
+    importSingleCSVFile(key, file, (count, error) => {
+      if (error) results.push(`✗ ${file.name} — ${error}`);
+      else results.push(`✓ ${DATA_CONFIGS[key].label}: ${count} item${count===1?'':'s'} (from ${file.name})`);
+      remaining--;
+      if (remaining === 0) finishBulkImport(results);
+    });
+  });
+}
+
+function finishBulkImport(results) {
+  const el = document.getElementById('bulkImportStatus');
+  if (el) { el.textContent = results.join('\n'); el.style.display = 'block'; }
+  const successCount = results.filter(r => r.startsWith('✓')).length;
+  showToast(`Imported ${successCount} of ${results.length} file${results.length===1?'':'s'} ✓`);
+  input_bulkImportFile_reset();
+}
+
+function input_bulkImportFile_reset() {
+  const el = document.getElementById('bulkImportFileInput');
+  if (el) el.value = ''; // allow re-selecting the same file(s) later if needed
 }
 
 function genericSaveToServerNow(key, silent = false) {
@@ -12099,12 +12165,17 @@ function buildBulkDataActionsCard() {
   return `
     <div class="import-card" style="background:rgba(45,235,143,0.04);border-color:rgba(45,235,143,0.2);">
       <div class="import-label">Bulk Actions — Select Datasets</div>
-      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Export or save several at once instead of tapping through each card individually. Tap to select one, or hold/drag to select several. Import still needs to be done one file at a time, since each dataset needs its own file.</p>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Export or save several at once instead of tapping through each card individually. Tap to select one, or hold/drag to select several.</p>
       <select id="bulkDatasetSelect" multiple style="width:100%;min-height:120px;margin-bottom:14px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;">
         ${options}
       </select>
       <button class="copy-btn" onclick="bulkExportSelected()" style="width:100%;margin-bottom:6px;font-size:12px;">💾 Export selected to Downloads</button>
       <button class="copy-btn" onclick="bulkSaveToServerSelected()" style="width:100%;font-size:12px;background:rgba(45,235,143,0.1);border-color:rgba(45,235,143,0.3);color:var(--accent);">🔄 Save selected to server now</button>
+      <div style="border-top:1px solid var(--border);margin:14px 0;"></div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">Import several files at once too — pick multiple CSVs in one go and each is automatically matched to the right dataset by its filename (library.csv, recipes.csv, etc.), no need to go through each one separately.</p>
+      <input type="file" id="bulkImportFileInput" accept=".csv" multiple style="display:none" onchange="bulkImportMultipleFiles(this)">
+      <button class="copy-btn" onclick="document.getElementById('bulkImportFileInput').click()" style="width:100%;font-size:12px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);">📂 Import multiple files</button>
+      <div id="bulkImportStatus" style="display:none;font-size:11px;color:var(--text3);margin-top:10px;line-height:1.7;white-space:pre-wrap;font-family:'Space Mono',monospace;"></div>
     </div>`;
 }
 
