@@ -4008,6 +4008,10 @@ body[data-theme="light"] {
     <div id="set-logmutation-wrap">
     <div class="settings-card">
       <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;">Records exactly when a History day's individual items list shrinks unexpectedly (not from a normal single-item delete) — for tracing a real bug where logged items have disappeared while totals stayed intact. Last 20 anomalies, with a call stack for each.</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input id="debugWatchDateInput" class="modal-input" placeholder="DD/MM/YY - date to watch on every save" style="flex:1;font-size:12px;padding:8px;">
+        <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="localStorage.setItem('mh_debug_watch_date', document.getElementById('debugWatchDateInput').value.trim()); showToast('Now watching that date on every save')">Set</button>
+      </div>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderLogMutationDebug()">🔍 View mutation log</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
@@ -4216,7 +4220,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.380</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.381</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4983,7 +4987,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.380'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.381'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5039,6 +5043,25 @@ if (state.notes && state.notes.includes(',')) {
 
 function saveState() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return;
+  // Universal tracer - watches a specific date (set via Settings) on EVERY
+  // single saveState() call, regardless of caller. The three function-level
+  // traces above all came back clean for a real, confirmed wipe, meaning the
+  // actual cause is somewhere saveState() itself touches - this catches it
+  // regardless of which code path triggers the save.
+  (function() {
+    const watchDate = localStorage.getItem('mh_debug_watch_date');
+    if (!watchDate) return;
+    const day = state.history.find(h => h.date === watchDate);
+    const logLength = day ? (day.log || []).length : null;
+    const log = JSON.parse(localStorage.getItem('mh_savestate_watch_log') || '[]');
+    log.unshift({
+      timestamp: new Date().toISOString(),
+      logLength, totals: day ? { ...(day.totals||{}) } : null,
+      stack: (new Error().stack || '').split('\n').slice(0, 6).join('\n')
+    });
+    if (log.length > 30) log.length = 30;
+    localStorage.setItem('mh_savestate_watch_log', JSON.stringify(log));
+  })();
   // Slim old history entries before persisting — keep full logs for last 30 days only,
   // strip log arrays from older entries (totals are preserved, just the per-item detail is dropped).
   // This keeps localStorage well under quota for 365+ day histories.
@@ -16367,6 +16390,22 @@ function renderLogMutationDebug() {
     ).join('\n\n---\n\n') + '\n\n';
   }
   text += '─────────────────────────────\n\n';
+  const watchDate = localStorage.getItem('mh_debug_watch_date');
+  const watchLog = JSON.parse(localStorage.getItem('mh_savestate_watch_log') || '[]');
+  if (watchDate) {
+    text += `SAVESTATE WATCH (every save, date: ${watchDate}):\n\n`;
+    if (watchLog.length === 0) {
+      text += 'No saves recorded yet since watch was set.';
+    } else {
+      text += watchLog.map((e, i) =>
+        `#${i+1} — ${e.timestamp}\n` +
+        `  Log length: ${e.logLength === null ? '(day not found)' : e.logLength}\n` +
+        `  Totals: ${JSON.stringify(e.totals)}\n` +
+        `  Call stack:\n${e.stack}`
+      ).join('\n\n---\n\n');
+    }
+    text += '\n\n─────────────────────────────\n\n';
+  }
   if (callTrace.length === 0) {
     text += 'CALL TRACE (every logFoods() call): none recorded yet.';
   } else {
@@ -16387,6 +16426,7 @@ function clearLogMutationDebug() {
   appConfirm('Clear the log mutation debug data?', () => {
     localStorage.removeItem('mh_log_mutation_debug');
     localStorage.removeItem('mh_logfoods_call_trace');
+    localStorage.removeItem('mh_savestate_watch_log');
     const out = document.getElementById('logMutationDebugOutput');
     if (out) out.style.display = 'none';
     showToast('Debug log cleared');
