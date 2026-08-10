@@ -4220,7 +4220,7 @@ body[data-theme="light"] {
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.382</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.383</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4987,7 +4987,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.382'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.383'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -4997,6 +4997,15 @@ const APP_VERSION = 'v3.10.382'; // single source of truth — bump here each re
 // a section above was collapsed.
 localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log from testing
 let state = loadState();
+// One-time corrective re-sort using the fixed comparator - the array has
+// been sorted with a broken string comparison for an unknown period, so
+// existing data needs fixing immediately on load rather than waiting for
+// the next natural push+sort to happen to run with the corrected version.
+// Cheap (784 entries sorts near-instantly) and safe to run on every load
+// regardless of whether this particular load actually needed it.
+if (state.history && state.history.length > 1) {
+  state.history.sort((a, b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
+}
 backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
 // Weight-phase auto-switch previously only ran via updateDashboard(), which
 // is only guaranteed to fire once the Today tab has actually rendered - if
@@ -5269,7 +5278,7 @@ async function restoreMissingHistoryDaysFromServer() {
         });
         restoredDates.push(date);
       });
-      state.history.sort((a,b) => a.date < b.date ? 1 : -1);
+      state.history.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
       saveState();
       if (typeof updateDashboard === 'function') updateDashboard();
       console.log(`[history] Pulled ${restoredDates.length} day(s) missing locally: ${restoredDates.join(', ')}`);
@@ -5295,6 +5304,23 @@ async function restoreMissingHistoryDaysFromServer() {
       }
     }
   } catch (e) {}
+}
+
+// Converts a DD/MM/YY date string into a genuinely chronologically-sortable
+// key ("20YY-MM-DD"). This exists because a plain string comparison on
+// DD/MM/YY is fundamentally broken for sorting - the day comes first in the
+// string, so "31/12/25" string-sorts as "greater than" "09/08/26" even
+// though December 2025 is chronologically many months EARLIER. This was a
+// real, confirmed root cause: state.history sorted this way grouped entries
+// by day-of-month rather than true date, meaning a genuinely recent day
+// could land far back in the array - and 30-day-retention logic, which uses
+// array position as a proxy for recency, would then silently strip that
+// day's full detail on every save, even though the save itself succeeded.
+function ddmmyySortKey(dateStr) {
+  const parts = (dateStr || '').split('/');
+  if (parts.length !== 3) return dateStr || ''; // malformed - fall back to raw string rather than throw
+  const [dd, mm, yy] = parts;
+  return `20${yy}-${mm}-${dd}`;
 }
 
 function todayStr() {
@@ -8067,7 +8093,7 @@ function backupMasterCSV() {
   const dateStr = todayStr().replace(/\//g, '-');
   const rows = state.history
     .filter(h => h.totals?.kcal > 0)
-    .sort((a,b) => a.date < b.date ? -1 : 1)
+    .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1)
     .map(h => {
       const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
       const tags = (h.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !legacy.includes(t.toLowerCase()));
@@ -8113,7 +8139,7 @@ function exportAll() {
   // 2. Nutrition CSV (master.csv format)
   const nutritionRows = state.history
     .filter(h => h.totals?.kcal > 0)
-    .sort((a,b) => a.date < b.date ? -1 : 1)
+    .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1)
     .map(h => `${h.date}|${h.totals.kcal}|${h.totals.protein}|${h.totals.carbs}|${h.notes||''}`)
     .join('\n');
   if (nutritionRows) download(nutritionRows, `master_${dateStr}.csv`, 'text/csv');
@@ -9136,7 +9162,7 @@ function recordActivityHistoryPoint(act, date) {
   const existing = log.findIndex(p => p.date === date && p.name === baseName);
   const point = { date, name: baseName, miles: Math.round(miles*100)/100, durationMin: parseFloat(act.duration), pace: miles/hours };
   if (existing >= 0) log[existing] = point; else log.push(point);
-  log.sort((a,b) => a.date < b.date ? -1 : 1);
+  log.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
   if (log.length > ACTIVITY_LOG_MAX) log = log.slice(log.length - ACTIVITY_LOG_MAX);
   localStorage.setItem(ACTIVITY_LOG_KEY, JSON.stringify(log));
 }
@@ -9299,7 +9325,7 @@ function getActivityPersonalBest(act) {
   if (similar.length === 0) return null;
   // Compare against the most recent matching session, not the best ever — "faster
   // than last time" is about recent comparison, not lifetime record-chasing
-  const last = similar.sort((a,b) => a.date < b.date ? 1 : -1)[0];
+  const last = similar.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1)[0];
   const hours = parseFloat(act.duration) / 60;
   const currentPace = miles / hours;
   const paceDiffPctPerMile = (currentPace - last.pace) / last.pace * 100;
@@ -18553,7 +18579,7 @@ function saveMissedDayConv(kcal, protein, carbs, fat) {
       // defensible available option, same reasoning as the live rollover fix.
       targetsSnapshot: { kcal: TARGETS.standard?.kcal, protein: TARGETS.standard?.protein, carbs: TARGETS.standard?.carbs, fat: parseInt(localStorage.getItem('mh_target_fat')) || 247 }
     });
-    state.history.sort((a,b) => a.date < b.date ? 1 : -1);
+    state.history.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
     showToast(`${dateVal} added to history ✓`);
   }
   saveState();
@@ -18821,7 +18847,7 @@ function saveMissedDay() {
       weight: null,
       targetsSnapshot: { kcal: TARGETS.standard?.kcal, protein: TARGETS.standard?.protein, carbs: TARGETS.standard?.carbs, fat: parseInt(localStorage.getItem('mh_target_fat')) || 247 }
     });
-    state.history.sort((a,b) => a.date < b.date ? 1 : -1);
+    state.history.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
     showToast(`${dateVal} added to history ✓`);
   }
   saveState();
@@ -19177,7 +19203,7 @@ function confirmWeight() {
     existing.weight = val;
   } else {
     state.history.push({ date: today, weight: val, log: [], totals: { kcal: 0, protein: 0, carbs: 0 } });
-    state.history.sort((a,b) => a.date < b.date ? 1 : -1);
+    state.history.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
   }
   saveState();
   updateDashboard();
@@ -20662,7 +20688,7 @@ function recordCalibrationPoint(metKcal, wearKcal, date) {
   const point = { date, metKcal: Math.round(metKcal), wearKcal: Math.round(wearKcal), ratio: wearKcal / metKcal };
   if (existing >= 0) log[existing] = point; else log.push(point);
   // Keep only the most recent N points
-  log.sort((a,b) => a.date < b.date ? -1 : 1);
+  log.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
   if (log.length > CALIBRATION_MAX_POINTS) log = log.slice(log.length - CALIBRATION_MAX_POINTS);
   localStorage.setItem(CALIBRATION_KEY, JSON.stringify(log));
 }
