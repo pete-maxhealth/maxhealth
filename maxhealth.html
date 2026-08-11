@@ -4260,7 +4260,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.412</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.413</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5008,7 +5008,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.412'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.413'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8199,6 +8199,52 @@ function backupMasterCSV() {
   showToast('master.csv saved to Downloads ✓');
 }
 
+// Builds the full backup payload once, shared between the local download
+// (exportAll) and the server-side POST (saveFullBackupToServer / the
+// automatic daily trigger) - previously this object only ever got built
+// inline inside exportAll(), meaning the server-save path would have had
+// to duplicate it rather than share one source of truth.
+function buildFullBackupPayload() {
+  return { state, library: loadLibrary(), recipes: loadRecipes(), routines: loadRoutines(), phaseHistory: getPhaseHistoryRaw(), autoSwitchDays: localStorage.getItem('mh_autoswitch_days'), notifAutoSwitch: localStorage.getItem('mh_notif_autoswitch'), exportedAt: new Date().toISOString() };
+}
+
+// Posts the full backup to the local server's /save-full-backup endpoint
+// (added specifically for this - BACKUP_DIR existed server-side already but
+// nothing ever wrote to it). Silent by default since this is also called
+// automatically once a day; pass silent=false for the explicit "Export All"
+// button so the person gets confirmation it actually reached the server,
+// not just Downloads.
+async function saveFullBackupToServer(silent = true) {
+  if (!_serverOnline) return false;
+  try {
+    const res = await fetch(`${MH_SERVER}/save-full-backup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildFullBackupPayload())
+    });
+    if (!res.ok) throw new Error('Server responded with an error');
+    localStorage.setItem('mh_last_full_backup_date', todayStr());
+    if (!silent) showToast('Full backup also saved to server ✓');
+    return true;
+  } catch (e) {
+    if (!silent) showToast('Server backup failed — local download still worked');
+    return false;
+  }
+}
+
+// Runs once on startup (see call site near other startup functions) - if
+// today hasn't had a full backup yet, does one automatically and silently.
+// This is the closest a browser-only app can get to a true scheduled daily
+// backup without the app running in the background 24/7: not a cron job,
+// but "first open of the day quietly backs up," which covers the actual
+// goal (a recent copy always exists server-side) for anyone who opens the
+// app at least once a day, which logging itself already requires anyway.
+function autoBackupIfNeeded() {
+  const lastBackup = localStorage.getItem('mh_last_full_backup_date');
+  if (lastBackup === todayStr()) return; // already done today
+  saveFullBackupToServer(true);
+}
+
 function exportAll() {
   const dateStr = todayStr().replace(/\//g,'-');
   let count = 0;
@@ -8220,10 +8266,13 @@ function exportAll() {
   // AI report framing, the auto-switch itself all depend on it) but was
   // never actually captured by this "backup everything" export before.
   download(
-    JSON.stringify({ state, library: loadLibrary(), recipes: loadRecipes(), routines: loadRoutines(), phaseHistory: getPhaseHistoryRaw(), autoSwitchDays: localStorage.getItem('mh_autoswitch_days'), notifAutoSwitch: localStorage.getItem('mh_notif_autoswitch'), exportedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(buildFullBackupPayload(), null, 2),
     `maxhealth_backup_${dateStr}.json`,
     'application/json'
   );
+  // Also push to the server, not just Downloads - explicit button press,
+  // so this one reports success/failure rather than failing silently.
+  saveFullBackupToServer(false);
 
   // 2. Nutrition CSV (master.csv format)
   const nutritionRows = state.history
@@ -25187,6 +25236,7 @@ async function checkServer() {
         badge.style.background = 'var(--accent-dim)';
       }
       updateDataBackupWarningForMode(true);
+      autoBackupIfNeeded(); // _serverOnline is only reliably true from this point on - calling earlier would silently skip today's backup
       const btn = document.getElementById('syncBtn');
       if (btn) { btn.disabled = false; btn.textContent = '⟳ SYNC NOW'; }
       const msg = document.getElementById('syncStatusMsg');
