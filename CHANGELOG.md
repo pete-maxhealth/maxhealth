@@ -1,5 +1,77 @@
 # MaxedHealth Changelog
 
+## Phase 14 (v3.10.297 – v3.10.417)
+
+A genuinely huge session — roughly 120 versions, spanning a full condition-scoping audit, a real multi-round bug hunt that traced a silent data-loss bug to its actual root cause, a full theme system rebuild, and a proper backup architecture with a real server-side endpoint. Less a single feature push than several distinct campaigns back to back.
+
+## New Features
+
+**Condition-scoping audit — 11 fixes**
+- Wellness drill-down insights (9 instances: Sleep, HR, HRV, SpO2, Walking, Ketosis, Protein, Muscle Mass) previously said "GBM protocol" unconditionally regardless of the person's actual condition — now correctly gated with condition-appropriate fallback text for T1/T2 diabetes and general users
+- Suggested Targets guidance now genuinely different per condition: GBM/epilepsy gets protein-tracks-weight + fat-is-fixed-ratio framing; T2 diabetes gets carb-ceiling-is-primary-lever framing; T1 diabetes gets a caution to check with a diabetes team; general gets neutral framing
+- Calories drill-down had a hardcoded personal reference ("cream shake") and a hardcoded "92-93kg" weight target baked into generic UI text — now genuinely dynamic and condition-neutral
+
+**3-pronged ingredient search**
+- Searching an ingredient now checks Library first (instant, your own saved items), then Open Food Facts, then offers an AI estimate as a clearly-labelled last resort ("AI estimate — not a verified database entry"), never auto-applied without confirmation
+
+**History target snapshots**
+- Historical days previously showed *current* targets in "out of X" figures (TARGETS is a live Proxy), meaning every settings change silently rewrote history's target displays retroactively
+- Each history entry now snapshots the targets active on that actual day; older entries without a snapshot get a phase-history-based approximation (marked with "~") rather than showing today's numbers
+
+**Ketosis Adherence — a genuine Trends chart**
+- Previously existed only as a streak banner, a Journey summary stat, and a written correlation insight — never as its own drill-down chart. Now a real green/red bar-per-day chart, checked against each day's own mode-specific ceiling (Standard/Occasion/Holiday), not one fixed number
+- T1 diabetes gets a clear, explicit distinction between nutritional ketosis (what this tracks) and DKA (a genuine medical emergency with a different cause) — not just a caveat, an unmissable note with symptoms to watch for
+
+**Multi-file import**
+- Select several CSVs at once in one picker; each auto-matched to the right dataset by filename (tolerant of date-suffixed or "(1)"-suffixed real-world filenames)
+- Later consolidated further: Import and Export now share one radio-toggled list rather than being separate UI patterns, and Export always saves to the server alongside the local download rather than being two separate actions
+
+**Theme system rebuilt from the ground up**
+- Was 5 fully-baked, mutually exclusive themes (Midnight/Aurora/Carbon/Slate/Light), each bundling a background palette *and* an accent together
+- Now: Base (Dark/Light/Auto — Auto follows system preference) and Accent (any custom colour, works on any base) are fully independent choices, matching how the existing Icon Pack system already worked
+- Vital/Pulse/Forge visual themes got genuine light-mode palettes built (previously dark-only, with no light equivalent at all) — each keeps its distinct character (Vital's clinical sharpness, Pulse's organic roundness, Forge's intense warmth) adapted for a white background, with accent colours darkened for contrast
+
+**Settings Change Log**
+- Every setting on the Manage tab now auto-saves on blur instead of requiring an explicit Save tap (10 buttons removed) — the safety net for this is a new change log recording what changed, old value, new value, when, with a per-entry "copy old value" button for easy reverting. Rotates to keep the last 7 days only
+
+**Full server-side backup**
+- New `/save-full-backup` server endpoint (server.py) — the full JSON state (today's log, complete history, Library, Recipes, Routines, Weight Phase History) previously had *no* server-side home at all, only ever a local browser download
+- 7-day rotation, same principle as the Settings Change Log
+- Automatic daily trigger — first app-open of the day silently backs up to the server once local mode is confirmed; not a true background cron, but the closest a browser-only app can get without running 24/7
+- "Full App State" folded into the same unified Import/Export list as the other 5 datasets — export-only for now, since full-state restore is a genuinely different, more careful feature than the other 5 tables' simple CSV import
+
+**Tap-to-reveal help text throughout Settings**
+- Long explanatory paragraphs that were permanently visible under every card title — read once, then just clutter for a returning user — now hidden behind a small "?" that reveals on tap. Applied across Import, Manage, and Insights/Reports tabs (several dozen instances)
+
+## Fixed
+
+**The History silent-data-loss bug — full root cause found**
+- Real, reproducible bug: individually logged items on a History day would vanish (list empty) while the day's totals stayed correct — genuinely difficult to trace, since the in-memory session state was always correct; only what got *persisted* was affected
+- Root cause: `state.history` was being sorted with a plain string comparison on "DD/MM/YY" dates — fundamentally broken, since day comes first in that string ("31/12/25" string-sorts as "greater than" "09/08/26" despite being chronologically months earlier)
+- This scrambled the array's true chronological order, meaning a genuinely recent day could land far back in the array — and the 30-day localStorage-size-management logic (which strips item-level detail from anything beyond the 30 most recent, using array *position* as a proxy for recency) would then silently strip that day's items on every save, even though the save itself succeeded
+- Fixed with a real date-comparison helper (`ddmmyySortKey`) replacing the broken string comparison in all 10 places it existed, plus a one-time corrective re-sort on app load so existing scrambled history self-heals immediately rather than waiting for the next natural sort
+
+**Accent picker not visually applying**
+- A second, genuine root cause hunt: picking a custom accent colour correctly updated the underlying CSS variable (confirmed via direct computed-value inspection) but almost nothing on screen reflected it
+- Actual cause: leftover dead code from an older, since-removed parallel theme system still set `data-theme` directly on `document.body` on every startup — since `<body>` contains the entire visible app, and CSS custom properties resolve to the nearest declaration, this silently re-declared the theme's own default accent on body, overriding the correctly-set value inherited from `<html>` for literally everything visible
+- Also fixed: `applyTheme()` was unconditionally clearing any custom accent on every base switch; a leftover pre-redesign branch treated visual-theme-active base-swatch taps as accent-only changes rather than genuine base switches; the three Base swatch preview stripes had their accent hardcoded inline rather than reflecting whatever's actually active
+
+**Static-text condition leaks**
+- A "Fat % here is a ketosis requirement" explainer unconditionally said "for the GBM protocol" in static HTML regardless of the person's actual selected condition — found via live condition-switching tests, not caught by earlier code-review-only passes
+
+**Demo library refreshed with real, current data**
+- Was a stale snapshot (143 items) from an earlier point in the library's growth; refreshed to the current real library (185 items) and real recipes (10, replacing a single placeholder) — alcohol and "Treatment day" entries deliberately kept rather than sanitised, since an honest demo was judged more valuable than a polished one
+
+## Infrastructure
+
+**AI Provider / shared-proxy messaging**
+- "Unlimited use, billed to you" read as a statement of current fact rather than what adding your own key would mean — reworded, and the vague "capped daily/monthly" replaced with the real number (`PROXY_DAILY_CAP = 60` calls/day), both now sourced from the actual constant rather than hardcoded prose
+
+**server.py**
+- Removed `/save-library` and `/load-library` — referenced an undefined `LIBRARY_JSON` variable that would have thrown a server error if ever genuinely hit; fully superseded by the working `/save-library-csv` and `/library` endpoints
+
+---
+
 ## Phase 13 (v3.10.289 – v3.10.296)
 
 Continuous voice input, extended from Recipe Builder (built last phase) out to everywhere it genuinely fits, plus a proper look at what the shared Cloudflare Worker actually costs as usage scales.

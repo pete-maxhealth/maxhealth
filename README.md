@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.272
+**Version:** v3.10.417
 
 ---
 
@@ -48,6 +48,9 @@
 - **Multi-AI consensus check** — verify any logged item against Claude, Gemini, and ChatGPT independently, one tap. Three estimates agreeing is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as worth finding a real label rather than trusting any of them. Each provider's own numbers are checked for internal consistency before comparing. Per-provider checkboxes let you exclude an outlier before applying an average to a single item.
 - **Activity Credit Balance** — rolling-window tracking (Insights → Trends) of exercise calorie credit earned vs actually eaten back, built from real stored history. A single day under an exercise-boosted target is harmless; this surfaces the pattern if it's happening often enough to compound into something real, with interpretation tailored to your actual Goal/Phase setting.
 - **Phase-aware calorie context** — Remaining Today distinguishes harmless unclaimed exercise credit from genuine under-eating against your actual base target, worded differently for maintain/gain/lose goals.
+- **Base + Accent, fully independent** — theme is now two separate choices rather than 5 fixed bundles: Base (Dark/Light/Auto — Auto follows system preference) and Accent (any custom colour, works on either base). Vital/Pulse/Forge visual themes each have genuine light-mode palettes too, not just dark.
+- **Settings auto-save + Change Log** — every setting saves on blur, no explicit Save taps required. The safety net: a Change Log records what changed, old value, new value, when — with a one-tap "copy old value" for reverting an accidental edit, keeping the last 7 days.
+- **Ketosis Adherence trend** — a real chart (Insights → Trends), not just a streak banner — green/red per day, checked against that day's own mode-specific ceiling, not one fixed number. T1 diabetes gets an explicit, unmissable distinction between this (nutritional ketosis) and DKA (a genuine medical emergency).
 
 ---
 
@@ -96,17 +99,19 @@ For anything other than `maxhealth.html` itself (worker.js, docs, scripts), comm
 
 ## Full backup
 
-Two separate layers need covering — a filesystem backup can't reach into the browser's storage, and the browser can't back up server files.
+Three layers now, not two — a filesystem backup can't reach into the browser's storage, and the browser can't back up server files, but local installs also get a genuinely automatic layer that didn't exist before.
 
-**1. In the app itself: Settings → Data & Backup → 📦 EXPORT ALL DATA** — captures everything living only in browser storage (today's log, full history, library, recipes, routines, settings). Nothing else backs this up automatically; it only exists if this button gets tapped.
+**1. Automatic (local installs only, no action needed):** the full JSON state (today's log, complete history, library, recipes, routines, settings) backs itself up to the server once a day, on the first app-open of the day, once local mode is confirmed. 7-day rotation, same as the wearable pipeline's own backups. Not a true background cron — it needs the app to be opened at least once daily, which logging itself already requires — but it means a recent server-side copy always exists without doing anything.
 
-**2. Filesystem (local install only):**
+**2. Manual, any time: Settings → Import → Full App State → Export selected** — same JSON as the automatic backup, downloaded locally *and* pushed to the server immediately, rather than waiting for the next automatic cycle. Useful right after a change you don't want to risk losing before tomorrow's automatic run. This is the only layer that exists at all for cloud/GitHub Pages users, since there's no server to back up to automatically.
+
+**3. Filesystem (local install only):**
 ```bash
 pkg install zip -y
 cd /storage/emulated/0/maxhealth
 zip -r "/storage/emulated/0/Download/maxhealth_full_backup_$(date +%Y%m%d).zip" app/maxhealth/ data/tables/ data/backup/
 ```
-(`data/backup/` holds the pipeline's own rolling 7-day backups of the CSV/JSON files — previously missed by this command, meaning a restore from an older version of this zip alone would have current data but no historical fallback.)
+(`data/backup/` now holds two things worth keeping separate in your head: the wearable pipeline's own rolling 7-day backups of the CSV/JSON files, and — as of the full-backup endpoint — the app's own daily `maxhealth_backup_YYYY-MM-DD.json` snapshots, also rotating at 7 days.)
 
 ---
 

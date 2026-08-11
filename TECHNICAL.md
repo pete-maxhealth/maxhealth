@@ -72,8 +72,9 @@ date|kcal|protein|carbs|fat|notes
 | `mh_weight_target_high` | Weight target upper bound |
 | `mh_name` | User name |
 | `mh_condition` | Medical condition (gbm, t2d, general) |
-| `mh_visual_theme` | Visual colour theme |
-| `mh_color_scheme` | Dark/light/auto scheme |
+| `mh_visual_theme` | Visual colour theme — `none` / `vital` / `pulse` / `forge`. Independent of `mh_theme` (base) as of the Phase 14 theme rebuild — each visual theme now has its own light-mode palette too, activated via `[data-theme="light"][data-visual-theme="..."]` combined selectors |
+| `mh_theme` | Base — `midnight` (default) / `light` / `auto` (follows system preference). Replaces the old `mh_color_scheme` key (removed Phase 14 — a genuine parallel system that caused a real bug, see Known Issues) |
+| `mh_custom_accent` | Custom accent hex, independent of base — set via the swatch presets or the native colour picker in Customise. Re-applied automatically whenever base changes (`applyTheme()` no longer clears it on switch, a Phase 14 fix) |
 | `mh_recent_scans` | Last 10 barcode scans |
 | `mh_saved_queries` | Saved report queries |
 | `mh_notif_prefs` | Notification preferences |
@@ -96,6 +97,9 @@ date|kcal|protein|carbs|fat|notes
 | `mh_provider` | AI provider selection — `none` (proxy) / `claude` / `openai`. Determines whether `callHealthAI()` calls Anthropic/OpenAI directly with a personal key, or falls through to the shared Cloudflare Worker proxy |
 | `mh_apikey` | Personal API key, used only when `mh_provider` is `claude` or `openai` |
 | `mh_activity_credit_window` | Activity Credit Balance's rolling window size in days (default 14, adjustable 7-90 directly in the card) |
+| `mh_settings_change_log` | Settings Change Log (Phase 14) — every auto-saved setting change on Manage, with old/new value and timestamp. 7-day rotation |
+| `mh_last_full_backup_date` | Last date the automatic daily server backup ran (see `/save-full-backup`) — checked on startup so it only fires once per day |
+| `mh_last_export_nudge` | Last date "Export All Data" was used, for the 7-day reminder banner shown after logging |
 
 ---
 
@@ -243,6 +247,7 @@ The API Token needs the "Edit Cloudflare Workers" template, or a custom token wi
 | v3.10.x | 10 | Library-aware meal suggestions, ingredient substitution, recipe-aware suggestions, dashboard/tab reordering, ketosis milestones, four new nutrition sanity checks, demo mode overhaul, corrected TDEE (height fix: 188cm not 178cm) |
 | v3.10.202-272 | 12 | Multi-AI consensus check (Claude/Gemini/OpenAI), log food to a past day, Activity Credit Balance, phase-aware calorie context — plus a large infrastructure/reliability pass: Worker request-forwarding, direct-API-key path (missing body, missing CORS header), sleep pipeline extractors-path bug, cloud deploy silently ~100 versions behind, fuzzy-match apostrophe/brand fixes, activity-credit duplicate-calculation unification |
 | v3.10.289-296 | 13 | Continuous voice input extended across meal logging, missed-day, library batch-add, and supplements (plus single-shot voice for weight/water); fixed a meal-voice pause dead-end (manual mic-tap now offers Log-it, not just resume); Cloudflare Worker server-side rate limiting (per-IP daily cap + hard monthly cost ceiling via Workers KV) to bound shared-proxy cost regardless of user scale |
+| v3.10.297-417 | 14 | Condition-scoping audit (11 fixes); 3-pronged ingredient search (Library → OFF → AI); History target snapshots (fixes retroactive rewriting from live TARGETS proxy); Ketosis Adherence as a genuine Trends chart; found and fixed a real silent-data-loss bug (broken DD/MM/YY string date-sort scrambled history's true chronological order, causing the 30-day localStorage-size logic to silently strip recent days' items); full theme system rebuild (Base/Accent fully independent, was 5 fixed bundles); found and fixed a second root-cause bug (leftover dead code setting `data-theme` on `document.body` silently overrode the correct accent for everything visible); Settings auto-save + Change Log (removed 10 explicit Save buttons); real server-side full backup (`/save-full-backup`, 7-day rotation, automatic daily trigger) — `data/backup/` finally gets used, having existed unused since the folder structure was first created; tap-to-reveal help text across Import/Manage/Insights (several dozen instances) |
 
 ---
 
@@ -281,6 +286,23 @@ python update_health.py
 ```bash
 curl http://localhost:5757/ping
 ```
+
+---
+
+## Full server-side backup (Phase 14)
+
+`BACKUP_DIR` (`data/backup/`) existed since the folder structure was first set up — created on every server startup — but nothing ever wrote to it until this. The 5 CSV tables had their own server persistence via `/save-library-csv` etc. and `saveLibrary()`'s "always try, silent fail if unavailable" pattern; the full JSON state (today's log, complete history, everything `buildFullBackupPayload()` builds client-side) had no server-side home at all, only ever a local browser download.
+
+**Endpoint:** `POST /save-full-backup` (server.py) — accepts the same JSON `exportAll()` already builds, writes to `data/backup/maxhealth_backup_YYYY-MM-DD.json`, one file per calendar day. 7-day rotation on every write (deletes anything beyond the most recent 7 files, sorted by filename).
+
+**Client-side trigger (maxhealth.html):**
+- `buildFullBackupPayload()` — the shared payload builder, used by both the local download and the server POST, so they can never drift apart
+- `saveFullBackupToServer(silent)` — checks `_serverOnline` before attempting (unlike the older CSV pattern, which attempts-and-silently-fails); posts to `/save-full-backup`; updates `mh_last_full_backup_date` on success
+- `autoBackupIfNeeded()` — called from `checkServer()`'s confirmed-local success path (both the immediate hostname-based one and the async ping-confirmed one — there are two, see below). Checks `mh_last_full_backup_date` against today; if not yet done today, backs up silently. Not a true scheduled job — it's "first app-open of the day," which covers the real goal (a recent server copy always exists) for anyone who opens the app daily, which logging itself already requires
+
+**Cloud users:** `_serverOnline` is false (no local server reachable), so `saveFullBackupToServer()` returns early without attempting anything — local download via `exportAll()` still works exactly as before, just without the server half. This is correct, not a gap — cloud users have never had a server to back up to.
+
+**Gotcha worth knowing:** the badge showing "⬡ LOCAL" and the backup/warning text updating are two separate code paths — one fires immediately on hostname alone (before any server ping resolves), the other fires later inside `checkServer()`'s async success callback. Both now call `updateDataBackupWarningForMode()` / `autoBackupIfNeeded()`, but if either one is extended in future, check both call sites, not just one — this exact gap caused the backup-status text to visibly lag behind the badge for a moment on a previous version.
 
 ---
 
@@ -530,11 +552,14 @@ This is the single-day companion to Activity Credit Balance above — this note 
 - Water target celebration not firing
 - `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
 - OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
+- Full App State (Import tab) is export-only — no restore-from-backup function exists yet. Genuinely different, more careful feature than the other 5 tables' import (which only ever adds/updates rows); a full-state restore would overwrite everything, including today's log
 
 **Resolved this session, previously listed here:**
 - ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)
 - ~~Monthly summary may truncate if Cloudflare Worker caps `max_tokens`~~ — this was the Worker's hardcoded `max_tokens: 500`, now forwards the client's actual request
 - ~~Tab bleeding — occasional, cosmetic only~~ — was specifically the Reset button's text overflowing its container once a 6th hydration button was added; fixed with overflow/ellipsis safety on the button style
+- ~~History items silently disappearing while totals stayed correct~~ — genuinely difficult bug, several rounds of live tracing before finding it: `state.history` was sorted with a plain string comparison on "DD/MM/YY" dates, which is fundamentally broken (day comes first in the string, so "31/12/25" string-sorts as "greater than" "09/08/26"). This scrambled the array's true chronological order, and the 30-day localStorage-size-management logic — which strips item-level detail from anything beyond the 30 most recent, using array *position* as a proxy for recency — would then silently strip a genuinely recent day's items on every save. Fixed with a real `ddmmyySortKey()` comparator replacing the broken one in all 10 places it existed, plus a one-time corrective re-sort on load so already-scrambled history self-heals immediately
+- ~~Custom accent colour not visually applying despite the CSS variable being confirmed correct~~ — a second, separate root-cause hunt. Leftover dead code from an older, already-removed parallel theme system still set `data-theme` directly on `document.body` on every startup. Since `<body>` contains the entire visible app and CSS custom properties resolve to the nearest declaration, this silently re-declared the theme's own default accent on body, overriding the correctly-set value inherited from `<html>` for everything visible — while the computed-value check on `documentElement` (where the inline style genuinely lived) kept confirming "correct," which is what made this one hard to see
 
 ---
 
