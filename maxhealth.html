@@ -4184,10 +4184,6 @@
         <div class="settings-label">Today's entries</div>
         <div class="settings-value" id="todayCount">—</div>
       </div>
-      <button class="run-btn" onclick="exportAll()" style="width:100%;margin-bottom:8px;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);color:var(--yellow);">
-        📦 EXPORT ALL DATA
-      </button>
-      <div class="settings-hint" style="margin-bottom:14px;"><span class="help-slot" data-id="exportalldata" data-text="Downloads several files to your Downloads folder: full JSON backup (includes library, recipes, routines), nutrition CSV, combined CSV. Keep them somewhere safe."></span></div>
       <button class="copy-btn" onclick="clearTodayLog()" style="width:100%;margin-bottom:4px;background:rgba(235,80,80,0.08);border-color:rgba(235,80,80,0.25);color:#eb5050;">🗑 CLEAR TODAY'S LOG</button>
       <div class="settings-hint" style="margin-bottom:0;"><span class="help-slot" data-id="cleartoday" data-text="Wipes today's food entries only — history is untouched. Use if yesterday's log rolled over incorrectly."></span></div>
     </div>
@@ -4260,7 +4256,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.414</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.416</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5008,7 +5004,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.414'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.416'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12266,7 +12262,15 @@ function bulkExportAndSaveSelected() {
   // one happened to be tapped. No separate save-to-server action anymore.
   const selected = getBulkSelectedDatasets();
   if (!selected.length) { showToast('Select at least one dataset first'); return; }
-  selected.forEach(key => { genericExportCSV(key, true); genericSaveToServerNow(key, true); });
+  // "fullstate" is a genuine special case, not one of the 5 CSV tables -
+  // same list, same button, but routes through exportAll() (JSON, includes
+  // today's log and full history) rather than the generic per-table CSV
+  // path the other 5 share. From the user's actual perspective this is
+  // still just "another thing on the list to back up" - the file-format
+  // difference underneath doesn't need its own separate UI.
+  const csvKeys = selected.filter(k => k !== 'fullstate');
+  csvKeys.forEach(key => { genericExportCSV(key, true); genericSaveToServerNow(key, true); });
+  if (selected.includes('fullstate')) exportAll();
   showToast(`Exported & saved ${selected.length} dataset${selected.length===1?'':'s'} ✓`);
 }
 
@@ -12286,12 +12290,12 @@ function setBulkActionMode(mode) {
 }
 
 function buildBulkDataActionsCard() {
-  const labels = { library: 'Food Library', supplements: 'Supplements', recipes: 'Recipes', routines: 'Routines', strength: 'Strength Log' };
+  const labels = { library: 'Food Library', supplements: 'Supplements', recipes: 'Recipes', routines: 'Routines', strength: 'Strength Log', fullstate: 'Full App State (export only)' };
   const options = Object.keys(labels).map(key => `<option value="${key}" selected>${labels[key]}</option>`).join('');
   return `
     <div class="import-card" style="background:rgba(45,235,143,0.04);border-color:rgba(45,235,143,0.2);">
       <div class="import-label">Import / Export</div>
-      <span class="help-slot" data-id="bulkactions" data-text="Same list either way. Export writes the selected datasets to Downloads and the server together. Import auto-matches whichever files you pick to the right dataset by filename."></span>
+      <span class="help-slot" data-id="bulkactions" data-text="Same list either way for the first 5. Export writes selected datasets to Downloads and the server together; import auto-matches whichever files you pick to the right dataset by filename. Full App State is export-only - it's the one exception, since there's no restore-from-backup function built yet, only individual-table import for the other 5."></span>
       <div style="display:flex;gap:16px;margin-bottom:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
           <input type="radio" name="bulkMode" value="export" checked onchange="setBulkActionMode('export')" style="accent-color:var(--accent);"> Export
@@ -12300,7 +12304,7 @@ function buildBulkDataActionsCard() {
           <input type="radio" name="bulkMode" value="import" onchange="setBulkActionMode('import')" style="accent-color:var(--accent);"> Import
         </label>
       </div>
-      <select id="bulkDatasetSelect" multiple style="width:100%;min-height:120px;margin-bottom:14px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;">
+      <select id="bulkDatasetSelect" multiple style="width:100%;min-height:130px;margin-bottom:14px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:13px;">
         ${options}
       </select>
       <button id="bulkExportBtn" class="copy-btn" onclick="bulkExportAndSaveSelected()" style="width:100%;font-size:12px;display:block;">💾 Export selected (Downloads + server)</button>
@@ -19920,10 +19924,10 @@ function updateDataBackupWarningForMode(isLocal) {
   headline.style.color = isLocal ? 'var(--green)' : 'var(--yellow)'; // was staying hardcoded yellow (a caution colour) even for the local "you're covered" confirmation, which read oddly
   if (isLocal) {
     headline.innerHTML = '✓ Auto-backed up to your local server daily<span onclick="const el=document.getElementById(\'help-databackupwarning\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span>';
-    if (helpSpan) helpSpan.innerHTML = "Your daily nutrition totals sync to the server on every rollover and edit. The full detail — individual logged items, Library, Recipes, Routines, Weight Phase History — backs up automatically once a day, on the first time you open the app that day. Anything changed after today's auto-backup already ran won't be captured server-side until tomorrow's — tap the button below any time for an immediate, up-to-the-minute backup instead of waiting.";
+    if (helpSpan) helpSpan.innerHTML = "Your daily nutrition totals sync to the server on every rollover and edit. The full detail — individual logged items, Library, Recipes, Routines, Weight Phase History — backs up automatically once a day, on the first time you open the app that day. Anything changed after today's auto-backup already ran won't be captured server-side until tomorrow's — select Full App State on the Import tab any time for an immediate, up-to-the-minute backup instead of waiting.";
   } else {
     headline.innerHTML = '⚠ Your data lives in browser storage<span onclick="const el=document.getElementById(\'help-databackupwarning\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span>';
-    if (helpSpan) helpSpan.innerHTML = "Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you tap the button below. If Chrome ever clears site data, it's gone without a trace.";
+    if (helpSpan) helpSpan.innerHTML = "Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you select Full App State on the Import tab. If Chrome ever clears site data, it's gone without a trace.";
   }
 }
 
