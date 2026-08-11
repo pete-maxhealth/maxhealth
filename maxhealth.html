@@ -4175,14 +4175,16 @@
     <div class="section-title" style="cursor:pointer;" onclick="toggleSection('set-databackup','set-databackup-wrap','set-databackup-icon')">Data &amp; Backup <span id="set-databackup-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-databackup-wrap">
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
-      <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you tap the button below. If Chrome ever clears site data, it's gone without a trace."></span></div>
-      <div class="settings-row" style="margin-bottom:12px;">
-        <div class="settings-label">History entries</div>
-        <div class="settings-value" id="histCount">—</div>
-      </div>
-      <div class="settings-row" style="margin-bottom:14px;">
-        <div class="settings-label">Today's entries</div>
-        <div class="settings-value" id="todayCount">—</div>
+      <div id="dataBackupStatusBlock">
+        <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
+        <div class="settings-row" style="margin-bottom:12px;">
+          <div class="settings-label">History entries</div>
+          <div class="settings-value" id="histCount">—</div>
+        </div>
+        <div class="settings-row" style="margin-bottom:14px;">
+          <div class="settings-label">Today's entries</div>
+          <div class="settings-value" id="todayCount">—</div>
+        </div>
       </div>
       <button class="copy-btn" onclick="clearTodayLog()" style="width:100%;margin-bottom:4px;background:rgba(235,80,80,0.08);border-color:rgba(235,80,80,0.25);color:#eb5050;">🗑 CLEAR TODAY'S LOG</button>
       <div class="settings-hint" style="margin-bottom:0;"><span class="help-slot" data-id="cleartoday" data-text="Wipes today's food entries only — history is untouched. Use if yesterday's log rolled over incorrectly."></span></div>
@@ -4256,7 +4258,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.416</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.417</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5004,7 +5006,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.416'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.417'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -19910,25 +19912,27 @@ function initHelpSlots() {
 }
 
 // The "your data lives in browser storage" warning was written assuming
-// cloud mode, where that's fully true - but on Local, daily nutrition
-// totals genuinely do auto-sync to the server on every rollover and edit
-// (saveNutritionToServer, several call sites). Only the full detail - the
-// individual log items, Library, Recipes, Routines - still needs the
-// manual Export/Save action either way. Reworded per-mode so Local users
-// aren't told something that overstates their actual risk, while still
-// being honest that full detail isn't automatically protected either way.
+// cloud mode, where that's fully true. Local users now get a real, fully
+// automatic daily backup (see saveFullBackupToServer/autoBackupIfNeeded),
+// so there's nothing left for them to decide or act on regarding backup
+// status - showing a status block for something fully automatic is still
+// clutter even when the message itself is reassuring rather than a warning.
+// So for Local, this hides the whole status block (headline + entry counts)
+// rather than just softening its wording - Clear Today's Log, a genuine
+// action, stays visible either way since it's unrelated to backup status.
+// Cloud users still see the real warning, since nothing backs them up
+// automatically at all.
 function updateDataBackupWarningForMode(isLocal) {
+  const statusBlock = document.getElementById('dataBackupStatusBlock');
+  if (statusBlock) statusBlock.style.display = isLocal ? 'none' : 'block';
+  if (isLocal) return; // nothing left to update below - text only matters when the block is actually shown
+
   const headline = document.getElementById('dataBackupWarningHeadline');
   if (!headline) return;
   const helpSpan = document.getElementById('help-databackupwarning');
-  headline.style.color = isLocal ? 'var(--green)' : 'var(--yellow)'; // was staying hardcoded yellow (a caution colour) even for the local "you're covered" confirmation, which read oddly
-  if (isLocal) {
-    headline.innerHTML = '✓ Auto-backed up to your local server daily<span onclick="const el=document.getElementById(\'help-databackupwarning\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span>';
-    if (helpSpan) helpSpan.innerHTML = "Your daily nutrition totals sync to the server on every rollover and edit. The full detail — individual logged items, Library, Recipes, Routines, Weight Phase History — backs up automatically once a day, on the first time you open the app that day. Anything changed after today's auto-backup already ran won't be captured server-side until tomorrow's — select Full App State on the Import tab any time for an immediate, up-to-the-minute backup instead of waiting.";
-  } else {
-    headline.innerHTML = '⚠ Your data lives in browser storage<span onclick="const el=document.getElementById(\'help-databackupwarning\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span>';
-    if (helpSpan) helpSpan.innerHTML = "Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you select Full App State on the Import tab. If Chrome ever clears site data, it's gone without a trace.";
-  }
+  headline.style.color = 'var(--yellow)';
+  headline.innerHTML = '⚠ Your data lives in browser storage<span onclick="const el=document.getElementById(\'help-databackupwarning\');el.style.display=el.style.display===\'none\'?\'block\':\'none\';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span>';
+  if (helpSpan) helpSpan.innerHTML = "Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you select Full App State on the Import tab. If Chrome ever clears site data, it's gone without a trace.";
 }
 
 function showToast(msg, actionLabel, actionFn, duration = 2000) {
