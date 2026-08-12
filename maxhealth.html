@@ -3880,8 +3880,7 @@
           style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:12px;font-family:Space Mono,monospace;line-height:1.6;resize:vertical;min-height:80px;"
           placeholder="2026-03-12 loss&#10;2026-06-21 gain" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingsPhaseHistory', 'Weight Phase History', savePhaseHistory)"></textarea>
         <div style="display:flex;gap:8px;width:100%;">
-          <button class="copy-btn" onclick="document.getElementById('phaseHistoryImportFile').click()" style="flex:1;font-size:12px;">📂 Import from backup</button>
-          <input type="file" id="phaseHistoryImportFile" accept=".json" style="display:none;" onchange="importPhaseHistoryFromBackup(this)">
+          <button class="copy-btn" onclick="importPhaseHistoryFromServer()" style="flex:1;font-size:12px;">📂 Import from backup</button>
         </div>
         <div style="font-size:11px;color:var(--text3);">Example: first line <span style="font-family:Space Mono,monospace;">2026-03-12 loss</span> means intentional loss from data start. Second line <span style="font-family:Space Mono,monospace;">2026-06-21 gain</span> means gaining phase from that date.</div>
       </div>
@@ -4258,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.424</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.425</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5016,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.424'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.425'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7246,22 +7245,30 @@ function getPhaseHistoryRaw() {
 // the actual confirmation step means there's no separate confirm dialog to
 // build, and it gives a chance to review/edit before anything is committed,
 // consistent with this app's "ask before proceeding" approach elsewhere.
-function importPhaseHistoryFromBackup(input) {
-  const file = input.files[0];
-  if (!file) return;
-  input.value = ''; // allow re-selecting the same file later if needed
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    let data;
-    try {
-      data = JSON.parse(e.target.result);
-    } catch (err) {
-      showToast('Not a valid backup file — could not parse JSON');
+// Pulls the most recent daily backup straight from the server - no file
+// picker, no hunting through device folders for a filename like
+// "maxhealth_backup_2026-08-11.json" sitting next to unrelated JSON files
+// (field_sources_*.json from the wearable pipeline). Same server backups
+// the Restore-from-Backup feature already uses; this just needs one field
+// out of the most recent one, and it's non-destructive (populates the
+// textarea for review, doesn't save until the person taps Save themselves).
+async function importPhaseHistoryFromServer() {
+  showToast('Checking server for backups…');
+  try {
+    const listRes = await fetch(`${MH_SERVER}/list-backups`, { signal: AbortSignal.timeout(5000) });
+    const listData = await listRes.json();
+    if (!listData.backups || listData.backups.length === 0) {
+      showToast('No backups found on the server yet');
       return;
     }
+    // Server returns these newest-first (sorted with reverse=True), so the
+    // most recent backup is the first entry, not the last.
+    const latest = listData.backups[0];
+    const res = await fetch(`${MH_SERVER}/load-full-backup?date=${latest.date}`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('Server returned an error');
+    const data = await res.json();
     if (typeof data.phaseHistory !== 'string' || !data.phaseHistory.trim()) {
-      showToast('No phase history found in this backup file');
+      showToast(`No phase history found in the ${latest.date} backup`);
       return;
     }
     const el = document.getElementById('settingsPhaseHistory');
@@ -7269,11 +7276,12 @@ function importPhaseHistoryFromBackup(input) {
       el.value = data.phaseHistory.trim();
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    showToast('Imported — review below, then tap Save to confirm');
-  };
-  reader.onerror = () => showToast('Could not read that file — try again');
-  reader.readAsText(file);
+    showToast(`Imported from ${latest.date} backup — review below, then tap Save to confirm`);
+  } catch (e) {
+    showToast('Could not reach the server backup — try again');
+  }
 }
+
 
 function savePhaseHistory() {
   const el = document.getElementById('settingsPhaseHistory');
