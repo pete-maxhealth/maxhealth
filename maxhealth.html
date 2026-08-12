@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.426</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.427</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.426'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.427'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7309,14 +7309,35 @@ async function importPhaseHistoryFromServer() {
       showToast('No backups found on the server yet');
       return;
     }
-    // Server returns these newest-first (sorted with reverse=True), so the
-    // most recent backup is the first entry, not the last.
-    const latest = listData.backups[0];
-    const res = await fetch(`${MH_SERVER}/load-full-backup?date=${latest.date}`, { signal: AbortSignal.timeout(10000) });
+    
+    // Show a picker for which backup to load from
+    const modal = document.createElement('div');
+    modal.id = 'phaseHistoryBackupPicker';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:400px;width:100%;max-height:60vh;overflow-y:auto;">
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;">Pick a backup to restore phase history from</div>
+        ${listData.backups.map(b => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+            <span style="font-size:13px;color:var(--text2);">${b.date} <span style="color:var(--text3);">(${Math.round(b.size / 1024)}KB)</span></span>
+            <button class="copy-btn" style="width:auto;font-size:11px;padding:6px 12px;background:var(--accent-dim);color:var(--accent);border-color:var(--accent-glow);" onclick="loadPhaseHistoryFromBackup('${b.date}')">Load</button>
+          </div>
+        `).join('')}
+        <button class="copy-btn" style="width:100%;margin-top:12px;background:var(--surface2);color:var(--text3);" onclick="document.getElementById('phaseHistoryBackupPicker').remove()">Cancel</button>
+      </div>`;
+    document.body.appendChild(modal);
+  } catch (e) {
+    showToast('Could not reach the server to list backups');
+  }
+}
+
+async function loadPhaseHistoryFromBackup(dateStr) {
+  try {
+    const res = await fetch(`${MH_SERVER}/load-full-backup?date=${dateStr}`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error('Server returned an error');
     const data = await res.json();
     if (typeof data.phaseHistory !== 'string' || !data.phaseHistory.trim()) {
-      showToast(`No phase history found in the ${latest.date} backup`);
+      showToast(`No phase history found in the ${dateStr} backup`);
       return;
     }
     const el = document.getElementById('settingsPhaseHistory');
@@ -7324,9 +7345,12 @@ async function importPhaseHistoryFromServer() {
       el.value = data.phaseHistory.trim();
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-    showToast(`Imported from ${latest.date} backup — review below, then tap Save to confirm`);
+    // Close the picker modal
+    const modal = document.getElementById('phaseHistoryBackupPicker');
+    if (modal) modal.remove();
+    showToast(`Loaded from ${dateStr} backup — review below, then tap Save to confirm`);
   } catch (e) {
-    showToast('Could not reach the server backup — try again');
+    showToast('Could not load that backup');
   }
 }
 
