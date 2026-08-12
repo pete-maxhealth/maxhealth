@@ -4258,7 +4258,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.420</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.421</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5013,7 +5013,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.420'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.421'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12305,7 +12305,7 @@ function buildBulkDataActionsCard() {
     <div class="import-card" style="background:rgba(45,235,143,0.04);border-color:rgba(45,235,143,0.2);">
       <div class="import-label" style="cursor:pointer;" onclick="toggleSection('imp-bulk','imp-bulk-wrap','imp-bulk-icon')">Import / Export <span id="imp-bulk-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▾ hide</span></div>
       <div id="imp-bulk-wrap">
-      <span class="help-slot" data-id="bulkactions" data-text="Same list either way for the first 5. Export writes selected datasets to Downloads and the server together; import auto-matches whichever files you pick to the right dataset by filename. Full App State is export-only - it's the one exception, since there's no restore-from-backup function built yet, only individual-table import for the other 5."></span>
+      <span class="help-slot" data-id="bulkactions" data-text="Same list either way for the first 5. Export writes selected datasets to Downloads and the server together; import auto-matches whichever files you pick to the right dataset by filename. Full App State here is export-only - restoring it is a much more careful, deliberate operation (it replaces everything, not just adds to it), so it has its own dedicated section below rather than living in this casual multi-select."></span>
       <div style="display:flex;gap:16px;margin-bottom:12px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
           <input type="radio" name="bulkMode" value="export" checked onchange="setBulkActionMode('export')" style="accent-color:var(--accent);"> Export
@@ -12322,7 +12322,105 @@ function buildBulkDataActionsCard() {
       <button id="bulkImportBtn" class="copy-btn" onclick="document.getElementById('bulkImportFileInput').click()" style="width:100%;font-size:12px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);display:none;">📂 Select files to import</button>
       <div id="bulkImportStatus" style="display:none;font-size:11px;color:var(--text3);margin-top:10px;line-height:1.7;white-space:pre-wrap;font-family:'Space Mono',monospace;"></div>
       </div>
+    </div>
+
+    <!-- Restore from server backup - deliberately separate from the casual
+         Import/Export card above. That one adds/updates individual rows;
+         this replaces everything (today's log, full history, library,
+         recipes, routines) at once. Different enough risk profile to
+         deserve its own space, its own confirmation, and its own
+         explanation rather than being one more option in a multi-select. -->
+    <div class="import-card" style="background:rgba(168,85,247,0.04);border-color:rgba(168,85,247,0.2);">
+      <div class="import-label" style="cursor:pointer;color:#a855f7;" onclick="toggleSection('imp-restore','imp-restore-wrap','imp-restore-icon')">Restore from Server Backup <span id="imp-restore-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▸ show</span></div>
+      <div id="imp-restore-wrap" style="display:none;">
+      <div style="font-size:12px;color:var(--text3);margin-top:10px;margin-bottom:12px;"><span class="help-slot" data-id="restorebackup" data-text="Replaces everything currently in the app - today's log, full history, library, recipes, routines - with a server backup from a chosen date. This is a full replacement, not a merge: whatever you've logged since that backup was made will be gone unless it also exists in the backup file. Use this after clearing Chrome, losing a phone, or setting up a fresh device - not as a casual undo."></span></div>
+      <button class="copy-btn" style="width:100%;" onclick="loadAvailableBackups()">🔍 Check available backups</button>
+      <div id="restoreBackupList" style="margin-top:12px;"></div>
+      </div>
     </div>`;
+}
+
+// ─── Restore from Server Backup ──────────────────────────────────────────
+// Genuinely different risk profile from the Import/Export card above -
+// that one adds/updates individual rows from a file you pick; this
+// replaces the entire app state from a server-side snapshot. Three
+// deliberate steps rather than one button: see what's available, pick a
+// date, then a real confirmation naming exactly what's about to happen
+// before anything is touched.
+
+async function loadAvailableBackups() {
+  const el = document.getElementById('restoreBackupList');
+  if (!el) return;
+  el.innerHTML = '<div style="font-size:12px;color:var(--text3);">Checking…</div>';
+  try {
+    const res = await fetch(`${MH_SERVER}/list-backups`, { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    if (!data.backups || data.backups.length === 0) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--text3);">No backups found yet. One gets created automatically the first time you open the app each day.</div>';
+      return;
+    }
+    el.innerHTML = data.backups.map(b => {
+      const sizeKb = Math.round(b.size / 1024);
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text2);">${b.date} <span style="color:var(--text3);">(${sizeKb}KB)</span></span>
+        <button class="copy-btn" style="width:auto;font-size:11px;padding:6px 12px;color:#a855f7;border-color:rgba(168,85,247,0.3);" onclick="confirmRestoreFromBackup('${b.date}')">Restore</button>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--yellow);">Couldn\'t reach the server to check backups.</div>';
+  }
+}
+
+function confirmRestoreFromBackup(dateStr) {
+  const existing = document.getElementById('restoreConfirmModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'restoreConfirmModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border:1px solid rgba(168,85,247,0.3);border-radius:16px;padding:22px;max-width:400px;width:100%;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#a855f7;margin-bottom:12px;">⚠ Replace all current data?</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">
+        This will overwrite today's log, your full history, library, recipes and routines with the backup from <strong style="color:var(--text);">${dateStr}</strong>.<br><br>
+        Anything logged or changed since that backup was made — and isn't also in the backup itself — will be gone. This cannot be undone.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="modal-btn cancel" style="flex:1;padding:12px;" onclick="document.getElementById('restoreConfirmModal').remove()">Cancel</button>
+        <button class="modal-btn" style="flex:1;padding:12px;background:#a855f7;color:#fff;border:none;border-radius:10px;" onclick="executeRestoreFromBackup('${dateStr}')">Yes, Restore</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function executeRestoreFromBackup(dateStr) {
+  const modal = document.getElementById('restoreConfirmModal');
+  if (modal) modal.innerHTML = '<div style="background:var(--surface);border-radius:16px;padding:24px;color:var(--text2);font-size:13px;">Restoring…</div>';
+
+  try {
+    const res = await fetch(`${MH_SERVER}/load-full-backup?date=${dateStr}`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error('Server returned an error');
+    const backup = await res.json();
+
+    if (!backup.state) throw new Error('Backup file looks malformed - missing state');
+
+    // Full replacement, matching what buildFullBackupPayload() originally
+    // captured - state (today's log + full history), library, recipes,
+    // routines, phase history, auto-switch settings.
+    state = backup.state;
+    if (backup.library) saveLibrary(backup.library);
+    if (backup.recipes) saveRecipes(backup.recipes);
+    if (backup.routines) saveRoutines(backup.routines);
+    if (backup.phaseHistory != null) localStorage.setItem('mh_phase_history', backup.phaseHistory);
+    if (backup.autoSwitchDays != null) localStorage.setItem('mh_autoswitch_days', backup.autoSwitchDays);
+    saveState();
+
+    if (modal) modal.remove();
+    showToast(`Restored from ${dateStr} ✓ Reloading…`);
+    setTimeout(() => window.location.reload(), 1200);
+  } catch (e) {
+    if (modal) modal.innerHTML = `<div style="background:var(--surface);border-radius:16px;padding:24px;"><div style="color:var(--yellow);font-size:13px;margin-bottom:12px;">Restore failed: ${e.message}</div><button class="modal-btn cancel" style="width:100%;padding:10px;" onclick="document.getElementById('restoreConfirmModal').remove()">Close</button></div>`;
+  }
 }
 
 function renderDataImportCards() {
