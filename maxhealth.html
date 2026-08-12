@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.425</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.426</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.425'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.426'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6995,6 +6995,55 @@ function processNutritionCSV(text, outEl) {
     // Build existing date set in DD/MM/YY format
     const existing = new Set(state.history.map(d => d.date));
 
+    // FIRST PASS: scan for dates that would be overwritten, ask for confirmation
+    const datesInCSV = [];
+    const overlappingDates = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line.toLowerCase().startsWith('date') || line.toLowerCase().startsWith('dd/mm')) continue;
+      const parts = line.split('|').map(p => p.trim());
+      if (parts.length < 4) continue;
+      const dateStr = parts[0].trim();
+      if (!/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) continue;
+      datesInCSV.push(dateStr);
+      if (existing.has(dateStr)) overlappingDates.push(dateStr);
+    }
+
+    // If any dates would be overwritten, ask for confirmation
+    if (overlappingDates.length > 0) {
+      const todayStr = (() => {
+        const d = new Date();
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = String(d.getFullYear()).slice(-2);
+        return `${day}/${month}/${year}`;
+      })();
+      const hasTodayConflict = overlappingDates.includes(todayStr);
+      const conflictLabel = hasTodayConflict ? '⚠ TODAY AND' : '';
+      appConfirm(
+        `${conflictLabel} ${overlappingDates.length} date(s) already have entries. Replace them with CSV data?`,
+        () => {
+          // User confirmed — proceed with the actual import
+          doNutritionImport(text, out, existing);
+        },
+        null,
+        true
+      );
+      return;
+    }
+
+    // No conflicts — proceed immediately
+    doNutritionImport(text, out, existing);
+  } catch(e) {
+    out.className = 'output-box error';
+    out.textContent = 'Error parsing file: ' + e.message;
+  }
+}
+
+// Separated into its own function so we can ask for confirmation first
+function doNutritionImport(text, out, existing) {
+  try {
+    const lines = text.trim().split('\n').filter(Boolean);
     let imported = 0, updated = 0, skipped = 0, flagged = 0;
     const newEntries = [];
     const flaggedRows = [];
@@ -7082,7 +7131,6 @@ function processNutritionCSV(text, outEl) {
     showToast(`${imported} added, ${updated} corrected ✓`);
     updateDashboard();
     renderHistory();
-
   } catch(err) {
     out.className = 'output-box error';
     out.textContent = `Error: ${err.message}`;
@@ -26090,9 +26138,19 @@ function getHeightInCm(val) {
 
 
 function resetOnboarding() {
-  localStorage.removeItem('mh_onboarded');
-  localStorage.removeItem('mh_onboard_step');
-  location.reload();
+  // Confirm before wiping onboarding state — this is the explicit user-facing
+  // action that re-triggers the setup wizard, which will overwrite any app
+  // settings the user has already configured (provider, API key, height, age, etc).
+  appConfirm(
+    '⚠ Redo setup wizard?',
+    () => {
+      localStorage.removeItem('mh_onboarded');
+      localStorage.removeItem('mh_onboard_step');
+      location.reload();
+    },
+    null,
+    true
+  );
 }
 
 function previewOnboarding() {
