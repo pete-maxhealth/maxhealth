@@ -4052,6 +4052,19 @@
     </div>
     </div>
 
+    <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0;" onclick="toggleSection('set-savedebug','set-savedebug-wrap','set-savedebug-icon')">Save Debug Trace <span id="set-savedebug-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-savedebug-wrap">
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Not needed for everyday use — only useful if something looks wrong and needs diagnosing.</div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+        <input type="checkbox" id="saveDebugToggle" ${localStorage.getItem('mh_save_debug') === 'true' ? 'checked' : ''}
+          onchange="localStorage.setItem('mh_save_debug', this.checked); showToast(this.checked ? 'Save debug trace on - next save-to-library attempt will show its steps in chat' : 'Save debug trace off')"
+          style="width:16px;height:16px;accent-color:var(--accent);">
+        <span style="font-size:12px;color:var(--text2);">Show what happened when saving to library</span>
+      </label>
+    </div>
+    </div>
+
     <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0;" onclick="toggleSection('set-healthcheck','set-healthcheck-wrap','set-healthcheck-icon')">🩺 App Health Check <span id="set-healthcheck-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-healthcheck-wrap">
     <div class="settings-card">
@@ -4257,7 +4270,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.437</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.438</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5028,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.437'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.438'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13953,15 +13966,28 @@ function saveLibraryOnlyFromPreview() {
   // that prompt only ever appeared after a real log action completed. This gives
   // direct access to the thing Pete actually wanted: building up the library with
   // frequently-eaten foods without it counting toward that day's totals.
+  //
+  // All the console.log calls below are unchanged from before - the trace[]
+  // array alongside them is additive, only shown in-chat when the "Save Debug
+  // Trace" toggle in Settings is on, so normal use stays exactly as quiet as
+  // it always was.
+  const debugOn = localStorage.getItem('mh_save_debug') === 'true';
+  const trace = [];
+  const dbg = (msg) => { if (debugOn) trace.push(msg); };
+
   const foods = window._pendingMealFoods;
   console.log('[saveLibraryOnlyFromPreview] called. Pending foods:', foods);
+  dbg(`Called with ${foods ? foods.length : 0} pending food(s)`);
   if (!foods || foods.length === 0) {
     console.warn('[saveLibraryOnlyFromPreview] No pending foods - nothing to save. This previously failed completely silently.');
+    dbg('No pending foods found - nothing to save');
     addBubble('Nothing to save — the pending item may not have finished loading yet. Try again once the food details are showing.', 'system', 'warn');
+    if (debugOn) addBubble(`🔍 Debug trace:<br>${trace.join('<br>')}`, 'system');
     cancelMealPreview();
     return;
   }
   const lib = loadLibrary();
+  dbg(`Library loaded: ${lib.length} existing item(s)`);
   const saved = [], overwritten = [], needsConfirm = [];
 
   foods.forEach(f => {
@@ -13978,9 +14004,11 @@ function saveLibraryOnlyFromPreview() {
       source: 'ai_confirmed'
     };
     console.log(`[saveLibraryOnlyFromPreview] Processing "${f.name}":`, entry);
+    dbg(`Processing "${f.name}" - ${entry.kcal}kcal, ${entry.protein}g P, ${entry.fat}g F, ${entry.carbs}g C, portion: ${entry.portion || '(none)'}`);
     const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
     if (existingIdx > -1) {
       console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - exact name match found, overwriting existing entry.`);
+      dbg(`"${f.name}" - exact match with existing library entry, will overwrite`);
       lib[existingIdx] = entry;
       overwritten.push(f.name);
       return;
@@ -13992,16 +14020,19 @@ function saveLibraryOnlyFromPreview() {
     const fuzzy = fuzzyFindInLibrary(f.name);
     if (fuzzy) {
       console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - fuzzy match found against "${fuzzy.name}", needs manual confirmation before saving.`);
+      dbg(`"${f.name}" - fuzzy-matched against existing "${fuzzy.name}" - will need manual confirm, NOT saved yet`);
       needsConfirm.push({ newEntry: entry, existing: fuzzy });
       return;
     }
     console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - no match, saving as new entry.`);
+    dbg(`"${f.name}" - no match found, saving as brand new library entry`);
     lib.push(entry);
     saved.push(f.name);
   });
 
   const saveResult = saveLibrary(lib);
   console.log('[saveLibraryOnlyFromPreview] saveLibrary() result:', saveResult, '- library now has', lib.length, 'items');
+  dbg(`saveLibrary() returned: ${JSON.stringify(saveResult)} - library now has ${lib.length} total item(s)`);
   renderLibrary();
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
@@ -14019,9 +14050,11 @@ function saveLibraryOnlyFromPreview() {
     // way this function doesn't yet account for. Surface it rather than let
     // the whole action complete with no visible outcome at all.
     console.error('[saveLibraryOnlyFromPreview] No items saved, overwritten, or needing confirmation - unexpected empty result for foods:', foods);
-    addBubble('Something went wrong saving this — check the browser console for details, or try again.', 'system', 'warn');
+    dbg('WARNING: nothing ended up saved, overwritten, or needing confirmation - unexpected empty result');
+    addBubble('Something went wrong saving this — turn on Save Debug Trace in Settings and try again for details, or check the browser console.', 'system', 'warn');
   }
 
+  if (debugOn) addBubble(`🔍 Debug trace:<br>${trace.join('<br>')}`, 'system');
   if (needsConfirm.length) showFuzzyLibraryConfirm(needsConfirm);
 }
 
