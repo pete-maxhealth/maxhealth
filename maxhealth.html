@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.431</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.432</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.431'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.432'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17809,8 +17809,14 @@ function _libPickerItemChosen(idx) {
   } else if (_libPickerTarget?.type === 'substitute') {
     const f = lib[idx];
     if (!f) return;
+    // Capture onPick BEFORE closing - closeRecipeLibPicker() resets
+    // _libPickerTarget back to {type:'recipe'} as cleanup, which silently
+    // wiped this callback when read afterward instead of before (the
+    // swap looked like it worked - picker closed normally - but nothing
+    // was actually removed or added, since onPick was already gone).
+    const onPick = _libPickerTarget.onPick;
     closeRecipeLibPicker();
-    _libPickerTarget.onPick?.(f);
+    onPick?.(f);
   } else {
     addLibItemToRecipe(idx);
   }
@@ -17867,31 +17873,18 @@ function filterRecipeLibPicker(q) {
   const el = document.getElementById('recipeLibPickerList');
 
   if (!filtered.length && q.trim()) {
-    // No exact match - same substitute-finding logic already used for meal
-    // logging (findLibrarySubstitutes), reused here rather than building a
-    // second matcher. Falls back to a plain "no results" message if nothing
-    // similar exists either.
-    const substitutes = findLibrarySubstitutes(q);
-    if (substitutes.length) {
-      el.innerHTML = `
-        <div style="padding:8px 0 12px;font-size:12px;color:var(--text3);">No exact match for "${q}" — closest in your library:</div>
-        ${substitutes.map(f => {
-          const realIdx = lib.findIndex(l => l.name === f.name);
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="_libPickerItemChosen(${realIdx})">
-            <div>
-              <div style="font-size:13px;color:var(--text);">${f.name}</div>
-              <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
-            </div>
-            <span style="color:var(--accent);font-size:18px;padding:0 8px;">+</span>
-          </div>`;
-        }).join('')}
-      `;
-      return;
-    }
+    // Deliberately NOT falling back to a fuzzy "closest match" guess here -
+    // that's exactly the pattern that suggested peanut butter for butter,
+    // and separately surfaced "frozen chicken" as a "closest match" for
+    // raspberries (both only shared the word "frozen"). The whole point of
+    // the picker redesign was a human choosing from real options instead of
+    // trusting an algorithm's guess - showing algorithmic guesses here would
+    // contradict that. Just says nothing matched, with a retry hint and the
+    // online-search escape hatch where one exists.
     const onlineLink = _libPickerTarget?.searchOnlineFallback
       ? `<div onclick="_libPickerSearchOnline()" style="color:var(--blue);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:8px;">🔍 Can't find it in your library? Search online instead</div>`
       : '';
-    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0 8px;text-align:center;">No match for "${q}"${_libPickerTarget?.type === 'substitute' ? '' : ' — add it manually below instead'}.</div>${onlineLink}`;
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0 8px;text-align:center;">No match for "${q}" — try a different search term${_libPickerTarget?.type === 'substitute' ? '' : ', or add it manually below'}.</div>${onlineLink}`;
     return;
   }
 
