@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.430</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.431</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.430'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.431'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5928,36 +5928,15 @@ function findLibrarySubstitutes(name, excludeName, limit = 3) {
 // swapping to mixed nuts - rewriting step text to match would mean guessing
 // at phrasing, which risks being wrong in a way that's worse than just
 // leaving it for the cook to notice and adjust themselves.
-// ─── INGREDIENT SUBSTITUTION — shared core ─────────────────────────────────
-// Shape-agnostic: finds a similar library item and confirms the swap, but
-// doesn't touch any specific ingredient/combo data structure itself - each
-// caller (recipe ingredients, cook mode, suggested-meal combos) mutates its
-// own shape in its own onAccept callback. This is the piece that's
-// genuinely identical everywhere; the mutation logic differs per shape
-// (recipe ingredients scale by amount/_base, combo items are swapped
-// wholesale) so it stays in each caller rather than being forced together.
-function _findSubstituteAndConfirm(name, extraNote, onAccept) {
-  const matches = findLibrarySubstitutes(name, name, 1);
-  if (!matches.length) {
-    showToast(`No similar ingredient found in your library for "${name}"`);
-    return;
-  }
-  const f = matches[0];
-  appConfirm(
-    `Swap "${name}" for "${f.name}"?<br><span style="color:var(--text3);font-size:12px;">${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C per ${f.portion || '100g'}</span>${extraNote ? `<br><span style="color:var(--text3);font-size:11px;">${extraNote}</span>` : ''}`,
-    () => onAccept(f),
-    null, false, { confirm: 'Swap it in' }
-  );
-}
-
-// Recipe-builder / Cook Mode caller - ingredients here scale by a numeric
-// amount against a per-baseG nutrition figure (_base), so the swap keeps
-// the same portion size and recalculates macros at that amount using the
-// substitute's own values, same math as addLibItemToRecipe.
-function _substituteRecipeIngredient(ing, onSwapped) {
+// Recipe-builder / Cook Mode substitution - opens the full library picker
+// (pre-filled with the current ingredient's name) rather than auto-picking
+// a match, so the person always makes the final call themselves. Ingredient
+// amount stays the same; macros recalculate against the chosen item's own
+// values, same math as addLibItemToRecipe.
+function _substituteRecipeIngredient(ing, onSwapped, searchOnlineFallback) {
   if (!ing) return;
   const amount = ing.amount || 100;
-  _findSubstituteAndConfirm(ing.name, `same ${amount}g portion, macros recalculated.`, (f) => {
+  _openSubstitutePicker(ing.name, (f) => {
     const _ps = (f.portion || '').toLowerCase();
     const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
     let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
@@ -5981,15 +5960,19 @@ function _substituteRecipeIngredient(ing, onSwapped) {
     ing._substitutedFrom = oldName;
     showToast(`Swapped in "${f.name}" ✓`);
     onSwapped();
-  });
+  }, searchOnlineFallback);
 }
 
 
 function substituteBuilderIngredient(i) {
+  // Online-search fallback only makes sense here - openRecipeIngredientSearch
+  // needs a real _recipeIngredients index, which Cook Mode ingredients don't
+  // reliably map to (they may have been loaded from a saved recipe, a
+  // separate object entirely from the live builder array).
   _substituteRecipeIngredient(_recipeIngredients[i], () => {
     renderRecipeIngredients();
     updateRecipeTotals();
-  });
+  }, () => openRecipeIngredientSearch(i));
 }
 
 function substituteCookIngredient(i) {
@@ -11623,7 +11606,11 @@ function substituteComboItem(comboIndex, itemIndex) {
   const combo = window._pendingLibraryCombos[comboIndex];
   const item = combo?.items?.[itemIndex];
   if (!item) return;
-  _findSubstituteAndConfirm(item.name, null, (f) => {
+  // No online-search fallback here yet, unlike the recipe-builder version -
+  // combo items don't have an equivalent "fix this ingredient" search flow
+  // built for them. Worth adding later if this turns out to matter as much
+  // here as it does for recipes.
+  _openSubstitutePicker(item.name, (f) => {
     combo.items[itemIndex] = { ...f, _substitutedFrom: item.name };
     _reRenderComboCard(comboIndex);
   });
@@ -17810,17 +17797,51 @@ function editRecipeIngredientNote(i) {
   }, ing.note || '');
 }
 
-// Which context opened the library picker - lets the same modal serve both
-// "add to recipe" (existing) and "add to a suggested-meal combo" (new)
-// without needing two near-identical picker UIs. Reset on close so a stale
-// target can't linger into an unrelated future open.
+// Which context opened the library picker - lets the same modal serve
+// "add to recipe", "add to a suggested-meal combo", and "substitute an
+// ingredient" without needing three near-identical picker UIs. Reset on
+// close so a stale target can't linger into an unrelated future open.
 let _libPickerTarget = { type: 'recipe' };
 function _libPickerItemChosen(idx) {
+  const lib = loadLibrary();
   if (_libPickerTarget?.type === 'combo') {
     addComboItemFromLibrary(_libPickerTarget.comboIndex, idx);
+  } else if (_libPickerTarget?.type === 'substitute') {
+    const f = lib[idx];
+    if (!f) return;
+    closeRecipeLibPicker();
+    _libPickerTarget.onPick?.(f);
   } else {
     addLibItemToRecipe(idx);
   }
+}
+
+// Opens the library picker pre-filled with a search for the ingredient
+// being replaced, so the person sees the real list and picks themselves -
+// this is deliberately NOT an auto-match-and-confirm, after a fuzzy match
+// once suggested peanut butter as a substitute for dairy butter. A human
+// choosing from a real list can't make that category of mistake, regardless
+// of how good the underlying matching heuristic is or isn't.
+function _openSubstitutePicker(currentName, onPick, searchOnlineFallback) {
+  _libPickerTarget = { type: 'substitute', onPick, searchOnlineFallback };
+  recipeAddFromLibrary(); // resets target to 'recipe' internally - restored below
+  _libPickerTarget = { type: 'substitute', onPick, searchOnlineFallback };
+  const input = document.getElementById('recipeLibSearch');
+  if (input) {
+    input.value = currentName;
+    filterRecipeLibPicker(currentName);
+  }
+}
+
+// Only shown in the picker's zero-results state, and only when the caller
+// supplied a fallback (recipe/Cook Mode substitution has one via the
+// existing online food search; suggested-combo substitution currently
+// doesn't - add it there too later if it turns out to matter as much).
+function _libPickerSearchOnline() {
+  const fallback = _libPickerTarget?.searchOnlineFallback;
+  if (!fallback) return;
+  closeRecipeLibPicker();
+  fallback();
 }
 
 function recipeAddFromLibrary() {
@@ -17867,7 +17888,10 @@ function filterRecipeLibPicker(q) {
       `;
       return;
     }
-    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">No match for "${q}" — add it manually below instead.</div>`;
+    const onlineLink = _libPickerTarget?.searchOnlineFallback
+      ? `<div onclick="_libPickerSearchOnline()" style="color:var(--blue);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:8px;">🔍 Can't find it in your library? Search online instead</div>`
+      : '';
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0 8px;text-align:center;">No match for "${q}"${_libPickerTarget?.type === 'substitute' ? '' : ' — add it manually below instead'}.</div>${onlineLink}`;
     return;
   }
 
