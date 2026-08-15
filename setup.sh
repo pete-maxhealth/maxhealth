@@ -114,8 +114,51 @@ fi
 WATCHEOF
 chmod +x "$HOME/mh_watchdog.sh"
 
-# Crontab — check every minute
-echo "* * * * * ~/mh_watchdog.sh" | crontab -
+# Auto-update script — checks GitHub every 30 min, applies any update, then
+# lets the watchdog above (already running every minute) restart the server.
+# This is a pure end-user device, never expected to carry real local code
+# edits, so it always converges to exactly what's on GitHub (git reset --hard)
+# rather than attempting a merge - a merge conflict here would silently block
+# every future update forever with no one watching to notice or resolve it.
+cat > "$HOME/mh_autoupdate.sh" << 'UPDATEEOF'
+#!/data/data/com.termux/files/usr/bin/bash
+REPO_DIR="/storage/emulated/0/maxhealth/app/maxhealth"
+LOG="$HOME/mh_autoupdate.log"
+cd "$REPO_DIR" || { echo "$(date): ERROR - can't cd to $REPO_DIR" >> "$LOG"; exit 1; }
+git fetch origin main --quiet 2>> "$LOG"
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse origin/main)
+if [ "$LOCAL" != "$REMOTE" ]; then
+  echo "$(date): Update found ($LOCAL -> $REMOTE), applying..." >> "$LOG"
+  git reset --hard origin/main >> "$LOG" 2>&1
+  pkill -9 -f "python.*server.py"
+  echo "$(date): Update applied, server stopped - watchdog will restart it within a minute." >> "$LOG"
+fi
+UPDATEEOF
+chmod +x "$HOME/mh_autoupdate.sh"
+
+# mhstart command — installed globally so it works from any directory, not
+# just when the caller already happens to be sitting in the app folder.
+# (An earlier version cd'd one level too high, which silently no-op'd rather
+# than failing loudly - it only ever "worked" because Termux sessions here
+# are almost always already inside the app folder when this gets typed.)
+mkdir -p "$PREFIX/bin"
+cat > "$PREFIX/bin/mhstart" << 'STARTEOF'
+#!/data/data/com.termux/files/usr/bin/bash
+if curl -sf http://localhost:5757/ping > /dev/null 2>&1; then
+  echo "MaxedHealth already running ✓"
+  exit 0
+fi
+echo "Starting MaxedHealth..."
+cd /storage/emulated/0/maxhealth/app/maxhealth || { echo "✗ App folder not found — is MaxedHealth installed?"; exit 1; }
+python server.py &
+sleep 2
+curl -sf http://localhost:5757/ping > /dev/null 2>&1 && echo "MaxedHealth running ✓" || echo "Starting — check in a moment"
+STARTEOF
+chmod +x "$PREFIX/bin/mhstart"
+
+# Crontab — watchdog every minute, auto-update check every 30 minutes
+(echo "* * * * * ~/mh_watchdog.sh"; echo "*/30 * * * * ~/mh_autoupdate.sh") | crontab -
 
 # Boot script 1 — starts crond, which then runs the watchdog every minute
 mkdir -p "$BOOT_DIR"
@@ -135,12 +178,23 @@ bash ~/mh_watchdog.sh &
 WAKEEOF
 chmod +x "$BOOT_DIR/start-watchdog.sh"
 
+# Boot script 3 — checks for an update immediately on boot (rather than
+# waiting up to 30 min for the next cron tick), then starts the server
+cat > "$BOOT_DIR/maxhealth.sh" << 'MHBOOTEOF'
+#!/data/data/com.termux/files/usr/bin/bash
+sleep 5
+bash ~/mh_autoupdate.sh > /dev/null 2>&1
+mhstart > /dev/null 2>&1
+MHBOOTEOF
+chmod +x "$BOOT_DIR/maxhealth.sh"
+
 # Start crond now for this session
 crond
 
 echo "  ✓ Self-healing watchdog installed"
-echo "  ✓ Cron configured (checks every 60s)"
-echo "  ✓ Boot scripts installed (wake-lock + auto-restart on reboot)"
+echo "  ✓ Auto-update installed (checks GitHub every 30 min)"
+echo "  ✓ Cron configured (watchdog every 60s, updates every 30 min)"
+echo "  ✓ Boot scripts installed (wake-lock + auto-update + auto-restart on reboot)"
 echo ""
 
 # ── Step 5: Start server ──────────────────────────────────────────────────────
