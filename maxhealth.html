@@ -13945,7 +13945,13 @@ function logFoods(foods, originalText, aiMessage = null) {
           return foods.length > 2 ? names + ` + ${foods.length-2} more` : names;
         }
         return originalText || foods[0]?.name || 'Meal';
-      })(), items: foods,
+      })(),
+      // Only show a portion size on single-ingredient entries - multi-item
+      // meals already summarise via description ("X + Y + 2 more") and
+      // listing every portion here would clutter the history line for no
+      // real benefit over the per-item amounts already shown in items[].
+      amount: foods.length === 1 ? (foods[0].amount || null) : null,
+      items: foods,
       kcal: Math.round(mealTotals.kcal),
       protein: Math.round(mealTotals.protein * 10) / 10,
       fat: Math.round(mealTotals.fat * 10) / 10,
@@ -13985,7 +13991,13 @@ function logFoods(foods, originalText, aiMessage = null) {
         return foods.length > 2 ? names + ` + ${foods.length-2} more` : names;
       }
       return originalText || foods[0]?.name || 'Meal';
-    })(), items: foods,
+    })(),
+    // Only show a portion size on single-ingredient entries - multi-item
+    // meals already summarise via description ("X + Y + 2 more") and
+    // listing every portion here would clutter the history line for no
+    // real benefit over the per-item amounts already shown in items[].
+    amount: foods.length === 1 ? (foods[0].amount || null) : null,
+    items: foods,
     kcal: Math.round(mealTotals.kcal),
     protein: Math.round(mealTotals.protein * 10) / 10,
     fat: Math.round(mealTotals.fat * 10) / 10,
@@ -16405,7 +16417,10 @@ function renderHistory() {
         ${cleanLog.map((e, j) => `
           <div class="hist-entry" id="hist-entry-${i}-${j}" style="flex-direction:column;align-items:flex-start;padding:5px 0;">
             <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.time ? `<span style="color:var(--text3);font-family:Space Mono,monospace;font-size:10px;margin-right:4px;">${e.time}</span>` : ''}${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${e.amount ? ` <span style="color:var(--text3);font-size:11px;">(${e.amount})</span>` : ''}</span>
+              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.time ? `<span style="color:var(--text3);font-family:Space Mono,monospace;font-size:10px;margin-right:4px;">${e.time}</span>` : ''}${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${(() => {
+                const amt = e.amount || (e.items && e.items.length === 1 ? e.items[0].amount : null);
+                return amt ? ` <span style="color:var(--text3);font-size:11px;">(${amt})</span>` : '';
+              })()}</span>
               <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C${e.fat ? ` · ${e.fat}g F` : ''}</span>
               <span style="color:var(--red);cursor:pointer;padding:2px 6px;font-size:16px;font-weight:700;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})">×</span>
             </div>
@@ -17656,7 +17671,18 @@ function addLibItemToRecipe(idx) {
   // Get base portion from library entry
   const _ps = (f.portion || '').toLowerCase();
   const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-  const baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
+  let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
+  // Sanity check: a portion this small implies an implausible kcal/g density
+  // (e.g. "per 1g" with 1000+ kcal stated - almost certainly a mislabeled
+  // library entry where the values are really per-100g). Nothing real food
+  // exceeds ~900 kcal per single gram (pure fat tops out around 9 kcal/g).
+  // Falling back to 100g here is a guess, not a fix - the library entry
+  // itself still needs correcting - but it stops a bad label from silently
+  // producing a million-kcal recipe total.
+  if (baseG > 0 && baseG < 10 && (f.kcal / baseG) > 50) {
+    showToast(`⚠️ "${f.name}" portion (${f.portion}) looks wrong for its kcal - check its library entry. Using 100g for now.`);
+    baseG = 100;
+  }
   _recipeIngredients.push({
     name: f.name,
     amount: baseG,
