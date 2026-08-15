@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.433</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.434</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.433'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.434'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6951,6 +6951,7 @@ function _saveNewLibraryItem(entry) {
   closeSaveLibraryModal();
   renderLibrary();
   showToast('Added to library ✓');
+  _advanceIngredientSaveQueueIfActive({ type: 'saved', text: entry.name });
 }
 
 // Shown before saving, only when something worth comparing already exists.
@@ -7004,7 +7005,10 @@ function confirmOverwriteExistingLibraryItem(existingId) {
   if (!entry) return;
   const lib = loadLibrary();
   const idx = lib.findIndex(l => l.id === existingId);
+  let diffText = entry.name;
   if (idx > -1) {
+    const old = lib[idx];
+    diffText = `${old.name}: ${old.kcal}→${entry.kcal}kcal, ${old.protein}→${entry.protein}g P, ${old.fat||0}→${entry.fat||0}g F, ${old.carbs}→${entry.carbs}g C`;
     // Keep the existing item's id (history/logs may reference it), overwrite everything else
     lib[idx] = { ...entry, id: existingId };
   } else {
@@ -7016,6 +7020,7 @@ function confirmOverwriteExistingLibraryItem(existingId) {
   closeSaveLibraryModal();
   renderLibrary();
   showToast(`"${entry.name}" values saved ✓`);
+  _advanceIngredientSaveQueueIfActive({ type: 'overwritten', text: diffText });
 }
 
 // ─── NAVIGATION ──────────────────────────────────────────
@@ -13569,34 +13574,24 @@ function showSaveIngredientsDialog(foods, saveBar) {
   saveBar._saveFoods = foods;
   saveBar.setAttribute('data-savebar','1');
 
-  const rows = foods.map((f, i) => {
-    // Was exact/prefix-only (_libDupeCheck), which missed genuinely similar but
-    // differently-worded names — e.g. "Elmlea whipping cream" vs the existing
-    // "Elmlea Double Cream" scored zero on that check despite being the same
-    // product, so it silently created a second entry instead of ever offering
-    // to overwrite. Real fuzzy word-overlap matching catches this properly.
-    const dupe = fuzzyFindInLibrary(f.name);
-    // Previously crammed into the same single-line, nowrap/ellipsis-truncated
-    // span as the item name - on anything but a very short name, this warning
-    // (and the toggle link inside it) got silently cut off entirely, exactly
-    // like "possibly alr..." with no way to ever see or tap the rest.
-    // Now its own line underneath, with normal wrapping.
-    const dupeLabel = dupe
-      ? `<div style="font-size:10px;color:var(--yellow);margin-left:24px;margin-top:-2px;padding-bottom:6px;line-height:1.5;white-space:normal;">possibly already saved as "${dupe.name}" — <span onclick="event.preventDefault();toggleSaveSeparately(this)" style="text-decoration:underline;cursor:pointer;">save as new instead</span></div>`
-      : '';
-    const checked = !dupe ? 'checked' : '';
-    return `
-      <div>
-      <label style="display:flex;align-items:center;gap:8px;padding:6px 0 ${dupe ? '0' : '6px'} 0;${dupe ? '' : 'border-bottom:1px solid var(--border);'}cursor:pointer;" data-existing-name="${dupe ? dupe.name.replace(/"/g,'&quot;') : ''}" data-save-separately="false">
-        <input type="checkbox" data-idx="${i}" ${checked}
-          style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
-        <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</span>
-        <span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:Space Mono,monospace;">${Math.round(f.kcal)}kcal</span>
-      </label>
-      ${dupeLabel}
-      ${dupe ? '<div style="border-bottom:1px solid var(--border);"></div>' : ''}
-      </div>`;
-  }).join('');
+  // No longer doing our own fuzzy-dupe-check-and-inline-toggle here - that
+  // mechanism let checking a plain-looking checkbox silently overwrite a
+  // completely different, differently-named library item (an "Egg Mayo
+  // (Tesco)" entry got replaced by generic mayonnaise's values this way,
+  // with only a small, easy-to-miss "possibly already saved as X" line as
+  // warning). Selecting an item here now just means "consider saving this" -
+  // the actual comparison against similar existing items, with real
+  // side-by-side values and an explicit overwrite-or-separate choice, is
+  // the SAME proper modal the manual Add Food form already uses
+  // (validateAndSaveLibraryEntry / showAddFoodComparison), not a second,
+  // less careful copy of that idea.
+  const rows = foods.map((f, i) => `
+    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;">
+      <input type="checkbox" data-idx="${i}" checked
+        style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+      <span style="flex:1;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.name}</span>
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap;font-family:Space Mono,monospace;">${Math.round(f.kcal)}kcal</span>
+    </label>`).join('');
 
   saveBar.innerHTML = `
     <div style="width:100%;margin-top:4px;">
@@ -13611,23 +13606,13 @@ function showSaveIngredientsDialog(foods, saveBar) {
     </div>`;
 }
 
-// Flips a flagged item between "overwrite the existing match" and "this is
-// genuinely different, save separately" - auto-checks the checkbox too,
-// since explicitly choosing how to save something implies wanting to save it.
-function toggleSaveSeparately(span) {
-  // The toggle now lives in its own line beneath the label (fixing the
-  // ellipsis-truncation bug), so it's a sibling of the label, not a
-  // descendant - find the shared wrapping div first, then the label within it.
-  const wrapper = span.parentElement?.parentElement;
-  const label = wrapper?.querySelector('label');
-  if (!label) return;
-  const checkbox = label.querySelector('input[type="checkbox"]');
-  const isSeparate = label.dataset.saveSeparately === 'true';
-  label.dataset.saveSeparately = isSeparate ? 'false' : 'true';
-  if (checkbox) checkbox.checked = true;
-  span.textContent = isSeparate ? 'save as new instead' : 'overwrite instead';
-}
-
+// Builds a queue of real library entries from the checked items and hands
+// them to validateAndSaveLibraryEntry ONE AT A TIME - the same shared,
+// careful entry point the manual Add Food form uses (plausibility check,
+// then a proper compare-and-choose modal if something similar exists).
+// Processed sequentially (not all at once) because that modal can only
+// track one pending entry at a time (window._pendingAddFoodEntry) - same
+// one-at-a-time pattern already used by the duplicate scanner.
 function confirmSaveIngredients(btn) {
   const saveBar = btn.closest('[data-savebar]');
   const foods = saveBar?._saveFoods;
@@ -13635,55 +13620,58 @@ function confirmSaveIngredients(btn) {
   const list = saveBar.querySelector('#saveIngredientsList');
   if (!list) return;
   const checkboxes = list.querySelectorAll('input[type="checkbox"]');
-  const lib = loadLibrary() || [];
-  const saved = [];
-  const overwritten = [];
 
+  const queue = [];
   checkboxes.forEach(cb => {
     if (!cb.checked) return;
     const f = foods[parseInt(cb.dataset.idx)];
     if (!f) return;
-    const label = cb.closest('label');
-    const existingName = label?.dataset.existingName || '';
-    const saveSeparately = label?.dataset.saveSeparately === 'true';
-    const entry = {
-      name:    (existingName && !saveSeparately) ? existingName : f.name, // keep the existing library name when overwriting a fuzzy match, not the newly-typed one - unless explicitly saving separately
-      kcal:    Math.round(f.kcal * 100) / 100,
+    queue.push({
+      id: 'ingsave_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      name: f.name,
+      kcal: Math.round(f.kcal * 100) / 100,
       protein: Math.round(f.protein * 100) / 100,
-      fat:     Math.round((f.fat || 0) * 100) / 100,
-      carbs:   Math.round(f.carbs * 100) / 100,
+      fat: Math.round((f.fat || 0) * 100) / 100,
+      carbs: Math.round(f.carbs * 100) / 100,
       portion: f.amount || '',
-      locked:  false,
-      isMeal:  false,
-    };
-    // Explicitly ticking a duplicate means overwriting is exactly what's wanted —
-    // previously this used only exact-name matching, missing fuzzy matches like
-    // "Elmlea whipping cream" against an existing "Elmlea Double Cream" entry,
-    // which silently created a second entry instead of ever offering to overwrite.
-    // Skipped entirely when the user explicitly chose "save as new instead".
-    const existingIdx = saveSeparately
-      ? -1
-      : (existingName
-        ? lib.findIndex(l => l.name.toLowerCase() === existingName.toLowerCase())
-        : lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase()));
-    if (existingIdx > -1) {
-      const old = lib[existingIdx];
-      const diff = `${old.name}: ${old.kcal}→${entry.kcal}kcal, ${old.protein}→${entry.protein}g P, ${old.fat}→${entry.fat}g F, ${old.carbs}→${entry.carbs}g C`;
-      lib[existingIdx] = entry;
-      overwritten.push(diff);
-    } else {
-      lib.push(entry);
-      saved.push(f.name);
-    }
+      per100g: false,
+      locked: false,
+      isMeal: false,
+    });
   });
 
-  if (!saved.length && !overwritten.length) { showToast('Nothing selected to save'); return; }
-  saveLibrary(lib);
-  const parts = [];
-  if (saved.length) parts.push(`Saved: ${saved.join(', ')}`);
-  if (overwritten.length) parts.push(`Overwritten:<br>${overwritten.join('<br>')}`);
-  saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);line-height:1.6;">✓ ${parts.join('<br>')}</span>`;
-  showToast(parts.join('<br>'), null, null, 4500);
+  if (!queue.length) { showToast('Nothing selected to save'); return; }
+  window._ingredientSaveBar = saveBar;
+  window._ingredientSaveResults = { saved: [], overwritten: [] };
+  window._pendingIngredientSaveQueue = queue;
+  _advanceIngredientSaveQueueIfActive();
+}
+
+// Called from the tail of every path that finishes saving one library entry
+// (_saveNewLibraryItem, confirmSaveAddFoodAsNew, confirmOverwriteExistingLibraryItem).
+// A no-op for the normal single-item Add Food flow (queue is null there) -
+// only does anything when confirmSaveIngredients set up a batch above.
+function _advanceIngredientSaveQueueIfActive(lastResult) {
+  const queue = window._pendingIngredientSaveQueue;
+  if (!queue) return;
+  if (lastResult) window._ingredientSaveResults?.[lastResult.type]?.push(lastResult.text);
+
+  if (!queue.length) {
+    const saveBar = window._ingredientSaveBar;
+    const { saved, overwritten } = window._ingredientSaveResults || { saved: [], overwritten: [] };
+    window._pendingIngredientSaveQueue = null;
+    window._ingredientSaveBar = null;
+    window._ingredientSaveResults = null;
+    if (!saved.length && !overwritten.length) return;
+    const parts = [];
+    if (saved.length) parts.push(`Saved: ${saved.join(', ')}`);
+    if (overwritten.length) parts.push(`Overwritten:<br>${overwritten.join('<br>')}`);
+    if (saveBar) saveBar.innerHTML = `<span style="font-size:12px;color:var(--accent);line-height:1.6;">✓ ${parts.join('<br>')}</span>`;
+    showToast(parts.join('<br>'), null, null, 4500);
+    return;
+  }
+  const next = queue.shift();
+  validateAndSaveLibraryEntry(next);
 }
 
 function confirmMealLog() {
