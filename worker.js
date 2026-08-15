@@ -1,4 +1,12 @@
 
+// Tune these two to whatever worst-case monthly spend you're actually willing
+// to risk. Rough cost reference at claude-sonnet-4-6 rates ($3/$15 per
+// million input/output tokens): a typical text call is ~$0.004, a
+// photo/label call ~$0.015. MONTHLY_CALL_CAP x ~$0.006 (blended average) is
+// roughly your true worst-case monthly ceiling - e.g. 5000 calls ≈ £24-30/mo.
+const PER_IP_DAILY_CAP = 80;
+const MONTHLY_CALL_CAP = 5000;
+
 export default {
 	async fetch(request, env) {
 		if (request.method === 'OPTIONS') {
@@ -17,6 +25,64 @@ export default {
 
 		try {
 			const body = await request.json();
+
+			// ── Cost containment ────────────────────────────────────────────────
+			// Two independent caps, both backed by Workers KV (so they're shared
+			// across every device/user hitting this Worker — unlike the app's own
+			// localStorage-based cap, which only protects one device and resets
+			// the moment someone clears their browser data):
+			//
+			//   1. Per-IP daily cap — stops one household/device from running away
+			//      (a stuck retry loop, a runaway feature) without affecting anyone
+			//      else.
+			//   2. Global monthly cap — a hard ceiling on total spend regardless of
+			//      how many people or devices are using the app. This is the one
+			//      that actually bounds worst-case cost as usage scales; the per-IP
+			//      cap alone still scales linearly with device count.
+			//
+			// KV is eventually-consistent, not atomic — under heavy concurrent
+			// traffic this can under-count slightly (a handful of requests landing
+			// in the same instant might all read the same "before" count). That's
+			// fine for a cost *ceiling* with headroom built in; it would NOT be
+			// fine if this needed to be an exact security boundary.
+			const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+			const now = new Date();
+			const dayKey   = `calls:day:${now.toISOString().slice(0,10)}:${ip}`;
+			const monthKey = `calls:month:${now.toISOString().slice(0,7)}`;
+			// multiCheck fans out to 3 provider calls per request - weight it
+			// accordingly rather than letting it count as "1" against the same
+			// caps a single-provider call uses.
+			const weight = body.multiCheck ? 3 : 1;
+
+			if (env.RATE_LIMIT_KV) {
+				const [dayCount, monthCount] = await Promise.all([
+					env.RATE_LIMIT_KV.get(dayKey),
+					env.RATE_LIMIT_KV.get(monthKey)
+				]);
+				const dayN = parseInt(dayCount || '0', 10);
+				const monthN = parseInt(monthCount || '0', 10);
+
+				if (monthN + weight > MONTHLY_CALL_CAP) {
+					return new Response(JSON.stringify({
+						error: { message: `Monthly AI usage cap reached (${MONTHLY_CALL_CAP} calls) - this protects against runaway cost across all users. Resets at the start of next month.` }
+					}), { status: 429, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+				}
+				if (dayN + weight > PER_IP_DAILY_CAP) {
+					return new Response(JSON.stringify({
+						error: { message: `Daily AI usage cap reached for this connection (${PER_IP_DAILY_CAP} calls) - try again tomorrow, or add your own API key in Settings to bypass the shared account entirely.` }
+					}), { status: 429, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+				}
+
+				// Best-effort increment, not strictly atomic (see note above) - the
+				// 24h/31-day TTLs mean a slightly-stale write still self-corrects
+				// within one cycle rather than permanently drifting.
+				await Promise.all([
+					env.RATE_LIMIT_KV.put(dayKey, String(dayN + weight), { expirationTtl: 60 * 60 * 24 }),
+					env.RATE_LIMIT_KV.put(monthKey, String(monthN + weight), { expirationTtl: 60 * 60 * 24 * 31 })
+				]);
+			}
+			// If RATE_LIMIT_KV isn't bound yet, caps are simply skipped rather than
+			// erroring every request - see deploy note for how to add the binding.
 
 			// ── Multi-provider consensus check ──────────────────────────────────
 			// Runs the same prompt past Claude, Gemini, and OpenAI in parallel and
@@ -72,11 +138,16 @@ export default {
 							body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
 						}
 					);
+					// "High demand" is documented as typically transient within seconds,
+					// but a single retry isn't always enough during a sustained spike -
+					// up to 2 retries with increasing backoff (1.5s, then 3s). This runs
+					// in parallel with Claude/OpenAI via Promise.allSettled, so the extra
+					// time only affects Gemini's own result, never delays the other two.
 					let res = await doFetch();
-					if (res.status === 503) {
-						// "High demand" is documented as typically transient within seconds -
-						// one retry after a short wait, rather than failing immediately.
-						await new Promise(r => setTimeout(r, 1500));
+					let attempt = 0;
+					while (res.status === 503 && attempt < 2) {
+						attempt++;
+						await new Promise(r => setTimeout(r, attempt * 1500));
 						res = await doFetch();
 					}
 					const data = await res.json();

@@ -9,7 +9,6 @@
 #      because only #1 was ever being bumped — the live app kept showing the
 #      old APP_VERSION no matter what the file said. Both must always be
 #      updated together, in the same commit, or this happens again.
-
 set -e
 
 NEW_VERSION="$1"
@@ -22,6 +21,19 @@ if [ -z "$NEW_VERSION" ] || [ -z "$MESSAGE" ]; then
 fi
 
 FILE="maxhealth.html"
+DOWNLOADED="/storage/emulated/0/Download/maxhealth.html"
+
+# Copies the freshly-downloaded file into place before anything else runs -
+# folds the manual "cp ... && cd ... && bash bump_and_deploy.sh" three-step
+# into one command. If nothing new was downloaded, fails loudly here rather
+# than silently re-bumping whatever old copy already happens to be in place.
+if [ ! -f "$DOWNLOADED" ]; then
+  echo "❌ No file found at $DOWNLOADED — nothing to deploy."
+  echo "Download the updated maxhealth.html first, then run this again."
+  exit 1
+fi
+cp "$DOWNLOADED" "$FILE"
+echo "Copied $DOWNLOADED into place."
 
 CURRENT=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE" || echo "NOT FOUND")
 APP_VER_CURRENT=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE" || echo "NOT FOUND")

@@ -37,6 +37,14 @@ LOG_FILE   = os.path.join(BASE, 'logs', 'pipeline.log')
 COMBINED   = os.path.join(TABLES, 'combined.csv')
 NUTRITION  = os.path.join(TABLES, 'nutrition.csv')
 PREFS_FILE = os.path.join(BASE, 'data', 'pipeline_prefs.json')
+# Tracks exactly which source last set each field, per date - {date: {field: source}}.
+# Exists because combined.csv only has ONE 'source' string per ROW (a union across
+# every metric that contributed anything that day), which makes it genuinely
+# impossible to tell whether, say, RingConn's presence in that string means it set
+# the SLEEP field specifically, or just contributed steps while Amazfit's sleep
+# reading is what's actually sitting in the field. This file removes that ambiguity
+# by tracking attribution at the field level, not the row level.
+FIELD_SOURCES_FILE = os.path.join(BASE, 'data', 'field_sources.json')
 
 MAX_BACKUPS   = 7
 MAX_LOG_LINES = 500
@@ -157,6 +165,29 @@ def get_precedence(prefs):
     return prec
 
 
+def load_field_sources():
+    """Load per-date, per-field source attribution. Returns {date: {field: source}}.
+    Missing/corrupt file is treated as empty - existing rows from before this
+    tracking existed simply have no recorded attribution yet, which is handled
+    as "unknown" (lowest priority, always safely overwritable) in the merge."""
+    if os.path.exists(FIELD_SOURCES_FILE):
+        try:
+            with open(FIELD_SOURCES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def save_field_sources(field_sources):
+    """Persist per-date, per-field source attribution."""
+    os.makedirs(os.path.dirname(FIELD_SOURCES_FILE), exist_ok=True)
+    tmp_path = FIELD_SOURCES_FILE + '.tmp'
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(field_sources, f, indent=2, sort_keys=True)
+    os.replace(tmp_path, FIELD_SOURCES_FILE)  # atomic, same pattern as write_combined
+
+
 # ── Backup ────────────────────────────────────────────────────────────────────
 
 def backup_files():
@@ -175,6 +206,7 @@ def backup_files():
         (MASTER,         'master',       'csv'),
         (LIBRARY_CSV,    'library',      'csv'),
         (SUPPLEMENTS_CSV,'supplements',  'csv'),
+        (FIELD_SOURCES_FILE, 'field_sources', 'json'),
     ]:
         if os.path.exists(src_path):
             dst = os.path.join(BACKUP_DIR, f"{name}_{ts}.{ext}")
@@ -183,7 +215,7 @@ def backup_files():
 
     # Trim backups older than 7 days per file type
     cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('field_sources','json')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         for f in glob.glob(pattern):
             if os.path.getmtime(f) < cutoff:
@@ -312,22 +344,29 @@ def validate_row(row, device):
 
 # ── Source precedence merge ───────────────────────────────────────────────────
 
-def merge_with_precedence(existing_rows, new_rows_by_source, precedence):
+def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_sources=None):
     """
     Merge new data into existing rows using source precedence rules.
 
     existing_rows: dict {date: row_dict}
     new_rows_by_source: dict {source_name: {date: row_dict}}
     precedence: dict {metric_category: [source, ...]}
+    field_sources: dict {date: {field: source}} - tracks which source actually
+        set each field, mutated in place and also returned. Pass {} (or None)
+        on a fresh run; existing fields with no recorded attribution (rows
+        written before this tracking existed) are treated as "unknown" and
+        can always be overwritten by any prioritised source, since there's no
+        reliable way to know what actually set them.
 
     For each date and each field:
     - If existing row has no value: fill from highest-priority source that has it
     - If existing row has a value: only overwrite if a higher-priority source provides it
     - Never leave a field empty if any source has data for it
 
-    Returns merged rows dict.
+    Returns (merged rows dict, field_sources dict).
     """
     merged = dict(existing_rows)
+    field_sources = field_sources if field_sources is not None else {}
 
     # Collect all dates across all sources
     all_dates = set(merged.keys())
@@ -339,6 +378,7 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence):
             merged[date] = {'date': date}
 
         row = merged[date]
+        date_field_sources = field_sources.setdefault(date, {})
         sources_used = set()
         if row.get('source'):
             sources_used = set(row['source'].split('+'))
@@ -363,25 +403,32 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence):
                         # Field is empty — fill it from this source
                         row[field] = src_val
                         sources_used.add(source)
+                        date_field_sources[field] = source
                         break
                     else:
                         # Field already has a value — only overwrite if this is
-                        # a higher-priority source than whatever set it originally
-                        current_source = row.get('source', '')
-                        current_priority = next(
-                            (i for i, s in enumerate(prio_sources) if s in current_source),
-                            999
+                        # a higher-priority source than whatever ACTUALLY set
+                        # it, per the field-level tracking above (not a guess
+                        # from the row's combined multi-metric source string,
+                        # which can't tell sleep's real source apart from
+                        # steps' or HRV's on a day multiple devices touched).
+                        current_source = date_field_sources.get(field)
+                        current_priority = (
+                            prio_sources.index(current_source)
+                            if current_source in prio_sources
+                            else 999  # unknown/untracked - always safely overwritable
                         )
                         new_priority = prio_sources.index(source)
                         if new_priority < current_priority:
                             row[field] = src_val
                             sources_used.add(source)
+                            date_field_sources[field] = source
                         break  # Don't check lower-priority sources for this field
 
         row['source'] = '+'.join(sorted(sources_used)) if sources_used else row.get('source', '')
         merged[date] = row
 
-    return merged
+    return merged, field_sources
 
 
 # ── Device extractors ─────────────────────────────────────────────────────────
@@ -511,6 +558,7 @@ def main():
     # ── Normal pipeline run ──
     prefs = load_prefs()
     precedence = get_precedence(prefs)
+    field_sources = load_field_sources()
 
     # Determine which devices to run
     if args.device:
@@ -564,7 +612,7 @@ def main():
         return
 
     # Merge with precedence
-    merged = merge_with_precedence(existing, new_rows_by_source, precedence)
+    merged, field_sources = merge_with_precedence(existing, new_rows_by_source, precedence, field_sources)
 
     new_dates = len(merged) - len(existing)
     log('pipeline', 'merge', 'ok',
@@ -577,6 +625,12 @@ def main():
 
     # Write output
     write_combined(merged, dry_run=args.dry_run, existing_count=len(existing))
+
+    # Persist field-level source attribution - only after a real (non-dry-run)
+    # write, so a dry-run preview never mutates state that a real run would rely on
+    if not args.dry_run:
+        save_field_sources(field_sources)
+        log('pipeline', 'field_sources', 'ok', f"Saved attribution for {len(field_sources)} date(s)")
 
     # Archive processed inbox files to data/inbox/old/
     if not args.dry_run:
