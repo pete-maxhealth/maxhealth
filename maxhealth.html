@@ -4270,7 +4270,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.439</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.440</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5028,7 +5028,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.439'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.440'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -21364,13 +21364,28 @@ function renderTrends() {
     const avgSteps7 = lastStepsVals.length ? Math.round(lastStepsVals.reduce((a,b)=>a+b,0)/lastStepsVals.length) : null;
     const actScore = avgSteps7 ? Math.min(100, Math.round(avgSteps7/10000*100)) : null;
 
-    // Vitals score — SpO2 + HRV, use last row that actually has these values
+    // Vitals score — SpO2 + HRV, use last row that actually has these values.
+    // HRV is scored against the person's OWN recent baseline (last 30
+    // readings), not a fixed generic target - HRV normal ranges vary hugely
+    // by individual (age, fitness, health conditions), so a flat "80ms=
+    // perfect" scale unfairly marked a genuinely healthy personal baseline
+    // as "Low" for anyone whose normal sits below that generic figure.
+    // This brings it in line with how the pattern-learning backend already
+    // judges HRV (relative to the person's own baseline, not a population
+    // number) - previously the two disagreed on the same data, which is
+    // exactly the kind of contradiction that erodes trust in either one.
     const lastSpO2 = [...spo2Vals].reverse().find(v => v != null && v > 0) || null;
     const lastHRV  = [...hrvVals].reverse().find(v => v != null && v > 0) || null;
+    const recentHrvVals = [...hrvVals].filter(v => v != null && v > 0).slice(-30);
+    const hrvBaseline = recentHrvVals.length >= 3
+      ? recentHrvVals.reduce((a,b) => a+b, 0) / recentHrvVals.length
+      : null;
     let vitScore = null;
     if (lastSpO2) {
       const spo2part = Math.round((lastSpO2 - 88) / 12 * 60); // 88%=0, 100%=60
-      const hrvpart  = lastHRV ? Math.min(40, Math.round(lastHRV / 80 * 40)) : 20; // 0ms=0, 80ms+=40
+      const hrvpart = (lastHRV && hrvBaseline)
+        ? Math.min(40, Math.round((lastHRV / hrvBaseline) * 40)) // at/above your own recent baseline = full marks
+        : (lastHRV ? 20 : 20); // not enough history for a personal baseline yet - neutral, same fallback as before
       vitScore = Math.min(100, spo2part + hrvpart);
     }
 
