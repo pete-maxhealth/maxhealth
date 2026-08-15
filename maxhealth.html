@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.432</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.433</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.432'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.433'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5937,23 +5937,9 @@ function _substituteRecipeIngredient(ing, onSwapped, searchOnlineFallback) {
   if (!ing) return;
   const amount = ing.amount || 100;
   _openSubstitutePicker(ing.name, (f) => {
-    const _ps = (f.portion || '').toLowerCase();
-    const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-    let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
-    // Same sanity check as addLibItemToRecipe - a mislabeled "per 1g" library
-    // entry would otherwise blow up the swapped-in macros the same way it did
-    // for the recipe totals bug fixed earlier.
-    if (baseG > 0 && baseG < 10 && (f.kcal / baseG) > 50) baseG = 100;
-    const factor = amount / baseG;
     const oldName = ing.name;
-    ing.name = f.name;
-    ing.amount = amount; // deliberately unchanged - same portion size as before
-    ing.kcal = Math.round(f.kcal * factor);
-    ing.protein = Math.round(f.protein * factor * 10) / 10;
-    ing.fat = Math.round((f.fat || 0) * factor * 10) / 10;
-    ing.carbs = Math.round(f.carbs * factor * 10) / 10;
-    ing.fibre = Math.round((f.fibre || 0) * factor * 10) / 10;
-    ing._base = { kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs, fibre: f.fibre || 0, baseG };
+    const scaled = _libItemToScalableIngredient(f, amount); // same amount, preserved - portion size unchanged
+    Object.assign(ing, scaled);
     // Tags the swap so it's visibly traceable rather than looking identical
     // to having always been this ingredient - shows as a small note in the
     // ingredient row (both builder and Cook Mode) until removed/re-edited.
@@ -11538,7 +11524,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
     (combo.items || []).forEach(name => {
       let match = lib.find(l => l.name.toLowerCase() === name.toLowerCase());
       if (!match) match = fuzzyFindInLibrary(name); // name drifted slightly — still try to resolve it
-      if (match) resolvedItems.push(match); else anyMissing = true;
+      if (match) resolvedItems.push(_libItemToScalableIngredient(match)); else anyMissing = true;
     });
     if (!resolvedItems.length) return; // nothing resolved at all — skip this combo entirely
     const comboIndex = window._pendingLibraryCombos.length;
@@ -11578,11 +11564,18 @@ function _buildComboItemsCardHTML(comboIndex) {
   }
   const totals = _comboItemsTotals(combo.items);
   const itemRows = combo.items.map((f, j) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-      <div style="font-size:12px;color:var(--text2);">
-        ${f.name} <span style="color:var(--text3);">(${f.portion || (f.per100g ? '100g' : 'as stored')})</span>${f._substitutedFrom ? ` <span style="color:var(--text3);font-style:italic;font-size:10px;">(swapped from ${f._substitutedFrom})</span>` : ''}
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;color:var(--text2);">${f.name}${f._substitutedFrom ? ` <span style="color:var(--text3);font-style:italic;font-size:10px;">(swapped from ${f._substitutedFrom})</span>` : ''}</div>
+        <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;" id="combo-item-macros-${comboIndex}-${j}">${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C</div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:2px 6px;flex-shrink:0;">
+        <input type="number" value="${f.amount || 100}" min="1" max="5000"
+          style="width:45px;background:transparent;border:none;outline:none;color:var(--text);font-size:13px;font-weight:700;text-align:center;"
+          oninput="scaleComboItem(${comboIndex},${j},this.value)">
+        <span style="font-size:9px;color:var(--text3);">g</span>
+      </div>
+      <div style="display:flex;gap:2px;flex-shrink:0;">
         <span onclick="substituteComboItem(${comboIndex},${j})" style="color:var(--accent);cursor:pointer;padding:2px 4px;font-size:13px;" title="Swap for something similar in your library">🔄</span>
         <span onclick="removeComboItem(${comboIndex},${j})" style="color:var(--text3);cursor:pointer;padding:2px 4px;font-size:14px;" title="Remove">×</span>
       </div>
@@ -11591,10 +11584,33 @@ function _buildComboItemsCardHTML(comboIndex) {
     ${itemRows}
     <div onclick="openLibraryPickerForCombo(${comboIndex})" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin:6px 0;">+ add ingredient</div>
     ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
-    <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
+    <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;" id="combo-totals-${comboIndex}">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
     ${combo.anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
     <button onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
   </div>`;
+}
+
+// Scales one combo item's macros against its own base, updates just that
+// item's macro line and the card's total line inline (no full card
+// re-render) - same reasoning as scaleRecipeIngredient: re-rendering the
+// whole card while someone's actively typing into the amount field would
+// fight the input's own focus/cursor position.
+function scaleComboItem(comboIndex, itemIndex, gramsStr) {
+  const combo = window._pendingLibraryCombos[comboIndex];
+  const item = combo?.items?.[itemIndex];
+  if (!item) return;
+  const grams = parseFloat(gramsStr) || 0;
+  if (grams <= 0) return;
+  item.amount = grams;
+  const scaled = getScaledIngredient(item);
+  item.kcal = scaled.kcal; item.protein = scaled.protein; item.fat = scaled.fat; item.carbs = scaled.carbs; item.fibre = scaled.fibre;
+  const macrosEl = document.getElementById(`combo-item-macros-${comboIndex}-${itemIndex}`);
+  if (macrosEl) macrosEl.textContent = `${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C`;
+  const totalsEl = document.getElementById(`combo-totals-${comboIndex}`);
+  if (totalsEl) {
+    const totals = _comboItemsTotals(combo.items);
+    totalsEl.textContent = `${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F`;
+  }
 }
 
 function _reRenderComboCard(comboIndex) {
@@ -11610,8 +11626,10 @@ function substituteComboItem(comboIndex, itemIndex) {
   // combo items don't have an equivalent "fix this ingredient" search flow
   // built for them. Worth adding later if this turns out to matter as much
   // here as it does for recipes.
+  const amount = item.amount || 100;
   _openSubstitutePicker(item.name, (f) => {
-    combo.items[itemIndex] = { ...f, _substitutedFrom: item.name };
+    const oldName = item.name;
+    combo.items[itemIndex] = { ..._libItemToScalableIngredient(f, amount), _substitutedFrom: oldName }; // same portion size preserved, same as recipe-ingredient substitute
     _reRenderComboCard(comboIndex);
   });
 }
@@ -11628,7 +11646,7 @@ function addComboItemFromLibrary(comboIndex, libIdx) {
   const f = lib[libIdx];
   const combo = window._pendingLibraryCombos[comboIndex];
   if (!f || !combo) return;
-  combo.items.push(f);
+  combo.items.push(_libItemToScalableIngredient(f));
   closeRecipeLibPicker();
   _reRenderComboCard(comboIndex);
 }
@@ -11662,7 +11680,7 @@ function logSuggestedCombo(comboIndex) {
   const items = pending.items;
   if (!items || !items.length) { showToast('No items left in this suggestion to log'); return; }
   const foods = items.map(f => ({
-    name: f.name, amount: f.portion || '100g',
+    name: f.name, amount: `${f.amount || 100}g`, // was f.portion (the library default, ignoring any edit) - now the actual amount, portion editing wouldn't have logged correctly otherwise
     kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs,
     _fromLibrary: true,
   }));
@@ -17900,31 +17918,38 @@ function filterRecipeLibPicker(q) {
   }).join('');
 }
 
-function addLibItemToRecipe(idx) {
-  const lib = loadLibrary();
-  const f = lib[idx];
-  if (!f) return;
-  // Get base portion from library entry
+// Shared portion-parsing logic - previously duplicated identically in
+// addLibItemToRecipe and the recipe-ingredient substitute function, and now
+// also needed for suggested-combo items getting the same scalable shape.
+// One place for the baseG extraction and the mislabeled-portion sanity
+// check (the "per 1g" with 1000+ kcal bug from the recipe-totals fix).
+function _libItemToScalableIngredient(f, amountOverride) {
   const _ps = (f.portion || '').toLowerCase();
   const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
   let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
-  // Sanity check: a portion this small implies an implausible kcal/g density
-  // (e.g. "per 1g" with 1000+ kcal stated - almost certainly a mislabeled
-  // library entry where the values are really per-100g). Nothing real food
-  // exceeds ~900 kcal per single gram (pure fat tops out around 9 kcal/g).
-  // Falling back to 100g here is a guess, not a fix - the library entry
-  // itself still needs correcting - but it stops a bad label from silently
-  // producing a million-kcal recipe total.
   if (baseG > 0 && baseG < 10 && (f.kcal / baseG) > 50) {
     showToast(`⚠️ "${f.name}" portion (${f.portion}) looks wrong for its kcal - check its library entry. Using 100g for now.`);
     baseG = 100;
   }
-  _recipeIngredients.push({
+  const amount = amountOverride || baseG;
+  const factor = amount / baseG;
+  return {
     name: f.name,
-    amount: baseG,
-    kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0,
+    amount,
+    kcal: Math.round(f.kcal * factor),
+    protein: Math.round(f.protein * factor * 10) / 10,
+    fat: Math.round((f.fat || 0) * factor * 10) / 10,
+    carbs: Math.round(f.carbs * factor * 10) / 10,
+    fibre: Math.round((f.fibre || 0) * factor * 10) / 10,
     _base: { kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0, baseG }
-  });
+  };
+}
+
+function addLibItemToRecipe(idx) {
+  const lib = loadLibrary();
+  const f = lib[idx];
+  if (!f) return;
+  _recipeIngredients.push(_libItemToScalableIngredient(f));
   closeRecipeLibPicker();
   renderRecipeIngredients();
   updateRecipeTotals();
