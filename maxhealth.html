@@ -4270,7 +4270,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.438</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.439</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5028,7 +5028,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.438'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.439'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5827,6 +5827,20 @@ const FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','
 // interchangeable on a strict protocol). Checked before the generic list,
 // so "peanut butter" resolves to its own category rather than "butter".
 const COMPOUND_CATEGORY_WORDS = ['peanut butter', 'almond butter', 'cashew butter', 'cocoa butter', 'shea butter'];
+// Genuine nut/seed spreads group together as substitutes for each other
+// (comparable use and macro profile - all a fat+protein spread). Cocoa
+// butter and shea butter deliberately stay their own separate categories
+// rather than joining that group - cocoa butter is a flavourless baking
+// fat, not a spread, and shea butter is essentially never a food ingredient
+// at all in normal retail context (it's a cosmetic product) - grouping
+// either of those in with peanut butter would just be a different flavour
+// of the same "shares a word, isn't actually similar" mistake this whole
+// category system exists to prevent.
+const COMPOUND_CATEGORY_CANONICAL = {
+  'peanut butter': 'nut butter',
+  'almond butter': 'nut butter',
+  'cashew butter': 'nut butter',
+};
 function canonicalCategory(matched) { return matched.replace(/es$/, '').replace(/s$/, ''); }
 // Single source of truth for category detection, used everywhere
 // FOOD_CATEGORY_WORDS matching happens - previously each of the 4 functions
@@ -5836,7 +5850,7 @@ function canonicalCategory(matched) { return matched.replace(/es$/, '').replace(
 function detectFoodCategory(text) {
   const lower = text.toLowerCase();
   const compound = COMPOUND_CATEGORY_WORDS.find(c => lower.includes(c));
-  if (compound) return canonicalCategory(compound);
+  if (compound) return COMPOUND_CATEGORY_CANONICAL[compound] || canonicalCategory(compound);
   const generic = FOOD_CATEGORY_WORDS.find(c => lower.includes(c));
   return generic ? canonicalCategory(generic) : null;
 }
@@ -10549,6 +10563,9 @@ function closeFoodSearch() {
     const recipeModal = document.getElementById('recipeBuilderModal');
     if (recipeModal) recipeModal.style.display = 'flex';
   }
+  // No modal to restore for combo mode - just clear the target so a
+  // cancelled search doesn't silently apply to a future unrelated one
+  _comboSearchTarget = null;
 }
 
 function handleFoodSearchOverlayClick(e) {
@@ -10907,6 +10924,37 @@ function logFoodFromDatabase() {
   const grams = parseFloat(document.getElementById('foodAmountGrams').value);
   if (isNaN(grams) || grams <= 0) { showToast('Enter an amount in grams'); return; }
   const factor = grams / 100;
+
+  // Suggested-combo substitute mode — route the picked online result back
+  // into that specific combo item, same amount-preserving swap logic as
+  // substituteComboItem's normal library-picker path, just with an online
+  // result standing in for a library entry. Checked first and returns
+  // early so this never falls through into the recipe-mode logic below.
+  if (_comboSearchTarget) {
+    const { comboIndex, itemIndex } = _comboSearchTarget;
+    _comboSearchTarget = null;
+    const combo = window._pendingLibraryCombos[comboIndex];
+    const item = combo?.items?.[itemIndex];
+    closeFoodSearch();
+    if (!combo || !item) { showToast('That suggestion is no longer available'); return; }
+    const oldName = item.name;
+    const newName = _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name;
+    const amount = item.amount || grams;
+    combo.items[itemIndex] = {
+      name: newName,
+      amount,
+      kcal: Math.round(_selectedFoodItem.kcal * amount / 100),
+      protein: Math.round(_selectedFoodItem.prot * amount / 100 * 10) / 10,
+      fat: Math.round((_selectedFoodItem.fat || 0) * amount / 100 * 10) / 10,
+      carbs: Math.round(_selectedFoodItem.carb * amount / 100 * 10) / 10,
+      fibre: Math.round((_selectedFoodItem.fibre || 0) * amount / 100 * 10) / 10,
+      _base: { kcal: _selectedFoodItem.kcal, protein: _selectedFoodItem.prot, fat: _selectedFoodItem.fat || 0, carbs: _selectedFoodItem.carb, fibre: _selectedFoodItem.fibre || 0, baseG: 100 },
+      _substitutedFrom: oldName
+    };
+    _reRenderComboCard(comboIndex);
+    showToast(`Swapped in "${newName}" ✓`);
+    return;
+  }
 
   // Recipe mode — add to recipe instead of logging
   if (_recipeSearchMode) {
@@ -11640,16 +11688,12 @@ function substituteComboItem(comboIndex, itemIndex) {
   const combo = window._pendingLibraryCombos[comboIndex];
   const item = combo?.items?.[itemIndex];
   if (!item) return;
-  // No online-search fallback here yet, unlike the recipe-builder version -
-  // combo items don't have an equivalent "fix this ingredient" search flow
-  // built for them. Worth adding later if this turns out to matter as much
-  // here as it does for recipes.
   const amount = item.amount || 100;
   _openSubstitutePicker(item.name, (f) => {
     const oldName = item.name;
     combo.items[itemIndex] = { ..._libItemToScalableIngredient(f, amount), _substitutedFrom: oldName }; // same portion size preserved, same as recipe-ingredient substitute
     _reRenderComboCard(comboIndex);
-  });
+  }, () => openComboItemOnlineSearch(comboIndex, itemIndex));
 }
 
 function removeComboItem(comboIndex, itemIndex) {
@@ -18008,6 +18052,7 @@ function recipeOpenSearch() {
 
 let _recipeSearchMode = false;
 let _recipeSearchFixIndex = null; // set when Search is launched FROM a flagged ingredient - tells logFoodFromDatabase() to update that specific row in place rather than push a new one
+let _comboSearchTarget = null; // {comboIndex, itemIndex} - set when Search is launched from a suggested-combo item's substitute picker
 
 // Opens the exact same food-search UI used for adding a brand-new recipe
 // ingredient, but pre-filled with a flagged ingredient's own name and wired
@@ -18031,6 +18076,21 @@ function openRecipeIngredientSearch(index) {
 }
 
 // Recipe search mode handled inside logFoodFromDatabase directly
+
+// Same idea as openRecipeIngredientSearch above, but for a suggested-meal
+// combo item rather than a recipe ingredient - no modal to hide/restore
+// here since the chat stays visible behind the search overlay the whole
+// time, unlike the recipe builder which gets hidden while search is open.
+function openComboItemOnlineSearch(comboIndex, itemIndex) {
+  const combo = window._pendingLibraryCombos[comboIndex];
+  const item = combo?.items?.[itemIndex];
+  if (!item) return;
+  _comboSearchTarget = { comboIndex, itemIndex };
+  openFoodSearch();
+  const cleanName = item.name.replace(/^⚠️\s*/, '').trim();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = cleanName; onFoodSearchInput(cleanName); }
+}
 
 async function handleRecipeBarcode(input) {
   _recipeSearchMode = true;
