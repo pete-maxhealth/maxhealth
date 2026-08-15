@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.428</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.429</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.428'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.429'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5895,6 +5895,88 @@ function findLibrarySubstitutes(name, excludeName, limit = 3) {
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map(s => s.item);
+}
+
+// ─── INGREDIENT SUBSTITUTION — swap an already-added recipe ingredient for
+// something similar from the library, keeping the same portion size and
+// leaving step text untouched. Shared by both the recipe builder's
+// ingredient list and Cook Mode's ingredient panel, since both store
+// ingredients in the same shape ({name, amount, kcal, protein, fat, carbs,
+// _base}) - one swap function, two thin callers.
+//
+// Known trade-off, not silently hidden: this only swaps the ingredient
+// list entry. If a step says "fold in the walnuts", it still will after
+// swapping to mixed nuts - rewriting step text to match would mean guessing
+// at phrasing, which risks being wrong in a way that's worse than just
+// leaving it for the cook to notice and adjust themselves.
+// ─── INGREDIENT SUBSTITUTION — shared core ─────────────────────────────────
+// Shape-agnostic: finds a similar library item and confirms the swap, but
+// doesn't touch any specific ingredient/combo data structure itself - each
+// caller (recipe ingredients, cook mode, suggested-meal combos) mutates its
+// own shape in its own onAccept callback. This is the piece that's
+// genuinely identical everywhere; the mutation logic differs per shape
+// (recipe ingredients scale by amount/_base, combo items are swapped
+// wholesale) so it stays in each caller rather than being forced together.
+function _findSubstituteAndConfirm(name, extraNote, onAccept) {
+  const matches = findLibrarySubstitutes(name, name, 1);
+  if (!matches.length) {
+    showToast(`No similar ingredient found in your library for "${name}"`);
+    return;
+  }
+  const f = matches[0];
+  appConfirm(
+    `Swap "${name}" for "${f.name}"?<br><span style="color:var(--text3);font-size:12px;">${f.kcal}kcal · ${f.protein}g P · ${f.fat||0}g F · ${f.carbs}g C per ${f.portion || '100g'}</span>${extraNote ? `<br><span style="color:var(--text3);font-size:11px;">${extraNote}</span>` : ''}`,
+    () => onAccept(f),
+    null, false, { confirm: 'Swap it in' }
+  );
+}
+
+// Recipe-builder / Cook Mode caller - ingredients here scale by a numeric
+// amount against a per-baseG nutrition figure (_base), so the swap keeps
+// the same portion size and recalculates macros at that amount using the
+// substitute's own values, same math as addLibItemToRecipe.
+function _substituteRecipeIngredient(ing, onSwapped) {
+  if (!ing) return;
+  const amount = ing.amount || 100;
+  _findSubstituteAndConfirm(ing.name, `same ${amount}g portion, macros recalculated.`, (f) => {
+    const _ps = (f.portion || '').toLowerCase();
+    const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
+    let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
+    // Same sanity check as addLibItemToRecipe - a mislabeled "per 1g" library
+    // entry would otherwise blow up the swapped-in macros the same way it did
+    // for the recipe totals bug fixed earlier.
+    if (baseG > 0 && baseG < 10 && (f.kcal / baseG) > 50) baseG = 100;
+    const factor = amount / baseG;
+    const oldName = ing.name;
+    ing.name = f.name;
+    ing.amount = amount; // deliberately unchanged - same portion size as before
+    ing.kcal = Math.round(f.kcal * factor);
+    ing.protein = Math.round(f.protein * factor * 10) / 10;
+    ing.fat = Math.round((f.fat || 0) * factor * 10) / 10;
+    ing.carbs = Math.round(f.carbs * factor * 10) / 10;
+    ing.fibre = Math.round((f.fibre || 0) * factor * 10) / 10;
+    ing._base = { kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs, fibre: f.fibre || 0, baseG };
+    // Tags the swap so it's visibly traceable rather than looking identical
+    // to having always been this ingredient - shows as a small note in the
+    // ingredient row (both builder and Cook Mode) until removed/re-edited.
+    ing._substitutedFrom = oldName;
+    showToast(`Swapped in "${f.name}" ✓`);
+    onSwapped();
+  });
+}
+
+
+function substituteBuilderIngredient(i) {
+  _substituteRecipeIngredient(_recipeIngredients[i], () => {
+    renderRecipeIngredients();
+    updateRecipeTotals();
+  });
+}
+
+function substituteCookIngredient(i) {
+  _substituteRecipeIngredient(_cookRecipe?.ingredients?.[i], () => {
+    renderCookModeIngredients();
+  });
 }
 
 function jumpToLibraryLetter(letter) {
@@ -11457,25 +11539,98 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
       if (match) resolvedItems.push(match); else anyMissing = true;
     });
     if (!resolvedItems.length) return; // nothing resolved at all — skip this combo entirely
-    const combTotals = resolvedItems.reduce((a, f) => ({
-      kcal: a.kcal + (f.kcal||0), protein: a.protein + (f.protein||0),
-      carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0)
-    }), { kcal:0, protein:0, carbs:0, fat:0 });
-    window._pendingLibraryCombos.push({ type: 'items', items: resolvedItems });
+    const comboIndex = window._pendingLibraryCombos.length;
+    window._pendingLibraryCombos.push({ type: 'items', items: resolvedItems, note: combo.note, anyMissing });
     window._recentMealSuggestions.push(...resolvedItems.map(f => f.name));
     window._recentMealSuggestions = window._recentMealSuggestions.slice(-30);
-    const itemNames = resolvedItems.map(f => `${f.name} (${f.portion || (f.per100g ? '100g' : 'as stored')})`).join(' + ');
-    html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
-      <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">${itemNames}</div>
-      ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
-      <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${Math.round(combTotals.kcal)}kcal · ${Math.round(combTotals.protein*10)/10}g P · ${Math.round(combTotals.carbs*10)/10}g C · ${Math.round(combTotals.fat*10)/10}g F</div>
-      ${anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
-      <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
-    </div>`;
+    html += `<div id="combo-card-${comboIndex}">${_buildComboItemsCardHTML(comboIndex)}</div>`;
   });
   if (!html) { addBubble('Couldn\'t match the suggested items to your library exactly — try again.', 'system', 'warn'); return; }
   const bubble = addBubble('Here\'s what fits, using real items from your library and recipes:', 'system');
   bubble.innerHTML += html;
+}
+
+// ─── SUGGESTED-COMBO PER-ITEM EDITING — substitute, remove, add ────────────
+// Same problem as recipe ingredients: an AI suggestion is only useful if
+// what's actually in the kitchen is close enough to what got proposed.
+// Previously the only options were "log the whole combo as suggested" or
+// ignore it entirely for inspiration - now any single item can be swapped,
+// dropped, or added to, and the card re-renders in place rather than
+// needing the whole suggestion list rebuilt.
+
+function _comboItemsTotals(items) {
+  return items.reduce((a, f) => ({
+    kcal: a.kcal + (f.kcal||0), protein: a.protein + (f.protein||0),
+    carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0)
+  }), { kcal:0, protein:0, carbs:0, fat:0 });
+}
+
+function _buildComboItemsCardHTML(comboIndex) {
+  const combo = window._pendingLibraryCombos[comboIndex];
+  if (!combo || combo.type !== 'items') return '';
+  if (!combo.items.length) {
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">No items left in this suggestion.</div>
+      <button onclick="openLibraryPickerForCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);color:var(--accent);border-radius:6px;font-size:12px;cursor:pointer;">+ Add an ingredient</button>
+    </div>`;
+  }
+  const totals = _comboItemsTotals(combo.items);
+  const itemRows = combo.items.map((f, j) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
+      <div style="font-size:12px;color:var(--text2);">
+        ${f.name} <span style="color:var(--text3);">(${f.portion || (f.per100g ? '100g' : 'as stored')})</span>${f._substitutedFrom ? ` <span style="color:var(--text3);font-style:italic;font-size:10px;">(swapped from ${f._substitutedFrom})</span>` : ''}
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <span onclick="substituteComboItem(${comboIndex},${j})" style="color:var(--accent);cursor:pointer;padding:2px 4px;font-size:13px;" title="Swap for something similar in your library">🔄</span>
+        <span onclick="removeComboItem(${comboIndex},${j})" style="color:var(--text3);cursor:pointer;padding:2px 4px;font-size:14px;" title="Remove">×</span>
+      </div>
+    </div>`).join('');
+  return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
+    ${itemRows}
+    <div onclick="openLibraryPickerForCombo(${comboIndex})" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin:6px 0;">+ add ingredient</div>
+    ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
+    <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
+    ${combo.anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
+    <button onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
+  </div>`;
+}
+
+function _reRenderComboCard(comboIndex) {
+  const el = document.getElementById(`combo-card-${comboIndex}`);
+  if (el) el.innerHTML = _buildComboItemsCardHTML(comboIndex);
+}
+
+function substituteComboItem(comboIndex, itemIndex) {
+  const combo = window._pendingLibraryCombos[comboIndex];
+  const item = combo?.items?.[itemIndex];
+  if (!item) return;
+  _findSubstituteAndConfirm(item.name, null, (f) => {
+    combo.items[itemIndex] = { ...f, _substitutedFrom: item.name };
+    _reRenderComboCard(comboIndex);
+  });
+}
+
+function removeComboItem(comboIndex, itemIndex) {
+  const combo = window._pendingLibraryCombos[comboIndex];
+  if (!combo?.items) return;
+  combo.items.splice(itemIndex, 1);
+  _reRenderComboCard(comboIndex);
+}
+
+function addComboItemFromLibrary(comboIndex, libIdx) {
+  const lib = loadLibrary();
+  const f = lib[libIdx];
+  const combo = window._pendingLibraryCombos[comboIndex];
+  if (!f || !combo) return;
+  combo.items.push(f);
+  closeRecipeLibPicker();
+  _reRenderComboCard(comboIndex);
+}
+
+function openLibraryPickerForCombo(comboIndex) {
+  _libPickerTarget = { type: 'combo', comboIndex };
+  recipeAddFromLibrary(); // same picker modal, dispatcher routes the pick back here
+  _libPickerTarget = { type: 'combo', comboIndex }; // recipeAddFromLibrary resets this to 'recipe' - restore after
 }
 
 function logSuggestedCombo(comboIndex) {
@@ -11499,13 +11654,17 @@ function logSuggestedCombo(comboIndex) {
   }
 
   const items = pending.items;
-  if (!items || !items.length) return;
+  if (!items || !items.length) { showToast('No items left in this suggestion to log'); return; }
   const foods = items.map(f => ({
     name: f.name, amount: f.portion || '100g',
     kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs,
     _fromLibrary: true,
   }));
-  const mealName = items.map(f => f.name).join(' + ');
+  // Any substituted item gets its swap noted in the logged description too
+  // (e.g. "mixed nuts (swapped for walnuts)"), not just shown while editing -
+  // useful later reading back through history to see why a day's log doesn't
+  // match what was originally suggested.
+  const mealName = items.map(f => f._substitutedFrom ? `${f.name} (swapped for ${f._substitutedFrom})` : f.name).join(' + ');
   logFoods(foods, mealName);
   showToast(`✓ ${mealName} logged`);
   switchTabById('chat');
@@ -17632,11 +17791,25 @@ function editRecipeIngredientNote(i) {
   }, ing.note || '');
 }
 
+// Which context opened the library picker - lets the same modal serve both
+// "add to recipe" (existing) and "add to a suggested-meal combo" (new)
+// without needing two near-identical picker UIs. Reset on close so a stale
+// target can't linger into an unrelated future open.
+let _libPickerTarget = { type: 'recipe' };
+function _libPickerItemChosen(idx) {
+  if (_libPickerTarget?.type === 'combo') {
+    addComboItemFromLibrary(_libPickerTarget.comboIndex, idx);
+  } else {
+    addLibItemToRecipe(idx);
+  }
+}
+
 function recipeAddFromLibrary() {
+  _libPickerTarget = { type: 'recipe' };
   const lib = loadLibrary();
   const el = document.getElementById('recipeLibPickerList');
   el.innerHTML = lib.map((f, i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="addLibItemToRecipe(${i})">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="_libPickerItemChosen(${i})">
       <div>
         <div style="font-size:13px;color:var(--text);">${f.name}</div>
         <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
@@ -17652,9 +17825,36 @@ function filterRecipeLibPicker(q) {
   const lib = loadLibrary();
   const filtered = lib.filter(f => f.name.toLowerCase().includes(q.toLowerCase()));
   const el = document.getElementById('recipeLibPickerList');
+
+  if (!filtered.length && q.trim()) {
+    // No exact match - same substitute-finding logic already used for meal
+    // logging (findLibrarySubstitutes), reused here rather than building a
+    // second matcher. Falls back to a plain "no results" message if nothing
+    // similar exists either.
+    const substitutes = findLibrarySubstitutes(q);
+    if (substitutes.length) {
+      el.innerHTML = `
+        <div style="padding:8px 0 12px;font-size:12px;color:var(--text3);">No exact match for "${q}" — closest in your library:</div>
+        ${substitutes.map(f => {
+          const realIdx = lib.findIndex(l => l.name === f.name);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="_libPickerItemChosen(${realIdx})">
+            <div>
+              <div style="font-size:13px;color:var(--text);">${f.name}</div>
+              <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
+            </div>
+            <span style="color:var(--accent);font-size:18px;padding:0 8px;">+</span>
+          </div>`;
+        }).join('')}
+      `;
+      return;
+    }
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">No match for "${q}" — add it manually below instead.</div>`;
+    return;
+  }
+
   el.innerHTML = filtered.map((f, i) => {
     const realIdx = lib.findIndex(l => l.name === f.name);
-    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="addLibItemToRecipe(${realIdx})">
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="_libPickerItemChosen(${realIdx})">
       <div>
         <div style="font-size:13px;color:var(--text);">${f.name}</div>
         <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal}kcal · ${f.protein}g P · ${f.carbs}g C</div>
@@ -17696,6 +17896,7 @@ function addLibItemToRecipe(idx) {
 }
 
 function closeRecipeLibPicker() {
+  _libPickerTarget = { type: 'recipe' };
   document.getElementById('recipeLibPicker').style.display = 'none';
 }
 
@@ -17800,11 +18001,14 @@ function renderRecipeIngredients() {
       : ing.source === 'manual'
       ? `<span style="font-size:9px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px;">✏️ manual</span>`
       : '';
+    const substitutedNote = ing._substitutedFrom
+      ? `<span style="font-size:9px;color:var(--text3);font-style:italic;margin-left:6px;">(swapped from ${ing._substitutedFrom})</span>`
+      : '';
     return `
     <div style="padding:8px 0;border-bottom:1px solid var(--border);${isFlagged ? 'background:rgba(250,204,21,0.06);border-radius:6px;' : ''}">
       <div style="display:flex;align-items:center;gap:8px;">
         <div style="flex:1;">
-          <div style="font-size:13px;color:${isFlagged ? 'var(--yellow)' : 'var(--text)'};">${ing.name}${sourceBadge}</div>
+          <div style="font-size:13px;color:${isFlagged ? 'var(--yellow)' : 'var(--text)'};">${ing.name}${sourceBadge}${substitutedNote}</div>
           <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;" id="recipe-ing-macros-${i}">${Math.round(scaled.kcal)}kcal · ${Math.round(scaled.protein*10)/10}g P · ${Math.round((scaled.fat||0)*10)/10}g F · ${Math.round(scaled.carbs*10)/10}g C${ing._base ? ` <span style="color:var(--text3);font-size:10px;">(per ${ing._base.baseG}g)</span>` : ''}</div>
           ${isFlagged ? `<div style="display:flex;gap:10px;margin-top:4px;">
             <span onclick="openRecipeIngredientSearch(${i})" style="font-size:11px;color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online</span>
@@ -17818,6 +18022,7 @@ function renderRecipeIngredients() {
             oninput="scaleRecipeIngredient(${i}, this.value)">
           <span style="font-size:10px;color:var(--text3);">g</span>
         </div>
+        <span style="color:var(--accent);cursor:pointer;padding:4px 6px;font-size:14px;" onclick="substituteBuilderIngredient(${i})" title="Swap for something similar in your library">🔄</span>
         <span style="color:var(--text3);cursor:pointer;padding:4px 8px;font-size:16px;" onclick="removeRecipeIngredient(${i})">×</span>
       </div>
     </div>
@@ -18074,6 +18279,27 @@ function openCookModeFromDraft() {
   });
 }
 
+// Single source of truth for the Cook Mode ingredient panel - previously
+// duplicated near-identically in two places (initial open, and after a
+// servings change), which is exactly the kind of drift risk that's bitten
+// this codebase before (see: the two log-entry construction blocks that
+// silently diverged on the `amount` field). Both callers now just invoke
+// this. Ratio defaults to 1 (i.e. no scaling) when servings haven't been
+// changed from the recipe's original count.
+function renderCookModeIngredients() {
+  const ratio = (_cookCurrentServings && _cookOriginalServings) ? _cookCurrentServings / _cookOriginalServings : 1;
+  document.getElementById('cookModeIngredientsPanel').innerHTML = (_cookRecipe?.ingredients || []).map((ing, i) => {
+    const scaledAmount = ing.amount ? Math.round(ing.amount * ratio) : null;
+    return `<div style="padding:4px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+      <div>
+        <strong style="color:var(--text);">${ing.name}</strong>${scaledAmount ? ` — ${scaledAmount}g` : ''}${ing._substitutedFrom ? ` <span style="color:var(--text3);font-style:italic;font-size:10px;">(swapped from ${ing._substitutedFrom})</span>` : ''}
+        ${ing.note ? `<div style="color:var(--accent);font-style:italic;margin-top:2px;">${ing.note}</div>` : ''}
+      </div>
+      <span style="color:var(--accent);cursor:pointer;padding:2px 4px;font-size:13px;flex-shrink:0;" onclick="substituteCookIngredient(${i})" title="Swap for something similar in your library">🔄</span>
+    </div>`;
+  }).join('') || '<div style="color:var(--text3);font-size:12px;">No ingredients listed</div>';
+}
+
 function _openCookModeForRecipe(recipe) {
   _cookRecipe = recipe;
   _cookStepIndex = 0;
@@ -18085,12 +18311,7 @@ function _openCookModeForRecipe(recipe) {
 
   document.getElementById('cookModeRecipeName').textContent = recipe.name;
   document.getElementById('cookModeServingsLabel').textContent = `${_cookOriginalServings} serving${_cookOriginalServings === 1 ? '' : 's'}`;
-  document.getElementById('cookModeIngredientsPanel').innerHTML = (recipe.ingredients || []).map(ing =>
-    `<div style="padding:4px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
-      <strong style="color:var(--text);">${ing.name}</strong>${ing.amount ? ` — ${ing.amount}g` : ''}
-      ${ing.note ? `<div style="color:var(--accent);font-style:italic;margin-top:2px;">${ing.note}</div>` : ''}
-    </div>`
-  ).join('') || '<div style="color:var(--text3);font-size:12px;">No ingredients listed</div>';
+  renderCookModeIngredients();
   document.getElementById('cookModeIngredientsPanel').style.display = 'none';
   document.getElementById('cookModeIngToggleLabel').textContent = '(tap to show)';
   document.getElementById('cookModePlayPauseBtn').textContent = '▶ Start';
@@ -18230,13 +18451,7 @@ function cookModeRescale(newServings) {
   _cookCurrentServings = newServings;
   const ratio = newServings / _cookOriginalServings;
   document.getElementById('cookModeServingsLabel').textContent = `${newServings} serving${newServings === 1 ? '' : 's'}${ratio !== 1 ? ` (×${ratio.toFixed(2).replace(/\.?0+$/,'')})` : ''}`;
-  document.getElementById('cookModeIngredientsPanel').innerHTML = (_cookRecipe.ingredients || []).map(ing => {
-    const scaledAmount = ing.amount ? Math.round(ing.amount * ratio) : null;
-    return `<div style="padding:4px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
-      <strong style="color:var(--text);">${ing.name}</strong>${scaledAmount ? ` — ${scaledAmount}g` : ''}
-      ${ing.note ? `<div style="color:var(--accent);font-style:italic;margin-top:2px;">${ing.note}</div>` : ''}
-    </div>`;
-  }).join('') || '<div style="color:var(--text3);font-size:12px;">No ingredients listed</div>';
+  renderCookModeIngredients();
   const text = `Scaled to ${newServings} serving${newServings === 1 ? '' : 's'}.`;
   if (!_cookReadAloud || !('speechSynthesis' in window)) { _setCookMicStatus(text); return; }
   window.speechSynthesis.cancel();
