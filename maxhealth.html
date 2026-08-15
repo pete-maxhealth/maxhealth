@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.434</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.435</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5015,7 +5015,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.434'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.435'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13124,9 +13124,7 @@ function renderMealPreview() {
   // loop now needs to check _baseGramsIsGuess on the first item.
   const f0 = foods[0];
   const _amtStr = (f0.amount || '').toLowerCase();
-  const _amtNum = parseFloat(f0.amount) || 0;
-  const _amtIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_amtStr);
-  const _parsedGrams = _amtIsGrams && _amtNum > 0 ? _amtNum : 0;
+  const _parsedGrams = _extractGramsFromAmount(_amtStr);
   // Fallback: if the amount string didn't carry a parseable mass (e.g. "1 can"),
   // check whether the food's own NAME embeds one (e.g. "Hard Seltzer 440ml can") —
   // AI responses for packaged/unit items often put the real size there instead of
@@ -13169,8 +13167,7 @@ function renderMealPreview() {
     // Check if amount is specified and protein looks unscaled
     // Only fire for gram/ml amounts — skip tablespoon, tsp, whole etc.
     if (f.amount) {
-      const amtIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(f.amount);
-      const grams = amtIsGrams ? parseFloat(f.amount) : 0;
+      const grams = _extractGramsFromAmount(f.amount);
       if (grams > 0 && grams < 90 && f.protein > 0) {
         const proteinPer100 = (f.protein / grams) * 100;
         if (proteinPer100 > 50) {
@@ -13229,8 +13226,7 @@ function renderMealPreview() {
     // either. Pure fats are ~95-100% fat by weight — if the reported fat is far below
     // what the stated gram amount implies, the AI likely mis-scaled it.
     if (isPureFat(f.name) && f.amount) {
-      const amtIsGrams = /^\d+(\.\d+)?\s*(g|ml)\b/i.test(f.amount);
-      const grams = amtIsGrams ? parseFloat(f.amount) : 0;
+      const grams = _extractGramsFromAmount(f.amount);
       if (grams > 5) {
         const fatFraction = /cream/i.test(f.name) ? 0.5 : 0.9; // cream ~50% fat; oil/butter/lard/ghee ~90-100%
         const expectedFat = grams * fatFraction;
@@ -13338,6 +13334,19 @@ function removePreviewItem(idx) {
   }
 }
 
+// Extracts a gram/ml/kg/l figure from ANYWHERE in a string, not just the
+// very start - the previous per-site regexes were all anchored with ^,
+// which meant an amount like "half tin (200g)" or "3 rashers (90g)" never
+// matched even though the real figure was right there, just not leading.
+// That silently broke auto-scaling and validation warnings for exactly the
+// AI-generated amount phrasing this app produces most often. Returns 0
+// (not found) rather than null/undefined, matching the existing convention
+// at every call site.
+function _extractGramsFromAmount(str) {
+  const m = (str || '').match(/(\d+(?:\.\d+)?)\s*(g|ml|kg|l)\b/i);
+  return m ? parseFloat(m[1]) : 0;
+}
+
 function scalePreviewPortion(gramsStr) {
   const grams = parseFloat(gramsStr);
   if (!grams || grams <= 0 || !window._pendingMealFoods) return;
@@ -13387,9 +13396,7 @@ function editPreviewItem(index) {
   // then a fallback check of the food's name (e.g. "440ml can"), since
   // AI-parsed whole-item foods sometimes carry the real size there instead.
   const _amtStr = (f.amount || '').toLowerCase();
-  const _amtNum = parseFloat(f.amount) || 0;
-  const _amtIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_amtStr);
-  let _baseGrams = _amtIsGrams && _amtNum > 0 ? _amtNum : 0;
+  let _baseGrams = _extractGramsFromAmount(_amtStr);
   if (!_baseGrams) {
     const nameMatch = (f.name || '').match(/(\d+(?:\.\d+)?)\s*(ml|g|kg|l)\b/i);
     if (nameMatch) _baseGrams = parseFloat(nameMatch[1]);
@@ -13453,9 +13460,8 @@ function scaleEditPreviewAmount() {
   const note = document.getElementById('editAmountScaleNote');
   if (!base) return; // no baseline - fields stay exactly as manually entered
   const newVal = document.getElementById('editAmount')?.value || '';
-  const newNum = parseFloat(newVal) || 0;
-  const isGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(newVal.toLowerCase());
-  if (!isGrams || newNum <= 0) {
+  const newNum = _extractGramsFromAmount(newVal.toLowerCase());
+  if (newNum <= 0) {
     if (note) note.textContent = 'Type a number + unit (e.g. 60g) to auto-scale the macros.';
     return;
   }
