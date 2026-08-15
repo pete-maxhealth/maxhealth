@@ -6,12 +6,13 @@ Runs on localhost:5757 in Termux (auto-started via Termux:Boot).
 Bridges the HTML app and the data pipeline — no Termux interaction needed.
 
 Endpoints:
-  GET  /ping       — health check
-  GET  /combined   — serve combined.csv
-  GET  /status     — pipeline run status + log
-  GET  /run        — trigger pipeline (?device=all|withings|ringconn|amazfit&dry_run=true)
-  GET  /sync       — full sync: move exports from Download, run pipeline, serve combined.csv
-  GET  /inbox      — list files in inbox
+  GET  /ping              — health check
+  GET  /combined          — serve combined.csv
+  GET  /status            — pipeline run status + log
+  GET  /run               — trigger pipeline (?device=all|withings|ringconn|amazfit&dry_run=true)
+  GET  /sync              — full sync: move exports from Download, run pipeline, serve combined.csv
+  GET  /inbox             — list files in inbox
+  GET  /pattern-signals   — Day 2 signals for wearables (meal windows, sleep, activity, HRV)
 
 Usage:
   cd /storage/emulated/0/maxhealth/app
@@ -33,6 +34,13 @@ import threading
 import http.server
 import urllib.parse
 from datetime import datetime
+
+# ── Phase 14: Pattern Detection for Wearables ──────────────────────────────────
+try:
+    from pattern_detector import PatternDetector
+    HAS_PATTERN_DETECTOR = True
+except ImportError:
+    HAS_PATTERN_DETECTOR = False
 
 # ─── PATHS ────────────────────────────────────────────────────────────────────
 APP_DIR    = os.path.dirname(os.path.abspath(__file__))
@@ -362,6 +370,37 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({'error': str(e)}, 500)
 
+        # ── POST /save-full-backup — full JSON state, with rotation ───────────
+        # BACKUP_DIR has existed since the folder structure was first set up
+        # (created on every startup, line 59) but nothing ever actually wrote
+        # to it - the 5 tables got real server persistence via their own CSV
+        # endpoints, but the full JSON state (today's log, full history,
+        # everything exportAll() already builds client-side) never had a
+        # server-side home at all, only ever a local browser download.
+        elif path == '/save-full-backup':
+            try:
+                os.makedirs(BACKUP_DIR, exist_ok=True)
+                date_str = datetime.now().strftime('%Y-%m-%d')
+                backup_path = os.path.join(BACKUP_DIR, f'maxhealth_backup_{date_str}.json')
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    json.dump(body, f, ensure_ascii=False)
+
+                # 7-day rotation - same principle as the Settings Change Log
+                # (keep the last week, not unbounded growth from routine use).
+                # One file per calendar day, so at most 7 exist regardless of
+                # how many times a save fires on any given day.
+                existing = sorted(glob.glob(os.path.join(BACKUP_DIR, 'maxhealth_backup_*.json')))
+                if len(existing) > 7:
+                    for old_file in existing[:-7]:
+                        try:
+                            os.remove(old_file)
+                        except Exception:
+                            pass
+
+                self.send_json({'status': 'ok', 'file': os.path.basename(backup_path), 'kept': min(len(existing), 7)})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+
         else:
             self.send_json({'error': f'Unknown POST endpoint: {path}'}, 404)
 
@@ -387,6 +426,60 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             return
 
         # ── Health check ──────────────────────────────────────────────────
+        # ── GET /list-backups — dates available for restore ────────────────
+        # Companion to /save-full-backup: that endpoint writes the files,
+        # this one lets the client show the person what's actually available
+        # before restoring, rather than blindly grabbing "the latest" with
+        # no visibility. A destructive operation (restore overwrites
+        # everything) deserves that visibility.
+        if path == '/list-backups':
+            try:
+                os.makedirs(BACKUP_DIR, exist_ok=True)
+                files = sorted(glob.glob(os.path.join(BACKUP_DIR, 'maxhealth_backup_*.json')), reverse=True)
+                backups = []
+                for f in files:
+                    date_str = os.path.basename(f).replace('maxhealth_backup_', '').replace('.json', '')
+                    backups.append({'date': date_str, 'size': os.path.getsize(f)})
+                self.send_json({'backups': backups})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # ── GET /load-full-backup?date=YYYY-MM-DD — restore source ─────────
+        # Defaults to the most recent backup if no date given. Read-only -
+        # this just returns the JSON; the client decides what to do with it
+        # (confirmation modal, then the actual restore into state/library/
+        # recipes/routines happens entirely client-side).
+        if path == '/load-full-backup':
+            try:
+                os.makedirs(BACKUP_DIR, exist_ok=True)
+                date_param = params.get('date', [None])[0]
+                if date_param:
+                    backup_path = os.path.join(BACKUP_DIR, f'maxhealth_backup_{date_param}.json')
+                    if not os.path.exists(backup_path):
+                        self.send_json({'error': f'No backup found for {date_param}'}, 404)
+                        return
+                else:
+                    files = sorted(glob.glob(os.path.join(BACKUP_DIR, 'maxhealth_backup_*.json')), reverse=True)
+                    if not files:
+                        self.send_json({'error': 'No backups exist yet'}, 404)
+                        return
+                    backup_path = files[0]
+                with open(backup_path, 'r', encoding='utf-8') as f:
+                    data = f.read()
+                body = data.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                for k, v in CORS.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+
         if path == '/ping':
             self.send_json({'status': 'ok', 'version': '2.0', 'combined_exists': os.path.exists(COMBINED)})
 
@@ -431,6 +524,33 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_header(k, v)
             self.end_headers()
             self.wfile.write(body)
+
+        # ── Pattern Signals for Wearables (Phase 14) ─────────────────────
+        # Generates Day 2 signals + full pattern reports from meal/wearable data
+        # Used by Zepp OS watchapp and Wear OS companions
+        elif path == '/pattern-signals':
+            if not HAS_PATTERN_DETECTOR:
+                self.send_json({'error': 'pattern_detector not available'}, 501)
+                return
+            
+            try:
+                # Find the most recent backup (for today's meal log)
+                backup_files = sorted(glob.glob(os.path.join(BACKUP_DIR, 'maxhealth_backup_*.json')), reverse=True)
+                backup_path = backup_files[0] if backup_files else None
+                
+                if not backup_path or not os.path.exists(COMBINED) or not os.path.exists(MASTER_CSV):
+                    self.send_json({
+                        'error': 'Required data files not found',
+                        'needed': ['combined.csv', 'master.csv', 'recent backup']
+                    }, 404)
+                    return
+                
+                detector = PatternDetector(MASTER_CSV, COMBINED, backup_path)
+                signals = detector.generate_day_2_signals()
+                self.send_json(signals)
+            except Exception as e:
+                self.send_json({'error': f'Pattern detection failed: {str(e)}'}, 500)
+            return
 
         # ── Inbox status ──────────────────────────────────────────────────
         elif path == '/inbox':
@@ -521,11 +641,29 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
-        elif path.startswith('/docs/') or path in ('/carer.html', '/gbm_patient_guide.html'):
-            # Serve static HTML files from the maxhealth app directory
+        elif path.startswith('/docs/') or (path.endswith('.html') and path.count('/') == 1):
+            # Serve any static HTML file directly in the maxhealth app
+            # directory - previously only carer.html and
+            # gbm_patient_guide.html were allowed by explicit name here,
+            # meaning every other static page (why-free.html,
+            # user-guide.html, changelog.html) 404'd with "Unknown endpoint"
+            # despite genuinely existing on disk, simply because nobody had
+            # manually added its filename to this list yet.
+            #
+            # APP_DIR is os.path.dirname(__file__) - i.e. it already IS the
+            # maxhealth folder server.py itself lives in, not its parent.
+            # The original code (and my first attempt at this fix) both
+            # appended an extra 'maxhealth' segment on top of that, building
+            # a path like ".../maxhealth/maxhealth/why-free.html" that never
+            # existed - confirmed live via debug prints against the actual
+            # running process before landing on this.
             safe = path.lstrip('/')
-            file_path = os.path.join(APP_DIR, 'maxhealth', safe)
-            if os.path.exists(file_path) and file_path.endswith('.html'):
+            allowed_dir = os.path.normpath(APP_DIR)
+            file_path = os.path.normpath(os.path.join(allowed_dir, safe))
+            # Guards against path traversal (e.g. "/../../etc/passwd.html")
+            # now that this accepts any filename rather than a fixed list -
+            # the resolved path must still land inside the intended directory.
+            if file_path.startswith(allowed_dir) and os.path.exists(file_path) and file_path.endswith('.html'):
                 with open(file_path, 'rb') as f:
                     body = f.read()
                 self.send_response(200)
@@ -539,34 +677,16 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': f'Unknown endpoint: {path}'}, 404)
 
         elif path == '/save-library':
-            import json as _json, urllib.parse as _up
-            data_str = _up.parse_qs(_up.urlparse(self.path).query).get('data', [''])[0]
-            if data_str:
-                try:
-                    lib = _json.loads(_up.unquote(data_str))
-                    os.makedirs(TABLES_DIR, exist_ok=True)
-                    with open(LIBRARY_JSON, 'w', encoding='utf-8') as lf:
-                        _json.dump(lib, lf, ensure_ascii=False)
-                    self.send_json({'status': 'ok', 'count': len(lib)})
-                except Exception as e:
-                    self.send_json({'error': str(e)}, 400)
-            else:
-                self.send_json({'error': 'No data'}, 400)
+            # Broken, unreachable-in-practice dead code - LIBRARY_JSON was
+            # never actually defined anywhere in this file, so this would
+            # throw NameError if ever genuinely hit. Superseded entirely by
+            # /save-library-csv (POST) and /library (GET), which the app
+            # actually uses and which work correctly. Removed rather than
+            # left as a broken trap for a future debugging session.
+            self.send_json({'error': 'Deprecated - use /save-library-csv instead'}, 410)
 
         elif path == '/load-library':
-            if os.path.exists(LIBRARY_JSON):
-                with open(LIBRARY_JSON, 'r', encoding='utf-8') as lf:
-                    lib_data = lf.read()
-                body = lib_data.encode('utf-8')
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', str(len(body)))
-                for k, v in CORS.items():
-                    self.send_header(k, v)
-                self.end_headers()
-                self.wfile.write(body)
-            else:
-                self.send_json([])
+            self.send_json({'error': 'Deprecated - use /library instead'}, 410)
 
 
         elif path in ('/library', '/supplements', '/recipes', '/routines', '/strength'):
