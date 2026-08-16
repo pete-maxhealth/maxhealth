@@ -20,6 +20,7 @@ Usage:
 """
 
 import os
+import re
 import sys
 try:
     import pyzipper
@@ -33,6 +34,7 @@ import subprocess
 import threading
 import http.server
 import urllib.parse
+import zipfile
 from datetime import datetime
 
 # ── Phase 14: Pattern Detection for Wearables ──────────────────────────────────
@@ -97,6 +99,7 @@ def move_exports_to_inbox():
     os.makedirs(INBOX_DIR, exist_ok=True)
     moved = 0
     needs_zarchiver = False
+    unmatched_zips = []  # zip files seen but not recognised as any known device - reported at the end so a mismatch is visible in-app immediately, not just as a silent "nothing found"
 
     try:
         files = os.listdir(DOWNLOAD)
@@ -120,9 +123,17 @@ def move_exports_to_inbox():
         elif lower.startswith('data export') and lower.endswith('.zip'):
             is_export = True
 
-        # Withings
-        elif any(lower.startswith(p) for p in ('export_', 'data_export', 'data_pet_', 'withings', 'healthmate')) \
+        # Withings — real export filenames are data_{ACCOUNT_NAME}_{timestamp}.zip,
+        # so a check hardcoded to one specific name ('data_pet_', from testing
+        # only against Pete's own export) silently rejected every other family
+        # member's real export with the exact same, correct file structure.
+        # This is the same fix as extractors/withings.py's _looks_like_withings_zip -
+        # duplicated here rather than imported since this file only needs the one
+        # small check, not the rest of that module.
+        elif any(lower.startswith(p) for p in ('export_', 'data_export', 'withings', 'healthmate')) \
                 and lower.endswith('.zip'):
+            is_export = True
+        elif re.match(r'^data_[a-z]+_\d+\.zip$', lower):
             is_export = True
 
         if is_export:
@@ -132,6 +143,39 @@ def move_exports_to_inbox():
                 shutil.move(src, dest)
                 _log(f'Moved {name} → inbox')
                 moved += 1
+        elif lower.endswith('.zip'):
+            # A real zip that didn't match any known pattern - exactly the
+            # situation that took a manual Python check on Jill's device to
+            # diagnose last time, because the only feedback anyone had was
+            # "nothing found in Download", with no way to see WHY a real file
+            # sitting right there wasn't recognised. Reported below so this
+            # is visible in the app's own Sync log directly, without needing
+            # separate device access or a standalone script to find out.
+            unmatched_zips.append((name, src))
+
+    if moved == 0 and unmatched_zips:
+        _log(f'Found {len(unmatched_zips)} zip file(s) in Download that don\'t match any known device pattern:')
+        for name, path in unmatched_zips:
+            try:
+                size = os.path.getsize(path)
+                size_str = f'{size:,} bytes'
+            except Exception:
+                size_str = 'size unknown'
+            detail = f'  {name} ({size_str})'
+            try:
+                with zipfile.ZipFile(path) as zf:
+                    inner = zf.namelist()
+                    has_aggregates = any('aggregates_steps' in n.lower() for n in inner)
+                    has_ringconn_activity = any('activity' in n.lower() and n.lower().endswith('.csv') for n in inner)
+                    if has_aggregates:
+                        detail += ' — opens fine, contains aggregates_steps.csv (looks like a genuine Withings export that the filename check missed - tell Max the exact filename above)'
+                    elif has_ringconn_activity:
+                        detail += ' — opens fine, contains an activity CSV (may be a RingConn export with an unexpected filename)'
+                    else:
+                        detail += f' — opens fine, {len(inner)} file(s) inside, no recognised device signature found'
+            except Exception as e:
+                detail += f' — could NOT open as a zip ({e}) - the download may be incomplete or corrupted, try exporting again'
+            _log(detail)
 
     # Check for pre-extracted Zepp folders
     zepp_dirs = ('ACTIVITY', 'SLEEP', 'HEARTRATE_AUTO')
