@@ -51,7 +51,26 @@ DATA_DIR   = os.path.join(ROOT_DIR, 'data')
 TABLES_DIR = os.path.join(DATA_DIR, 'tables')
 INBOX_DIR  = os.path.join(DATA_DIR, 'inbox')
 BACKUP_DIR = os.path.join(DATA_DIR, 'backup')
-DOWNLOAD   = '/storage/emulated/0/Download'
+# Resolves via Termux's own storage symlink first (~/storage/downloads,
+# created by termux-setup-storage) rather than trusting the hardcoded
+# absolute path blindly. On virtually every real device this symlink
+# points to exactly /storage/emulated/0/Download anyway - the actual
+# value here doesn't usually change - but going through the symlink means
+# a genuinely missing/never-granted storage permission shows up as a
+# clear, specific error at startup, rather than the app silently scanning
+# an inaccessible or wrong folder and just reporting "nothing found",
+# which is much harder to diagnose (this is exactly what took real back-
+# and-forth to track down when it happened, even though that particular
+# case turned out to be a stale app folder, not this).
+_TERMUX_DOWNLOADS_SYMLINK = os.path.expanduser('~/storage/downloads')
+if os.path.isdir(_TERMUX_DOWNLOADS_SYMLINK):
+    DOWNLOAD = _TERMUX_DOWNLOADS_SYMLINK
+elif os.path.isdir('/storage/emulated/0/Download'):
+    DOWNLOAD = '/storage/emulated/0/Download'
+else:
+    DOWNLOAD = '/storage/emulated/0/Download'  # fallback path even though it doesn't exist yet - move_exports_to_inbox() reports the read failure clearly rather than this line silently picking something wrong
+    print("WARNING: Could not find the Downloads folder via ~/storage/downloads or /storage/emulated/0/Download.", file=sys.stderr)
+    print("Run 'termux-setup-storage' and grant the permission prompt, then restart the server.", file=sys.stderr)
 LOGS_DIR   = os.path.join(ROOT_DIR, 'logs')
 COMBINED   = os.path.join(TABLES_DIR, 'combined.csv')
 MASTER_CSV      = os.path.join(TABLES_DIR, 'master.csv')
