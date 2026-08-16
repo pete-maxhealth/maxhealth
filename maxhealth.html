@@ -4270,7 +4270,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.441</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.442</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5028,7 +5028,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.441'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.442'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24649,6 +24649,21 @@ function buildPatientContext(history) {
     // the two and reported a multi-day average as if it were today's actual
     // total - a genuinely different, wrong number from what the live
     // dashboard shows for the same day.
+    // Today's LIVE, in-progress log - separate again from latestDay above.
+    // This app only folds "today" into state.history (and therefore into
+    // everything buildPatientContext computes from) via a nightly rollover
+    // at midnight - so during the day, "today" simply isn't in the history
+    // array at all yet, no matter how it's sorted or labelled. Without this,
+    // a question asked mid-afternoon about "today" got answered using
+    // yesterday (the actual most recent COMPLETED day) with no indication
+    // that's what had happened - a second, more fundamental version of the
+    // same "today vs not-today" confusion the latestDay field above was
+    // built to solve, this time because today's data wasn't reachable at
+    // all rather than just unlabelled.
+    todayInProgress: (state.todayLog && state.todayLog.length > 0) ? {
+      date: todayStr(),
+      ...calcTotals(state.todayLog),
+    } : null,
     latestDay: sortedByDateDesc[0] ? {
       date: sortedByDateDesc[0].date,
       kcal: sortedByDateDesc[0].kcal,
@@ -24719,7 +24734,7 @@ function patientContextBlock(ctx) {
     ? `WEIGHT PHASE HISTORY (intentional — use this to interpret weight trends correctly):\n${phases.map(p => `  ${p.date}: switched to ${p.goal.toUpperCase()} phase`).join('\n')}\nWhen analysing any date range, identify which phase applied and frame weight trends accordingly. Do NOT treat intentional loss as a concern.`
     : '';
 
-  return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)\nPROTOCOL: ${meta.protocol}\nTARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ${ctx.t.standard.fat ? `~${ctx.t.standard.fat}g fat` : 'fat target not set - profile is missing weight/height/age/sex needed to calculate it, do not state a number for this'}${goalExtra}\n${phaseContext ? '\\n' + phaseContext : ''}\n${ctx.latestDay ? `\nMOST RECENT LOGGED DAY (${ctx.latestDay.date}) — use this, NOT "NUTRITION AVERAGES" below, for any question about "today" or "so far today". These are two different things: this is one specific day, the averages below span the whole tracked period.\n  ${ctx.latestDay.kcal} kcal | ${ctx.latestDay.protein}g protein | ${ctx.latestDay.carbs}g carbs | ${ctx.latestDay.fat}g fat\n` : ''}\nPERIOD: ${ctx.n} tracked days (days with <100 kcal logged excluded from all calculations)${ctx.gapDays > 0 ? ` — ${ctx.gapDays} day(s) in period had no nutrition logged (tracking gaps, not zero intake)` : ''}\nNUTRITION AVERAGES (period-wide, NOT today - see MOST RECENT LOGGED DAY above for that): ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat\nCARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against each day's actual ceiling
+  return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)\nPROTOCOL: ${meta.protocol}\nTARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ${ctx.t.standard.fat ? `~${ctx.t.standard.fat}g fat` : 'fat target not set - profile is missing weight/height/age/sex needed to calculate it, do not state a number for this'}${goalExtra}\n${phaseContext ? '\\n' + phaseContext : ''}\n${ctx.todayInProgress ? `\nTODAY IN PROGRESS (${ctx.todayInProgress.date}, as of right now - NOT a finished day, more may still be logged) — if the question is about "today" or "so far today", THIS is the answer, not the sections below:\n  ${ctx.todayInProgress.kcal} kcal | ${ctx.todayInProgress.protein}g protein | ${ctx.todayInProgress.carbs}g carbs | ${ctx.todayInProgress.fat}g fat so far today\n` : '\nTODAY: nothing logged yet today.\n'}${ctx.latestDay ? `\nMOST RECENT COMPLETED DAY (${ctx.latestDay.date}) — use this for "yesterday" or "my last logged day", NOT for "today" (see TODAY IN PROGRESS above for that). Also NOT the same as "NUTRITION AVERAGES" below, which spans the whole tracked period rather than one specific day.\n  ${ctx.latestDay.kcal} kcal | ${ctx.latestDay.protein}g protein | ${ctx.latestDay.carbs}g carbs | ${ctx.latestDay.fat}g fat\n` : ''}\nPERIOD: ${ctx.n} tracked days (days with <100 kcal logged excluded from all calculations)${ctx.gapDays > 0 ? ` — ${ctx.gapDays} day(s) in period had no nutrition logged (tracking gaps, not zero intake)` : ''}\nNUTRITION AVERAGES (period-wide, NOT today - see MOST RECENT LOGGED DAY above for that): ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat\nCARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against each day's actual ceiling
 ${ctx.nonCompliantDetail ? `NON-COMPLIANT DAY DETAIL (use this, not guesswork, to judge each overage):\n${ctx.nonCompliantDetail}\n` : ''}DAY TYPE BREAKDOWN: ${ctx.dayTypeSummary}
 CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
