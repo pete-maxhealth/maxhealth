@@ -2731,13 +2731,7 @@
       <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
-    <div class="quick-btns" id="quickBtnsQuery" style="display:none;">
-      <div class="quick-btn" onclick="quickPrompt('What do I still need today?')">What's remaining?</div>
-      <div class="quick-btn" onclick="quickPrompt('Am I in ketosis?')">Ketosis check</div>
-      <div class="quick-btn" onclick="quickPrompt('What can I ask?')">What can I ask?</div>
-      <div class="quick-btn" onclick="quickPrompt('Show my weekly summary')">Weekly summary</div>
-      <div class="quick-btn" onclick="quickPrompt('What is my weight trend?')">Weight trend</div>
-    </div>
+    <div class="quick-btns" id="quickBtnsQuery" style="display:none;"></div>
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
@@ -4270,7 +4264,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.442</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.443</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5028,7 +5022,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.442'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.443'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11754,6 +11748,163 @@ function logSuggestedCombo(comboIndex) {
   logFoods(foods, mealName);
   showToast(`✓ ${mealName} logged`);
   switchTabById('chat');
+}
+
+// ─── SAVED AI PROMPTS ─────────────────────────────────────────────────────
+// Same storage/save/list/delete pattern as the Reports Query Builder's
+// mh_saved_queries (name + save, list with Run/Delete, confirm before
+// delete) - reused deliberately rather than inventing a second pattern for
+// what's conceptually the same kind of thing: a named, recallable, user-
+// curated list. This one holds free-text Ask AI questions instead of
+// structured metric filters.
+function loadSavedPrompts() {
+  const raw = localStorage.getItem('mh_saved_prompts');
+  if (raw === null) {
+    // First-ever load - seed with the previous hardcoded pills (still
+    // genuinely useful) plus a few new examples that specifically show off
+    // what's possible when a question spans multiple kinds of data at once,
+    // not just nutrition alone. All seeded entries are completely ordinary
+    // saved prompts once created - editable and deletable like any other,
+    // not protected or special-cased.
+    const seed = [
+      { id: 1, name: "What's remaining?", text: "What do I still need today?" },
+      { id: 2, name: 'Ketosis check', text: 'Am I in ketosis?' },
+      { id: 3, name: 'What can I ask?', text: 'What can I ask?' },
+      { id: 4, name: 'Weekly summary', text: 'Show my weekly summary' },
+      { id: 5, name: 'Weight trend', text: 'What is my weight trend?' },
+      // New — single-metric, no combined data needed
+      { id: 6, name: 'HRV this month', text: 'How has my HRV changed over the last 30 days?' },
+      // New — cross-metric examples, combining nutrition with wearable data
+      { id: 7, name: 'Sleep vs next-day HRV', text: 'Does my sleep quality the night before affect my HRV the next day?' },
+      { id: 8, name: 'Carbs on active vs rest days', text: 'Compare my average carb intake on days I did over 8000 steps versus days I did under 5000 steps' },
+      { id: 9, name: 'Compliant + well-rested days', text: 'How many days this month was I both under my carb ceiling and got at least 7 hours of sleep?' },
+    ];
+    localStorage.setItem('mh_saved_prompts', JSON.stringify(seed));
+    return seed;
+  }
+  try { return JSON.parse(raw) || []; } catch { return []; }
+}
+
+function saveSavedPrompts(prompts) {
+  localStorage.setItem('mh_saved_prompts', JSON.stringify(prompts));
+}
+
+// Compact pill row - shows up to 6 saved prompts in the same visual style
+// the old hardcoded pills used, plus one more pill that opens the full
+// searchable/browsable manager. Curating which ones show is just a matter
+// of deleting the ones you don't want in the manager - no separate
+// "pinning" concept needed for a list this size.
+function renderSavedPromptPills() {
+  const el = document.getElementById('quickBtnsQuery');
+  if (!el) return;
+  const prompts = loadSavedPrompts();
+  const shown = prompts.slice(0, 6);
+  el.innerHTML = shown.map(p =>
+    `<div class="quick-btn" onclick="quickPrompt(${JSON.stringify(p.text).replace(/"/g, '&quot;')})">${(p.name || p.text).replace(/</g,'&lt;')}</div>`
+  ).join('') + `<div class="quick-btn" style="border-color:var(--text3);color:var(--text3);" onclick="openSavedPromptsManager()">🔍 Browse all</div>`;
+}
+
+let _editingSavedPromptId = null;
+
+function openSavedPromptsManager() {
+  document.getElementById('savedPromptsSearch').value = '';
+  _editingSavedPromptId = null;
+  document.getElementById('savedPromptName').value = '';
+  document.getElementById('savedPromptText').value = '';
+  document.getElementById('savedPromptFormTitle').textContent = 'Add a new prompt';
+  document.getElementById('savedPromptSaveBtn').textContent = '💾 Save';
+  renderSavedPromptsManagerList('');
+  document.getElementById('savedPromptsManagerModal').style.display = 'flex';
+}
+
+function closeSavedPromptsManager() {
+  document.getElementById('savedPromptsManagerModal').style.display = 'none';
+}
+
+function filterSavedPromptsManager(q) {
+  renderSavedPromptsManagerList(q);
+}
+
+function renderSavedPromptsManagerList(filterText) {
+  const el = document.getElementById('savedPromptsManagerList');
+  const prompts = loadSavedPrompts();
+  const q = (filterText || '').toLowerCase().trim();
+  const filtered = q
+    ? prompts.filter(p => (p.name || '').toLowerCase().includes(q) || (p.text || '').toLowerCase().includes(q))
+    : prompts;
+
+  if (!filtered.length) {
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts yet — add one below.'}</div>`;
+    return;
+  }
+
+  el.innerHTML = filtered.map(p => `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;overflow:hidden;">
+        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}</div>
+        <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(p.text||'').replace(/</g,'&lt;')}</div>
+      </div>
+      <button class="run-btn" style="font-size:11px;padding:6px 12px;width:auto;flex-shrink:0;" onclick="runSavedPromptFromManager(${p.id})">Run</button>
+      <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:14px;" onclick="editSavedPromptStart(${p.id})" title="Edit">✏️</span>
+      <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:18px;line-height:1;" onclick="deleteSavedPromptConfirm(${p.id})" title="Delete">×</span>
+    </div>`).join('');
+}
+
+function runSavedPromptFromManager(id) {
+  const prompts = loadSavedPrompts();
+  const p = prompts.find(x => x.id === id);
+  if (!p) return;
+  closeSavedPromptsManager();
+  quickPrompt(p.text);
+}
+
+function editSavedPromptStart(id) {
+  const prompts = loadSavedPrompts();
+  const p = prompts.find(x => x.id === id);
+  if (!p) return;
+  _editingSavedPromptId = id;
+  document.getElementById('savedPromptName').value = p.name || '';
+  document.getElementById('savedPromptText').value = p.text || '';
+  document.getElementById('savedPromptFormTitle').textContent = `Editing "${p.name || 'Unnamed prompt'}"`;
+  document.getElementById('savedPromptSaveBtn').textContent = '💾 Update';
+}
+
+function saveSavedPromptFromForm() {
+  const name = document.getElementById('savedPromptName').value.trim();
+  const text = document.getElementById('savedPromptText').value.trim();
+  if (!text) { showToast('Enter the question text'); return; }
+
+  const prompts = loadSavedPrompts();
+  if (_editingSavedPromptId !== null) {
+    const idx = prompts.findIndex(x => x.id === _editingSavedPromptId);
+    if (idx > -1) prompts[idx] = { ...prompts[idx], name, text };
+    showToast('Prompt updated ✓');
+  } else {
+    const nextId = prompts.length ? Math.max(...prompts.map(p => p.id)) + 1 : 1;
+    prompts.push({ id: nextId, name, text });
+    showToast('Prompt saved ✓');
+  }
+  saveSavedPrompts(prompts);
+  _editingSavedPromptId = null;
+  document.getElementById('savedPromptName').value = '';
+  document.getElementById('savedPromptText').value = '';
+  document.getElementById('savedPromptFormTitle').textContent = 'Add a new prompt';
+  document.getElementById('savedPromptSaveBtn').textContent = '💾 Save';
+  renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);
+  renderSavedPromptPills();
+}
+
+function deleteSavedPromptConfirm(id) {
+  const prompts = loadSavedPrompts();
+  const p = prompts.find(x => x.id === id);
+  if (!p) return;
+  appConfirm(`Delete saved prompt "${p.name || 'Unnamed prompt'}"?`, () => {
+    const current = loadSavedPrompts().filter(x => x.id !== id);
+    saveSavedPrompts(current);
+    renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);
+    renderSavedPromptPills();
+    showToast('Prompt deleted ✓');
+  }, null, true);
 }
 
 function quickPrompt(text) {
@@ -26504,6 +26655,7 @@ function setChatMode(mode) {
   document.getElementById('modeQuery').classList.toggle('active', mode === 'query');
   document.getElementById('quickBtnsLog').style.display = mode === 'log' ? 'flex' : 'none';
   document.getElementById('quickBtnsQuery').style.display = mode === 'query' ? 'flex' : 'none';
+  if (mode === 'query') renderSavedPromptPills(); // data-driven pills - render fresh each time in case they were edited since last shown
   const inp = document.getElementById('chatInput');
   if (inp) inp.placeholder = mode === 'log' ? 'Describe a meal, snap a photo, scan a barcode…' : 'Quick question about today…';
 }
@@ -27185,6 +27337,28 @@ function dismissInsight() {
     </div>
     <div id="recipeLibPickerList"></div>
     <button class="modal-btn cancel" style="width:100%;margin-top:12px;" onclick="closeRecipeLibPicker()">Cancel</button>
+  </div>
+</div>
+
+<!-- SAVED AI PROMPTS MANAGER — search/browse/add/edit/delete, same
+     bottom-sheet style as the library picker above for consistency. -->
+<div class="modal-overlay" id="savedPromptsManagerModal" style="display:none;position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.8);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;">SAVED PROMPTS</div>
+    <div style="position:relative;margin-bottom:10px;">
+      <input id="savedPromptsSearch" class="modal-input" placeholder="Search…" style="width:100%;font-size:13px;padding-right:30px;box-sizing:border-box;" oninput="filterSavedPromptsManager(this.value)">
+      <span onclick="document.getElementById('savedPromptsSearch').value='';filterSavedPromptsManager('');document.getElementById('savedPromptsSearch').focus();" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);cursor:pointer;padding:4px;">✕</span>
+    </div>
+    <div id="savedPromptsManagerList"></div>
+
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div id="savedPromptFormTitle" style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:8px;">ADD A NEW PROMPT</div>
+      <input id="savedPromptName" class="modal-input" placeholder="Name (e.g. Sleep vs HRV)" style="width:100%;font-size:13px;margin-bottom:6px;box-sizing:border-box;">
+      <textarea id="savedPromptText" class="modal-input" placeholder="The actual question to ask…" rows="2" style="width:100%;font-size:13px;margin-bottom:8px;box-sizing:border-box;resize:vertical;"></textarea>
+      <button id="savedPromptSaveBtn" class="run-btn" style="width:100%;" onclick="saveSavedPromptFromForm()">💾 Save</button>
+    </div>
+
+    <button class="modal-btn cancel" style="width:100%;margin-top:12px;" onclick="closeSavedPromptsManager()">Close</button>
   </div>
 </div>
 
