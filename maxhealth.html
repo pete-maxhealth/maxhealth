@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.448</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.449</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5013,7 +5013,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.448'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.449'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -21213,7 +21213,28 @@ function renderPatternsCard() {
 
   if (!findings.length) {
     card.style.display = 'block';
-    content.innerHTML = `<div style="color:var(--text3);">Not enough history yet to surface a genuine pattern — needs at least ${MIN_GROUP} days in each comparison group before it'll say anything. Keep logging and check back.</div>`;
+    // Previously just said "not enough history" regardless of why - which
+    // was actively misleading with a large total day count, since these
+    // checks need PAIRED wearable data (sleep duration, steps) alongside
+    // nutrition, not just logged nutrition days. 790 days of food logging
+    // says nothing about how many of those days also have a synced sleep
+    // or step reading. Reporting the real counts here shows exactly which
+    // requirement isn't met, rather than leaving a big total day count
+    // looking like it should have been enough when it never could be.
+    const sleepDaysCount = days.filter(d => d.sleep_duration > 0).length;
+    const stepDaysCount = days.filter(d => d.steps > 0).length;
+    const dayOfWeekFn = d => { const [dd, mm, yy] = d.date.split('/').map(Number); return new Date(2000 + yy, mm - 1, dd).getDay(); };
+    const weekendCount = days.filter(d => [0, 6].includes(dayOfWeekFn(d))).length;
+    const weekdayCount = days.filter(d => ![0, 6].includes(dayOfWeekFn(d))).length;
+    content.innerHTML = `<div style="color:var(--text3);">
+      Not enough paired data yet to surface a genuine pattern — needs at least ${MIN_GROUP} days in each comparison group, or the difference found wasn't large enough to be worth mentioning (under 15 percentage points).
+      <div style="margin-top:8px;font-size:11px;font-family:Space Mono,monospace;">
+        ${days.length} day(s) with nutrition logged<br>
+        ${sleepDaysCount} day(s) with sleep data synced${sleepDaysCount < MIN_GROUP * 2 ? ' — this is the limiting factor for the sleep pattern check' : ''}<br>
+        ${stepDaysCount} day(s) with step data synced${stepDaysCount < MIN_GROUP * 2 ? ' — this is the limiting factor for the activity pattern check' : ''}<br>
+        ${weekendCount} weekend / ${weekdayCount} weekday day(s) logged
+      </div>
+    </div>`;
     return;
   }
   card.style.display = 'block';
