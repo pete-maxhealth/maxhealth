@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.449</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.450</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5013,7 +5013,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.449'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.450'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11840,37 +11840,16 @@ function saveSavedPrompts(prompts) {
 function renderSavedPromptPills(containerId, runFnName) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const prompts = loadSavedPrompts();
-  // p.pinned !== false rather than p.pinned === true - anything saved before
-  // this toggle existed has no pinned field at all, and should keep showing
-  // as a pill exactly as it did before, not silently disappear.
-  // Sorted by actual usage count (most-run first) rather than raw creation
-  // order - previously the pill row just showed whatever happened to be
-  // first in the array, which had nothing to do with what actually gets
-  // used day to day.
-  const shown = prompts
-    .filter(p => p.pinned !== false)
-    .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
-    .slice(0, 6);
-  // Routes through the id rather than embedding the raw text in the onclick -
-  // simpler than escaping quotes into an inline attribute, and lets this
-  // record real usage (useCount) each time a pill actually gets tapped.
-  el.innerHTML = shown.map(p =>
-    `<div class="quick-btn" onclick="runSavedPromptTracked(${p.id}, '${runFnName}')">${(p.name || p.text).replace(/</g,'&lt;')}</div>`
-  ).join('') + `<div class="quick-btn" style="border-color:var(--text3);color:var(--text3);" onclick="openSavedPromptsManager('${runFnName}')">🔍 Browse all</div>`;
-}
-
-function runSavedPromptTracked(id, runFnName) {
-  const prompts = loadSavedPrompts();
-  const p = prompts.find(x => x.id === id);
-  if (!p) return;
-  p.useCount = (p.useCount || 0) + 1;
-  saveSavedPrompts(prompts);
-  window[runFnName](p.text);
+  // Just one button - the pinned-pills-in-a-row approach kept cluttering the
+  // screen no matter how it was curated, since it was competing for
+  // attention with the other real action buttons around it. All the actual
+  // browsing, running, sorting and searching happens one tap away instead.
+  el.innerHTML = `<div class="quick-btn" onclick="openSavedPromptsManager('${runFnName}')">🔍 Browse saved prompts</div>`;
 }
 
 let _editingSavedPromptId = null;
 let _savedPromptsManagerRunFn = 'quickPrompt';
+let _savedPromptSortMode = 'mostused';
 
 function openSavedPromptsManager(runFnName) {
   _savedPromptsManagerRunFn = runFnName || 'quickPrompt';
@@ -11880,7 +11859,7 @@ function openSavedPromptsManager(runFnName) {
   document.getElementById('savedPromptText').value = '';
   document.getElementById('savedPromptFormTitle').textContent = 'Add a new prompt';
   document.getElementById('savedPromptSaveBtn').textContent = '💾 Save';
-  renderSavedPromptsManagerList('');
+  setSavedPromptSort('mostused');
   document.getElementById('savedPromptsManagerModal').style.display = 'flex';
 }
 
@@ -11892,13 +11871,32 @@ function filterSavedPromptsManager(q) {
   renderSavedPromptsManagerList(q);
 }
 
+// Explicit, visible sort control - previously the list just silently
+// defaulted to most-used-first with no way to see or change that, which
+// wasn't really "sortable" in any way a person could actually use.
+function setSavedPromptSort(mode) {
+  _savedPromptSortMode = mode;
+  ['mostused', 'name', 'recent'].forEach(m => {
+    const el = document.getElementById(`savedPromptSort-${m}`);
+    if (el) {
+      el.style.background = m === mode ? 'var(--accent)' : 'transparent';
+      el.style.color = m === mode ? 'var(--bg)' : 'var(--text2)';
+    }
+  });
+  renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch')?.value || '');
+}
+
 function renderSavedPromptsManagerList(filterText) {
   const el = document.getElementById('savedPromptsManagerList');
   const prompts = loadSavedPrompts();
   const q = (filterText || '').toLowerCase().trim();
-  const filtered = q
+  let filtered = q
     ? prompts.filter(p => (p.name || '').toLowerCase().includes(q) || (p.text || '').toLowerCase().includes(q))
-    : prompts.slice().sort((a, b) => (b.useCount || 0) - (a.useCount || 0)); // most-used first when not actively searching
+    : prompts.slice();
+
+  if (_savedPromptSortMode === 'mostused') filtered.sort((a, b) => (b.useCount || 0) - (a.useCount || 0));
+  else if (_savedPromptSortMode === 'name') filtered.sort((a, b) => (a.name || a.text || '').localeCompare(b.name || b.text || ''));
+  else if (_savedPromptSortMode === 'recent') filtered.sort((a, b) => b.id - a.id); // ids are assigned sequentially, so higher id = more recently added
 
   if (!filtered.length) {
     el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts yet — add one below.'}</div>`;
@@ -11906,7 +11904,6 @@ function renderSavedPromptsManagerList(filterText) {
   }
 
   el.innerHTML = filtered.map(p => {
-    const isPinned = p.pinned !== false;
     const uses = p.useCount || 0;
     return `
     <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
@@ -11914,22 +11911,12 @@ function renderSavedPromptsManagerList(filterText) {
         <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}${uses > 0 ? ` <span style="color:var(--text3);font-weight:400;font-size:10px;font-family:Space Mono,monospace;">· used ${uses}×</span>` : ''}</div>
         <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(p.text||'').replace(/</g,'&lt;')}</div>
       </div>
-      <span onclick="toggleSavedPromptPinned(${p.id})" style="cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:15px;opacity:${isPinned ? '1' : '0.35'};" title="${isPinned ? 'Showing as a quick pill — tap to hide from the pill row' : 'Hidden from the pill row — tap to show as a quick pill'}">📌</span>
+      <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:14px;" onclick="editSavedPromptStart(${p.id})" title="Edit">✏️</span>
       <button class="run-btn" style="font-size:11px;padding:6px 12px;width:auto;flex-shrink:0;" onclick="runSavedPromptFromManager(${p.id})">Run</button>
       <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:14px;" onclick="editSavedPromptStart(${p.id})" title="Edit">✏️</span>
       <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:18px;line-height:1;" onclick="deleteSavedPromptConfirm(${p.id})" title="Delete">×</span>
     </div>`;
   }).join('');
-}
-
-function toggleSavedPromptPinned(id) {
-  const prompts = loadSavedPrompts();
-  const idx = prompts.findIndex(x => x.id === id);
-  if (idx === -1) return;
-  prompts[idx].pinned = prompts[idx].pinned === false ? true : false;
-  saveSavedPrompts(prompts);
-  renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);
-  refreshAllSavedPromptPillRows();
 }
 
 function runSavedPromptFromManager(id) {
@@ -27501,6 +27488,12 @@ function dismissInsight() {
     <div style="position:relative;margin-bottom:10px;">
       <input id="savedPromptsSearch" class="modal-input" placeholder="Search…" style="width:100%;font-size:13px;padding-right:30px;box-sizing:border-box;" oninput="filterSavedPromptsManager(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
       <span onclick="document.getElementById('savedPromptsSearch').value='';filterSavedPromptsManager('');document.getElementById('savedPromptsSearch').blur();" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);cursor:pointer;padding:4px;" title="Clear search">✕</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;font-size:11px;">
+      <span style="color:var(--text3);align-self:center;">Sort:</span>
+      <span id="savedPromptSort-mostused" onclick="setSavedPromptSort('mostused')" style="cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);">Most used</span>
+      <span id="savedPromptSort-name" onclick="setSavedPromptSort('name')" style="cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);">A–Z</span>
+      <span id="savedPromptSort-recent" onclick="setSavedPromptSort('recent')" style="cursor:pointer;padding:4px 10px;border-radius:6px;border:1px solid var(--border);">Recently added</span>
     </div>
     <div id="savedPromptsManagerList"></div>
 
