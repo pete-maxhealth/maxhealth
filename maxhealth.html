@@ -2202,7 +2202,7 @@
         <div style="font-weight:600;color:var(--text);margin-bottom:4px;">🧠 GBM / Therapeutic Ketosis</div>
         <div style="font-size:12px;color:var(--text3);line-height:1.5;">Sets a 50g carb ceiling, enables ketosis zone monitoring, and links to the GBM Patient Protocol Guide.</div>
       </div>
-      <div class="provider-btn" id="ob-condBtn-t2d" onclick="obSetCondition('t2d')" style="text-align:left;padding:14px 16px;white-space:normal;border-radius:var(--radius-sm);">
+      <div class="provider-btn" id="ob-condBtn-t2_diabetes" onclick="obSetCondition('t2_diabetes')" style="text-align:left;padding:14px 16px;white-space:normal;border-radius:var(--radius-sm);">
         <div style="font-weight:600;color:var(--text);margin-bottom:4px;">🩸 Type 2 Diabetes</div>
         <div style="font-size:12px;color:var(--text3);line-height:1.5;">Sets a 100g carb ceiling, enables blood sugar context in meal logging and trend analysis.</div>
       </div>
@@ -2226,7 +2226,7 @@
     </div>
 
     <!-- T2D detail panel -->
-    <div id="ob-cond-t2d-detail" style="display:none;background:rgba(245,197,66,0.05);border:1px solid rgba(245,197,66,0.15);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:20px;">
+    <div id="ob-cond-t2_diabetes-detail" style="display:none;background:rgba(245,197,66,0.05);border:1px solid rgba(245,197,66,0.15);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:20px;">
       <div style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em;">Type 2 Diabetes</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.7;">
         A 100g daily carb ceiling is set as a starting point — your dietitian or diabetes nurse may recommend a different target. AI meal logging will include carbohydrate context relevant to blood sugar management. Adjust the ceiling in Settings at any time.
@@ -4257,7 +4257,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.444</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.447</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4687,7 +4687,7 @@ function obSetCondition(cond) {
   document.querySelectorAll('[id^="ob-condBtn-"]').forEach(b => b.classList.remove('active'));
   document.getElementById(`ob-condBtn-${cond}`).classList.add('active');
   // Hide all detail panels, show relevant one
-  ['gbm','t2d'].forEach(c => {
+  ['gbm','t2_diabetes'].forEach(c => {
     const el = document.getElementById(`ob-cond-${c}-detail`);
     if (el) el.style.display = (c === cond) ? 'block' : 'none';
   });
@@ -4773,7 +4773,7 @@ function onboardNext(step) {
     // Apply condition-specific carb ceiling if not manually set
     if (!carbs) {
       if (_obCondition === 'gbm')   carbs = 50;
-      else if (_obCondition === 't2d')    carbs = 100;
+      else if (_obCondition === 't2_diabetes')    carbs = 100;
     }
 
     // Same tolerance check as the Settings screen — whatever's in the calories
@@ -4822,19 +4822,17 @@ function onboardNext(step) {
   // Apply condition defaults on transition from step 5
   if (step === 6) {
     localStorage.setItem('mh_condition', _obCondition);
-    // Apply carb ceiling based on condition (if not already set in step 4)
+    // Apply carb ceiling based on condition (if not already set in step 4) -
+    // same shared mapping saveCondition() uses when condition changes later
+    // via Settings, so the two can't drift apart from each other again.
     const existingCarbs = localStorage.getItem('mh_target_carbs');
     if (!existingCarbs || existingCarbs === '0') {
-      if (_obCondition === 'gbm') {
-        localStorage.setItem('mh_target_carbs', 50);
-        localStorage.setItem('mh_ceil_standard', 50);
-        localStorage.setItem('mh_ceil_occasion', 75);
-        localStorage.setItem('mh_ceil_holiday',  100);
-      } else if (_obCondition === 't2d') {
-        localStorage.setItem('mh_target_carbs', 100);
-        localStorage.setItem('mh_ceil_standard', 100);
-        localStorage.setItem('mh_ceil_occasion', 150);
-        localStorage.setItem('mh_ceil_holiday',  200);
+      const ceilings = getConditionCeilingDefaults(_obCondition);
+      if (ceilings) {
+        localStorage.setItem('mh_target_carbs', ceilings.standard);
+        localStorage.setItem('mh_ceil_standard', ceilings.standard);
+        localStorage.setItem('mh_ceil_occasion', ceilings.occasion);
+        localStorage.setItem('mh_ceil_holiday',  ceilings.holiday);
       }
     }
   }
@@ -5015,7 +5013,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.444'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.447'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7351,10 +7349,46 @@ function updateProfileCompletenessNote() {
   note.style.display = complete ? 'none' : 'block';
 }
 
+// Shared condition -> carb ceiling defaults, used both at onboarding and
+// whenever condition changes later via Settings. Previously this mapping
+// only existed inline inside the onboarding step-6 code, so changing
+// condition afterward via Settings' saveCondition() silently did nothing to
+// the ceiling at all - the two were never actually connected, despite the
+// Settings dropdown's own label text promising specific ceilings ("Type 2
+// Diabetes — Low carb (≤100g)"). T1 diabetes is deliberately left out -
+// insulin-dependent carb management is too individual for a blanket
+// default, consistent with this app's own existing caution text elsewhere
+// ("consult your diabetes team before adjusting targets").
+function getConditionCeilingDefaults(cond) {
+  const defaults = {
+    gbm:         { standard: 50,  occasion: 75,  holiday: 100 },
+    epilepsy:    { standard: 50,  occasion: 75,  holiday: 100 },
+    t2_diabetes: { standard: 100, occasion: 150, holiday: 200 },
+    general:     { standard: 150, occasion: 175, holiday: 200 },
+  };
+  return defaults[cond] || null;
+}
+
 function saveCondition() {
   const el = document.getElementById('settingsCondition');
-  if (el) localStorage.setItem('mh_condition', el.value);
+  if (!el) return;
+  const newCond = el.value;
+  const oldCond = localStorage.getItem('mh_condition');
+  localStorage.setItem('mh_condition', newCond);
   if (typeof updateGBMSectionVisibility === 'function') updateGBMSectionVisibility();
+
+  const ceilings = getConditionCeilingDefaults(newCond);
+  if (ceilings && newCond !== oldCond) {
+    localStorage.setItem('mh_ceil_standard', ceilings.standard);
+    localStorage.setItem('mh_ceil_occasion', ceilings.occasion);
+    localStorage.setItem('mh_ceil_holiday',  ceilings.holiday);
+    showToast(`Carb ceiling updated to ${ceilings.standard}g for this condition — adjust in Settings if you'd rather use a different figure.`);
+  }
+  // Re-render immediately so the change is visible without navigating away
+  // and back - previously this panel just silently kept showing whatever
+  // it last calculated under the old condition until something else
+  // happened to trigger a refresh.
+  if (typeof renderSuggestedTargets === 'function') renderSuggestedTargets();
 }
 
 // ─── WEIGHT PHASE HISTORY (with redundant storage, same pattern as Library) ──
@@ -11760,15 +11794,20 @@ function loadSavedPrompts() {
     // saved prompts once created - editable and deletable like any other,
     // not protected or special-cased.
     const seed = [
+      // pinned: true (or omitted) shows in the quick-pill row by default;
+      // pinned: false keeps it fully available in the searchable list
+      // without cluttering the row. Mix of simple quick-fire questions and
+      // a couple of the complex cross-metric ones, rather than defaulting
+      // to all the more involved Reports-style questions as quick pills.
       { id: 1, name: "What's remaining?", text: 'What do I still need today?' },
-      { id: 2, name: 'Ketosis check', text: 'Did I likely break ketosis on any recent days where I went over my carb ceiling? Weigh each overage against my TDEE, what I ate, and any exercise that day rather than just the raw carb number.' },
+      { id: 2, name: 'Ketosis check', text: 'Did I likely break ketosis on any recent days where I went over my carb ceiling? Weigh each overage against my TDEE, what I ate, and any exercise that day rather than just the raw carb number.', pinned: false },
       { id: 3, name: 'What can I ask?', text: 'What can I ask?' },
       { id: 4, name: 'Weekly summary', text: 'Show my weekly summary' },
-      { id: 5, name: 'Weight trend', text: 'How has my weight changed over time and what might be driving it?' },
-      { id: 6, name: 'HRV correlations', text: 'Were my low HRV days linked to poor sleep or high carbs?' },
-      { id: 7, name: 'Target days', text: 'Which days did I hit all three targets — calories, protein and carbs?' },
-      { id: 8, name: 'Sleep analysis', text: 'Analyse my sleep patterns and any correlations with next-day activity or HRV.' },
-      { id: 9, name: 'Muscle gain plan', text: 'I want to build muscle and tone up. Based on my actual eating and activity history, what would I need to change — protein, calories, training?' },
+      { id: 5, name: 'Weight trend', text: 'How has my weight changed over time and what might be driving it?', pinned: false },
+      { id: 6, name: 'HRV correlations', text: 'Were my low HRV days linked to poor sleep or high carbs?', pinned: false },
+      { id: 7, name: 'Target days', text: 'Which days did I hit all three targets — calories, protein and carbs?', pinned: false },
+      { id: 8, name: 'Sleep analysis', text: 'Analyse my sleep patterns and any correlations with next-day activity or HRV.', pinned: false },
+      { id: 9, name: 'Muscle gain plan', text: 'I want to build muscle and tone up. Based on my actual eating and activity history, what would I need to change — protein, calories, training?', pinned: false },
       // New — single-metric, no combined data needed
       { id: 10, name: 'HRV this month', text: 'How has my HRV changed over the last 30 days?' },
       // New — cross-metric examples, combining nutrition with wearable data
@@ -11802,10 +11841,32 @@ function renderSavedPromptPills(containerId, runFnName) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const prompts = loadSavedPrompts();
-  const shown = prompts.slice(0, 6);
+  // p.pinned !== false rather than p.pinned === true - anything saved before
+  // this toggle existed has no pinned field at all, and should keep showing
+  // as a pill exactly as it did before, not silently disappear.
+  // Sorted by actual usage count (most-run first) rather than raw creation
+  // order - previously the pill row just showed whatever happened to be
+  // first in the array, which had nothing to do with what actually gets
+  // used day to day.
+  const shown = prompts
+    .filter(p => p.pinned !== false)
+    .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
+    .slice(0, 6);
+  // Routes through the id rather than embedding the raw text in the onclick -
+  // simpler than escaping quotes into an inline attribute, and lets this
+  // record real usage (useCount) each time a pill actually gets tapped.
   el.innerHTML = shown.map(p =>
-    `<div class="quick-btn" onclick="${runFnName}(${JSON.stringify(p.text).replace(/"/g, '&quot;')})">${(p.name || p.text).replace(/</g,'&lt;')}</div>`
+    `<div class="quick-btn" onclick="runSavedPromptTracked(${p.id}, '${runFnName}')">${(p.name || p.text).replace(/</g,'&lt;')}</div>`
   ).join('') + `<div class="quick-btn" style="border-color:var(--text3);color:var(--text3);" onclick="openSavedPromptsManager('${runFnName}')">🔍 Browse all</div>`;
+}
+
+function runSavedPromptTracked(id, runFnName) {
+  const prompts = loadSavedPrompts();
+  const p = prompts.find(x => x.id === id);
+  if (!p) return;
+  p.useCount = (p.useCount || 0) + 1;
+  saveSavedPrompts(prompts);
+  window[runFnName](p.text);
 }
 
 let _editingSavedPromptId = null;
@@ -11837,29 +11898,46 @@ function renderSavedPromptsManagerList(filterText) {
   const q = (filterText || '').toLowerCase().trim();
   const filtered = q
     ? prompts.filter(p => (p.name || '').toLowerCase().includes(q) || (p.text || '').toLowerCase().includes(q))
-    : prompts;
+    : prompts.slice().sort((a, b) => (b.useCount || 0) - (a.useCount || 0)); // most-used first when not actively searching
 
   if (!filtered.length) {
     el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts yet — add one below.'}</div>`;
     return;
   }
 
-  el.innerHTML = filtered.map(p => `
+  el.innerHTML = filtered.map(p => {
+    const isPinned = p.pinned !== false;
+    const uses = p.useCount || 0;
+    return `
     <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div style="flex:1;min-width:0;overflow:hidden;">
-        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}${uses > 0 ? ` <span style="color:var(--text3);font-weight:400;font-size:10px;font-family:Space Mono,monospace;">· used ${uses}×</span>` : ''}</div>
         <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(p.text||'').replace(/</g,'&lt;')}</div>
       </div>
+      <span onclick="toggleSavedPromptPinned(${p.id})" style="cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:15px;opacity:${isPinned ? '1' : '0.35'};" title="${isPinned ? 'Showing as a quick pill — tap to hide from the pill row' : 'Hidden from the pill row — tap to show as a quick pill'}">📌</span>
       <button class="run-btn" style="font-size:11px;padding:6px 12px;width:auto;flex-shrink:0;" onclick="runSavedPromptFromManager(${p.id})">Run</button>
       <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:14px;" onclick="editSavedPromptStart(${p.id})" title="Edit">✏️</span>
       <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:18px;line-height:1;" onclick="deleteSavedPromptConfirm(${p.id})" title="Delete">×</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function toggleSavedPromptPinned(id) {
+  const prompts = loadSavedPrompts();
+  const idx = prompts.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  prompts[idx].pinned = prompts[idx].pinned === false ? true : false;
+  saveSavedPrompts(prompts);
+  renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);
+  refreshAllSavedPromptPillRows();
 }
 
 function runSavedPromptFromManager(id) {
   const prompts = loadSavedPrompts();
   const p = prompts.find(x => x.id === id);
   if (!p) return;
+  p.useCount = (p.useCount || 0) + 1;
+  saveSavedPrompts(prompts);
   closeSavedPromptsManager();
   window[_savedPromptsManagerRunFn](p.text);
 }
@@ -27357,12 +27435,16 @@ function dismissInsight() {
 
 <!-- SAVED AI PROMPTS MANAGER — search/browse/add/edit/delete, same
      bottom-sheet style as the library picker above for consistency. -->
-<div class="modal-overlay" id="savedPromptsManagerModal" style="display:none;position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.8);align-items:flex-end;">
-  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s ease;">
-    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);margin-bottom:12px;">SAVED PROMPTS</div>
+<div class="modal-overlay" id="savedPromptsManagerModal" onclick="if(event.target===this)closeSavedPromptsManager()" style="display:none;position:fixed;inset:0;z-index:210;background:rgba(0,0,0,0.8);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="position:sticky;top:0;z-index:1;background:var(--surface);display:flex;justify-content:space-between;align-items:center;padding:20px 16px 12px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);">SAVED PROMPTS</div>
+      <span onclick="closeSavedPromptsManager()" style="font-size:20px;color:var(--text3);cursor:pointer;padding:4px 8px;line-height:1;" title="Close">✕</span>
+    </div>
+    <div style="padding:0 16px 36px;">
     <div style="position:relative;margin-bottom:10px;">
-      <input id="savedPromptsSearch" class="modal-input" placeholder="Search…" style="width:100%;font-size:13px;padding-right:30px;box-sizing:border-box;" oninput="filterSavedPromptsManager(this.value)">
-      <span onclick="document.getElementById('savedPromptsSearch').value='';filterSavedPromptsManager('');document.getElementById('savedPromptsSearch').focus();" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);cursor:pointer;padding:4px;">✕</span>
+      <input id="savedPromptsSearch" class="modal-input" placeholder="Search…" style="width:100%;font-size:13px;padding-right:30px;box-sizing:border-box;" oninput="filterSavedPromptsManager(this.value)" onkeydown="if(event.key==='Enter'){this.blur();}">
+      <span onclick="document.getElementById('savedPromptsSearch').value='';filterSavedPromptsManager('');document.getElementById('savedPromptsSearch').blur();" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--text3);cursor:pointer;padding:4px;" title="Clear search">✕</span>
     </div>
     <div id="savedPromptsManagerList"></div>
 
@@ -27374,6 +27456,7 @@ function dismissInsight() {
     </div>
 
     <button class="modal-btn cancel" style="width:100%;margin-top:12px;" onclick="closeSavedPromptsManager()">Close</button>
+    </div>
   </div>
 </div>
 
