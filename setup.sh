@@ -88,6 +88,15 @@ else
   echo "  Cloning repository..."
   git clone -q "$REPO" "$APP_DIR/app"
 fi
+# Git refuses to operate on a repo if the file ownership looks different from
+# what the current process expects ("dubious ownership") - a real security
+# feature, but one that fires as a false positive constantly on Android/
+# Termux. Setting this now means it's correct from the very first run,
+# rather than waiting for the first auto-update cron cycle to self-heal it
+# (that self-heal exists too, in mh_autoupdate.sh below, as a second layer -
+# this one silently blocked every update for over a day on one real device
+# before being noticed, precisely because the failure was silent).
+git config --global --add safe.directory "$APP_DIR/app/maxhealth"
 echo "  ✓ MaxedHealth ready"
 echo ""
 
@@ -125,6 +134,18 @@ cat > "$HOME/mh_autoupdate.sh" << 'UPDATEEOF'
 REPO_DIR="/storage/emulated/0/maxhealth/app/maxhealth"
 LOG="$HOME/mh_autoupdate.log"
 cd "$REPO_DIR" || { echo "$(date): ERROR - can't cd to $REPO_DIR" >> "$LOG"; exit 1; }
+# Git refuses to operate on a repo if the file ownership looks different from
+# what the current process expects ("dubious ownership") - a real security
+# feature, but one that fires as a false positive constantly on Android/
+# Termux, where a fresh git clone can end up with ownership metadata that
+# looks different to a cron job's execution context than to an interactive
+# shell's, even though it's genuinely the same device and the same person.
+# Run every single time rather than once during setup, so this can't
+# silently start blocking every future update again if ownership ever shifts
+# a second time for any reason - this exact thing is what took a full day's
+# worth of failed update attempts to notice, since the failure was silent
+# beyond this log file.
+git config --global --add safe.directory "$REPO_DIR" 2>> "$LOG"
 git fetch origin main --quiet 2>> "$LOG"
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
