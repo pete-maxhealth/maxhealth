@@ -506,8 +506,6 @@ This is the single-day companion to Activity Credit Balance above — this note 
 - Water target celebration not firing
 - `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
 - OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
-- `mhstart` on at least one real device requires manual Termux intervention rather than firing automatically on app open, despite boot scripts and cron both appearing correctly configured — root cause not yet confirmed (Termux:Boot reliability vs OEM battery/autostart restrictions specifically)
-- Onboarding offers a "Body Recomposition" condition (`recomp`) with no corresponding option in Settings' condition dropdown — selectable once at onboarding, then inaccessible to view or change afterward
 
 **Resolved this session, previously listed here:**
 - ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)

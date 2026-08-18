@@ -13,7 +13,8 @@ Phase 13 and 14's detailed entries were never written up (see Known Outstanding 
 - Room database, repository, and sync manager built for the Galaxy Watch companion, then found to have the identical wrong-field-shape assumption as the Zepp side above
 - Rebuilt to store the real response as a single JSON blob rather than modelling nested objects across flat SQL columns, since this cache is always read/written as a whole and never queried field-by-field
 - Configurable phone IP added rather than hardcoded `127.0.0.1` — a watch and phone are separate devices, so localhost can never reach the phone's own server no matter how the earlier Zepp build had assumed it would
-- UI (Compose, Material3, `TransformingLazyColumn`) built against verified current API samples rather than trained-memory assumptions, given how much the Wear Compose library has moved since — first real `Build → Make Project` still outstanding
+- UI (Compose, Material3, `TransformingLazyColumn`) built against verified current API samples rather than trained-memory assumptions, given how much the Wear Compose library has moved since
+- **Subsequently discontinued** — decided against building a second, separate watch interface when the existing Zepp/Amazfit one already does the job well. This section is kept as an accurate record of the work and its lessons, not as a sign it's still planned.
 
 **Pattern-learning backend actually deployed for the first time**
 - `pattern_detector.py` and the `/pattern-signals` endpoint had been built and tested in prior chat sessions but never actually copied to the live device or wired into `server.py` — every real call had been silently returning "unknown endpoint" this whole time
@@ -82,10 +83,13 @@ Phase 13 and 14's detailed entries were never written up (see Known Outstanding 
 
 ## Known Outstanding Items
 - Phase 13 and 14 changelog entries were never written up in detail — the live version history has real gaps this file doesn't cover
-- Wear OS watchapp: data layer and UI written, `Build → Make Project` not yet run for the first time
-- `mhstart` on at least one real device still requires manual Termux intervention rather than firing automatically on app open — root cause not yet confirmed (Termux:Boot reliability vs OEM battery/autostart restrictions)
-- Onboarding offers a "Body Recomposition" condition with no corresponding option in Settings' condition dropdown — selectable once, then inaccessible afterward
 - Garmin data quality comparison against RingConn/Withings not yet completed
+- Health Connect bridge (Android) — planned, not yet started: a small companion app reading Health Connect's aggregated wearable/phone data and feeding it into the existing local pipeline, replacing per-vendor export parsing with one standard source. Local-only, no cloud involvement.
+
+**Resolved since first written:**
+- Wear OS watchapp — discontinued (see Phase 15 entry above)
+- `mhstart` not firing automatically — root cause found and fixed (a git "dubious ownership" check was silently blocking the auto-update script; now self-healing on every run)
+- "Body Recomposition" condition missing from Settings dropdown — fixed
 
 # MaxedHealth Changelog — Phase 12 (v3.10.202 – v3.10.272)
 
