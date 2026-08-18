@@ -1,3 +1,62 @@
+# MaxedHealth Changelog — Phase 16 (v3.10.451 – v3.10.465)
+
+A single very long session covering three distinct threads: real bug fixes found through direct use (recipe substitution, the polyols/net-carbs feature end-to-end, several condition-aware calculation gaps), a genuinely new feature (site-wide search), and the start of Health Connect integration (server-side complete, native Android bridge app written and pending its first build).
+
+## Recipe & Substitution Fixes
+
+- **Substitute picker pre-fill bug** — tapping the swap icon on a flagged, unmatched ingredient pre-filled the search box with the entire raw label ("⚠️ mascarpone cheese — add nutrition") instead of just the food name, finding poor or no matches until manually retyped. Fixed, scoped specifically to flagged rows so ordinary resolved ingredients with their own parenthetical text aren't mangled by the same stripping.
+- **Missing "+ add ingredient" button** — the recipe builder had no way to add a new ingredient to an already-created recipe, only during initial creation. Added, reusing the existing library-add mechanism.
+- **Recipe ingredients/steps could silently blank out entirely** — a single malformed ingredient (missing its name field) threw an uncaught exception mid-render, and since the list only gets assigned to the page after the whole render completes, one bad item took the other eleven down with it with no visible error at all. Now wrapped so a broken item shows as a specific, diagnosable red error row while the rest of the list renders correctly — this is what actually caught and fixed the real corrupted ingredient (mascarpone) once deployed.
+- **Library/substitute picker had no reachable way to cancel** — the Cancel button existed but sat below a potentially long, scrollable list with nothing visible above it. Added a sticky close button pinned to the top regardless of scroll position, plus tap-outside-to-close.
+
+## Net Carbs & Polyols (UK/EU labelling)
+
+- **Polyols now genuinely subtracted from net carbs**, not just fibre — matching UK/EU convention and directly relevant given how often ketogenic recipes lean on erythritol and similar sweeteners. Sourced only from real barcode/OpenFoodFacts data (`polyols_100g`), never AI-estimated from photos or descriptions, matching the same accuracy principle fibre already followed.
+- Threaded through the full chain: barcode extraction → recipe ingredients → the actual logged entry (found and fixed a pre-existing gap here too — fibre itself was missing from the final logged object at one specific step).
+- **Found eight separate places checking raw carbs directly** instead of the net-aware calculation once this was built out properly — most visibly the ketosis status badge itself, which could show "BORDERLINE" in gross mode and "DEEP KETOSIS" in net mode for the exact same day. Also fixed: the "Ketosis check" and "What's remaining?" saved prompts, the carb-ceiling-hit warning, a second separate remaining-carbs calculation, History tab's per-day compliance indicator, and two internal streak/pattern-compliance checks.
+- Made polyols clearly visible at the moments that matter — barcode scan screen, save-to-library confirmation, logging confirmation, and a small icon on recipe ingredients that carry them — rather than buried as one more number in a long stats string.
+
+## New Conditions: Migraine & Cluster Headache
+
+- Added as full conditions alongside GBM/Epilepsy/Strict Ketosis, following real research: genuine RCT evidence for migraine (including a 74% vs 6% responder-rate trial), earlier-stage but real published evidence for cluster headache (open-label trials, a formal Italian expert consensus statement). Both explicitly framed as promising rather than established standard-of-care, unlike GBM/epilepsy's more settled evidence base.
+- This required going well beyond the Settings dropdown — found and fixed **8 separate places** where GBM/epilepsy get special treatment for the shared "≥65% fat therapeutic ratio" trait, updating all consistently. One related spot was deliberately left untouched: an Insights panel that mixes the shared fat-ratio trait with claims specifically about *GBM tumour-outcome research*, which doesn't transfer to a headache condition and would have been actively misleading to extend.
+- **Found `CONDITION_META` (the table that actually drives the AI's condition-awareness across Ask AI, AI Reports, and trends) was missing migraine, cluster headache, *and* `recomp`** — meaning AI advice was silently generic for all three despite the UI looking condition-aware. Fixed with real evidence citations for each.
+- **Found a second, independently-hardcoded condition→ceiling mapping in onboarding** that only covered 2 of what are now 9 conditions — same class of drift bug as `CONDITION_META`, fixed by routing through the same shared function instead of a second copy.
+- **Onboarding expanded from 4 to all 9 conditions** — previously only offered GBM, T2 Diabetes, Recomp, and General, meaning Epilepsy, Strict Keto, T1 Diabetes, Migraine, and Cluster Headache were only reachable by switching later via Settings, with no indication that was needed.
+- Added `recomp` (Body Recomposition) to `CONDITION_META`, `strict_keto` and `recomp` to a few other spots — pre-existing gaps found while doing this work, not new to this session.
+
+## Condition History & Period-Aware AI Reports
+
+- New "Condition History" tracking, following the exact same proven pattern as the existing Weight Phase History feature — auto-logs on every genuine condition change (Settings and onboarding both), so a later condition change can't retroactively distort how old, already-logged days get judged.
+- `buildPatientContext()` can now filter to a specific condition's real period(s) and judge those days against that period's own actual carb ceiling, rather than whatever's set today — while the default (no filter) behaviour stays exactly as it was, since that's the right choice for a whole-history report.
+- Rather than a dropdown selector, **Ask AI and Full Summary are now period-aware automatically** — whenever more than one condition has genuinely been used, a real date-ranged "Condition Periods" block gets included in the prompt (silently absent otherwise), and the AI does its own grouping/comparison from the day-level data it already receives. Supports genuinely natural questions like "compare my general and migraine periods" without needing an explicit filter UI at all.
+- Fixed a same-day correction bug (mis-clicking a condition and correcting it moments later created two spurious log entries for a period that never really existed) and a `NaN%` compliance bug that would have appeared for a condition-filtered period with zero logged days.
+
+## Site-Wide Search
+
+- New 🔍 icon in the header, always accessible, opens one search box covering Library, Recipes (the same underlying view, so genuinely one search), Saved Prompts, and a curated list of every real Settings section across all three sub-tabs (Manage/Customise/Import).
+- First version missed the entire Import sub-tab and had two mislabelled settings entries, found and fixed once real search terms (Withings, Zepp, android) came back empty — added keyword synonyms for device/brand names so those terms correctly surface the right settings section even though the section's own display label doesn't contain them.
+- Fixed collapsed sections being unreachable from search results — `scrollIntoView` on a `display:none` element does nothing, so a search result for a currently-collapsed section would silently appear to do nothing at all. Now expands the section first if needed.
+
+## Health Connect (Android) — server-side complete, native app pending first build
+
+- Researched and confirmed the real current Health Connect SDK (`androidx.health.connect:connect-client:1.2.0-alpha05`) — this only exists as a compiled native Android API, no web or shell-accessible path at all, confirmed before writing any code rather than assumed.
+- **Server-side fully built and tested**: new `extractors/health_connect.py` (parses the bridge app's JSON export, same conventions as every other extractor), a `server.py` branch recognising the export filename with matching diagnostics for near-misses, and full registration in `update_health.py`'s device list and precedence tables — deliberately lowest priority in every list, since it's an aggregate of whatever a device's own more detailed export would already provide directly.
+- **Native bridge app written** (Kotlin) — minimal by design per the explicit "invisible, no overhead" requirement: request Health Connect permission once, then a WorkManager background job syncs hourly with no further interaction needed. Reads steps (via aggregate, avoiding phone+watch double-counting), sleep, HRV, and weight; writes to the public Downloads folder via MediaStore, landing exactly where Termux's existing pipeline already looks.
+- Confirmed (researched properly, not assumed): phone-based step counting flows into Health Connect automatically on Android 14+ with zero extra work, so this covers phone-only users for activity tracking without a separate code path. Sleep/HRV/SpO2 remain a genuine hardware limitation — no software approach changes that.
+- **Not yet done**: the actual Android Studio build — written but never compiled, same status the Wear OS project reached before being discontinued. This needs laptop access to progress further.
+
+## Other
+
+- **Wear OS watchapp discontinued** — decided against building a second, separate watch interface given the existing Zepp/Amazfit one already does the job well. Kept as accurate historical record in this changelog rather than removed, since the work and its lessons (the same field-shape bug caught before being repeated) are still genuinely useful reference. GitHub repo archived, local project folder cleaned up.
+- Investigated (properly researched, not guessed) nutritional evidence for four other candidate conditions — coeliac disease and iron deficiency both have very strong evidence but need a genuinely different kind of feature (allergen flagging, nutrient-timing) rather than fitting the carb-ceiling model, so both stay parked rather than force-fitted in.
+
+## Known Outstanding Items
+- Health Connect bridge app written but not yet built/tested in Android Studio
+- Phase 13 and 14 changelog entries were never written up in detail — the live version history has real gaps this file doesn't cover
+- Garmin data quality comparison against RingConn/Withings not yet completed
+- Coeliac disease and iron deficiency conditions researched and evidence-graded, but deliberately not added — would need ingredient-level allergen flagging and nutrient-timing features respectively, not just another dropdown entry
+
 # MaxedHealth Changelog — Phase 15 (v3.10.273 – v3.10.450)
 
 Phase 13 and 14's detailed entries were never written up (see Known Outstanding Items below) - this entry starts from where the live version history resumes. A genuinely large session spanning wearable development, several rounds of real-device bug hunting on both Pete's and Jill's phones, and a fair amount of infrastructure most of which won't be visible as a feature but fixes something that was quietly wrong underneath.
@@ -82,14 +141,7 @@ Phase 13 and 14's detailed entries were never written up (see Known Outstanding 
 - Went through a few rounds of direct revision based on real use: a pin/unpin mechanism was built, then replaced entirely by a single "Browse" entry point once it became clear that showing several pills in a row just competed for attention with everything else on screen — sometimes the simpler version is the right one, not the more configurable one
 
 ## Known Outstanding Items
-- Phase 13 and 14 changelog entries were never written up in detail — the live version history has real gaps this file doesn't cover
-- Garmin data quality comparison against RingConn/Withings not yet completed
-- Health Connect bridge (Android) — planned, not yet started: a small companion app reading Health Connect's aggregated wearable/phone data and feeding it into the existing local pipeline, replacing per-vendor export parsing with one standard source. Local-only, no cloud involvement.
-
-**Resolved since first written:**
-- Wear OS watchapp — discontinued (see Phase 15 entry above)
-- `mhstart` not firing automatically — root cause found and fixed (a git "dubious ownership" check was silently blocking the auto-update script; now self-healing on every run)
-- "Body Recomposition" condition missing from Settings dropdown — fixed
+*(See the Phase 16 entry at the top of this file for the current list — the items below were resolved or carried forward there during this documentation pass, rather than duplicated in two places.)*
 
 # MaxedHealth Changelog — Phase 12 (v3.10.202 – v3.10.272)
 

@@ -204,6 +204,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.x | 10 | Library-aware meal suggestions, ingredient substitution, recipe-aware suggestions, dashboard/tab reordering, ketosis milestones, four new nutrition sanity checks, demo mode overhaul, corrected TDEE (height fix: 188cm not 178cm) |
 | v3.10.202-272 | 12 | Multi-AI consensus check (Claude/Gemini/OpenAI), log food to a past day, Activity Credit Balance, phase-aware calorie context — plus a large infrastructure/reliability pass: Worker request-forwarding, direct-API-key path (missing body, missing CORS header), sleep pipeline extractors-path bug, cloud deploy silently ~100 versions behind, fuzzy-match apostrophe/brand fixes, activity-credit duplicate-calculation unification |
 | v3.10.273-450 | 15 | Wear OS/Zepp watchapp development, pattern-learning backend actually deployed live for the first time, full ingredient substitution system, unified Saved Prompts library — plus another large accuracy/reliability pass: recipe totals 1000× scaling bug, Vitals score self-contradiction, AI Reports fabricated fat target + missing "today" data, diabetes condition silently not applying, save-to-library silent overwrite, Withings import name-hardcoding (two separate files), device auto-update infrastructure, Patterns card misleading message. Phase 13-14 not individually documented here — see CHANGELOG.md's Known Outstanding Items |
+| v3.10.451-465 | 16 | Site-wide search, Migraine/Cluster Headache conditions with real evidence grading, Condition History + period-aware AI reports (compare periods via free text, no dropdown), full polyols/net-carbs implementation, Health Connect server-side pipeline (native bridge app written, first build pending) — plus recipe/substitution fixes: pre-fill bug, missing add-ingredient button, single malformed ingredient silently blanking the whole list, unreachable cancel button on a long picker list. Also found CONDITION_META missing 3 conditions (AI advice was silently generic for them), and a second independently-hardcoded ceiling mapping in onboarding drifted out of sync with the shared function everywhere else uses |
 
 ---
 
@@ -302,20 +303,56 @@ Zepp exports are AES-encrypted zip files. Python's stdlib `zipfile` cannot decry
 
 ---
 
+## Health Connect data pipeline (Android)
+
+Health Connect has no web or shell-accessible API at all — it's a compiled native Android SDK (`androidx.health.connect:connect-client`, confirmed current as `1.2.0-alpha05`) accessed only via a real app linking the client library. This means, unlike every other device in this pipeline, there's a genuine native Android companion app involved (`maxedhealth-healthbridge`, separate repo) rather than just an extractor parsing an export file.
+
+**Data flow:** Health Connect (on-device) → bridge app reads via `HealthConnectClient`, WorkManager syncs hourly once permission is granted once → writes `health_connect_export_{timestamp}.json` to the public Downloads folder via `MediaStore` (not raw file I/O — required on Android 10+ scoped storage, needs no broad storage permission) → lands exactly where Termux's `~/storage/downloads` symlink already looks → `move_exports_to_inbox()` in `server.py` recognises the filename pattern → `extractors/health_connect.py` parses it into the same row shape every other extractor produces.
+
+**Export JSON shape** (bridge app's own format, not a Health Connect native shape):
+```json
+{
+  "source": "health_connect",
+  "exported_at": "2026-08-18T09:00:00Z",
+  "days": [
+    {"date": "2026-08-17", "steps": 8342, "sleep_duration_minutes": 412,
+     "hrv_ms": 38.2, "weight_kg": 92.1}
+  ]
+}
+```
+Any field can be absent per day — the bridge app doesn't guess or fill gaps, same as every other extractor.
+
+**Precedence:** deliberately last in every field's precedence list (`weight`, `hrv`, `sleep`, `steps`) in `update_health.py`'s `DEFAULT_PRECEDENCE` — it's an aggregate of whatever the phone's own sensor or another app already wrote into Health Connect, so a device's own direct, more detailed export should win when both exist for the same day.
+
+**Steps specifically use `aggregate()`, not `readRecords()`** in the bridge app, to avoid double-counting when both the phone and a connected watch report steps into Health Connect for the same period. Confirmed (Android 14+): the phone's own step sensor writes into Health Connect automatically with zero extra app involvement once any app has requested `READ_STEPS` permission, so phone-only users get activity tracking without needing a separate wearable at all. Sleep/HRV/SpO2 remain a genuine hardware limitation — no phone-only path exists for these.
+
+**Status:** server-side (extractor, `server.py` branch, `update_health.py` registration) fully built and tested. Bridge app written in Kotlin, not yet built/run in Android Studio — first build pending, same status the (now-discontinued) Wear OS project reached before being parked.
+
+---
+
 ## Condition/Protocol system
 
 `localStorage('mh_condition')` stores the user's selected condition:
 
 | Key | Condition | Carb target | Report framing |
 |-----|-----------|-------------|----------------|
-| `gbm` | GBM — therapeutic ketogenic | 20–30g | Evidence-categorised ([Proven]/[Early Stage]/[Speculative]), gaining phase context |
-| `epilepsy` | Epilepsy — therapeutic ketogenic | 20–30g | Seizure control focus, strict compliance |
-| `strict_keto` | Strict Ketosis | 20–50g | Metabolic health, weight focus |
-| `t1_diabetes` | Type 1 Diabetes | Carb-aware | Insulin management, flag dosing implications |
-| `t2_diabetes` | Type 2 Diabetes | 50–100g | Glucose stability, HbA1c framing |
-| `general` | General Health / Weight Loss | 100–150g | Calorie deficit, balanced approach |
+| `gbm` | GBM — therapeutic ketogenic | 50g standard | [Proven]/[Early Stage]/[Speculative] evidence-categorised, gaining phase context |
+| `epilepsy` | Epilepsy — therapeutic ketogenic | 50g standard | Seizure control focus, [Proven] evidence base |
+| `strict_keto` | Strict Ketosis | 50g standard | Metabolic health, weight focus, [Proven] evidence base |
+| `migraine` | Migraine — ketogenic trial | 50g standard | [Early Stage] evidence — real RCT data, explicitly framed as promising not established standard of care |
+| `cluster_headache` | Cluster Headache — ketogenic trial | 50g standard | [Early Stage] evidence, genuinely earlier-stage than migraine's own evidence base |
+| `t1_diabetes` | Type 1 Diabetes | Carb-aware, no auto ceiling | Insulin management, flag dosing implications |
+| `t2_diabetes` | Type 2 Diabetes | 100g standard | Glucose stability, HbA1c framing |
+| `general` | General Health / Weight Loss | 150g standard | Calorie deficit, balanced approach |
+| `recomp` | Body Recomposition | No carb ceiling | Protein-focused, lean mass preservation/gain |
 
-`buildPatientContext()` and `patientContextBlock()` in `maxhealth.html` build all AI report prompts from this value. The `CONDITION_META` table maps conditions to protocol labels, evidence notes and report framing. Carb ceilings themselves are set separately in Settings → Carb Ceilings and are independent of this selection.
+All 9 offered at onboarding as well as Settings — onboarding previously only offered 4 (`gbm`/`t2_diabetes`/`recomp`/`general`), found and fixed alongside a second, independently-hardcoded ceiling mapping in onboarding that only covered 2 conditions and had silently drifted out of sync with `getConditionCeilingDefaults()`, the shared function everywhere else uses.
+
+`gbm`/`epilepsy`/`migraine`/`cluster_headache` share the elevated 1.8g/kg protein multiplier and the "≥65% fat therapeutic ratio" framing (both trace back to the same therapeutic-ketogenic clinical lineage). One related spot deliberately excludes `migraine`/`cluster_headache` despite sharing the fat-ratio trait: an Insights panel that also mixes in claims specifically about *GBM tumour-outcome research*, which doesn't transfer to a headache condition.
+
+`buildPatientContext()` and `patientContextBlock()` in `maxhealth.html` build all AI report prompts from this value. The `CONDITION_META` table maps conditions to protocol labels, evidence notes and report framing — found missing `migraine`/`cluster_headache`/`recomp` entirely in one pass, meaning AI advice was silently generic for those three despite the UI looking condition-aware. Carb ceilings themselves are set separately in Settings → Carb Ceilings and are independent of this selection.
+
+`buildPatientContext(history, conditionFilter)` accepts an optional second parameter — when set, filters to only days that were genuinely logged during that condition's real period(s) per Condition History (below), and judges them against that period's own carb ceiling rather than today's.
 
 ---
 
@@ -349,6 +386,20 @@ Stored in `localStorage('mh_phase_history')` as newline-separated `YYYY-MM-DD go
 `setGoal()` automatically appends a new timestamped entry when the goal changes — only if the goal actually changed from the previous entry (deduplication). The textarea in Settings is for historical backdating only.
 
 All AI reports receive the full phase history via `patientContextBlock()` with explicit instruction not to treat intentional loss as a concern.
+
+---
+
+## Condition History
+
+Same pattern as Weight Phase History above, for condition instead of goal — stored in `localStorage('mh_condition_history')` as newline-separated `YYYY-MM-DD condition` entries, sorted earliest first.
+
+`getConditionHistory()` parses and returns sorted array. `getConditionForDate(isoDate)` mirrors `getPhaseForDate()` exactly — a date before the earliest logged entry is treated as belonging to that first entry (extends backward), same convention for consistency between the two.
+
+`appendConditionHistory(newCond)` fires from both `saveCondition()` (Settings) and the onboarding commit step, only on a genuine change from the previous entry. Same-day corrections (change → change back, e.g. a mis-click) collapse into the last entry rather than creating a spurious extra period — checked by comparing the new entry's date against the log's last entry, replacing in place if they match rather than appending.
+
+`buildConditionPeriodsBlock()` builds a plain-text date-ranged summary of every period (only when 2+ distinct conditions genuinely exist — silently empty otherwise) and gets appended to `askReportsAI()`'s prompt. Deliberately doesn't pre-aggregate per-period stats — the day-level CSV data already sent to the AI has dates on every row, so the AI does its own grouping/comparison once it knows which dates belong to which period. This is what makes free-text comparison questions ("compare my general and migraine periods") work without a dropdown filter.
+
+`patientContextBlock()` returns an explicit "no data for this period" message when `ctx.n === 0` (a condition-filtered period with zero logged days) rather than a wall of misleading zero-stats — and the compliance percentage calculation is guarded against the `0/0 = NaN` this would otherwise produce.
 
 ---
 
@@ -506,6 +557,7 @@ This is the single-day companion to Activity Credit Balance above — this note 
 - Water target celebration not firing
 - `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
 - OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
+- Health Connect bridge app (Kotlin) written but not yet built/run in Android Studio — first build pending, needs verifying against the real current SDK the same way the Wear OS build needed several rounds of fixing wrong assumptions
 
 **Resolved this session, previously listed here:**
 - ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)

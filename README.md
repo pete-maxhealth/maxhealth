@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.450
+**Version:** v3.10.465
 
 ---
 
@@ -22,7 +22,7 @@
 - **Unified AI reliability** — all 9 AI call sites (Ask AI, Full Summary, GBM Summary, Oncology narrative, meal parsing, portion estimation, barcode reading, missed-day calculators) now share one function with real error surfacing instead of generic swallowed failures, and image support for vision calls.
 - **Voice logging, refined** — one-tap "Log it" directly on the transcript, real error messages instead of raw codes, subtle mic highlight on treatment-tagged days.
 - **Library duplicate protection, properly consistent** — the same category-mismatch check (a food-category word like "bread" vs "cheese" disqualifies a match, regardless of incidental word overlap) now applies across all four library-matching functions, not just one — found after a generic descriptor match ("white", "slices") slipped a wrong suggestion through three sibling functions that had never been fixed.
-- **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for GBM/Epilepsy. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
+- **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy/Migraine/Cluster Headache, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for the therapeutic-protocol conditions. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
 - **Library-aware meal suggestions** — "📚 From my library" proposes real combinations of saved ingredients and Recipes (proper per-serving math) against today's actual remaining macros, never inventing values. One-tap logging straight from the suggestion.
 - **Ingredient substitution** — a genuine searchable picker across recipes, Cook Mode, and suggested meals, with an online-search fallback when nothing in your library fits. Deliberately not auto-matching — an earlier automatic version once suggested peanut butter as a substitute for dairy butter, which is the kind of mistake a real search list in front of a person doesn't make regardless of how good the matching heuristic gets.
 - **Saved Prompts library** — every AI question (both the Log-tab chat and the Reports Ask AI panel) draws from one shared, searchable, editable list rather than fixed buttons. Add, edit, delete, dictate new ones by voice, sorted by how often you actually use each one.
@@ -31,10 +31,12 @@
 - **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
 - **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
 - **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
+- **Condition History** — same pattern as Weight Phase History, for condition instead of goal. Auto-logs whenever your condition genuinely changes, so a later switch can't retroactively distort how old data gets judged. Ask AI and Full Summary become period-aware automatically once more than one condition has been used — ask naturally ("compare my general and migraine periods") and the AI handles the comparison itself, no filter or dropdown needed.
+- **Site-wide search** — 🔍 in the header, always accessible. One box searches Library, Recipes, Saved Prompts, and every Settings section across all three sub-tabs. Tapping a result takes you straight there — opens the right picker pre-filled, runs the prompt directly, or scrolls straight to the settings section (expanding it first if collapsed).
 - **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
 - **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
 - **Food library** — Meals, Recipes, and Ingredients. Search, A-Z nav (ingredients only), long-press to log, recently scanned items.
-- **Condition/Protocol** — Settings dropdown (GBM, Epilepsy, Strict Ketosis, Type 1 Diabetes, Type 2 Diabetes, General Health). All AI reports adapt framing, evidence categorisation and thresholds.
+- **Condition/Protocol** — Settings dropdown, all 9 offered at onboarding too: GBM, Epilepsy, Strict Ketosis, Migraine, Cluster Headache, Type 1 Diabetes, Type 2 Diabetes, General Health, Body Recomposition. All AI reports adapt framing, evidence categorisation and thresholds — Migraine/Cluster Headache explicitly framed as promising, real trial evidence rather than established standard of care.
 - **Activity card** — Walking, Resistance + custom exercises. Distance-aware effort auto-calculation. All macro targets adjust dynamically. Strength Training log and Routine Templates for saved exercise groupings.
 - **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
 - **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
