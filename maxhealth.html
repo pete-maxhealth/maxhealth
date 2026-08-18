@@ -4289,7 +4289,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.465</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.439</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5050,7 +5050,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.465'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.439'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -27602,6 +27602,42 @@ async function runAppHealthCheck() {
     // Cuts through every layer of app logic (proxy vs direct, which key,
     // provider routing) by making an actual minimal call right now and
     // showing exactly what comes back, rather than inferring from symptoms.
+    // ── 6. Auto-update / watchdog status (Local mode only) ──
+    // Reads the real autoupdate log, crontab, and running processes via a
+    // dedicated server endpoint - lets someone check whether self-update is
+    // genuinely working with one tap here, rather than needing Termux
+    // command-line access. Built specifically so this can be debugged
+    // remotely: the person having the issue taps this button and copies
+    // the result, no terminal commands needed on their end at all.
+    lines.push('\n── AUTO-UPDATE STATUS ──');
+    try {
+      const sysRes = await fetch('/system-status', { cache: 'no-store' });
+      if (sysRes.ok) {
+        const sys = await sysRes.json();
+        if (sys.autoupdate_log_tail === null) {
+          lines.push(`${warn} No mh_autoupdate.log found - auto-update has never run on this device yet, or setup.sh predates it`);
+        } else {
+          lines.push(`${ok} Auto-update log found (${sys.autoupdate_log_lines_total} total lines). Last entries:`);
+          sys.autoupdate_log_tail.trim().split('\n').forEach(l => lines.push(`  ${l}`));
+        }
+        lines.push('');
+        lines.push('Crontab:');
+        if (sys.crontab && sys.crontab.trim()) {
+          sys.crontab.trim().split('\n').forEach(l => lines.push(`  ${l}`));
+        } else {
+          lines.push(`  ${warn} Empty or unreadable - watchdog and auto-update cron entries are missing`);
+        }
+        lines.push(sys.crond_running ? `${ok} crond is running` : `${warn} crond does NOT appear to be running - nothing can fire on schedule regardless of what's in crontab`);
+        if (sys.server_process_count != null) {
+          lines.push(sys.server_process_count === 1 ? `${ok} Exactly 1 server.py process running` : `${warn} ${sys.server_process_count} server.py processes running (expected exactly 1)`);
+        }
+      } else {
+        lines.push(`${warn} /system-status returned ${sysRes.status} - only available in Local mode with the current server.py`);
+      }
+    } catch (sysErr) {
+      lines.push(`${warn} Could not reach /system-status: ${sysErr.message} - only available in Local mode`);
+    }
+
     lines.push('\n── AI CONNECTION (live test) ──');
     const _provider = localStorage.getItem('mh_provider') || 'none';
     const _storedKey = localStorage.getItem('mh_apikey') || '';

@@ -119,6 +119,7 @@ def move_exports_to_inbox():
     moved = 0
     needs_zarchiver = False
     unmatched_zips = []  # zip files seen but not recognised as any known device - reported at the end so a mismatch is visible in-app immediately, not just as a silent "nothing found"
+    unmatched_json = []  # same, for the Health Connect bridge app's JSON exports
 
     try:
         files = os.listdir(DOWNLOAD)
@@ -155,6 +156,13 @@ def move_exports_to_inbox():
         elif re.match(r'^data_[a-z]+_\d+\.zip$', lower):
             is_export = True
 
+        # Health Connect bridge app — writes health_connect_export_*.json
+        # directly (not a zip - JSON, since the bridge app controls its own
+        # export format completely, unlike the other devices' proprietary
+        # export tools).
+        elif re.match(r'^health_connect_export_.*\.json$', lower):
+            is_export = True
+
         if is_export:
             if os.path.exists(dest):
                 _log(f'Skipped — {name} already in inbox')
@@ -171,6 +179,10 @@ def move_exports_to_inbox():
             # is visible in the app's own Sync log directly, without needing
             # separate device access or a standalone script to find out.
             unmatched_zips.append((name, src))
+        elif lower.endswith('.json'):
+            # Same reasoning as unmatched_zips above, for the Health Connect
+            # bridge app's JSON export specifically.
+            unmatched_json.append((name, src))
 
     if moved == 0 and unmatched_zips:
         _log(f'Found {len(unmatched_zips)} zip file(s) in Download that don\'t match any known device pattern:')
@@ -194,6 +206,26 @@ def move_exports_to_inbox():
                         detail += f' — opens fine, {len(inner)} file(s) inside, no recognised device signature found'
             except Exception as e:
                 detail += f' — could NOT open as a zip ({e}) - the download may be incomplete or corrupted, try exporting again'
+            _log(detail)
+
+    if moved == 0 and unmatched_json:
+        _log(f'Found {len(unmatched_json)} JSON file(s) in Download that don\'t match the Health Connect export pattern:')
+        for name, path in unmatched_json:
+            try:
+                size = os.path.getsize(path)
+                size_str = f'{size:,} bytes'
+            except Exception:
+                size_str = 'size unknown'
+            detail = f'  {name} ({size_str})'
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    parsed = json.load(f)
+                if isinstance(parsed, dict) and 'days' in parsed:
+                    detail += ' — opens fine, has a \'days\' key (looks like a genuine Health Connect export that the filename check missed - tell Max the exact filename above)'
+                else:
+                    detail += ' — opens fine as JSON, but no recognised Health Connect structure found'
+            except Exception as e:
+                detail += f' — could NOT parse as JSON ({e}) - the export may be incomplete, try syncing the bridge app again'
             _log(detail)
 
     # Check for pre-extracted Zepp folders
@@ -504,6 +536,52 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     date_str = os.path.basename(f).replace('maxhealth_backup_', '').replace('.json', '')
                     backups.append({'date': date_str, 'size': os.path.getsize(f)})
                 self.send_json({'backups': backups})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            return
+
+        # ── GET /system-status — self-update/watchdog diagnostics ──────────
+        # Lets someone check whether auto-update and the watchdog are
+        # genuinely working from inside the app itself - a single tap in
+        # App Health Check - rather than needing Termux command-line access,
+        # which is exactly the barrier that made this hard to debug
+        # remotely (a non-technical user on a different device can't easily
+        # be walked through typing terminal commands over a phone call).
+        # Fixed, hardcoded commands only - no user input reaches subprocess,
+        # so there's no injection risk despite this being a live shell call.
+        if path == '/system-status':
+            try:
+                result = {}
+
+                log_path = os.path.expanduser('~/mh_autoupdate.log')
+                if os.path.exists(log_path):
+                    with open(log_path, 'r', errors='replace') as f:
+                        lines = f.readlines()
+                    result['autoupdate_log_tail'] = ''.join(lines[-15:])
+                    result['autoupdate_log_lines_total'] = len(lines)
+                else:
+                    result['autoupdate_log_tail'] = None
+
+                try:
+                    cron_out = subprocess.run(['crontab', '-l'], capture_output=True, text=True, timeout=5)
+                    result['crontab'] = cron_out.stdout if cron_out.returncode == 0 else f'(crontab -l failed: {cron_out.stderr.strip()})'
+                except Exception as e:
+                    result['crontab'] = f'(could not run crontab -l: {e})'
+
+                try:
+                    crond_out = subprocess.run(['pgrep', '-f', 'crond'], capture_output=True, text=True, timeout=5)
+                    result['crond_running'] = bool(crond_out.stdout.strip())
+                except Exception as e:
+                    result['crond_running'] = None
+                    result['crond_check_error'] = str(e)
+
+                try:
+                    server_out = subprocess.run(['pgrep', '-f', 'python.*server.py'], capture_output=True, text=True, timeout=5)
+                    result['server_process_count'] = len(server_out.stdout.strip().split('\n')) if server_out.stdout.strip() else 0
+                except Exception as e:
+                    result['server_process_count'] = None
+
+                self.send_json(result)
             except Exception as e:
                 self.send_json({'error': str(e)}, 500)
             return

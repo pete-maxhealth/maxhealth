@@ -50,11 +50,16 @@ MAX_BACKUPS   = 7
 MAX_LOG_LINES = 500
 
 # ── Source precedence (default order, user-configurable via prefs) ─────────────
+# health_connect sits last in every list deliberately - it's an aggregate of
+# whatever the phone's own sensor or another app already wrote into Health
+# Connect, so a device's own direct, more detailed export should always be
+# preferred when both exist for the same day. See extractors/health_connect.py
+# for the full reasoning.
 DEFAULT_PRECEDENCE = {
-    'weight':   ['withings', 'manual', 'ringconn', 'amazfit'],
-    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit'],
-    'sleep':    ['ringconn', 'withings', 'garmin', 'amazfit'],
-    'steps':    ['garmin', 'withings', 'ringconn', 'amazfit'],
+    'weight':   ['withings', 'manual', 'ringconn', 'amazfit', 'health_connect'],
+    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
+    'sleep':    ['ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
+    'steps':    ['garmin', 'withings', 'ringconn', 'amazfit', 'health_connect'],
     'spo2':     ['ringconn', 'withings', 'amazfit'],
     'hr':       ['ringconn', 'amazfit', 'withings', 'garmin'],
 }
@@ -81,6 +86,7 @@ SOURCE_FIELDS = {
                  'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
                  'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
+    'health_connect': ['steps', 'sleep_duration', 'hrv', 'weight'],
 }
 
 # Map metric category → combined.csv fields
@@ -516,7 +522,7 @@ def check_integrity(rows_by_date):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-KNOWN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit']
+KNOWN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit', 'health_connect']
 
 def main():
     parser = argparse.ArgumentParser(description='MaxedHealth Data Pipeline')
