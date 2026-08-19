@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.478</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.479</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.478'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.479'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8995,12 +8995,13 @@ The description contains the product name and the amount they had (e.g. "ASDA Co
 Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate or use your training data.
 Step 2: Extract the amount in grams or ml from the user's description. The amount MUST be stated — do not assume 100g if no amount is given; instead set amount to "unknown" and note this in the message field.
 Step 3: Check whether the label states these values apply "when cooked", "when grilled", "as prepared", or similar — most raw meat/fish products state nutrition on a RAW/as-sold basis, but some (like certain sausages) state it on a COOKED basis instead. If the label explicitly says the figures are on a cooked/prepared basis, note this clearly in the message field, since it means the user's stated amount needs to be the COOKED weight to match these figures correctly, not the raw weight.
+Step 4: If the label shows a "Fibre" row and/or an "of which Polyols" row nested under Carbohydrate (common on EU multi-language keto/low-carb labels), read those exact printed per-100g figures too and include them as "fibre"/"polyols" in per100g. This is reading a printed number off the same real label, not estimating — same accuracy standard as the other fields. Omit either field entirely if the label doesn't show it, rather than guessing.
 
 Respond ONLY with a JSON object (no markdown, no preamble):
 {
   "type": "food",
   "items": [
-    { "name": "Product name (no quantity)", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }, "grams": 150 }
+    { "name": "Product name (no quantity)", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2, "fibre": 9.3, "polyols": 6.0 }, "grams": 150 }
   ],
   "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C."
 }
@@ -9024,13 +9025,13 @@ If the user describes food or a meal (or you can see food in an image), respond 
   "message": "one line summary including any portion assumptions"
 }
 
-If PHOTO CLASSIFICATION below determines this is a LABEL PATH item (a genuine printed nutrition panel, not estimated), use this shape instead for that item — raw per-100g label facts plus the gram amount, NOT pre-multiplied, since scaling is done deterministically downstream rather than trusted to your arithmetic:
+If PHOTO CLASSIFICATION below determines this is a LABEL PATH item (a genuine printed nutrition panel, not estimated), use this shape instead for that item — raw per-100g label facts plus the gram amount, NOT pre-multiplied, since scaling is done deterministically downstream rather than trusted to your arithmetic. If the label shows a "Fibre" row and/or an "of which Polyols" row nested under Carbohydrate (common on EU multi-language keto/low-carb labels), read those exact printed per-100g figures too and include as "fibre"/"polyols" — this is reading a printed number off the same label, not estimating. Omit either field entirely if the label doesn't show it:
 {
   "type": "food",
   "items": [
-    { "name": "Product name", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2 }, "grams": 150 }
+    { "name": "Product name", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2, "fibre": 9.3, "polyols": 6.0 }, "grams": 150 }
   ],
-  "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C."
+  "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C · 9.3g fibre · 6.0g polyols."
 }
 Mixed responses are fine — a meal photo with one labelled component and one estimated component can use both shapes in the same items array.
 
@@ -11679,10 +11680,20 @@ async function _processLabelEstimate(b64, mime, systemPrompt) {
               protein: Math.round((p.protein || 0) * factor * 100) / 100,
               fat:     Math.round((p.fat     || 0) * factor * 100) / 100,
               carbs:   Math.round((p.carbs   || 0) * factor * 100) / 100,
+              // Same scaling as the other macros - fibre/polyols only ever
+              // appear here if the AI genuinely read them printed on the
+              // label itself (see the prompt above), never estimated, so
+              // this is consistent with how every other field on this path
+              // already gets sourced. Omitted entirely (not zeroed) when
+              // the label didn't show them, matching the barcode-sourced
+              // path's own convention of only ever including these when
+              // real data backs them.
+              ...(p.fibre   != null ? { fibre:   Math.round((p.fibre   || 0) * factor * 10) / 10 } : {}),
+              ...(p.polyols != null ? { polyols: Math.round((p.polyols || 0) * factor * 10) / 10 } : {}),
               _per100gBase: p,
             };
           }
-          return { name: it.name + ' (per 100g — amount not confirmed)', amount: '100g', kcal: p.kcal||0, protein: p.protein||0, fat: p.fat||0, carbs: p.carbs||0, _per100gBase: p, _amountUnconfirmed: true };
+          return { name: it.name + ' (per 100g — amount not confirmed)', amount: '100g', kcal: p.kcal||0, protein: p.protein||0, fat: p.fat||0, carbs: p.carbs||0, ...(p.fibre != null ? { fibre: p.fibre } : {}), ...(p.polyols != null ? { polyols: p.polyols } : {}), _per100gBase: p, _amountUnconfirmed: true };
         }
         return it; // fallback if the model ever reverts to the old shape
       });
@@ -11945,6 +11956,9 @@ IMPORTANT: two days can have identical grams remaining for very different reason
       : `Fat is running meaningfully HIGH as a % of calories so far today — favour leaner, lower-fat items even where a richer option would also technically fit the remaining grams. Do not push toward higher-fat foods right now.`)
   : `Today's ratio is close enough to target that fat isn't a correction priority either way — just work from the remaining grams and target ratio.`}
 This is a genuine priority alongside the remaining-grams budget, not just a tiebreaker — never at the cost of actually exceeding the remaining carb/protein/fat budget itself, which stays the hard limit.
+${[['fat', remaining.fat], ['protein', remaining.protein], ['carbs', remaining.carbs]].filter(([,v]) => v > 0 && v < 15).map(([label, v]) =>
+  `\n⚠ ${label.toUpperCase()} BUDGET IS CRITICALLY TIGHT: only ${v}g remaining. This is not "still some room" — a single richer item (a spoon of cream, a handful of nuts, a fatty cut of meat) can easily exceed this alone. Actively check each candidate item's real gram-scaled contribution against this specific number before including it, not just against its general style or macro ratio.`
+).join('')}
 
 CURRENT TIME OF DAY: ${timeOfDay}
 Where reasonable, prefer combos/recipes that suit this time of day (e.g. breakfast-style items — cereal, toast, eggs, bagels, jam, marmite, cheese, yoghurt — in the morning; lighter snack-style options in the late evening). This is a preference, not a rule — if the best-fitting items for the remaining macro budget genuinely aren't a natural fit for the time of day, still suggest them rather than forcing a worse macro match just to suit the clock.
@@ -13177,6 +13191,12 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
               protein: Math.round((p.protein || 0) * factor * 100) / 100,
               fat:     Math.round((p.fat     || 0) * factor * 100) / 100,
               carbs:   Math.round((p.carbs   || 0) * factor * 100) / 100,
+              // Same reasoning as the other label-reading path - only ever
+              // present if genuinely printed on the label and read by the
+              // AI, never estimated, omitted entirely rather than zeroed
+              // when the label doesn't show them.
+              ...(p.fibre   != null ? { fibre:   Math.round((p.fibre   || 0) * factor * 10) / 10 } : {}),
+              ...(p.polyols != null ? { polyols: Math.round((p.polyols || 0) * factor * 10) / 10 } : {}),
               _per100gBase: p,
             };
           }
@@ -13186,6 +13206,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
             name: it.name + ' (per 100g — amount not confirmed)',
             amount: '100g',
             kcal: p.kcal || 0, protein: p.protein || 0, fat: p.fat || 0, carbs: p.carbs || 0,
+            ...(p.fibre != null ? { fibre: p.fibre } : {}), ...(p.polyols != null ? { polyols: p.polyols } : {}),
             _per100gBase: p, _amountUnconfirmed: true,
           };
         }
