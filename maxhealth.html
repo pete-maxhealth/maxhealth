@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.480</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.481</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.480'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.481'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -10475,7 +10475,7 @@ function quickLogRecentScan(name) {
   const s = scans.find(x => x.name === name);
   if (!s) return;
   // Set as selected food item and open amount panel
-  _selectedFoodItem = { name: s.name, brand: '', kcal: s.kcal, prot: s.protein, fat: s.fat, carb: s.carbs, fibre: 0, satFat: 0, sugars: 0, salt: 0, iron: 0 };
+  _selectedFoodItem = { name: s.name, brand: '', kcal: s.kcal, prot: s.protein, fat: s.fat, carb: s.carbs, fibre: s.fibre || 0, polyols: s.polyols || 0, satFat: 0, sugars: 0, salt: 0, iron: 0 };
   document.getElementById('foodSearchView').style.display = 'none';
   document.getElementById('foodAmountView').classList.add('open');
   document.getElementById('foodSearchOverlay').classList.add('open');
@@ -11087,7 +11087,7 @@ function selectLibraryResult(i, q) {
     prot: Math.round(f.protein * scaleTo100 * 10) / 10,
     carb: Math.round(f.carbs * scaleTo100 * 10) / 10,
     fat: Math.round((f.fat||0) * scaleTo100 * 10) / 10,
-    fibre: f.fibre || 0, satFat: 0, sugars: 0, salt: 0, iron: 0
+    fibre: f.fibre || 0, polyols: f.polyols || 0, satFat: 0, sugars: 0, salt: 0, iron: 0
   };
   _lastFoodSourceType = 'search';
   document.getElementById('foodSearchView').style.display = 'none';
@@ -11476,6 +11476,10 @@ function logFoodFromDatabase() {
     name: _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name,
     kcal: _selectedFoodItem.kcal, protein: _selectedFoodItem.prot,
     fat: _selectedFoodItem.fat || 0, carbs: _selectedFoodItem.carb,
+    // fibre/polyols were available right here but never captured, meaning
+    // re-logging from Recent Scans always lost this data even for a
+    // barcode-sourced item that genuinely had it moments earlier.
+    fibre: _selectedFoodItem.fibre || 0, polyols: _selectedFoodItem.polyols || 0,
     portion: '100g', source: _lastFoodSourceType, scannedAt: Date.now()
   });
   logFoods([food], displayName);
@@ -15200,9 +15204,19 @@ function logFoods(foods, originalText, aiMessage = null) {
   const carbWarn = getEffectiveCarbs(newTotals) > targets.carbs;
   const itemList = foods.map(f => {
     const extras = [
-      f.fibre  ? f.fibre  + 'g fibre'   : null,
-      f.sugars ? f.sugars + 'g sugar'   : null,
-      f.iron   ? f.iron   + 'mg iron'   : null,
+      f.fibre   ? f.fibre   + 'g fibre'   : null,
+      // Was missing entirely - fibre and sugars were both shown here, but
+      // polyols never made it into this specific display line despite the
+      // data being correctly fetched and used elsewhere (net carbs
+      // calculation, save-to-library). This is exactly where someone would
+      // actually look to confirm what got logged, so its absence here
+      // specifically was the most visible version of the gap. Uses the
+      // same 🍬 marker as the single-item picker's own polyols display,
+      // for the same at-a-glance recognition, even though this line is
+      // more compact (multiple items can appear here, unlike that picker).
+      f.polyols ? `🍬 ${f.polyols}g polyols` : null,
+      f.sugars  ? f.sugars  + 'g sugar'   : null,
+      f.iron    ? f.iron    + 'mg iron'   : null,
     ].filter(Boolean).join(' · ');
     return `<div style="padding:4px 0;border-bottom:1px solid var(--border);"><div style="font-size:13px;color:var(--text);">${f.name}${f.amount ? ` <span style="color:var(--text3);font-weight:400;">(${f.amount})</span>` : ''}</div><div style="font-size:11px;color:var(--text3);margin-top:2px;">${f.kcal}kcal &nbsp;·&nbsp; <span style="color:var(--green);">${f.protein}g P</span> &nbsp;·&nbsp; <span style="color:#a78bfa;">${f.fat||0}g F</span> &nbsp;·&nbsp; <span style="color:var(--yellow);">${f.carbs}g C</span>${extras ? ' &nbsp;·&nbsp; ' + extras : ''}</div></div>`;
   }).join('');
