@@ -1,3 +1,50 @@
+# MaxedHealth Changelog — Phase 17 (v3.10.466 – v3.10.471)
+
+Continuation of the same session, spanning three threads: a genuinely useful debugging tool built specifically to solve a real, previously stuck device (Jill's), a long-standing structural bug finally caught by that same tool, and a substantial two-part feature (personalised walking effort, then real trend-based auto-adjustment) that grew out of what started as a simple question about pace classification.
+
+## Remote Diagnostics — App Health Check + `/system-status`
+
+- New server endpoint (`/system-status`) surfaces the real auto-update log, crontab contents, and whether `crond`/`server.py` are actually running — added specifically so a stuck device could be debugged **remotely**, without needing Termux command-line access on the affected phone at all.
+- Wired into the existing "🩺 Run health check" button — one tap, then "📋 Copy all text" to send the output to whoever's helping debug.
+- **This is what actually solved Jill's device.** Confirmed, end-to-end, on a real device that had been stuck for days: the health check first correctly showed `crond` wasn't running at all (root cause, not yet fixed at that point), then — after `crond` was restarted — showed the real log entries proving auto-update genuinely worked on its own at the very next scheduled tick, jumping five versions in one clean, unattended update.
+
+## Long-Standing Div Balance Bug — Found by the Tool Above
+
+- Building the health check's own version-sync check surfaced a real, pre-existing structural bug: a duplicate, prematurely-placed `</div><!-- /app-wrapper -->` closing the app's outermost wrapper in the *middle* of the document, with the correct matching close already existing at the true end. Different comment styles between the two suggest this had been sitting there for a while, silently — not something introduced this session.
+- Found via a proper stack-based HTML parser after simpler counting methods (including the crude raw-text `grep` this project had been relying on) proved unreliable — a raw count happened to look "balanced" for a long time purely because HTML-shaped text sitting inside JS strings was being counted alongside real markup.
+- **`bump_and_deploy.sh`'s own safety check had the identical blind spot** — it used the same unreliable raw-count method, meaning it could produce both false-positive aborts (blocking a genuinely correct fix, which is what actually happened) and, more concerningly, false-negative passes if JS-string content ever happened to mask a real imbalance. Fixed to use the same script-stripping method as the in-app Health Check, so the two can never disagree with each other again.
+- Also fixed the exact two-places version drift `bump_and_deploy.sh`'s own header comment already warned about — the `APP_VERSION` const had gone stale independently of the display text it's supposed to stay in sync with, for reasons unrelated to the script (a file was shared before a manual edit was made).
+
+## Setup Wizard & Advanced Tools Reorder Bug
+
+- "Redo Setup Wizard" made hideable and reorderable, matching every other settings section — previously a standalone block using different, ad-hoc markup.
+- **Found a real bug affecting three existing sections**: Log Mutation Debug, Save Debug Trace, and Settings Change Log were all genuinely, correctly positioned inside the fixed "⚠ Advanced — Troubleshooting Tools" box in the source HTML, but were missing from that box's reorder-exclusion list. The generic reorder system was picking them up and physically moving them out of Advanced Tools via `appendChild` — not hidden, just relocated somewhere nobody would think to look for a debug tool. All three now correctly excluded, matching their siblings.
+
+## Personalised Walking Effort & Activity Level
+
+- **Real research first**: confirmed there's no single correct universal walking-pace threshold for "brisk"/moderate effort — even the AHA (≥2.5mph) and CDC (≥3.5mph) officially disagree, explicitly because it depends on individual fitness. Multiple peer-reviewed studies warn fixed thresholds "may misclassify" intensity for exactly this reason.
+- **Activity Level is now a genuine, persistent Profile setting** — previously it was asked once during onboarding, used for a single TDEE calculation, and then discarded entirely with no way to view or change it afterward.
+- **New fitness-adjusted walking pace bands**, four tiers anchored on the real AHA/CDC figures rather than arbitrary numbers, replacing a single fixed scale that had the same "brisk" pace meaning completely different things depending who was walking.
+- **Found and fixed a real internal inconsistency**: two separate, independently-maintained pace-classification systems existed in the code (one for auto-suggesting an effort label from a logged pace, one for the reverse) and had drifted to disagree with each other even before personalisation was added. Both — plus two further consumers found along the way — now read from one shared source.
+- **Full Formulas & Technical Reference documentation** added, including an honest flag about one related thing *not* yet fixed: MET calorie values for walking aren't pace-adjusted the same way yet, so calorie estimates outside the "moderately active" tier may be very slightly off until that's addressed too.
+
+## Activity Level Auto-Switch
+
+- Directly building on the above: the app now detects **sustained, genuine change** in real step-count data and adjusts Activity Level automatically, rather than requiring it to be manually kept up to date as someone's real fitness changes.
+- Reuses the app's own existing TDEE step-count thresholds (already closely aligned with the real, widely-cited Tudor-Locke & Bassett 2004 classification, independently confirmed via research) — one consistent definition of each tier, not a second one invented separately.
+- **Deliberately more noise-resistant than the existing weight/goal auto-switch it's modelled on**: rather than requiring every single day in the check window to individually match (which a single low-step rest day would break even during genuine sustained improvement), it checks whether the smoothed 30-day rolling average, computed as of each of the last N days, has consistently agreed on a different tier throughout. Proven with real simulated tests: a genuinely noisy but sustained improvement correctly triggers; a stable match correctly doesn't; a short vacation-week spike correctly gets recognised as not sustained rather than falsely triggering a permanent change.
+- Improvement gets a real celebration (matching the existing ketosis-streak-milestone pattern); a decline gets a plain, factual notification only — informed either way, celebrated only when it's genuinely something to celebrate, as specifically requested.
+- New Activity Level History, mirroring the existing Condition History pattern exactly, so a later auto-switch (or manual change) never retroactively distorts how older logged days get interpreted by AI reports.
+- **Two genuine pre-existing bugs found and fixed along the way**, unrelated to what was being built: `mh_notif_autoswitch` was being included in backups but never actually restored from one, and Condition History's own textarea was never populated when Settings first loaded — only ever got filled in as a side effect of something else happening first, meaning a fresh visit could show blank even with real history genuinely stored.
+
+## Known Outstanding Items
+- Health Connect bridge app (Kotlin) written but not yet built/run in Android Studio — first build pending
+- Heylo crackerbread camera/photo logging reported as "hit and miss" — not yet investigated
+- MET calorie values for walking are not yet pace-adjusted the same way the effort-label bands now are (see above)
+- Phase 13 and 14 changelog entries were never written up in detail — the live version history has real gaps this file doesn't cover
+- Garmin data quality comparison against RingConn/Withings not yet completed
+- Coeliac disease and iron deficiency conditions researched and evidence-graded, but deliberately not added — would need ingredient-level allergen flagging and nutrient-timing features respectively, not just another dropdown entry
+
 # MaxedHealth Changelog — Phase 16 (v3.10.451 – v3.10.465)
 
 A single very long session covering three distinct threads: real bug fixes found through direct use (recipe substitution, the polyols/net-carbs feature end-to-end, several condition-aware calculation gaps), a genuinely new feature (site-wide search), and the start of Health Connect integration (server-side complete, native Android bridge app written and pending its first build).
@@ -52,10 +99,7 @@ A single very long session covering three distinct threads: real bug fixes found
 - Investigated (properly researched, not guessed) nutritional evidence for four other candidate conditions — coeliac disease and iron deficiency both have very strong evidence but need a genuinely different kind of feature (allergen flagging, nutrient-timing) rather than fitting the carb-ceiling model, so both stay parked rather than force-fitted in.
 
 ## Known Outstanding Items
-- Health Connect bridge app written but not yet built/tested in Android Studio
-- Phase 13 and 14 changelog entries were never written up in detail — the live version history has real gaps this file doesn't cover
-- Garmin data quality comparison against RingConn/Withings not yet completed
-- Coeliac disease and iron deficiency conditions researched and evidence-graded, but deliberately not added — would need ingredient-level allergen flagging and nutrient-timing features respectively, not just another dropdown entry
+*(See the Phase 17 entry at the top of this file for the current list — the items below were carried forward there during this documentation pass, rather than duplicated in two places.)*
 
 # MaxedHealth Changelog — Phase 15 (v3.10.273 – v3.10.450)
 

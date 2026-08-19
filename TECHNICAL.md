@@ -205,6 +205,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.202-272 | 12 | Multi-AI consensus check (Claude/Gemini/OpenAI), log food to a past day, Activity Credit Balance, phase-aware calorie context — plus a large infrastructure/reliability pass: Worker request-forwarding, direct-API-key path (missing body, missing CORS header), sleep pipeline extractors-path bug, cloud deploy silently ~100 versions behind, fuzzy-match apostrophe/brand fixes, activity-credit duplicate-calculation unification |
 | v3.10.273-450 | 15 | Wear OS/Zepp watchapp development, pattern-learning backend actually deployed live for the first time, full ingredient substitution system, unified Saved Prompts library — plus another large accuracy/reliability pass: recipe totals 1000× scaling bug, Vitals score self-contradiction, AI Reports fabricated fat target + missing "today" data, diabetes condition silently not applying, save-to-library silent overwrite, Withings import name-hardcoding (two separate files), device auto-update infrastructure, Patterns card misleading message. Phase 13-14 not individually documented here — see CHANGELOG.md's Known Outstanding Items |
 | v3.10.451-465 | 16 | Site-wide search, Migraine/Cluster Headache conditions with real evidence grading, Condition History + period-aware AI reports (compare periods via free text, no dropdown), full polyols/net-carbs implementation, Health Connect server-side pipeline (native bridge app written, first build pending) — plus recipe/substitution fixes: pre-fill bug, missing add-ingredient button, single malformed ingredient silently blanking the whole list, unreachable cancel button on a long picker list. Also found CONDITION_META missing 3 conditions (AI advice was silently generic for them), and a second independently-hardcoded ceiling mapping in onboarding drifted out of sync with the shared function everywhere else uses |
+| v3.10.466-471 | 17 | Remote diagnostics (`/system-status` + App Health Check) — confirmed solving a real, previously stuck device end-to-end. Personalised Activity Level (real Profile setting, research-backed fitness-adjusted walking pace bands) plus real auto-switch from sustained step-count trends, modelled on but more noise-resistant than the existing weight/goal auto-switch — plus a genuine long-standing structural div-balance bug found via the new diagnostics (stray duplicate closing tag), `bump_and_deploy.sh`'s own safety check fixed to match (it had the same blind spot), 3 debug/settings sections found being silently relocated out of Advanced Tools by the reorder system, and 2 further small pre-existing bugs (a notification setting never restored from backup, Condition History's field never populated on fresh page load) |
 
 ---
 
@@ -274,6 +275,17 @@ Requires: **Termux:Boot** and **Termux:API** from F-Droid (same signing key as T
 Uses `git reset --hard` rather than a merge deliberately — these are pure end-user devices that should never carry real local code edits, so always converging to exactly what's on GitHub is safer than risking a merge conflict silently blocking every future update forever with no one watching to resolve it.
 
 This exists because devices could otherwise run stale code indefinitely with no way to catch up on their own — every fix required someone to manually `git pull` on that specific device. Folded into `setup.sh` itself (not just patched onto existing installs by hand), so every fresh install gets this automatically.
+
+### Remote diagnostics — `/system-status`
+
+New `server.py` GET endpoint, wired into the existing App Health Check tool (Settings → Manage → Advanced Troubleshooting Tools). Reads (fixed, hardcoded commands only, no user input reaches `subprocess` — no injection risk despite being a live shell call):
+
+- `~/mh_autoupdate.log` (last 15 lines + total line count)
+- `crontab -l` output
+- Whether `crond` is actually running (`pgrep -f crond`)
+- How many `server.py` processes are running (`pgrep -f "python.*server.py"` — should be exactly 1)
+
+Built specifically so a stuck device can be debugged **remotely**, without needing Termux command-line access on the affected phone — the person having the issue taps the button and copies the output, no terminal commands needed on their end at all. **Confirmed working on a real, previously stuck device**: first correctly showed `crond` wasn't running (the actual root cause — nothing can fire on schedule regardless of what's in crontab), then, after `crond` was restarted, showed the real log entries proving auto-update genuinely worked unattended at the next scheduled tick.
 
 ---
 
@@ -403,6 +415,26 @@ Same pattern as Weight Phase History above, for condition instead of goal — st
 
 ---
 
+## Activity Level, Walking Pace Bands & Auto-Switch
+
+**Persistence**: `localStorage('mh_activity_level')` — one of `sedentary`/`light`/`moderate`/`active`. Previously set once during onboarding via a transient in-memory variable (`_obActivity`) and never persisted at all; `obSetActivity()` now writes it immediately, and it's editable afterward in Settings → Profile via `saveActivityLevel()`, following the exact same pattern as `saveCondition()`.
+
+**Walking pace bands**: `ACTIVITY_WALKING_PACE_BANDS` (four tiers, each with `easyMax`/`moderateMax`/`longBumpMiles`) replaces the single fixed `PACE_BANDS.walking` band that previously applied to everyone regardless of fitness. `getWalkingPaceBands()` is the single source of truth — reads the current activity level and returns the matching tier, falling back to the original generic band if somehow unset. Anchored on real research: the AHA (≥2.5mph) and CDC (≥3.5mph) officially disagree on what counts as "brisk," explicitly because it depends on individual fitness — `active` tier is anchored on the CDC figure, `light` on the AHA figure, `sedentary`/`moderate` interpolate between them. This specific 4-tier breakdown is a reasonable engineering synthesis of the validated underlying principle, not a literally-published clinical table.
+
+Five separate call sites were found using pace assumptions before this fix, two of them silently disagreeing with each other (`calcSuggestedEffort()`'s auto-suggest bands vs. a separate fixed-mph reverse calculation used for calorie/step estimation when only an effort label, not exact pace, is available). All five now read from `getWalkingPaceBands()`.
+
+**Known limitation**: `MET.walking` values (2.8/3.5/4.5 for Easy/Moderate/Hard) are not yet pace-adjusted the same way — calibrated assuming something close to the old universal scale, so calorie estimates outside the "moderately active" tier may be slightly off until this gets addressed too.
+
+**Auto-switch**: `checkActivityLevelAutoSwitch()`, modelled closely on `checkWeightPhaseAutoSwitch()` (same file, same `mh_autoswitch_days` shared setting, default 14) but deliberately more resistant to noise — rather than requiring every single day in the window to individually match (which one low-step rest day would break even during genuine sustained improvement), it computes the smoothed 30-day trailing average *as of* each of the last N days and requires all of those to agree on one tier. Reuses the exact thresholds already used for the TDEE step-count activity multiplier (`>12000` active, `>8000` moderate, `>5000` light, else sedentary) — independently confirmed via research to closely match the widely-cited Tudor-Locke & Bassett (2004) step-count classification — so there's one consistent definition of each tier across TDEE and Activity Level, not two that could drift apart.
+
+Same once-per-day guard pattern as its weight sibling (`mh_last_auto_activity_check`), called from the same three places: `updateDashboard()`, the guaranteed-once-per-app-open `setTimeout`, and immediately on `mh_autoswitch_days` changing (since both mechanisms share that one setting).
+
+A move to a more active tier gets a real celebration (`addBubble` + `showToast`, matching the ketosis-streak-milestone pattern); a move to a less active tier is a plain, factual `showToast` only — informed either way, celebrated only when it's genuinely something to celebrate. Toggleable independently via `mh_notif_activity_autoswitch` (default on), separate from the weight/goal notification toggle.
+
+**Activity Level History**: `localStorage('mh_activity_level_history')`, identical structure and functions to Condition History (`getActivityLevelHistory()`, `appendActivityLevelHistory()`, same-day-collapse guard) — logs every genuine change, whether manual or auto-switched, so a later change can't retroactively distort how older logged days get interpreted.
+
+---
+
 ## ⭐ Full Summary
 
 `runFullSummary()` — pre-built 9-section comprehensive analysis prompt fed directly into `askReportsAI()`. Covers: nutrition overview, weight & body composition, ketosis quality, sleep, HRV & recovery, activity, best performing period, areas needing attention, protocol verdict. Phase-aware and condition-specific via `patientContextBlock()`. Nil days excluded.
@@ -427,7 +459,9 @@ Rather than hand-wire reorder buttons into ~25+ individual sections, `makeContai
 
 **Critical safety detail:** `applyGenericOrder()` checks whether the DOM already matches the stored order before doing anything — `appendChild` on an element already in the correct position still forces a real remove+reinsert, which destroys focus on any input inside it (this was found and fixed after it silently broke a search box on every keystroke). Never call the move logic unconditionally on every render.
 
-Debug/troubleshooting sections (`set-bodycompdebug`, `set-rollover`) are explicitly excluded from the reorderable set — they live inside a fixed "⚠ Advanced" warning box, and reordering them would eventually orphan that box from the sections it's meant to mark.
+Debug/troubleshooting sections (`set-bodycompdebug`, `set-rollover`, `set-logmutation`, `set-savedebug`, `set-healthcheck`, `set-changelog`) are explicitly excluded from the reorderable set — all six live inside a fixed "⚠ Advanced" warning box, and reordering any of them would eventually orphan that box from the sections it's meant to mark. **Found and fixed a real bug**: three of these six (`set-logmutation`, `set-savedebug`, `set-changelog`) were genuinely, correctly positioned inside the Advanced Tools wrapper in the source HTML, but were missing from this exclusion list — the reorder system was picking them up and physically relocating them elsewhere via `appendChild`, not hidden, just moved somewhere nobody would think to look for a debug tool. Worth re-checking this exact list any time a new section gets added inside that same warning box.
+
+`imp-bulk` and `imp-restore` (Import tab) are excluded for an unrelated, second reason: their HTML is wholesale regenerated by `renderDataImportCards()` every time `checkServer()` runs, independently of and often after the reorder scan. Letting the reorder system move these would orphan the moved copy while a fresh one gets built in its place on the next server check — two live copies of each, both matching the `toggleSection` scan, silently growing the section count past its real total.
 
 The Today dashboard (`applyDashboardOrder`) and Library tab (`applyLibraryOrder`) use separate, similar-but-not-shared implementations of the same pattern, built earlier and kept independent to avoid risk when the generic version was added later.
 
@@ -558,6 +592,8 @@ This is the single-day companion to Activity Credit Balance above — this note 
 - `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
 - OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
 - Health Connect bridge app (Kotlin) written but not yet built/run in Android Studio — first build pending, needs verifying against the real current SDK the same way the Wear OS build needed several rounds of fixing wrong assumptions
+- `MET.walking` calorie values (2.8/3.5/4.5) are not yet pace-adjusted the same way the effort-label bands now are — calibrated assuming something close to the old universal pace scale, so calorie estimates outside the "moderately active" tier may be slightly off
+- Heylo crackerbread camera/photo logging reported as "hit and miss" — not yet investigated
 
 **Resolved this session, previously listed here:**
 - ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)

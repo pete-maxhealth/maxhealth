@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.465
+**Version:** v3.10.471
 
 ---
 
@@ -32,6 +32,7 @@
 - **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
 - **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
 - **Condition History** — same pattern as Weight Phase History, for condition instead of goal. Auto-logs whenever your condition genuinely changes, so a later switch can't retroactively distort how old data gets judged. Ask AI and Full Summary become period-aware automatically once more than one condition has been used — ask naturally ("compare my general and migraine periods") and the AI handles the comparison itself, no filter or dropdown needed.
+- **Activity Level, personalised and self-updating** — a real, editable Profile setting (previously asked once at onboarding and discarded). Walking effort (Easy/Moderate/Hard) is calibrated to it — real research confirmed there's no single universal "brisk" pace threshold, since even the AHA and CDC officially disagree on the number, explicitly because it depends on individual fitness. Auto-switches from sustained real step-count trends (smoothed 30-day average, resistant to single noisy or rest days), with a celebration for genuine improvement and a plain notification for decline. Full Activity Level History, same pattern as Condition History.
 - **Site-wide search** — 🔍 in the header, always accessible. One box searches Library, Recipes, Saved Prompts, and every Settings section across all three sub-tabs. Tapping a result takes you straight there — opens the right picker pre-filled, runs the prompt directly, or scrolls straight to the settings section (expanding it first if collapsed).
 - **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
 - **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
@@ -41,6 +42,7 @@
 - **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
 - **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
 - **Boot survival & auto-update** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots, zero user interaction required. A separate 30-minute check also pulls any update from GitHub automatically, so a device never falls behind without someone manually running `git pull` on it.
+- **Remote diagnostics** — Settings → Manage → Advanced Troubleshooting Tools → App Health Check shows the real auto-update log, crontab, and whether crond/the server are actually running, alongside the existing version-sync and div-balance checks. One tap, then copy the output — lets a stuck device get debugged by someone else entirely, without needing Termux access on the affected phone.
 - **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
