@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.479</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.480</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.479'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.480'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9024,6 +9024,8 @@ If the user describes food or a meal (or you can see food in an image), respond 
   ],
   "message": "one line summary including any portion assumptions"
 }
+
+A gram figure is a helpful anchor when given, but never required — if someone doesn't know the exact weight (e.g. "chicken curry, one portion, not sure how much"), estimate a typical, realistic portion's worth of that specific food directly rather than needing a number to scale from. If the user gives a bare, unitless number with nothing else to clarify it (e.g. just "500" with no "g"/"ml"/other context), don't silently treat it as an exact, confident weight — state your assumption plainly in the message (e.g. "assumed 500g, correct me if that's off") so it's visibly a guess the user can correct, not authoritative data.
 
 If PHOTO CLASSIFICATION below determines this is a LABEL PATH item (a genuine printed nutrition panel, not estimated), use this shape instead for that item — raw per-100g label facts plus the gram amount, NOT pre-multiplied, since scaling is done deterministically downstream rather than trusted to your arithmetic. If the label shows a "Fibre" row and/or an "of which Polyols" row nested under Carbohydrate (common on EU multi-language keto/low-carb labels), read those exact printed per-100g figures too and include as "fibre"/"polyols" — this is reading a printed number off the same label, not estimating. Omit either field entirely if the label doesn't show it:
 {
@@ -20160,12 +20162,22 @@ function logRecipe(id, servings) {
   const recipe = loadRecipes().find(r => r.id === id);
   if (!recipe) return;
   const factor = servings / recipe.servings;
+  // Was missing fat and polyols entirely (only kcal/protein/carbs/fibre were
+  // scaled and passed) - fibre being present while fat/polyols weren't is
+  // exactly the kind of partial-field bug that's easy to miss, since some
+  // macros looking right can mask others being silently dropped. Now
+  // matches _doLogRecipe() below field-for-field - these were two separate,
+  // independently-written recipe-logging paths that had drifted apart from
+  // each other, not just from the recipe card's own totals.
   const foods = recipe.ingredients.map(ing => ({
     name:    ing.name,
+    amount:  Math.round((ing.amount || 100) * factor) + 'g',
     kcal:    Math.round(ing.kcal    * factor),
     protein: Math.round(ing.protein * factor * 10) / 10,
+    fat:     Math.round((ing.fat    || 0) * factor * 10) / 10,
     carbs:   Math.round(ing.carbs   * factor * 10) / 10,
     fibre:   Math.round((ing.fibre  || 0) * factor * 10) / 10,
+    ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
   showToast(`${recipe.name} logged ✓`);
@@ -21477,6 +21489,11 @@ function _doLogRecipe(recipe, s) {
   const servings = parseFloat(s);
   if (isNaN(servings) || servings <= 0) { showToast('Invalid serving count'); return; }
   const factor = servings / (recipe.servings || 1);
+  // Was missing fibre and polyols entirely, unlike logRecipe() above which
+  // at least had fibre - two separate, independently-written recipe-logging
+  // paths (this one for the custom-servings prompt, that one for the quick
+  // "Log 1 serving" button) that had drifted apart from each other. Now
+  // matches field-for-field.
   const foods = (recipe.ingredients || []).map(ing => ({
     name: ing.name,
     amount: Math.round((ing.amount || 100) * factor) + 'g',
@@ -21484,6 +21501,8 @@ function _doLogRecipe(recipe, s) {
     protein: Math.round((ing.protein || 0) * factor * 10) / 10,
     fat: Math.round((ing.fat || 0) * factor * 10) / 10,
     carbs: Math.round((ing.carbs || 0) * factor * 10) / 10,
+    fibre: Math.round((ing.fibre || 0) * factor * 10) / 10,
+    ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, recipe.name + ' (×' + servings + ')');
   switchTabById('chat');
