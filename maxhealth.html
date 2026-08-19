@@ -4128,6 +4128,17 @@
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearSettingsChangeLog()">Clear log</button>
     </div>
     </div>
+
+    <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0 0 8px 8px;" onclick="toggleSection('set-jserrors','set-jserrors-wrap','set-jserrors-icon')">🐛 JS Error Log <span id="set-jserrors-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-jserrors-wrap">
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;"><span class="help-slot" data-id="jserrors" data-text="Any JavaScript error or unhandled promise rejection the app hits gets recorded here permanently, not just as a chat bubble that vanishes once the app closes. Keeps the last 30, each with a real timestamp - useful for catching an intermittent bug nobody was watching the screen for when it happened."></span></div>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderJSErrorLog()">🔍 View error log</button>
+      <div id="jsErrorLogOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
+      <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('jsErrorLogOutput', 'JS error log')">📋 Copy all text</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearJSErrorLog()">Clear log</button>
+    </div>
+    </div>
     </div><!-- end advanced-tools-wrap -->
 
     <div style="margin-top:16px;">
@@ -4341,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.475</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.477</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5107,7 +5118,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.475'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.477'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5144,10 +5155,25 @@ setTimeout(() => { if (typeof checkActivityLevelAutoSwitch === 'function') check
 // explained by any existing try/catch — if it's happening somewhere outside
 // processMessage's own error handling (a stray .then(), a callback, anything),
 // this is the net that finally catches it.
+// Genuinely persistent JS error log - the chat bubble alone was ephemeral
+// and never survived a session ending, meaning any error that happened
+// couldn't be checked retroactively at all, only if someone happened to be
+// watching the chat at the exact moment it fired. Keeps the last 30 errors
+// with a real timestamp, viewable later via Advanced Troubleshooting Tools
+// regardless of how much time or how many app restarts have passed since.
+function logPersistentError(msg, detail) {
+  try {
+    const raw = JSON.parse(localStorage.getItem('mh_js_error_log') || '[]');
+    raw.push({ t: new Date().toISOString(), msg, detail: (detail || '').toString().slice(0, 500) });
+    localStorage.setItem('mh_js_error_log', JSON.stringify(raw.slice(-30)));
+  } catch(_) {}
+}
+
 window.addEventListener('error', (e) => {
   try {
     const msg = `🐛 JS ERROR: ${e.message} (${(e.filename||'').split('/').pop() || 'unknown'}:${e.lineno})`;
     console.error(msg, e.error);
+    logPersistentError(msg, e.error?.stack);
     if (typeof addBubble === 'function') addBubble(msg, 'system', 'warn');
   } catch(_) {}
 });
@@ -5156,6 +5182,7 @@ window.addEventListener('unhandledrejection', (e) => {
     const reason = e.reason?.message || e.reason?.toString?.() || JSON.stringify(e.reason);
     const msg = `🐛 UNHANDLED PROMISE REJECTION: ${reason}`;
     console.error(msg, e.reason);
+    logPersistentError(msg, e.reason?.stack);
     if (typeof addBubble === 'function') addBubble(msg, 'system', 'warn');
   } catch(_) {}
 });
@@ -6180,7 +6207,7 @@ function makeContainerReorderable(containerEl, scopeKey) {
   // both matching the toggleSection scan, and growing the section count
   // past its real total (e.g. showing 7/8, 8/8 instead of 6/6). Same failure
   // mode as the debug/troubleshooting sections above, same fix.
-  const EXCLUDED_KEYS = ['set-bodycompdebug', 'set-rollover', 'set-healthcheck', 'set-logmutation', 'set-savedebug', 'set-changelog', 'imp-bulk', 'imp-restore'];
+  const EXCLUDED_KEYS = ['set-bodycompdebug', 'set-rollover', 'set-healthcheck', 'set-logmutation', 'set-savedebug', 'set-changelog', 'set-jserrors', 'imp-bulk', 'imp-restore'];
   titles.forEach(titleEl => {
     const m = (titleEl.getAttribute('onclick') || '').match(/toggleSection\('([^']+)'\s*,\s*'([^']+)'/);
     if (!m) return;
@@ -8479,6 +8506,30 @@ function clearSettingsChangeLog() {
     const out = document.getElementById('settingsChangeLogOutput');
     if (out) out.style.display = 'none';
     showToast('Change log cleared');
+  });
+}
+
+function renderJSErrorLog() {
+  const out = document.getElementById('jsErrorLogOutput');
+  if (!out) return;
+  const log = JSON.parse(localStorage.getItem('mh_js_error_log') || '[]');
+  if (!log.length) {
+    out.textContent = 'No errors recorded.';
+    out.style.display = 'block';
+    return;
+  }
+  out.textContent = log.map((e, i) =>
+    `#${i+1} — ${e.t.slice(0,19).replace('T',' ')}\n${e.msg}${e.detail ? `\n${e.detail}` : ''}`
+  ).join('\n\n');
+  out.style.display = 'block';
+}
+
+function clearJSErrorLog() {
+  appConfirm('Clear the JS error log?', () => {
+    localStorage.removeItem('mh_js_error_log');
+    const out = document.getElementById('jsErrorLogOutput');
+    if (out) out.style.display = 'none';
+    showToast('Error log cleared');
   });
 }
 
@@ -11765,6 +11816,31 @@ CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name
   }
 }
 
+// Persisted repeat-avoidance for meal suggestions - was previously
+// window._recentMealSuggestions, a plain in-memory array that reset to
+// empty every time the app reloaded. Given how often this app gets
+// restarted in normal use, that meant repeat-avoidance essentially never
+// survived beyond a single open session, which is very likely why the same
+// combos kept resurfacing across separate uses. A 48-hour window here is
+// long enough to avoid the same suggestion twice in a day or two, but
+// short enough that a small library doesn't permanently lose access to a
+// genuinely good-fit item forever.
+function getRecentMealSuggestions() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('mh_recent_meal_suggestions') || '[]');
+    const cutoff = Date.now() - (48 * 3600 * 1000);
+    return raw.filter(e => e.t > cutoff).map(e => e.name);
+  } catch(e) { return []; }
+}
+function addRecentMealSuggestions(names) {
+  try {
+    const raw = JSON.parse(localStorage.getItem('mh_recent_meal_suggestions') || '[]');
+    const now = Date.now();
+    const updated = raw.concat(names.map(name => ({ name, t: now }))).slice(-50);
+    localStorage.setItem('mh_recent_meal_suggestions', JSON.stringify(updated));
+  } catch(e) {}
+}
+
 async function suggestMealFromLibrary(kind = 'both') {
   const lib = loadLibrary();
   const recipes = loadRecipes();
@@ -11811,8 +11887,8 @@ async function suggestMealFromLibrary(kind = 'both') {
 
   // Session-only memory of what's already been suggested recently, so tapping
   // this button twice in a row doesn't just hand back the same combo again.
-  window._recentMealSuggestions = window._recentMealSuggestions || [];
-  const recentText = window._recentMealSuggestions.slice(-8).join(', ');
+  const recentNames = getRecentMealSuggestions();
+  const recentText = recentNames.slice(-8).join(', ');
 
   // What's actually been eaten today and yesterday — gives the AI real pattern
   // awareness (meal timing, snack-vs-meal balance, sweet/savoury repetition)
@@ -11852,7 +11928,12 @@ TARGET MACRO RATIO (% of calories): ${tgtFatPct}% fat / ${tgtProtPct}% protein /
 ${currentFatPct != null
   ? `TODAY'S ACTUAL RATIO SO FAR: ${currentFatPct}% fat / ${currentProtPct}% protein / ${currentCarbPct}% carbs${Math.abs(currentFatPct - tgtFatPct) >= 8 ? ` — ${currentFatPct < tgtFatPct ? 'running LOW on fat as a share of calories' : 'running HIGH on fat as a share of calories'} relative to protocol, by a meaningful margin` : ' — close to protocol ratio, no correction needed beyond the usual remaining-grams fit'}`
   : `Nothing logged yet today, so no ratio drift to correct yet — just work from the remaining grams and target ratio above.`}
-IMPORTANT: two days can have identical grams remaining for very different reasons — prioritise suggestions that pull today's ACTUAL ratio back toward the target ratio, not just whichever items numerically fit the remaining grams. If fat is running meaningfully low as a % of calories so far today, favour higher-fat items even where a leaner option would also technically fit the remaining grams. This is a genuine priority alongside the remaining-grams budget, not just a tiebreaker — never at the cost of actually exceeding the remaining carb/protein/fat budget itself, which stays the hard limit.
+IMPORTANT: two days can have identical grams remaining for very different reasons — prioritise suggestions that pull today's ACTUAL ratio back toward the target ratio, not just whichever items numerically fit the remaining grams. ${currentFatPct != null && Math.abs(currentFatPct - tgtFatPct) >= 8
+  ? (currentFatPct < tgtFatPct
+      ? `Fat is running meaningfully LOW as a % of calories so far today — favour higher-fat items even where a leaner option would also technically fit the remaining grams.`
+      : `Fat is running meaningfully HIGH as a % of calories so far today — favour leaner, lower-fat items even where a richer option would also technically fit the remaining grams. Do not push toward higher-fat foods right now.`)
+  : `Today's ratio is close enough to target that fat isn't a correction priority either way — just work from the remaining grams and target ratio.`}
+This is a genuine priority alongside the remaining-grams budget, not just a tiebreaker — never at the cost of actually exceeding the remaining carb/protein/fat budget itself, which stays the hard limit.
 
 CURRENT TIME OF DAY: ${timeOfDay}
 Where reasonable, prefer combos/recipes that suit this time of day (e.g. breakfast-style items — cereal, toast, eggs, bagels, jam, marmite, cheese, yoghurt — in the morning; lighter snack-style options in the late evening). This is a preference, not a rule — if the best-fitting items for the remaining macro budget genuinely aren't a natural fit for the time of day, still suggest them rather than forcing a worse macro match just to suit the clock.
@@ -11959,7 +12040,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
         fat: Math.round((recipe.total.fat||0) * factor * 10) / 10,
       };
       window._pendingLibraryCombos.push({ type: 'recipe', recipe, servings });
-      window._recentMealSuggestions.push(recipe.name);
+      addRecentMealSuggestions([recipe.name]);
       html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
         <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">🍽 ${recipe.name} (${servings} serving${servings>1?'s':''})</div>
         ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
@@ -11979,8 +12060,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
     if (!resolvedItems.length) return; // nothing resolved at all — skip this combo entirely
     const comboIndex = window._pendingLibraryCombos.length;
     window._pendingLibraryCombos.push({ type: 'items', items: resolvedItems, note: combo.note, anyMissing });
-    window._recentMealSuggestions.push(...resolvedItems.map(f => f.name));
-    window._recentMealSuggestions = window._recentMealSuggestions.slice(-30);
+    addRecentMealSuggestions(resolvedItems.map(f => f.name));
     html += `<div id="combo-card-${comboIndex}">${_buildComboItemsCardHTML(comboIndex)}</div>`;
   });
   if (!html) { addBubble('Couldn\'t match the suggested items to your library exactly — try again.', 'system', 'warn'); return; }
@@ -27906,6 +27986,24 @@ async function runAppHealthCheck() {
     // command-line access. Built specifically so this can be debugged
     // remotely: the person having the issue taps this button and copies
     // the result, no terminal commands needed on their end at all.
+    // Surfaced here too, not just its own dedicated section, since this
+    // report is the thing most likely to actually get checked after
+    // something's gone wrong - recent JS errors are exactly the kind of
+    // thing worth seeing immediately rather than needing to know a
+    // separate section exists and go find it deliberately.
+    lines.push('\n── RECENT JS ERRORS ──');
+    try {
+      const errLog = JSON.parse(localStorage.getItem('mh_js_error_log') || '[]');
+      if (!errLog.length) {
+        lines.push(`${ok} None recorded`);
+      } else {
+        lines.push(`${warn} ${errLog.length} recorded (showing last 5, see JS Error Log below for full history):`);
+        errLog.slice(-5).forEach(e => lines.push(`  ${e.t.slice(0,19).replace('T',' ')} — ${e.msg}`));
+      }
+    } catch (e) {
+      lines.push(`${warn} Could not read error log: ${e.message}`);
+    }
+
     lines.push('\n── AUTO-UPDATE STATUS ──');
     try {
       const sysRes = await fetch('/system-status', { cache: 'no-store' });
