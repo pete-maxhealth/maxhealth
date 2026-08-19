@@ -197,7 +197,8 @@ def save_field_sources(field_sources):
 # ── Backup ────────────────────────────────────────────────────────────────────
 
 def backup_files():
-    """Copy combined.csv, nutrition.csv, master.csv and library.json to backup dir with timestamp."""
+    """Copy combined.csv, nutrition.csv, master.csv, library.json, recipes.csv,
+    routines.csv and strength.csv to backup dir with timestamp."""
     os.makedirs(BACKUP_DIR, exist_ok=True)
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     backed_up = []
@@ -205,6 +206,13 @@ def backup_files():
     MASTER      = os.path.join(TABLES, 'master.csv')
     LIBRARY_CSV     = os.path.join(TABLES, 'library.csv')
     SUPPLEMENTS_CSV = os.path.join(TABLES, 'supplements.csv')
+    # Added along with strength.csv below - all three have their own
+    # server-side save endpoint (protecting against browser data loss) but
+    # were never actually included in this 7-day rotation, unlike their
+    # sibling tables here. Found while checking exactly this gap directly.
+    RECIPES_CSV     = os.path.join(TABLES, 'recipes.csv')
+    ROUTINES_CSV    = os.path.join(TABLES, 'routines.csv')
+    STRENGTH_CSV    = os.path.join(TABLES, 'strength.csv')
 
     for src_path, name, ext in [
         (COMBINED,       'combined',     'csv'),
@@ -212,6 +220,9 @@ def backup_files():
         (MASTER,         'master',       'csv'),
         (LIBRARY_CSV,    'library',      'csv'),
         (SUPPLEMENTS_CSV,'supplements',  'csv'),
+        (RECIPES_CSV,    'recipes',      'csv'),
+        (ROUTINES_CSV,   'routines',     'csv'),
+        (STRENGTH_CSV,   'strength',     'csv'),
         (FIELD_SOURCES_FILE, 'field_sources', 'json'),
     ]:
         if os.path.exists(src_path):
@@ -221,7 +232,7 @@ def backup_files():
 
     # Trim backups older than 7 days per file type
     cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('field_sources','json')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         for f in glob.glob(pattern):
             if os.path.getmtime(f) < cutoff:
@@ -235,11 +246,27 @@ def backup_files():
 def restore_backup(backup_path):
     """Restore a backup file to its original location."""
     fname = os.path.basename(backup_path)
-    if fname.startswith('combined_'):
-        dest = COMBINED
-    elif fname.startswith('nutrition_'):
-        dest = NUTRITION
-    else:
+    # Was only ever handling combined/nutrition - master, library, supplements,
+    # recipes, routines and strength could all be backed up via backup_files()
+    # above (some since the rotation started, some just added alongside it)
+    # but none of them were actually restorable through this function at all.
+    # One shared mapping now, matching the same prefixes backup_files() writes.
+    prefix_map = {
+        'combined_':     COMBINED,
+        'nutrition_':    NUTRITION,
+        'master_':       os.path.join(TABLES, 'master.csv'),
+        'library_':      os.path.join(TABLES, 'library.csv'),
+        'supplements_':  os.path.join(TABLES, 'supplements.csv'),
+        'recipes_':      os.path.join(TABLES, 'recipes.csv'),
+        'routines_':     os.path.join(TABLES, 'routines.csv'),
+        'strength_':     os.path.join(TABLES, 'strength.csv'),
+    }
+    dest = None
+    for prefix, path in prefix_map.items():
+        if fname.startswith(prefix):
+            dest = path
+            break
+    if dest is None:
         print(f"Error: Cannot determine destination for {fname}", file=sys.stderr)
         sys.exit(1)
 

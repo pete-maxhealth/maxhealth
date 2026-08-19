@@ -666,6 +666,25 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        # Mirrors /combined exactly, for the same reason - strength.csv only
+        # ever lives server-side (auto-saved on every workout log), so a
+        # client-side "backup to Downloads" button needs a real way to fetch
+        # it back, same as combined.csv already has.
+        elif path == '/strength':
+            if not os.path.exists(STRENGTH_CSV):
+                self.send_json({'error': 'strength.csv not found — log a workout first'}, 404)
+                return
+            with open(STRENGTH_CSV, 'r', encoding='utf-8') as f:
+                content = f.read()
+            body = content.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/csv')
+            self.send_header('Content-Length', str(len(body)))
+            for k, v in CORS.items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
         # ── Pattern Signals for Wearables (Phase 14) ─────────────────────
         # Generates Day 2 signals + full pattern reports from meal/wearable data
         # Used by Zepp OS watchapp and Wear OS companions
