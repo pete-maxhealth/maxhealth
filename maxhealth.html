@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.481</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.482</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.481'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.482'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5901,8 +5901,15 @@ function deleteLibraryChoiceItem(index) {
 
 function findInLibrary(name) {
   const lib = loadLibrary();
-  const lower = name.toLowerCase().trim();
-  return lib.find(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().split(' ').slice(0,3).join(' ')));
+  // Same apostrophe-normalization fix as findAllInLibrary below - kept
+  // identical between the two since one is explicitly documented as
+  // sharing the same matching rule as the other.
+  const stripApos = s => s.replace(/['’]/g, '');
+  const lower = stripApos(name.toLowerCase().trim());
+  return lib.find(f => {
+    const fname = stripApos(f.name.toLowerCase());
+    return fname.includes(lower) || lower.includes(fname.split(' ').slice(0,3).join(' '));
+  });
 }
 
 // Same matching rule as findInLibrary, but returns every match instead of
@@ -5913,8 +5920,17 @@ function findInLibrary(name) {
 // the caller detect that case and ask instead of guessing.
 function findAllInLibrary(name) {
   const lib = loadLibrary();
-  const lower = name.toLowerCase().trim();
-  return lib.filter(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase().split(' ').slice(0,3).join(' ')));
+  // Strip apostrophes before comparing - "Nicks" (as typed) vs "Nick's" (as
+  // stored, matching how Open Food Facts/brands actually punctuate names)
+  // otherwise fail to match at all, since the apostrophe breaks the plain
+  // substring check partway through the word. Genuinely confirmed missing
+  // a real, previously-saved library item from search results entirely.
+  const stripApos = s => s.replace(/['’]/g, '');
+  const lower = stripApos(name.toLowerCase().trim());
+  return lib.filter(f => {
+    const fname = stripApos(f.name.toLowerCase());
+    return fname.includes(lower) || lower.includes(fname.split(' ').slice(0,3).join(' '));
+  });
 }
 
 // Fuzzy fallback for when findInLibrary's substring match misses — e.g. "salted
@@ -6375,8 +6391,12 @@ function renderLibrary() {
   });
   // Apply search query — filters both meals and ingredients identically, since this
   // runs before the meals/ingredients split below. Matches against the food name only.
-  const searchQuery = (document.getElementById('librarySearch')?.value || '').toLowerCase().trim();
-  const searchedLib = searchQuery ? libWithIdx.filter(f => f.name.toLowerCase().includes(searchQuery)) : libWithIdx;
+  // Apostrophes stripped before comparing, same fix and same reasoning as
+  // findInLibrary/findAllInLibrary above - "Nicks" typed here wouldn't
+  // otherwise match a stored "Nick's" entry either.
+  const stripApos = s => s.replace(/['’]/g, '');
+  const searchQuery = stripApos((document.getElementById('librarySearch')?.value || '').toLowerCase().trim());
+  const searchedLib = searchQuery ? libWithIdx.filter(f => stripApos(f.name.toLowerCase()).includes(searchQuery)) : libWithIdx;
 
   // Split into meals and ingredients — isMealEntry() is now a global
   // function (see near loadLibrary()), previously duplicated locally here.
