@@ -4013,9 +4013,9 @@
 
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
         <div class="settings-label" style="margin-bottom:6px;">Carb counting method</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5;">UK labels are usually already total carbs. Some countries' labels separate out fibre, which many trackers subtract as "net carbs" since fibre is minimally glycemic — this app also subtracts polyols (sugar alcohols like erythritol, xylitol) alongside fibre when Net is selected, since UK/EU labelling convention treats them the same way and they're common in ketogenic recipes specifically. Defaults to Total — switching only affects <strong>today's</strong> ceiling check reliably; older logged days may not have fibre or polyol data recorded, so this can't be safely applied retroactively.</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5;"><strong style="color:var(--text2);">Total</strong> (the default) shows the raw carbs figure exactly as printed on the label — polyols (sugar alcohols like erythritol, xylitol) are still counted in full, since that's how UK/EU labels state the number. <strong style="color:var(--text2);">Net</strong> subtracts both fibre and polyols from that figure, giving the lower, physiologically-relevant number — this is what a "keto" product with, say, 16g total carbs is actually relying on: most of that is polyols the label counts but your body barely responds to. If Total ever looks too high for something clearly marketed as keto/low-carb, that's the sign Net is what you actually want to be looking at. Switching only affects <strong>today's</strong> ceiling check reliably; older logged days may not have fibre or polyol data recorded, so this can't be safely applied retroactively.</div>
         <div style="display:flex;gap:6px;">
-          <button id="carbMethodBtn-gross" onclick="setCarbMethod('gross')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-family:'Space Mono',monospace;">Total (gross)</button>
+          <button id="carbMethodBtn-gross" onclick="setCarbMethod('gross')" style="flex:1;padding:8px;border-radius:8px;font-size:12px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);font-family:'Space Mono',monospace;">Total (polyols included)</button>
           <button id="carbMethodBtn-net" onclick="setCarbMethod('net')" class="btn-neutral" style="flex:1;padding:8px;border-radius:8px;font-size:12px;font-family:'Space Mono',monospace;">Net (total − fibre − polyols)</button>
         </div>
       </div>
@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.483</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.484</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.483'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.484'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8303,7 +8303,7 @@ function setCarbMethod(method) {
     netBtn.style.color = method === 'net' ? 'var(--accent)' : 'var(--text2)';
   }
   updateDashboard();
-  showToast(`Carb counting: ${method === 'net' ? 'Net (total − fibre − polyols)' : 'Total (gross)'} ✓`);
+  showToast(`Carb counting: ${method === 'net' ? 'Net (total − fibre − polyols)' : 'Total (polyols included)'} ✓`);
 }
 
 function initCarbMethod() {
@@ -14042,7 +14042,14 @@ function buildMealImpactHtml(mealTotals) {
   // this has no numeric effect either way; it's correct behaviour once fibre
   // data does exist, not a fix that changes today's roast dinner specifically.
   const effectiveBefore = getEffectiveCarbs(todayTotalsBefore);
-  const projectedTotals = { carbs: todayTotalsBefore.carbs + mealTotals.carbs, fibre: (todayTotalsBefore.fibre || 0) + (mealTotals.fibre || 0) };
+  // polyols was missing entirely here - fibre was correctly carried through
+  // but polyols silently wasn't, meaning this specific ceiling-impact
+  // calculation only ever subtracted fibre in Net mode, understating how
+  // much room a polyol-heavy item (like this one) actually leaves. The
+  // comment above about AI-estimated meals having no fibre figure doesn't
+  // apply here specifically - this is a label-read item with real fibre
+  // and polyols data, both of which should carry through identically.
+  const projectedTotals = { carbs: todayTotalsBefore.carbs + mealTotals.carbs, fibre: (todayTotalsBefore.fibre || 0) + (mealTotals.fibre || 0), polyols: (todayTotalsBefore.polyols || 0) + (mealTotals.polyols || 0) };
   const effectiveAfter = getEffectiveCarbs(projectedTotals);
   const projectedCarbs = effectiveAfter;
   const wasInKetosis = effectiveBefore <= ceiling;
@@ -15248,7 +15255,14 @@ function logFoods(foods, originalText, aiMessage = null) {
   macrosDiv.className = 'bubble-macros';
   const fibreLogged = Math.round((newTotals.fibre||0) * 10) / 10;
   const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
-  macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}/${fatTgt}g F</span>` : ''}<span class="k">${newTotals.carbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}`;
+  // Was raw newTotals.carbs, completely bypassing getEffectiveCarbs() and
+  // the Net Carbs setting - this exact bubble is the single most visible
+  // "did this actually reduce my carbs" signal right after logging, so its
+  // showing gross carbs regardless of the Net setting was a genuinely
+  // high-impact gap, not a cosmetic one. Now respects the same setting the
+  // ketosis badge, History tab, and carb-ceiling warning already use.
+  const displayCarbs = getEffectiveCarbs(newTotals);
+  macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}/${fatTgt}g F</span>` : ''}<span class="k">${displayCarbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}`;
   bubbleDiv.appendChild(macrosDiv);
 
   // ── Save to Library options — suppress if already from library ──
@@ -15296,7 +15310,11 @@ function logFoods(foods, originalText, aiMessage = null) {
     }
   } else {
     // Approaching ceiling — send notification if enabled
-    checkCarbCeilingNotif(newTotals.carbs);
+    // Also switched to the same net-aware value as the bubble above -
+    // otherwise a device notification could warn about approaching the
+    // ceiling using gross carbs while someone's actually well under it
+    // in net terms, or vice versa.
+    checkCarbCeilingNotif(getEffectiveCarbs(newTotals));
   }
   updateDashboard();
   return entry.id;
@@ -17682,11 +17700,18 @@ function renderHistory() {
             const isEstimate = !day.targetsSnapshot && approx?.isEstimate;
             const dayFat = getEntryFat(day);
             const carbOver = getEffectiveCarbsForDay(day) > dayTargets.carbs;
+            // Was showing raw day.totals.carbs right next to a color that's
+            // decided by the net-aware carbOver check above - the displayed
+            // number and its own colour could genuinely disagree with each
+            // other (e.g. a number that looks fine but is still shown red,
+            // or vice versa), since they were computed from two different
+            // values. Now both come from the same source.
+            const carbDisplayVal = getEffectiveCarbsForDay(day);
             return `
             ${isEstimate ? `<span style="font-size:9px;color:var(--text3);" title="Estimated from Weight Phase History, not a genuine recorded target">~</span>` : ''}
             <span class="c">${day.totals.kcal}/${dayTargets.kcal}kcal</span>
             <span class="p">${day.totals.protein}/${dayTargets.protein}g P</span>
-            <span class="k" style="${carbOver ? 'color:var(--red);font-weight:700;' : ''}">${day.totals.carbs}/${dayTargets.carbs}g C</span>
+            <span class="k" style="${carbOver ? 'color:var(--red);font-weight:700;' : ''}">${carbDisplayVal}/${dayTargets.carbs}g C</span>
             <span style="color:#a78bfa;font-size:11px;">${dayFat}/${fatTargetVal}g F</span>`;
           })()}
         </div>
