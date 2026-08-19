@@ -4352,7 +4352,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.486</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.487</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5129,7 +5129,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.486'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.487'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -14119,8 +14119,18 @@ function renderMealPreview() {
     kcal:    a.kcal    + (f.kcal    || 0),
     protein: a.protein + (f.protein || 0),
     fat:     a.fat     + (f.fat     || 0),
-    carbs:   a.carbs   + (f.carbs   || 0)
-  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+    carbs:   a.carbs   + (f.carbs   || 0),
+    // Was missing entirely - this is the actual, genuine root cause of the
+    // pre-log ceiling warning still showing gross carbs even after
+    // buildMealImpactHtml() itself was already fixed to correctly read and
+    // subtract mealTotals.polyols. That fix had nothing to read from, since
+    // this specific totals calculation - completely separate from the one
+    // used elsewhere in the app - never summed polyols across the
+    // previewed items to begin with. Fibre included too for consistency,
+    // even though getEffectiveCarbs() no longer subtracts it.
+    fibre:   (a.fibre   || 0) + (f.fibre   || 0),
+    polyols: (a.polyols || 0) + (f.polyols || 0)
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
 
   // Base gram calculation — moved ahead of the warnings loop below, since that
   // loop now needs to check _baseGramsIsGuess on the first item.
@@ -14522,7 +14532,9 @@ function confirmSaveMeal(btn) {
     protein: a.protein + (f.protein || 0),
     fat:     a.fat     + (f.fat     || 0),
     carbs:   a.carbs   + (f.carbs   || 0),
-  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+    fibre:   (a.fibre   || 0) + (f.fibre   || 0),
+    polyols: (a.polyols || 0) + (f.polyols || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
 
   const entry = {
     name,
@@ -15134,8 +15146,8 @@ function logFoods(foods, originalText, aiMessage = null) {
     traceLogMutation('logFoods_pastDay', window._logTargetDate, 'before');
     if (!targetDay.log) targetDay.log = [];
     const mealTotals = foods.reduce((a, f) => ({
-      kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0)
-    }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+      kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0), fibre: (a.fibre||0) + (f.fibre||0), polyols: (a.polyols||0) + (f.polyols||0)
+    }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
     const entry = {
       id: Date.now(), time: nowTime(),
       description: (() => {
@@ -15163,7 +15175,9 @@ function logFoods(foods, originalText, aiMessage = null) {
       protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
       fat:     Math.round((acc.fat     + (e.fat     || 0)) * 10) / 10,
       carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
-    }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+      fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+      polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+    }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
     saveState();
     const dayTotals = targetDay.totals;
     traceLogMutation('logFoods_pastDay', window._logTargetDate, 'after');
@@ -15178,8 +15192,8 @@ function logFoods(foods, originalText, aiMessage = null) {
   if (_todayH && state.weight && !_todayH.weight) _todayH.weight = state.weight;
   const targets = TARGETS[state.dayMode];
   const mealTotals = foods.reduce((a, f) => ({
-    kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0)
-  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+    kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0), fibre: (a.fibre||0) + (f.fibre||0), polyols: (a.polyols||0) + (f.polyols||0)
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
 
   const entry = {
     id: Date.now(), time: nowTime(),
@@ -17846,7 +17860,9 @@ function saveHistEntry(dayIdx, entryIdx) {
     protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
     fat:     Math.round((acc.fat     + (e.fat     || 0)) * 10) / 10,
     carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
-  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+    fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+    polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
   saveState();
   renderHistory();
   showToast('Entry updated ✓');
@@ -17861,8 +17877,11 @@ function deleteHistEntry(dayIdx, entryIdx) {
     day.totals = day.log.reduce((acc, e) => ({
       kcal:    acc.kcal    + (e.kcal    || 0),
       protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
+      fat:     Math.round(((acc.fat || 0) + (e.fat || 0)) * 10) / 10,
       carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
-    }), { kcal: 0, protein: 0, carbs: 0 });
+      fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+      polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+    }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
     saveState();
     renderHistory();
     showToast('Entry removed ✓');
@@ -19173,7 +19192,7 @@ async function handleRecipeBarcode(input) {
 // totals, and save are always correct regardless of whether a prior mutation
 // succeeded.
 function getScaledIngredient(ing) {
-  if (!ing._base) return { kcal: ing.kcal||0, protein: ing.protein||0, fat: ing.fat||0, carbs: ing.carbs||0, fibre: ing.fibre||0 };
+  if (!ing._base) return { kcal: ing.kcal||0, protein: ing.protein||0, fat: ing.fat||0, carbs: ing.carbs||0, fibre: ing.fibre||0, polyols: ing.polyols||0 };
   const factor = (ing.amount || ing._base.baseG) / ing._base.baseG;
   return {
     kcal:    Math.round(ing._base.kcal    * factor),
@@ -19181,6 +19200,11 @@ function getScaledIngredient(ing) {
     fat:     Math.round((ing._base.fat||0)* factor * 10) / 10,
     carbs:   Math.round(ing._base.carbs   * factor * 10) / 10,
     fibre:   Math.round((ing._base.fibre||0) * factor * 10) / 10,
+    // Was missing entirely - ing._base already has polyols (added earlier
+    // today for the substitution-swap flow), this scaling function just
+    // never read or returned it, meaning it silently vanished every time a
+    // recipe ingredient's amount changed, regardless of that earlier fix.
+    polyols: Math.round((ing._base.polyols||0) * factor * 10) / 10,
   };
 }
 
@@ -20115,8 +20139,9 @@ function updateRecipeTotals() {
       fat:     acc.fat     + s.fat,
       carbs:   acc.carbs   + s.carbs,
       fibre:   acc.fibre   + s.fibre,
+      polyols: (acc.polyols || 0) + (s.polyols || 0),
     };
-  }, { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0 });
+  }, { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
 
   const per = {
     kcal:    Math.round(total.kcal    / servings),
@@ -20147,8 +20172,9 @@ function saveRecipe() {
       fat:     acc.fat     + s.fat,
       carbs:   acc.carbs   + s.carbs,
       fibre:   acc.fibre   + s.fibre,
+      polyols: (acc.polyols || 0) + (s.polyols || 0),
     };
-  }, { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0 });
+  }, { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
 
   const recipes = loadRecipes();
   if (_editingRecipeId) {
