@@ -4363,7 +4363,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.492</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.493</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5140,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.492'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.493'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6252,7 +6252,21 @@ function makeContainerReorderable(containerEl, scopeKey) {
     if (EXCLUDED_KEYS.includes(m[1])) return;
     const wrapEl = document.getElementById(m[2]);
     if (!wrapEl) return;
-    sections.push({ key: m[1], titleEl, wrapEl });
+    // If title and wrap share a common immediate parent that ISN'T the
+    // overall container itself (e.g. both sit inside their own individual
+    // .import-card wrapper div), that wrapper is what actually needs
+    // moving as one unit. Moving title/wrap separately via appendChild -
+    // which targets allEls[0]'s own parent, not a genuinely shared
+    // container - would tear them out of their wrapper and relocate them
+    // into a DIFFERENT section's wrapper entirely, leaving the original
+    // wrapper behind as an empty, orphaned box. This is the actual,
+    // definitive root cause of the "empty boxes" seen throughout today's
+    // session - unrelated to and unresolved by the earlier stable-anchor
+    // fix, which addressed a different problem (a bystander element with
+    // no wrapper at all, not this).
+    const sharedWrapper = (titleEl.parentNode === wrapEl.parentNode && titleEl.parentNode !== containerEl)
+      ? titleEl.parentNode : null;
+    sections.push({ key: m[1], titleEl, wrapEl, sharedWrapper });
   });
   if (sections.length < 2) return; // nothing meaningful to reorder
   window._reorderableSections[scopeKey] = sections;
@@ -6289,9 +6303,28 @@ function applyGenericOrder(scopeKey) {
     if (badge) badge.textContent = `${i+1}/${order.length}`;
   });
   const allEls = [];
-  order.forEach(k => { const s = byKey[k]; if (s) allEls.push(s.titleEl, s.wrapEl); });
+  order.forEach(k => {
+    const s = byKey[k];
+    if (!s) return;
+    // Move the shared wrapper as a single unit when one exists (see the
+    // discovery-time comment above) - pushing title/wrap separately in
+    // that case is what tore sections out of their own wrapper and
+    // relocated them into a different section's wrapper, leaving an
+    // empty, orphaned box behind.
+    if (s.sharedWrapper) allEls.push(s.sharedWrapper);
+    else allEls.push(s.titleEl, s.wrapEl);
+  });
   if (!allEls.length) return;
-  const parent = allEls[0].parentNode;
+  // Don't blindly trust allEls[0].parentNode - if even one section in this
+  // order somehow lacks a detected sharedWrapper and happens to land first,
+  // that section's own inner wrapper would be mistaken for the true shared
+  // container, reproducing the exact same orphaning bug this was meant to
+  // fix, just shifted onto a different section. Prefer any element that
+  // genuinely has a sharedWrapper as the anchor for finding the real
+  // parent, since those are known-correct; only fall back to allEls[0]
+  // when nothing in this order has one at all.
+  const anchorEl = sections.find(s => order.includes(s.key) && s.sharedWrapper)?.sharedWrapper || allEls[0];
+  const parent = anchorEl.parentNode;
   if (!parent) return;
   // Same safety fix as the dashboard/library versions — never move anything
   // that's already correctly placed, since appendChild on an in-DOM node still
