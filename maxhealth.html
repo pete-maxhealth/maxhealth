@@ -2757,9 +2757,7 @@
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
       <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <div id="photoModeMeal" onclick="setPhotoMode('meal')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--accent);color:var(--bg);border:none;font-family:Space Mono,monospace;">🍽 Meal</div>
-        <div id="photoModeLabel" onclick="setPhotoMode('label')" style="font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;background:var(--surface2);color:var(--text2);border:1px solid var(--border);font-family:Space Mono,monospace;">🏷 Label</div>
-        <div style="font-size:10px;color:var(--text3);">Type name + amount below</div>
+        <div style="font-size:10px;color:var(--text3);">AI reads the photo automatically — add a name/amount below if you know it</div>
       </div>
     </div>
     <div class="input-row">
@@ -4364,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.499</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.500</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5142,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.499'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.500'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9015,7 +9013,6 @@ function exportAll() {
 // ─── PHOTO HANDLING ──────────────────────────────────────
 let _pendingPhotoBase64 = null;
 let _pendingPhotoMime = null;
-let _photoMode = 'meal'; // 'meal' or 'label'
 
 function handlePhotoSelect(input) {
   const file = input.files[0];
@@ -9047,13 +9044,10 @@ function handlePhotoSelect(input) {
       document.getElementById('photoPreview').src = dataUrl;
       document.getElementById('photoPreviewWrap').style.display = 'block';
       document.getElementById('photoBtn').style.borderColor = 'var(--green)';
-      // Keep Meal mode by default — user switches to Label explicitly
-      // Update placeholder hint based on current mode
+      // Photo classification (meal vs label) is now automatic — no mode to set.
       const inp = document.getElementById('chatInput');
       if (inp) {
-        inp.placeholder = _photoMode === 'label'
-          ? 'Name and amount — e.g. "ASDA Cottage Cheese 150g"'
-          : 'Describe what\'s in the photo (optional)…';
+        inp.placeholder = 'Name and amount if known (optional) — e.g. "ASDA Cottage Cheese 150g"';
         inp.focus();
       }
     };
@@ -9063,27 +9057,9 @@ function handlePhotoSelect(input) {
   reader.readAsDataURL(file);
 }
 
-function setPhotoMode(mode) {
-  _photoMode = mode;
-  document.getElementById('photoModeMeal').style.background = mode === 'meal' ? 'var(--accent)' : 'var(--surface2)';
-  document.getElementById('photoModeMeal').style.color = mode === 'meal' ? 'var(--bg)' : 'var(--text2)';
-  document.getElementById('photoModeMeal').style.border = mode === 'meal' ? 'none' : '1px solid var(--border)';
-  document.getElementById('photoModeLabel').style.background = mode === 'label' ? 'var(--accent)' : 'var(--surface2)';
-  document.getElementById('photoModeLabel').style.color = mode === 'label' ? 'var(--bg)' : 'var(--text2)';
-  document.getElementById('photoModeLabel').style.border = mode === 'label' ? 'none' : '1px solid var(--border)';
-  // Update placeholder
-  const inp = document.getElementById('chatInput');
-  if (inp && document.getElementById('photoPreviewWrap')?.style.display !== 'none') {
-    inp.placeholder = mode === 'label'
-      ? 'Name and amount — e.g. "ASDA Cottage Cheese 150g"'
-      : 'Describe what\'s in the photo (optional)…';
-  }
-}
-
 function clearPhoto() {
   _pendingPhotoBase64 = null;
   _pendingPhotoMime = null;
-  _photoMode = 'meal';
   document.getElementById('photoPreviewWrap').style.display = 'none';
   document.getElementById('photoPreview').src = '';
   document.getElementById('photoBtn').style.borderColor = '';
@@ -9103,34 +9079,7 @@ async function parseWithAI(userText, imageBase64, imageMime) {
 
   const csvRow = `${todayStr()}|${totals.kcal}|${Math.round(totals.protein)}|${totals.carbs}|${(state.notes || state.dayMode || "").replace(/["|'\\]/g, "")}`;
 
-  // Detect label mode
-  const isLabelPhoto = !!(imageBase64 && userText && userText.startsWith('[LABEL]'));
-  const cleanText = isLabelPhoto ? userText.replace('[LABEL]', '').trim() : userText;
-
-  const systemPrompt = isLabelPhoto
-    ? `You are a nutrition label reader. The user has sent a photo of a nutritional information label with a description: "${cleanText || 'unknown product'}".
-The description contains the product name and the amount they had (e.g. "ASDA Cottage Cheese 150g").
-
-Step 1: Read the per-100g column from the label. On UK labels this is the LEFT or FIRST data column. Read EXACT numbers — do not estimate or use your training data.
-Step 2: Extract the amount in grams or ml from the user's description. The amount MUST be stated — do not assume 100g if no amount is given; instead set amount to "unknown" and note this in the message field.
-Step 3: Check whether the label states these values apply "when cooked", "when grilled", "as prepared", or similar — most raw meat/fish products state nutrition on a RAW/as-sold basis, but some (like certain sausages) state it on a COOKED basis instead. If the label explicitly says the figures are on a cooked/prepared basis, note this clearly in the message field, since it means the user's stated amount needs to be the COOKED weight to match these figures correctly, not the raw weight.
-Step 4: MANDATORY, not optional — check specifically for a "Fibre" row and/or an "of which Polyols" row nested under Carbohydrate (common on EU multi-language keto/low-carb labels like this one). Look for these deliberately, the same way you deliberately looked for the fat/protein/carbs rows in Step 1 — do not just report kcal/fat/carbs/protein and move on without this check. If either row is genuinely present, read those exact printed per-100g figures and include them as "fibre"/"polyols" in per100g. If, after checking, the label genuinely doesn't show one or both, omit that field entirely rather than guessing — but the check itself must happen every time, not just when convenient.
-KNOWN FAILURE MODE — CHECK FOR THIS EXPLICITLY: on labels laid out as "Carbohydrate → of which Sugars → of which Polyols" followed by separate Fibre and Protein lines, it's easy to accidentally shift every value up by one row — attributing the Polyols number to fibre, the Sugars number to polyols, and the Fibre number to protein. Before finalizing your answer, explicitly re-verify each field against its own literal printed label, not its position in the list: does the number you're calling "protein" sit next to a row that literally says "Protein"? Does "fibre" sit next to a row that literally says "Fibre"? Does "polyols" sit next to a row that literally says "Polyols" (not "Sugars")? If any of these don't match, you've shifted rows — go back and re-read each value against its actual printed label.
-
-Respond ONLY with a JSON object (no markdown, no preamble):
-{
-  "type": "food",
-  "items": [
-    { "name": "Product name (no quantity)", "per100g": { "kcal": 161, "protein": 13.7, "fat": 8.2, "carbs": 6.2, "fibre": 9.3, "polyols": 6.0 }, "grams": 150 }
-  ],
-  "message": "Read from label: 161kcal/100g · 13.7g P · 8.2g F · 6.2g C."
-}
-
-If the label states a cooked/prepared basis, the message should instead look like: "Read from label: 214kcal/100g · 18.4g P · 13.8g F · 3.0g C — figures are stated AS GRILLED, so the amount should be the cooked weight, not raw."
-
-CRITICAL: Report ONLY the raw per-100g figures exactly as printed on the label, in "per100g". Do NOT multiply or scale them yourself — put the gram amount in "grams" as a plain number and let the multiplication happen downstream. If no amount is stated, omit "grams" entirely rather than guessing.
-Use the product name from the user's description if provided, otherwise identify it from the label.`
-    : `You are a precise nutrition assistant for a health tracking app.
+  const systemPrompt = `You are a precise nutrition assistant for a health tracking app.
 The user is ${name}, on a strict low-carb, high-protein protocol.
 Today's targets: ${targets.kcal} kcal | ${targets.protein}g protein | ${targets.carbs}g carbs (${state.dayMode} day).
 So far today: ${totals.kcal} kcal | ${totals.protein}g protein | ${totals.carbs}g carbs.
@@ -9177,6 +9126,7 @@ PHOTO CLASSIFICATION — ALWAYS DO THIS FIRST: Before any other reasoning, class
   A photo of food ON a plate is ALWAYS MEAL PATH, even if the food came from a labelled package. But if the photo shows product PACKAGING — a box, bag, or wrapper — and a printed nutrition panel with real numbers is visible ANYWHERE in that photo, even alongside branding, product imagery, or the product name, that is ALWAYS LABEL PATH. Do not require the panel to be the sole or dominant subject of the photo — packaging photos routinely show branding and the nutrition panel together in one shot, and that combination is still a label photo, not a meal photo. When genuinely uncertain whether numbers visible are a real nutrition panel versus some other printed text, prefer LABEL PATH — a wrongly-applied label reading merely produces a confirmable message ("Read from label: ...") the user can check against the real packet, whereas wrongly applying MEAL PATH means visually estimating a packaged product's contents, guessing weight and macros with no numeric basis at all.
 
 LABEL PATH: READ THE EXACT VALUES FROM THE LABEL. Label values override all other sources including your training data. Report the per-100g figures exactly as printed, in the "per100g" shape shown above — do NOT multiply by the amount yourself, put the gram amount in "grams" and let the app scale it. State clearly "Macros calculated from label values" in the message field. Do not estimate or substitute any values not visible on the label. If no gram amount is stated or visible, omit "grams" rather than guessing.
+Also check whether the label states these values apply "when cooked", "when grilled", "as prepared", or similar — most raw meat/fish products state nutrition on a RAW/as-sold basis, but some (like certain sausages) state it on a COOKED basis instead. If the label explicitly says the figures are on a cooked/prepared basis, note this clearly in the message field, since it means the user's stated amount needs to be the COOKED weight to match these figures correctly, not the raw weight — e.g. "Read from label: 214kcal/100g · 18.4g P · 13.8g F · 3.0g C — figures are stated AS GRILLED, so the amount should be the cooked weight, not raw."
 
 MEAL PATH: Follow these four steps before calculating anything:
 Step 1 — IDENTIFY: List every visible food component separately, including oils, sauces, butter, dressings and cooking fats — these are frequently missed but contribute significantly to fat and calories.
@@ -11669,170 +11619,74 @@ function sendChat() {
 
   const photoB64 = _pendingPhotoBase64;
   const photoMime = _pendingPhotoMime;
-  const photoMode = _photoMode;
   if (hasPhoto) clearPhoto();
 
-  const displayText = text || (photoMode === 'label' ? '🏷 Label photo' : '📷 Photo');
+  const displayText = text || (hasPhoto ? '📷 Photo' : '');
   addBubble(displayText, 'user');
 
-  // Label mode: check if user included a gram amount — prompt if not
-  if (hasPhoto && photoMode === 'label') {
-    const hasGrams = /\d+\s*(g|ml|kg)\b/i.test(text || '');
-    if (!hasGrams) {
-      // Store pending so user can reply with amount OR tap AI help
-      window._pendingLabelPhoto = { b64: photoB64, mime: photoMime, text: text || '' };
-      // Build interactive bubble
-      const bubble = addBubble('', 'system', 'warn');
-      bubble.innerHTML = `
-        <div style="margin-bottom:8px;">I've read the label, but I still need <strong>how much you actually ate</strong> — not the pack size. Type the amount (e.g. <strong>150g</strong>) and I'll scale the per-100g label values to that.</div>
-        <div style="margin-bottom:6px;font-size:11px;color:var(--text3);">Not sure?</div>
-        <button onclick="requestLabelPortionEstimate()"
-          style="padding:8px 14px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;margin-bottom:8px;">
-          🤖 AI help needed?
-        </button>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);">Not eating this now — just want it saved for later?</div>
-        <button onclick="saveLabelToLibraryOnly()"
-          style="padding:8px 14px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--text2);font-size:13px;cursor:pointer;font-family:Space Mono,monospace;margin-top:6px;">
-          📚 Just add to library (haven't eaten this)
-        </button>`;
-      return;
-    }
-  }
-
-  // Prepend label instruction if label mode
-  const messageText = (hasPhoto && photoMode === 'label')
-    ? '[LABEL] ' + (text || '')
-    : text;
-  processMessage(messageText, photoB64, photoMime);
+  // No more pre-flight gate here — meal vs label is classified by the AI
+  // itself (see PHOTO CLASSIFICATION in the system prompt), and an item that
+  // comes back with an unconfirmed amount lands on the preview screen, which
+  // has its own editable Amount box and "Estimate portion" button. This
+  // removes the exact failure mode where the old gate only fired if the user
+  // remembered to tap a "Label" toggle first — forgetting it meant silently
+  // skipping the check entirely instead of asking for the amount.
+  processMessage(text, photoB64, photoMime);
 }
 
+// DEAD CODE PATH — kept only until confirmed unused after deploy, then remove.
 // Reuses the already-proven processMessage → showMealPreview pipeline (same
 // one used for every other label/photo log) rather than writing separate,
 // untested AI-calling logic — "100g" is just a neutral placeholder so the
 // label's own per-100g reference values come through unscaled, since nothing
 // is actually being logged as eaten. The preview's existing "Save only"
 // button (already working, already used elsewhere) handles the actual save.
-function saveLabelToLibraryOnly() {
-  const pending = window._pendingLabelPhoto;
-  if (!pending) return;
-  window._pendingLabelPhoto = null;
-  addBubble('📚 Just add to library (haven\'t eaten this)', 'user');
-  showToast('Reading the label — this will only offer to save it, not log it, since you already said this wasn\'t eaten');
-  // Marks that the user has ALREADY explicitly declared "haven't eaten this" -
-  // the preview that's about to render must not offer "Log it" as an option
-  // at all, rather than relying on the user to correctly pick "Save only"
-  // over "Log it" a second time after already stating their intent once.
-  window._labelOnlyIntent = true;
-  processMessage((pending.text || '') + ' 100g', pending.b64, pending.mime, true);
-}
+// Portion estimator for an item that landed on the preview with an
+// unconfirmed amount (per100g values known — from a label or otherwise —
+// but no gram amount was stated). Unlike the old pre-flight version, this
+// doesn't need to re-send the photo: the per-100g figures are already
+// captured on the pending item (_per100gBase), so this only needs a text
+// call to estimate a realistic portion size, then re-uses the same
+// scalePreviewPortion() the manual Amount box already calls, so the two
+// paths can never drift apart.
+async function estimatePreviewPortion() {
+  const foods = window._pendingMealFoods;
+  if (!foods || !foods.length) return;
+  const f0 = foods[0];
+  const base = f0._per100gBase;
+  if (!base) { showToast('No per-100g data to estimate a portion from'); return; }
 
-function requestLabelPortionEstimate() {
-  const pending = window._pendingLabelPhoto;
-  if (!pending) return;
-  window._pendingLabelPhoto = null;
+  const productName = (f0.name || '').replace(/\s*\(per 100g.*?\)\s*/i, '').trim();
 
-  addBubble('🤖 AI help needed?', 'user');
-
-  // Cross-reference library for similar items
+  // Cross-reference library for similar items, same heuristic as the old flow
   const lib = loadLibrary() || [];
-  const productName = (pending.text || '').toLowerCase();
-  let libraryHint = '';
-  if (lib.length > 0 && productName) {
-    // Simple similarity: any library item whose name shares a word with the product description
-    const words = productName.split(/\s+/).filter(w => w.length > 3);
-    const matches = lib.filter(item =>
-      words.some(w => item.name.toLowerCase().includes(w))
-      && item.portion
-    );
-    if (matches.length > 0) {
-      const refs = matches.slice(0, 3).map(m => `"${m.name}" at ${m.portion}`).join(', ');
-      libraryHint = `\n\nThe user's food library contains similar items for reference: ${refs}. Use these as a guide if relevant.`;
-    }
-  }
+  const words = productName.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const matches = lib.filter(item => words.some(w => item.name.toLowerCase().includes(w)) && item.portion);
+  const libraryHint = matches.length
+    ? `\n\nThe user's food library contains similar items for reference: ${matches.slice(0,3).map(m => `"${m.name}" at ${m.portion}`).join(', ')}. Use these as a guide if relevant.`
+    : '';
 
-  // Build estimate prompt — label mode but asking AI to guess the portion
-  const estimatePrompt = `[LABEL_ESTIMATE] ${pending.text || 'unknown product'}`;
-  const systemOverride = `You are a nutrition label reader and portion estimator.
-The user has sent a photo of a nutrition label but is unsure how much they consumed.
+  const prompt = `Estimate a typical single serving size in grams for this product: "${productName}".
+Per-100g values already confirmed: ${base.kcal || 0}kcal, ${base.protein || 0}g protein, ${base.fat || 0}g fat, ${base.carbs || 0}g carbs.
+Base the estimate on common UK portion sizes for this type of product.${libraryHint}
 
-Step 1: Read the per-100g values from the label exactly — LEFT or FIRST column on UK labels.
-Step 2: Identify the product type and estimate a typical single serving in grams, based on:
-  - Any pack size visible on the label
-  - Common serving sizes for this type of product
-  - The user's food library references below (if relevant)
-Step 3: State your assumption clearly in the message field — e.g. "Estimated 125g — typical single serve for this style of yogurt."${libraryHint}
+Respond ONLY with JSON, no markdown, no preamble: {"grams": 125, "message": "Estimated 125g — typical single serve for this style of product."}`;
 
-Respond ONLY with a JSON object (no markdown, no preamble):
-{
-  "type": "food",
-  "items": [
-    { "name": "Product name (no quantity)", "per100g": { "kcal": 107, "protein": 9.1, "fat": 5.5, "carbs": 4.1 }, "grams": 125 }
-  ],
-  "message": "Read from label: 107kcal/100g. Estimated 125g — typical single serve. Tap edit if you know the exact amount."
-}
-
-CRITICAL: Report ONLY the raw per-100g figures exactly as printed on the label, in "per100g" — do NOT multiply them yourself. Put your estimated gram amount in "grams" as a plain number; the app does the scaling deterministically, not you. This is the same reason label-reading elsewhere in this app no longer trusts the model to do its own arithmetic — it's unreliable under this kind of combined read-and-multiply task.`;
-
-  // Send directly — bypass the normal system prompt
-  _processLabelEstimate(pending.b64, pending.mime, systemOverride);
-}
-
-async function _processLabelEstimate(b64, mime, systemPrompt) {
-  const thinking = addBubble('🤖 Estimating portion from label…', 'system');
+  showToast('Estimating a typical portion…');
   try {
-    const result = await callHealthAI(systemPrompt, { maxTokens: 600, image: { base64: b64, mimeType: mime } });
+    const result = await callHealthAI(prompt, { maxTokens: 200 });
     if (!result.ok) throw new Error(result.error || 'API error');
     const clean = result.text.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
-
-    thinking.remove();
-    if (parsed.type === 'food' && parsed.items?.length) {
-      // Same deterministic scaling as every other label path — the AI reads the
-      // label and estimates a portion, but the app does the multiplication, never
-      // the model. This function had its own separate prompt that was never
-      // updated when that fix went in elsewhere, which is exactly what caused a
-      // wildly wrong result (150 got treated as grams of pure fat, not grams of
-      // product) despite the AI's own message stating the correct label values.
-      const scaledItems = parsed.items.map(it => {
-        if (it.per100g && typeof it.per100g === 'object') {
-          const grams = parseFloat(it.grams) || null;
-          const p = it.per100g;
-          if (grams && grams > 0) {
-            const factor = grams / 100;
-            return {
-              name: it.name,
-              amount: grams + 'g (estimated)',
-              kcal:    Math.round((p.kcal    || 0) * factor),
-              protein: Math.round((p.protein || 0) * factor * 100) / 100,
-              fat:     Math.round((p.fat     || 0) * factor * 100) / 100,
-              carbs:   Math.round((p.carbs   || 0) * factor * 100) / 100,
-              // Same scaling as the other macros - fibre/polyols only ever
-              // appear here if the AI genuinely read them printed on the
-              // label itself (see the prompt above), never estimated, so
-              // this is consistent with how every other field on this path
-              // already gets sourced. Omitted entirely (not zeroed) when
-              // the label didn't show them, matching the barcode-sourced
-              // path's own convention of only ever including these when
-              // real data backs them.
-              ...(p.fibre   != null ? { fibre:   Math.round((p.fibre   || 0) * factor * 10) / 10 } : {}),
-              ...(p.polyols != null ? { polyols: Math.round((p.polyols || 0) * factor * 10) / 10 } : {}),
-              _per100gBase: p,
-            };
-          }
-          return { name: it.name + ' (per 100g — amount not confirmed)', amount: '100g', kcal: p.kcal||0, protein: p.protein||0, fat: p.fat||0, carbs: p.carbs||0, ...(p.fibre != null ? { fibre: p.fibre } : {}), ...(p.polyols != null ? { polyols: p.polyols } : {}), _per100gBase: p, _amountUnconfirmed: true };
-        }
-        return it; // fallback if the model ever reverts to the old shape
-      });
-      const sanitised = sanitiseFatValues(scaledItems);
-      showMealPreview(sanitised, sanitised[0].name, parsed.message || 'AI portion estimate — verify before saving');
-      switchTabById('chat');
-    } else {
-      addBubble('Couldn\'t estimate a portion — try entering the amount manually.', 'system', 'warn');
-    }
-  } catch(e) {
-    console.error('_processLabelEstimate failed:', e); // real reason, for diagnosis — the user-facing message stays generic
-    thinking.remove();
-    addBubble(`Estimation failed: ${e.message || 'unknown error'} — please type the amount (e.g. 150g) to continue.`, 'system', 'warn');
+    const grams = parseFloat(parsed.grams);
+    if (!grams || grams <= 0) throw new Error('No valid gram estimate returned');
+    const input = document.getElementById('previewPortionInput');
+    if (input) input.value = grams;
+    scalePreviewPortion(grams);
+    showToast(parsed.message || `Estimated ${grams}g`);
+  } catch (e) {
+    console.error('estimatePreviewPortion failed:', e);
+    showToast('Estimate failed — enter the amount manually');
   }
 }
 
@@ -12965,20 +12819,6 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     return;
   }
 
-  // ── Resume pending label photo if user replies with an amount ──
-  if (window._pendingLabelPhoto && !imageBase64) {
-    const hasGrams = /\d+\s*(g|ml|kg)\b/i.test(text || '');
-    if (hasGrams) {
-      const pending = window._pendingLabelPhoto;
-      window._pendingLabelPhoto = null;
-      const combined = (pending.text ? pending.text + ' ' : '') + text.trim();
-      processMessage('[LABEL] ' + combined, pending.b64, pending.mime);
-      return;
-    }
-    // If they replied but still no grams, clear pending and continue normally
-    window._pendingLabelPhoto = null;
-  }
-
   // ── If a new image arrives, any pending clarification is stale — clear it ──
   if (imageBase64 && window._pendingClarification) {
     window._pendingClarification = null;
@@ -13351,9 +13191,11 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
             };
           }
           // No valid gram amount — show per-100g values as-is and flag it clearly
-          // rather than guessing a portion.
+          // rather than guessing a portion. _amountUnconfirmed drives a proper
+          // note + estimate button on the preview screen (renderMealPreview),
+          // rather than stuffing the disclaimer into the name itself.
           return {
-            name: it.name + ' (per 100g — amount not confirmed)',
+            name: it.name,
             amount: '100g',
             kcal: p.kcal || 0, protein: p.protein || 0, fat: p.fat || 0, carbs: p.carbs || 0,
             ...(p.fibre != null ? { fibre: p.fibre } : {}), ...(p.polyols != null ? { polyols: p.polyols } : {}),
@@ -14380,16 +14222,24 @@ function renderMealPreview() {
     }
   });
 
+  // Amount genuinely wasn't confirmed (label read but no stated portion) —
+  // the per-100g values are real, but 100g is a placeholder, not a guess at
+  // what was actually eaten. Flag it plainly and offer the AI estimate right
+  // here, rather than the old separate pre-flight bubble.
+  const amountUnconfirmed = foods.length === 1 && (f0._amountUnconfirmed || f0._baseGramsIsGuess);
+
   let itemRows;
   if (foods.length === 1) {
     itemRows = `<div style="margin-bottom:12px;">
       <div style="font-size:17px;font-weight:600;color:var(--text);margin-bottom:10px;line-height:1.3;">${f0.name}</div>
+      ${amountUnconfirmed ? `<div style="font-size:11px;color:var(--yellow);margin-bottom:8px;line-height:1.5;">⚠ Amount not confirmed — these are per-100g values. Enter how much you actually had, or let AI estimate a typical portion.</div>` : ''}
       <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:10px;">
         <div style="font-size:11px;color:var(--text3);white-space:nowrap;">Amount (g)</div>
         <input id="previewPortionInput" type="number" placeholder="${baseGrams}" value="${baseGrams}"
           style="flex:1;background:transparent;border:none;outline:none;color:var(--text);font-size:20px;font-weight:700;text-align:center;min-width:0;"
           oninput="scalePreviewPortion(this.value)">
       </div>
+      ${amountUnconfirmed ? `<button onclick="estimatePreviewPortion()" style="width:100%;padding:8px;margin-bottom:10px;background:var(--surface2);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:12px;cursor:pointer;font-family:Space Mono,monospace;">🤖 Estimate portion for me</button>` : ''}
       <div style="display:flex;gap:12px;font-size:13px;font-family:Space Mono,monospace;">
         <span style="color:var(--text2);" id="ppKcal">${Math.round(f0.kcal)}kcal</span>
         <span style="color:var(--green);" id="ppProt">${Math.round(f0.protein*10)/10}g P</span>
@@ -14441,9 +14291,7 @@ function renderMealPreview() {
     ${warnings.length ? `<div style="margin-bottom:6px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:3px 0;">${w}</div>`).join('')}</div>` : ''}
     ${window._pendingMealMessage ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;font-style:italic;">${window._pendingMealMessage}</div>` : ''}
     <div style="display:flex;gap:8px;margin-top:4px;">
-      ${window._labelOnlyIntent
-        ? `<div style="flex:1;font-size:11px;color:var(--text3);display:flex;align-items:center;padding:0 4px;">Save only — you already said this wasn't eaten</div>`
-        : `<button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>`}
+      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="cancelMealPreview()">Cancel</button>
     </div>
@@ -14451,7 +14299,6 @@ function renderMealPreview() {
       <button class="copy-btn" style="width:100%;padding:9px;font-size:12px;color:var(--text2);" onclick="runMultiAICheck()">🔍 Verify across 3 AIs — worth it for anything uncertain</button>
     </div>
   `;
-  window._labelOnlyIntent = false; // one-shot - consumed by this render, doesn't persist to the next unrelated preview
 
   const scroll = document.getElementById('chatScroll');
   scroll.appendChild(bubble);
