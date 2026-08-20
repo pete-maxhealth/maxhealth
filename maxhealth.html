@@ -14540,7 +14540,16 @@ function scaleEditPreviewAmount() {
   const note = document.getElementById('editAmountScaleNote');
   if (!base) return; // no baseline - fields stay exactly as manually entered
   const newVal = document.getElementById('editAmount')?.value || '';
-  const newNum = _extractGramsFromAmount(newVal.toLowerCase());
+  // A bare number here ("50") unambiguously means grams — same fix as
+  // updateLogEditItem's amount branch (v506). Scoped to this field only,
+  // not to _extractGramsFromAmount itself, which must stay strict for its
+  // other callers (parsing stored strings like a saved meal's "1 serving",
+  // where a bare leading number must NOT be assumed to mean grams). Units
+  // this field doesn't understand at all (e.g. "1 tbsp") still won't
+  // auto-scale — that's a separate, much bigger unit-conversion feature,
+  // not this fix.
+  const trimmed = newVal.trim();
+  const newNum = /^\d+(\.\d+)?$/.test(trimmed) ? parseFloat(trimmed) : _extractGramsFromAmount(trimmed.toLowerCase());
   if (newNum <= 0) {
     if (note) note.textContent = 'Type a number + unit (e.g. 60g) to auto-scale the macros.';
     return;
@@ -17030,6 +17039,14 @@ function editLogEntry(id) {
       copy._base = baseGrams > 0
         ? { grams: baseGrams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
         : null;
+      // Locks out the new-ingredient retroactive-capture logic in
+      // updateLogEditItem for items that already had a real baseline
+      // established here — that logic exists for fresh + Add ingredient
+      // rows, not to second-guess a baseline the editor already found.
+      // Items where no reliable size was found (baseGrams === 0) stay
+      // unconfirmed, so they can still pick up a baseline later if the
+      // user manually fixes them up with a real amount + macros.
+      copy._baseConfirmed = baseGrams > 0;
       return copy;
     });
     renderLogEditItemsForm(id, entry);
@@ -17105,6 +17122,12 @@ function renderLogEditItemsForm(id, entry) {
     <input id="edit-desc-${id}" class="modal-input" value="${entry.description}" placeholder="Description" style="font-size:13px;padding:7px 10px;">
     <div id="log-edit-items-${id}"></div>
     <button class="modal-btn" style="font-size:12px;padding:7px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addLogEditItem(${id})">+ Add ingredient</button>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap;">Scale entire entry to</span>
+      <input id="log-edit-scaleall-${id}" type="number" step="1" placeholder="%" style="width:56px;font-size:12px;padding:5px 6px;" class="modal-input">
+      <span style="font-size:11px;color:var(--text3);">%</span>
+      <button class="modal-btn" style="font-size:11px;padding:5px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);" onclick="scaleAllLogEditItems(${id})">Apply</button>
+    </div>
     <div id="log-edit-total-${id}" style="font-size:12px;color:var(--text3);padding:4px 0;"></div>
     <div style="display:flex;gap:8px;">
       <button class="modal-btn" style="flex:1;font-size:12px;padding:8px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteLogEntry(${id})">Delete</button>
@@ -17136,7 +17159,7 @@ function renderLogEditItemsList(id) {
         <div><div style="font-size:9px;color:#a78bfa;">FAT g</div><input id="log-edit-fat-${id}-${idx}" type="number" step="0.1" value="${it.fat||0}" oninput="updateLogEditItem(${id},${idx},'fat',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
         <div><div style="font-size:9px;color:var(--yellow);">CARBS g</div><input id="log-edit-carb-${id}-${idx}" type="number" step="0.1" value="${it.carbs||0}" oninput="updateLogEditItem(${id},${idx},'carbs',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
       </div>
-      <div id="log-edit-scalenote-${id}-${idx}" style="font-size:10px;color:var(--text3);margin-top:4px;">${it._base ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
+      <div id="log-edit-scalenote-${id}-${idx}" style="font-size:10px;color:var(--text3);margin-top:4px;">${it._base && it._base.grams != null ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
     </div>
   `).join('');
   updateLogEditTotalLine(id);
@@ -17155,6 +17178,20 @@ function updateLogEditItem(id, idx, field, value) {
 
   if (field === 'amount') {
     it.amount = value;
+    // New ingredients (from + Add ingredient) start with no _base at all.
+    // Before giving up, try to establish one now from whatever amount +
+    // macros are currently sitting in this row — handles the case where
+    // Amount is the LAST field typed, after macros were already filled in.
+    // Locked out once _baseConfirmed is set (a real, prior item, or this
+    // same new item after its first genuine rescale below) so this never
+    // overwrites an established baseline.
+    if (!it._baseConfirmed) {
+      const trimmedAmt = value.trim();
+      const grams = /^\d+(\.\d+)?$/.test(trimmedAmt) ? parseFloat(trimmedAmt) : _extractGramsFromAmount(trimmedAmt.toLowerCase());
+      it._base = grams > 0
+        ? { grams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+        : null;
+    }
     if (!it._base) return; // no reliable baseline captured when the editor opened - don't guess a scale, matches editPreviewItem's same rule
     // A bare number here ("50") unambiguously means grams — this field is
     // specifically for editing an ingredient whose baseline is already a
@@ -17168,6 +17205,12 @@ function updateLogEditItem(id, idx, field, value) {
       if (note) note.textContent = 'Type a number + unit (e.g. 150g) to auto-scale the macros.';
       return;
     }
+    // A value that genuinely differs from what _base holds means this is a
+    // real rescale request, not just re-confirming the baseline that was
+    // only just captured above (which would otherwise read as grams===grams
+    // and look identical to a real edit) — locks _base from here on, same
+    // as how an established item's baseline never moves again.
+    if (newGrams !== it._base.grams) it._baseConfirmed = true;
     const factor = newGrams / it._base.grams;
     it.kcal    = Math.round(it._base.kcal    * factor);
     it.protein = Math.round(it._base.protein * factor * 10) / 10;
@@ -17195,6 +17238,19 @@ function updateLogEditItem(id, idx, field, value) {
   // Keeps both editors behaving identically for the same interaction.
   const n = parseFloat(value);
   it[field] = isNaN(n) ? 0 : n;
+  // EXCEPT for a new ingredient that hasn't had a genuine rescale yet
+  // (_baseConfirmed unset) — there, _base needs to keep mirroring current
+  // values as each macro field gets typed, or whichever fields were still
+  // 0 at the moment _base was first captured would stay frozen at 0
+  // forever, even once the user finishes filling them in. See the matching
+  // logic in the 'amount' branch above for where this gets locked in.
+  if (!it._baseConfirmed) {
+    const trimmedAmt = (it.amount || '').trim();
+    const grams = /^\d+(\.\d+)?$/.test(trimmedAmt) ? parseFloat(trimmedAmt) : _extractGramsFromAmount(trimmedAmt.toLowerCase());
+    it._base = grams > 0
+      ? { grams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+      : null;
+  }
   updateLogEditTotalLine(id);
 }
 
@@ -17229,6 +17285,40 @@ function addLogEditItem(id) {
     const nameInput = lastRow ? lastRow.querySelector('input') : null;
     if (nameInput) nameInput.focus();
   }, 50);
+}
+
+// Scales every ingredient in the entry to X% at once — e.g. "I made a big
+// batch but only ate 60% of it." Deliberately scales from each item's
+// stable _base baseline, not its current on-screen values, so applying
+// this twice with different percentages (50% then 70%) gives 70% of the
+// ORIGINAL amounts, not 70% of the already-halved ones — matches the
+// non-compounding rule already used by per-item Amount-field scaling.
+// Items without a real gram-based _base (no parseable amount when the
+// editor opened, or a fresh row from + Add ingredient) get a macro-only
+// baseline snapshotted from their current values the first time this
+// runs, so they still scale — but their Amount text field is left alone
+// since there's no reliable gram figure to derive a new one from.
+function scaleAllLogEditItems(id) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items || !items.length) return;
+  const input = document.getElementById('log-edit-scaleall-' + id);
+  const pct = parseFloat(input?.value);
+  if (!pct || pct <= 0) { showToast('Enter a percentage greater than 0'); return; }
+  const factor = pct / 100;
+  items.forEach(it => {
+    if (!it._base) {
+      it._base = { grams: null, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 };
+    }
+    it.kcal    = Math.round(it._base.kcal    * factor);
+    it.protein = Math.round(it._base.protein * factor * 10) / 10;
+    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
+    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
+    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
+    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    if (it._base.grams != null) it.amount = Math.round(it._base.grams * factor) + 'g';
+  });
+  renderLogEditItemsList(id);
+  showToast(`Scaled entire entry to ${pct}% ✓`);
 }
 
 function updateLogEditTotalLine(id) {
@@ -18182,6 +18272,7 @@ function editHistEntry(dayIdx, entryIdx) {
       copy._base = baseGrams > 0
         ? { grams: baseGrams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
         : null;
+      copy._baseConfirmed = baseGrams > 0; // see the matching comment in editLogEntry()
       return copy;
     });
     renderHistEditItemsForm(dayIdx, entryIdx, entry);
@@ -18251,6 +18342,12 @@ function renderHistEditItemsForm(dayIdx, entryIdx, entry) {
     <input id="hedit-desc-${key}" class="modal-input" value="${entry.description}" style="font-size:12px;padding:6px 10px;">
     <div id="hist-edit-items-${key}"></div>
     <button class="modal-btn" style="font-size:11px;padding:6px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addHistEditItem('${key}')">+ Add ingredient</button>
+    <div style="display:flex;gap:5px;align-items:center;">
+      <span style="font-size:10px;color:var(--text3);white-space:nowrap;">Scale entire entry to</span>
+      <input id="hist-edit-scaleall-${key}" type="number" step="1" placeholder="%" style="width:52px;font-size:11px;padding:4px 6px;" class="modal-input">
+      <span style="font-size:10px;color:var(--text3);">%</span>
+      <button class="modal-btn" style="font-size:10px;padding:4px 8px;background:transparent;border:1px solid var(--border);color:var(--text2);" onclick="scaleAllHistEditItems('${key}')">Apply</button>
+    </div>
     <div id="hist-edit-total-${key}" style="font-size:11px;color:var(--text3);padding:3px 0;"></div>
     <div style="display:flex;gap:6px;">
       <button class="modal-btn" style="flex:1;font-size:11px;padding:6px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteHistEntry(${dayIdx},${entryIdx})">Delete</button>
@@ -18278,7 +18375,7 @@ function renderHistEditItemsList(key) {
         <div><div style="font-size:8px;color:#a78bfa;">FAT g</div><input id="hist-edit-fat-${key}-${idx}" type="number" step="0.1" value="${it.fat||0}" oninput="updateHistEditItem('${key}',${idx},'fat',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
         <div><div style="font-size:8px;color:var(--yellow);">CARBS g</div><input id="hist-edit-carb-${key}-${idx}" type="number" step="0.1" value="${it.carbs||0}" oninput="updateHistEditItem('${key}',${idx},'carbs',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
       </div>
-      <div id="hist-edit-scalenote-${key}-${idx}" style="font-size:9px;color:var(--text3);margin-top:3px;">${it._base ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
+      <div id="hist-edit-scalenote-${key}-${idx}" style="font-size:9px;color:var(--text3);margin-top:3px;">${it._base && it._base.grams != null ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
     </div>
   `).join('');
   updateHistEditTotalLine(key);
@@ -18297,6 +18394,15 @@ function updateHistEditItem(key, idx, field, value) {
 
   if (field === 'amount') {
     it.amount = value;
+    // See the matching, fully-commented logic in updateLogEditItem() —
+    // identical rationale, mirrored here for History's parallel editor.
+    if (!it._baseConfirmed) {
+      const trimmedAmt = value.trim();
+      const grams = /^\d+(\.\d+)?$/.test(trimmedAmt) ? parseFloat(trimmedAmt) : _extractGramsFromAmount(trimmedAmt.toLowerCase());
+      it._base = grams > 0
+        ? { grams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+        : null;
+    }
     if (!it._base) return;
     const trimmed = value.trim();
     const newGrams = /^\d+(\.\d+)?$/.test(trimmed) ? parseFloat(trimmed) : _extractGramsFromAmount(trimmed.toLowerCase());
@@ -18304,6 +18410,7 @@ function updateHistEditItem(key, idx, field, value) {
       if (note) note.textContent = 'Type a number + unit (e.g. 150g) to auto-scale the macros.';
       return;
     }
+    if (newGrams !== it._base.grams) it._baseConfirmed = true;
     const factor = newGrams / it._base.grams;
     it.kcal    = Math.round(it._base.kcal    * factor);
     it.protein = Math.round(it._base.protein * factor * 10) / 10;
@@ -18326,6 +18433,14 @@ function updateHistEditItem(key, idx, field, value) {
 
   const n = parseFloat(value);
   it[field] = isNaN(n) ? 0 : n;
+  // See the matching, fully-commented logic in updateLogEditItem().
+  if (!it._baseConfirmed) {
+    const trimmedAmt = (it.amount || '').trim();
+    const grams = /^\d+(\.\d+)?$/.test(trimmedAmt) ? parseFloat(trimmedAmt) : _extractGramsFromAmount(trimmedAmt.toLowerCase());
+    it._base = grams > 0
+      ? { grams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+      : null;
+  }
   updateHistEditTotalLine(key);
 }
 
@@ -18352,6 +18467,31 @@ function addHistEditItem(key) {
     const nameInput = lastRow ? lastRow.querySelector('input') : null;
     if (nameInput) nameInput.focus();
   }, 50);
+}
+
+// Mirrors scaleAllLogEditItems() exactly — see its comment for the
+// non-compounding-baseline rationale, which applies identically here.
+function scaleAllHistEditItems(key) {
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items || !items.length) return;
+  const input = document.getElementById('hist-edit-scaleall-' + key);
+  const pct = parseFloat(input?.value);
+  if (!pct || pct <= 0) { showToast('Enter a percentage greater than 0'); return; }
+  const factor = pct / 100;
+  items.forEach(it => {
+    if (!it._base) {
+      it._base = { grams: null, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 };
+    }
+    it.kcal    = Math.round(it._base.kcal    * factor);
+    it.protein = Math.round(it._base.protein * factor * 10) / 10;
+    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
+    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
+    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
+    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    if (it._base.grams != null) it.amount = Math.round(it._base.grams * factor) + 'g';
+  });
+  renderHistEditItemsList(key);
+  showToast(`Scaled entire entry to ${pct}% ✓`);
 }
 
 function updateHistEditTotalLine(key) {
