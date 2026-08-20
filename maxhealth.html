@@ -4364,7 +4364,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.495</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.496</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5142,7 +5142,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.495'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.496'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6299,6 +6299,16 @@ function getGenericOrder(scopeKey) {
     const stored = JSON.parse(localStorage.getItem('mh_reorder_' + scopeKey) || 'null');
     if (Array.isArray(stored) && stored.length === defaultOrder.length && defaultOrder.every(k => stored.includes(k))) return stored;
   } catch(e) {}
+  // Was returning the fresh default without ever persisting it - meant a
+  // stale stored order could keep failing this validation indefinitely
+  // (e.g. across several same-day changes to which sections exist, like
+  // About being added and dash-macroadvice being excluded), silently
+  // falling back every single call rather than actually healing itself.
+  // Persisting it here means the very next call already has a valid,
+  // matching stored order to work from.
+  if (defaultOrder.length) {
+    try { localStorage.setItem('mh_reorder_' + scopeKey, JSON.stringify(defaultOrder)); } catch(e) {}
+  }
   return defaultOrder;
 }
 function applyGenericOrder(scopeKey) {
@@ -6349,7 +6359,15 @@ function applyGenericOrder(scopeKey) {
 function moveGenericSection(scopeKey, key, direction) {
   const order = getGenericOrder(scopeKey);
   const idx = order.indexOf(key);
-  if (idx === -1) return;
+  // Was silently returning here with zero feedback if the key genuinely
+  // wasn't found in the order - which is exactly what "clicking the arrow
+  // and nothing happens, no error, no toast" looks like. Shouldn't happen
+  // in normal operation (the button only ever exists for a key that was
+  // just discovered), but getGenericOrder() now self-heals by persisting
+  // its fresh fallback, so a stale key mismatch shouldn't recur after one
+  // call - this toast exists specifically so a genuine failure is visible
+  // rather than silent, if it ever does happen again.
+  if (idx === -1) { showToast('Reorder data was out of sync — refreshed, try again'); return; }
   const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
   if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction==='up'?'top':'bottom')); return; }
   [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
