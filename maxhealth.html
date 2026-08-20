@@ -4364,7 +4364,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.498</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.499</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5142,7 +5142,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.498'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.499'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -14394,7 +14394,7 @@ function renderMealPreview() {
         <span style="color:var(--text2);" id="ppKcal">${Math.round(f0.kcal)}kcal</span>
         <span style="color:var(--green);" id="ppProt">${Math.round(f0.protein*10)/10}g P</span>
         <span style="color:#a78bfa;" id="ppFat">${Math.round((f0.fat||0)*10)/10}g F</span>
-        <span style="color:var(--yellow);" id="ppCarb">${Math.round(f0.carbs*10)/10}g C</span>
+        <span style="color:var(--yellow);" id="ppCarb">${Math.round(getEffectiveCarbs(f0)*10)/10}g C</span>
       </div>
     </div>`;
   } else {
@@ -14485,7 +14485,12 @@ function scalePreviewPortion(gramsStr) {
   const grams = parseFloat(gramsStr);
   if (!grams || grams <= 0 || !window._pendingMealFoods) return;
   const f = window._pendingMealFoods[0];
-  const base = f._base || { kcal: f.kcal, protein: f.protein, fat: f.fat||0, carbs: f.carbs, baseG: 100 };
+  // Was missing polyols (and fibre) entirely from both the base fallback
+  // and the explicit re-scale below - meant changing the amount either
+  // lost polyols data outright, or left it frozen at whatever the
+  // previous amount had scaled it to, rather than genuinely re-scaling
+  // for the new amount.
+  const base = f._base || { kcal: f.kcal, protein: f.protein, fat: f.fat||0, carbs: f.carbs, fibre: f.fibre||0, polyols: f.polyols||0, baseG: 100 };
   const baseG = base.baseG || 100;
   const factor = grams / baseG;
   window._pendingMealFoods[0] = {
@@ -14495,20 +14500,28 @@ function scalePreviewPortion(gramsStr) {
     protein: Math.round(base.protein * factor * 10) / 10,
     fat:     Math.round((base.fat||0) * factor * 10) / 10,
     carbs:   Math.round(base.carbs   * factor * 10) / 10,
+    fibre:   Math.round((base.fibre||0) * factor * 10) / 10,
+    polyols: Math.round((base.polyols||0) * factor * 10) / 10,
     amount:  grams + 'g',
   };
   const scaled = window._pendingMealFoods[0];
   const ppKcal = document.getElementById('ppKcal'); if (ppKcal) ppKcal.textContent = scaled.kcal + 'kcal';
   const ppProt = document.getElementById('ppProt'); if (ppProt) ppProt.textContent = scaled.protein + 'g P';
   const ppFat  = document.getElementById('ppFat');  if (ppFat)  ppFat.textContent  = scaled.fat + 'g F';
-  const ppCarb = document.getElementById('ppCarb'); if (ppCarb) ppCarb.textContent = scaled.carbs + 'g C';
+  // Was showing raw scaled.carbs - the whole point of this screen is
+  // showing what you're about to log, so it should reflect the same Net
+  // Carbs setting as everywhere else, not silently disagree with it.
+  const ppCarb = document.getElementById('ppCarb'); if (ppCarb) ppCarb.textContent = getEffectiveCarbs(scaled) + 'g C';
 
   // Impact box needs to reflect the new amount too — recalculated from the
   // just-scaled food and swapped in without touching the input itself, so
   // typing a new amount doesn't lose focus mid-keystroke.
   const impactEl = document.getElementById('mealPreviewImpact');
   if (impactEl) {
-    impactEl.innerHTML = buildMealImpactHtml({ kcal: scaled.kcal, protein: scaled.protein, fat: scaled.fat || 0, carbs: scaled.carbs });
+    // Was missing polyols/fibre here too, same bug-class as the other
+    // buildMealImpactHtml call sites fixed earlier - this is a third,
+    // separate instance that had been missed.
+    impactEl.innerHTML = buildMealImpactHtml({ kcal: scaled.kcal, protein: scaled.protein, fat: scaled.fat || 0, carbs: scaled.carbs, fibre: scaled.fibre || 0, polyols: scaled.polyols || 0 });
   }
 }
 
