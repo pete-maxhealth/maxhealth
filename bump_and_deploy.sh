@@ -64,13 +64,25 @@ if [ "$APPVER_COUNT" != "1" ]; then
 fi
 sed -i "s/const APP_VERSION = 'v$APP_VER_CURRENT'/const APP_VERSION = 'v$NEW_VERSION'/" "$FILE"
 
-OPEN=$(grep -o '<div' "$FILE" | wc -l)
-CLOSE=$(grep -o '</div>' "$FILE" | wc -l)
+OPEN=$(python3 -c "
+import re
+with open('$FILE') as f:
+    content = f.read()
+html_no_scripts = re.sub(r'<script[\s\S]*?</script>', '', content, flags=re.IGNORECASE)
+print(len(re.findall(r'<div\b', html_no_scripts, re.IGNORECASE)))
+")
+CLOSE=$(python3 -c "
+import re
+with open('$FILE') as f:
+    content = f.read()
+html_no_scripts = re.sub(r'<script[\s\S]*?</script>', '', content, flags=re.IGNORECASE)
+print(len(re.findall(r'</div>', html_no_scripts, re.IGNORECASE)))
+")
 if [ "$OPEN" != "$CLOSE" ]; then
   echo "WARNING: div mismatch — open=$OPEN close=$CLOSE. Aborting, do not commit."
   exit 1
 fi
-echo "Div balance OK: $OPEN open / $CLOSE close"
+echo "Div balance OK: $OPEN open / $CLOSE close (script blocks excluded — matches the in-app Health Check's own method, not a raw text count that HTML-shaped strings inside JS code can throw off)"
 
 FINAL_DISPLAY=$(grep -oP 'MaxedHealth v\K[0-9.]+' "$FILE")
 FINAL_APPVER=$(grep -oP "const APP_VERSION = 'v\K[0-9.]+" "$FILE")
