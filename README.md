@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.471
+**Version:** v3.10.510
 
 ---
 
@@ -30,6 +30,7 @@
 - **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
 - **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
 - **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
+- **Itemized ingredient editors** — multi-item log entries (Today's Log and History) get a real per-ingredient editor: add, remove, or adjust any single ingredient, with amount edits auto-scaling that item's macros from a stable baseline. **Scale entire entry to X%** applies proportionally across every ingredient at once in one action — for logging a partial serving of a bigger batch without recalculating each item by hand.
 - **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
 - **Condition History** — same pattern as Weight Phase History, for condition instead of goal. Auto-logs whenever your condition genuinely changes, so a later switch can't retroactively distort how old data gets judged. Ask AI and Full Summary become period-aware automatically once more than one condition has been used — ask naturally ("compare my general and migraine periods") and the AI handles the comparison itself, no filter or dropdown needed.
 - **Activity Level, personalised and self-updating** — a real, editable Profile setting (previously asked once at onboarding and discarded). Walking effort (Easy/Moderate/Hard) is calibrated to it — real research confirmed there's no single universal "brisk" pace threshold, since even the AHA and CDC officially disagree on the number, explicitly because it depends on individual fitness. Auto-switches from sustained real step-count trends (smoothed 30-day average, resistant to single noisy or rest days), with a celebration for genuine improvement and a plain notification for decline. Full Activity Level History, same pattern as Condition History.

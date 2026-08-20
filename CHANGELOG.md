@@ -1,3 +1,59 @@
+# MaxedHealth Changelog — Phase 17, continued (v3.10.472 – v3.10.510)
+
+**v3.10.472–499 were never individually documented here** — same gap this file already flags for Phase 13-14, now extended. What follows covers 500–510 in detail, plus a related RingConn pipeline fix and backfill that sit outside `maxhealth.html`'s own versioning entirely.
+
+## Itemized Ingredient Editors — Today's Log + History
+
+- **Real per-ingredient editing for multi-item log entries**, replacing an aggregate-only form that had no way to touch individual ingredients at all — add, remove, or edit any single item; totals are now *derived* from the items list on save rather than typed separately, closing a drift gap where the two could quietly disagree.
+- **Extended to History**, which previously had zero awareness of itemized entries whatsoever — worse than Today's old single-item-only sync. Same contract, kept as a deliberately parallel implementation (keyed by day+entry index rather than merged with Today's id-based functions) rather than forcing a shared abstraction that wasn't worth the added indirection.
+- **Amount-driven auto-scale** — editing an ingredient's Amount field rescales its macros proportionally from a captured baseline, the same pattern already used elsewhere in the app. A direct macro edit is treated as a manual override and doesn't reset that baseline, so a later Amount edit still scales from the original point, not from whatever was just hand-typed.
+- **New: "Scale entire entry to X%"** — one input, one Apply, scales every ingredient in the entry at once (e.g. "I made a big batch but only ate 60% of it"). Deliberately scales from each item's stable baseline rather than its current on-screen value, so applying it twice with different percentages (50% then 70%) gives 70% of the *original* amounts, not 70% of the already-halved ones.
+- **New-ingredient baseline gap, closed** — an ingredient added via "+ Add ingredient" had no baseline to scale from at all; typing an Amount did nothing until macros were also manually typed in, and if Amount was typed last, it silently did nothing even then. Now retroactively captures a baseline as fields get filled in, in either order, and locks it in only once a genuine rescale happens (a typed amount that actually differs from what's captured) — so it never freezes mid-entry with some fields still sitting at zero.
+- **Pre-log preview editor** got the matching bare-number fix separately (see below) — same underlying gap, different screen.
+
+## Library-Meal Portion Misparse — Critical Fix
+
+- **Root cause of a genuinely alarming real incident**: a saved multi-item meal stores its portion as a string like `"1 serving"`. Re-matching it later via text search extracted the leading digit with a raw `parseFloat`, silently treating "1 serving" as **1 gram**. Reproduced directly: typing "creamy" matched a saved "Creamy Chicken and Veg" meal, the Amount box showed "1", and the resulting figures (2536kcal / 281g protein) looked like an entire day's macros crammed into one gram — correctly triggering the impossible-mass warning, which is what surfaced it.
+- Fixed at all five call sites to use the existing strict gram/ml/kg/l-unit extractor instead of a raw `parseFloat`. Also un-conflated two previously-merged conditions: a "these are per-100g values" note that should only ever appear on genuine label-path items was showing on any item with no parseable size, meal-path included — and a hardcoded "100g" fallback in the accompanying warning now reads the real computed baseline instead.
+- **Companion fix**: the itemized editors' own Amount field was, correctly, using that same strict extractor — but that meant a bare number like `"50"` (no unit) was rejected even though in this specific interactive context it unambiguously means grams. Added a local bare-number-means-grams fallback scoped to just this field, without loosening the shared extractor itself, which must stay strict everywhere else for exactly the "1 serving" ambiguity above.
+
+## Photo/Label AI Pipeline Unification
+
+- **Removed the manual Meal/Label toggle entirely** — the AI's general system prompt already had full photo-classification logic to self-detect labels vs. meals, making the toggle redundant. This also removed a pre-flight gram-check gate that only fired if the toggle had been manually set to "Label," which was the root cause of a real reported bug: forgetting to tap the toggle silently bypassed the AI's own portion-confirmation flow. ~140 lines of now-dead code removed alongside it.
+- **Fibre/polyols visibility added to the single-item preview** — previously only shown after logging, not before.
+- **New AI-assumed-amount detector** — flags when the AI filled in a gram figure but its own accompanying message was still asking a clarifying question (e.g. "assumed 28g — correct me if wrong"), so a genuine guess can't be mistaken for a confirmed value. Initially built for label-path items only; extended to meal-path (photos of food, not labels) after confirming the same gap existed there too.
+
+## Dashboard Fixes
+
+- **Weight trend staleness** — the 14-day trend classification was computed purely from finalized history, which excludes today's entry until midnight rollover, while the headline weight figure above it was already live. The trend label could describe yesterday's rate sitting directly under today's fresh number. Now folds today's live entry into the window whenever it's newer than history's.
+- **Carb Zones tooltip made condition-aware** — was 100% static HTML with "GBM Protocol" and a metformin/MCT assumption hardcoded regardless of who's viewing it. A real cross-user bug: a second user on a different condition (e.g. Jill) would see Pete's own diagnosis-specific framing presented as if it were theirs. Now swaps to generic wording based on the condition setting, matching the existing pattern already used for hiding the Monthly Summary/Research Digest sections from non-GBM users.
+
+## Fibre/Polyols — Text Search vs. Barcode Parity
+
+- **Traced from a real incident**: a product logged via name search showed no polyols figure at all, despite the physical label clearly listing 17g/100g. Initial suspicion was the AI vision label-reading pipeline (which already has a documented mandate, and a known-failure-mode note, for exactly this kind of miss) — but this item had actually come through Open Food Facts text search, a completely separate code path that never touches the AI at all.
+- Root cause: OFF text search's results renderer never captured `fibre_100g`/`polyols_100g` into the result item's data attributes in the first place, unlike the barcode-scan path, which already handled both correctly. `selectFoodResult()` correspondingly had nothing to read back out.
+- Fixed to match the barcode path's field coverage exactly, including switching the amount screen's per-100g line from `textContent` to the same styled 🍬 polyols callout the barcode path already renders via `innerHTML`.
+
+## RingConn Sleep Date-Shift Bug — Found, Fixed, Backfilled
+
+- **The bug**: `ringconn.py`'s sleep extractor deliberately shifted any session starting between midnight and 04:00 back to the previous calendar date, on the assumption that a late bedtime belongs to "last night." RingConn's own app doesn't apply this adjustment at all — it labels a session by the raw calendar date of its start time, full stop. Confirmed directly against a real side-by-side comparison: a 01:01 bedtime that RingConn's own app called "Aug 19" was landing in `combined.csv` under "Aug 18."
+- **Scale**: checked against a full year's raw export — 173 of 348 sleep sessions (essentially half) had a pre-04:00 bedtime and were affected. 101 of those involved back-to-back affected nights, creating genuine multi-day cascades, not isolated one-off misdatings.
+- **Fix**: the shift logic removed outright; the extractor now trusts RingConn's own raw date.
+- **Backfill**: a plain pipeline re-run would *not* have corrected the already-wrong dates — the pipeline's field-level source-precedence merge only overwrites a field when a *higher-priority* source provides it, and RingConn re-processing its own already-top-priority field against a date already attributed to "ringconn" doesn't count as higher-priority, even though the underlying value had changed. Corrected instead via a standalone script working directly from the raw export as ground truth, covering all 272 real dates in that export's range: 110 had an actual value correction, 162 were re-confirmed already correct. Deliberately did not touch anything outside the sleep fields, and preserved a genuine, pre-existing, unrelated limitation found along the way — same-day dates with two independent full sleep sessions currently keep only the later one, silently dropping the earlier. Not caused by this bug, not something this backfill changed.
+- **Not yet covered**: anything before the export's own range (19 Aug 2025). Older exports could extend the backfill further back if wanted.
+
+## Inbox Retention Cleanup
+
+- `data/inbox/old/` had no retention policy at all — every processed export accumulated indefinitely. Added an automatic 180-day trim, deliberately far longer than the 7-day backup rotation: these are raw source exports, the only way to re-derive history if a future extractor bug is ever found — exactly what made the RingConn backfill above possible at all. A short retention here would have made that impossible for anything older than the window.
+
+## Known Outstanding Items
+
+- v3.10.472–499 not individually documented (see note at top)
+- RingConn sleep backfill only covers 19 Aug 2025 onward — older history not yet corrected
+- Same-day multi-session dates (RingConn) silently keep only the later session — pre-existing, unrelated to the date-shift fix, not yet addressed
+- A `bump_and_deploy.sh` version-revert was observed once mid-session (deployed v3.10.508 briefly reverted to v3.10.499 in the working tree before the next deploy) — root cause never identified; recurrence would be worth catching live with a `stat` timestamp check immediately before and after the deploy script runs
+- AI photo-reading occasionally misreading polyols rows on certain label layouts remains a known, deliberately deprioritized issue — affected products are being recorded manually in the meantime
+
 # MaxedHealth Changelog — Phase 17 (v3.10.466 – v3.10.471)
 
 Continuation of the same session, spanning three threads: a genuinely useful debugging tool built specifically to solve a real, previously stuck device (Jill's), a long-standing structural bug finally caught by that same tool, and a substantial two-part feature (personalised walking effort, then real trend-based auto-adjustment) that grew out of what started as a simple question about pace classification.
