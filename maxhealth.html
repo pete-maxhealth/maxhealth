@@ -4362,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.504</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.505</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5140,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.504'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.505'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5796,7 +5796,7 @@ function useFuzzyLibraryMatch() {
   const libMatch = pending.match;
   const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
   food._per100g = libMatch.per100g === true;
-  food._portionG = parseFloat(libMatch.portion) || 0;
+  food._portionG = _extractGramsFromAmount(libMatch.portion || '');
   window._pendingMealFoods = [food];
   window._pendingMealText = libMatch.name;
   showMealPreview([food], libMatch.name, 'From library — values locked. Adjust amount if needed.');
@@ -5835,7 +5835,7 @@ function useLibrarySubstitute(index) {
   window._pendingSubstitutes = null;
   const food = { name: sub.name, kcal: sub.kcal, protein: sub.protein, fat: sub.fat||0, carbs: sub.carbs, amount: sub.portion || '100g' };
   food._per100g = sub.per100g === true;
-  food._portionG = parseFloat(sub.portion) || 0;
+  food._portionG = _extractGramsFromAmount(sub.portion || '');
   window._pendingMealFoods = [food];
   window._pendingMealText = sub.name;
   showMealPreview([food], sub.name, 'Substituted from your library — values locked. Adjust amount if needed.');
@@ -5858,7 +5858,7 @@ function useLibraryChoice(index) {
   // but silently doing nothing.
   const food = { name: choice.name, kcal: choice.kcal, protein: choice.protein, fat: choice.fat||0, carbs: choice.carbs, amount: choice.portion || '100g' };
   food._per100g = choice.per100g === true;
-  food._portionG = parseFloat(choice.portion) || 0;
+  food._portionG = _extractGramsFromAmount(choice.portion || '');
   window._pendingMealFoods = [food];
   window._pendingMealText = choice.name;
   showMealPreview([food], choice.name, 'From library — values locked. Adjust amount if needed.');
@@ -6793,7 +6793,7 @@ function selectLibraryDefault(index) {
   };
   document.getElementById('libraryPortionModal').remove();
   food._per100g = f.per100g === true; // flag whether values are per-100g or per-portion
-  food._portionG = parseFloat(f.portion) || 0; // original portion in grams
+  food._portionG = _extractGramsFromAmount(f.portion || ''); // original portion, only if genuinely gram/ml-based
   showMealPreview([food], f.name, `From library (${baseLabel})`);
   switchTabById('chat');
 }
@@ -12951,7 +12951,14 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     // Show preview so user can adjust portion before logging
     const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
     food._per100g = libMatch.per100g === true;
-    food._portionG = parseFloat(libMatch.portion) || 0;
+    // Was raw parseFloat(libMatch.portion) - for a saved MEAL, portion is
+    // '1 serving' (see showSaveMealDialog), and parseFloat happily extracts
+    // "1" from that string with no regard for what follows, treating a
+    // whole multi-ingredient meal's total macros as if they were per SINGLE
+    // GRAM. _extractGramsFromAmount only matches a number genuinely
+    // followed by g/kg/ml/l, so '1 serving' correctly yields 0 (no reliable
+    // mass) instead of a wildly wrong 1.
+    food._portionG = _extractGramsFromAmount(libMatch.portion || '');
     window._pendingMealFoods = [food];
     window._pendingMealText = libMatch.name;
     window._pendingMealMessage = 'From library — values locked. Adjust amount if needed.';
@@ -14226,7 +14233,7 @@ function renderMealPreview() {
     // food's real portion. Typing a "corrected" number in that case will scale
     // already-correct values incorrectly, so flag it rather than let it happen silently.
     if (f === foods[0] && f._baseGramsIsGuess) {
-      warnings.push(`⚠ ${f.name}: couldn't find a real weight/volume for this item — the Amount box is a guess (100g). If these values are already correct for the whole item as logged, leave Amount alone rather than "correcting" it, or it'll scale incorrectly.`);
+      warnings.push(`⚠ ${f.name}: couldn't find a real weight/volume for this item — the Amount box is a guess (${baseGrams}g). If these values are already correct for the whole item as logged, leave Amount alone rather than "correcting" it, or it'll scale incorrectly.`);
     }
 
     // A food's macros literally cannot outweigh the food itself — this is a hard
@@ -14265,7 +14272,18 @@ function renderMealPreview() {
   // the per-100g values are real, but 100g is a placeholder, not a guess at
   // what was actually eaten. Flag it plainly and offer the AI estimate right
   // here, rather than the old separate pre-flight bubble.
-  const amountUnconfirmed = foods.length === 1 && (f0._amountUnconfirmed || f0._baseGramsIsGuess);
+  // Deliberately checks _amountUnconfirmed ONLY, not _baseGramsIsGuess too —
+  // those are different things. _amountUnconfirmed means genuine per-100g
+  // label data with no stated grams (this note and the Estimate button are
+  // both correct there). _baseGramsIsGuess just means no numeric size was
+  // found anywhere for the scaling baseline - true for plenty of non-label
+  // items too (e.g. a saved multi-item meal matched from the library, whose
+  // stored portion is "1 serving", not a gram figure). Those items' values
+  // are NOT per-100g and _per100gBase doesn't exist, so this note and the
+  // Estimate button (which requires _per100gBase) would both be wrong here.
+  // The generic no-size-found case already gets its own accurate warning
+  // from the warnings list below ("couldn't find a real weight/volume...").
+  const amountUnconfirmed = foods.length === 1 && f0._amountUnconfirmed;
   // Distinct from the above: the AI DID fill in a gram figure, but its own
   // message shows it was guessing (an assumed serving, an unanswered
   // "whole can or half?" question, etc) rather than something the user
