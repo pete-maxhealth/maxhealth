@@ -4362,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.506</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.507</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5140,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.506'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.507'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -18147,6 +18147,29 @@ function editHistEntry(dayIdx, entryIdx) {
   const el = document.getElementById(`hist-entry-${dayIdx}-${entryIdx}`);
   if (!el || el.querySelector('.hist-edit-form')) return;
 
+  // Same itemized editor as Today's log — see editLogEntry() for the full
+  // rationale. History had ZERO items[] awareness at all before this (worse
+  // than Today's old single-item-only sync), so this closes that gap too.
+  if (Array.isArray(entry.items) && entry.items.length > 1) {
+    const key = `${dayIdx}-${entryIdx}`;
+    window._histEditWorkingItems = window._histEditWorkingItems || {};
+    window._histEditWorkingItems[key] = entry.items.map(it => {
+      const copy = { ...it };
+      const amtStr = (it.amount || '').toLowerCase();
+      let baseGrams = _extractGramsFromAmount(amtStr);
+      if (!baseGrams) {
+        const nameMatch = (it.name || '').match(/(\d+(?:\.\d+)?)\s*(ml|g|kg|l)\b/i);
+        if (nameMatch) baseGrams = parseFloat(nameMatch[1]);
+      }
+      copy._base = baseGrams > 0
+        ? { grams: baseGrams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+        : null;
+      return copy;
+    });
+    renderHistEditItemsForm(dayIdx, entryIdx, entry);
+    return;
+  }
+
   const form = document.createElement('div');
   form.className = 'hist-edit-form';
   form.style.cssText = 'padding:8px 0;display:flex;flex-direction:column;gap:6px;';
@@ -18181,6 +18204,215 @@ function editHistEntry(dayIdx, entryIdx) {
 function cancelHistEdit(key) {
   const form = document.querySelector(`#hist-entry-${key} .hist-edit-form`);
   if (form) form.remove();
+  if (window._histEditWorkingItems) delete window._histEditWorkingItems[key];
+}
+
+// ── Per-ingredient editor for multi-item History entries ────────────────
+// Mirrors Today's renderLogEditItemsForm/renderLogEditItemsList/
+// updateLogEditItem/saveLogEditItems exactly — same staging contract
+// (edits live in window._histEditWorkingItems[key] until Save, discarded
+// on Cancel), same amount-driven auto-scale from a captured baseline, same
+// bare-number-means-grams fallback. Kept as a parallel implementation
+// rather than sharing functions directly since History entries are
+// addressed by day+entry index, not a single todayLog id — merging the two
+// into one generic function was judged not worth the added indirection for
+// this pass.
+function renderHistEditItemsForm(dayIdx, entryIdx, entry) {
+  const key = `${dayIdx}-${entryIdx}`;
+  const el = document.getElementById(`hist-entry-${key}`);
+  if (!el) return;
+  const existing = el.querySelector('.hist-edit-form');
+  if (existing) existing.remove();
+
+  const form = document.createElement('div');
+  form.className = 'hist-edit-form';
+  form.id = `hist-edit-form-${key}`;
+  form.style.cssText = 'padding:8px 0;display:flex;flex-direction:column;gap:6px;';
+  form.innerHTML = `
+    <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;">EDIT ENTRY — INGREDIENTS</div>
+    <input id="hedit-desc-${key}" class="modal-input" value="${entry.description}" style="font-size:12px;padding:6px 10px;">
+    <div id="hist-edit-items-${key}"></div>
+    <button class="modal-btn" style="font-size:11px;padding:6px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addHistEditItem('${key}')">+ Add ingredient</button>
+    <div id="hist-edit-total-${key}" style="font-size:11px;color:var(--text3);padding:3px 0;"></div>
+    <div style="display:flex;gap:6px;">
+      <button class="modal-btn" style="flex:1;font-size:11px;padding:6px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteHistEntry(${dayIdx},${entryIdx})">Delete</button>
+      <button class="modal-btn cancel" style="flex:1;font-size:11px;padding:6px;" onclick="cancelHistEdit('${key}')">Cancel</button>
+      <button class="modal-btn confirm-new" style="flex:2;font-size:11px;padding:6px;" onclick="saveHistEditItems(${dayIdx},${entryIdx})">Save</button>
+    </div>`;
+  el.appendChild(form);
+  renderHistEditItemsList(key);
+}
+
+function renderHistEditItemsList(key) {
+  const container = document.getElementById(`hist-edit-items-${key}`);
+  if (!container) return;
+  const items = (window._histEditWorkingItems && window._histEditWorkingItems[key]) || [];
+  container.innerHTML = items.map((it, idx) => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 8px;margin-bottom:5px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:5px;">
+        <input value="${it.name || ''}" oninput="updateHistEditItem('${key}',${idx},'name',this.value)" class="modal-input" style="flex:1;font-size:11px;padding:4px 6px;" placeholder="Name">
+        <input id="hist-edit-amt-${key}-${idx}" value="${it.amount || ''}" oninput="updateHistEditItem('${key}',${idx},'amount',this.value)" class="modal-input" style="width:60px;font-size:11px;padding:4px 6px;" placeholder="e.g. 150g">
+        <button onclick="removeHistEditItem('${key}',${idx})" title="Remove" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;">
+        <div><div style="font-size:8px;color:var(--text3);">KCAL</div><input id="hist-edit-kcal-${key}-${idx}" type="number" value="${it.kcal||0}" oninput="updateHistEditItem('${key}',${idx},'kcal',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
+        <div><div style="font-size:8px;color:var(--green);">PROT g</div><input id="hist-edit-prot-${key}-${idx}" type="number" step="0.1" value="${it.protein||0}" oninput="updateHistEditItem('${key}',${idx},'protein',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
+        <div><div style="font-size:8px;color:#a78bfa;">FAT g</div><input id="hist-edit-fat-${key}-${idx}" type="number" step="0.1" value="${it.fat||0}" oninput="updateHistEditItem('${key}',${idx},'fat',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
+        <div><div style="font-size:8px;color:var(--yellow);">CARBS g</div><input id="hist-edit-carb-${key}-${idx}" type="number" step="0.1" value="${it.carbs||0}" oninput="updateHistEditItem('${key}',${idx},'carbs',this.value)" class="modal-input" style="font-size:12px;padding:4px 5px;"></div>
+      </div>
+      <div id="hist-edit-scalenote-${key}-${idx}" style="font-size:9px;color:var(--text3);margin-top:3px;">${it._base ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
+    </div>
+  `).join('');
+  updateHistEditTotalLine(key);
+}
+
+function updateHistEditItem(key, idx, field, value) {
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items || !items[idx]) return;
+  const it = items[idx];
+  const note = document.getElementById(`hist-edit-scalenote-${key}-${idx}`);
+
+  if (field === 'name') {
+    it.name = value;
+    return;
+  }
+
+  if (field === 'amount') {
+    it.amount = value;
+    if (!it._base) return;
+    const trimmed = value.trim();
+    const newGrams = /^\d+(\.\d+)?$/.test(trimmed) ? parseFloat(trimmed) : _extractGramsFromAmount(trimmed.toLowerCase());
+    if (!newGrams || newGrams <= 0) {
+      if (note) note.textContent = 'Type a number + unit (e.g. 150g) to auto-scale the macros.';
+      return;
+    }
+    const factor = newGrams / it._base.grams;
+    it.kcal    = Math.round(it._base.kcal    * factor);
+    it.protein = Math.round(it._base.protein * factor * 10) / 10;
+    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
+    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
+    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
+    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    const kcalEl = document.getElementById(`hist-edit-kcal-${key}-${idx}`);
+    const protEl = document.getElementById(`hist-edit-prot-${key}-${idx}`);
+    const fatEl  = document.getElementById(`hist-edit-fat-${key}-${idx}`);
+    const carbEl = document.getElementById(`hist-edit-carb-${key}-${idx}`);
+    if (kcalEl) kcalEl.value = it.kcal;
+    if (protEl) protEl.value = it.protein;
+    if (fatEl)  fatEl.value  = it.fat;
+    if (carbEl) carbEl.value = it.carbs;
+    if (note) note.textContent = `Scaled from ${it._base.grams}g to ${newGrams}g (${Math.round(factor*100)}%)`;
+    updateHistEditTotalLine(key);
+    return;
+  }
+
+  const n = parseFloat(value);
+  it[field] = isNaN(n) ? 0 : n;
+  updateHistEditTotalLine(key);
+}
+
+function removeHistEditItem(key, idx) {
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items) return;
+  if (items.length <= 1) {
+    showToast('An entry needs at least one ingredient — use Delete to remove the whole entry instead.');
+    return;
+  }
+  items.splice(idx, 1);
+  renderHistEditItemsList(key);
+}
+
+function addHistEditItem(key) {
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items) return;
+  items.push({ name: '', amount: '', kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  renderHistEditItemsList(key);
+  setTimeout(() => {
+    const container = document.getElementById(`hist-edit-items-${key}`);
+    const rows = container ? container.children : null;
+    const lastRow = rows && rows[rows.length - 1];
+    const nameInput = lastRow ? lastRow.querySelector('input') : null;
+    if (nameInput) nameInput.focus();
+  }, 50);
+}
+
+function updateHistEditTotalLine(key) {
+  const items = (window._histEditWorkingItems && window._histEditWorkingItems[key]) || [];
+  const t = items.reduce((a, i) => ({
+    kcal:    a.kcal    + (parseFloat(i.kcal)    || 0),
+    protein: a.protein + (parseFloat(i.protein) || 0),
+    fat:     a.fat     + (parseFloat(i.fat)     || 0),
+    carbs:   a.carbs   + (parseFloat(i.carbs)   || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  const el = document.getElementById(`hist-edit-total-${key}`);
+  if (el) el.innerHTML = `Total: <strong style="color:var(--text);">${Math.round(t.kcal)}kcal · ${Math.round(t.protein*10)/10}g P · ${Math.round(t.fat*10)/10}g F · ${Math.round(t.carbs*10)/10}g C</strong>`;
+}
+
+function saveHistEditItems(dayIdx, entryIdx) {
+  const day = state.history[dayIdx];
+  if (!day) return;
+  const entry = day.log[entryIdx];
+  if (!entry) return;
+  const key = `${dayIdx}-${entryIdx}`;
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items || !items.length) { showToast('Need at least one ingredient'); return; }
+
+  const sanitised = sanitiseFatValues(items.map(it => ({
+    name: (it.name || '').trim() || 'Ingredient',
+    amount: it.amount || '',
+    kcal: parseFloat(it.kcal) || 0,
+    protein: parseFloat(it.protein) || 0,
+    fat: parseFloat(it.fat) || 0,
+    carbs: parseFloat(it.carbs) || 0,
+    ...(it.fibre != null ? { fibre: it.fibre } : {}),
+    ...(it.polyols != null ? { polyols: it.polyols } : {}),
+  })));
+  const corrections = [];
+  sanitised.forEach(s => {
+    if (s._carbsAutoCorrected) corrections.push(`${s.name}: carbs ${s._carbsAutoCorrectedFrom}g → 0g (plain meat/fish has none)`);
+    if (s._fatAutoCorrected) corrections.push(`${s.name}: fat ${s._fatAutoCorrectedFrom}g → ${s.fat}g`);
+    if (s._kcalAtwaterCorrected) corrections.push(`${s.name}: kcal ${s._kcalAtwaterCorrectedFrom} → ${s.kcal}`);
+  });
+
+  const desc = document.getElementById(`hedit-desc-${key}`)?.value.trim();
+  entry.description = desc || entry.description;
+  entry.items = sanitised;
+
+  const totals = sanitised.reduce((a, i) => ({
+    kcal:    a.kcal    + (i.kcal    || 0),
+    protein: a.protein + (i.protein || 0),
+    fat:     a.fat     + (i.fat     || 0),
+    carbs:   a.carbs   + (i.carbs   || 0),
+    fibre:   (a.fibre   || 0) + (i.fibre   || 0),
+    polyols: (a.polyols || 0) + (i.polyols || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+  entry.kcal    = Math.round(totals.kcal);
+  entry.protein = Math.round(totals.protein * 10) / 10;
+  entry.fat     = Math.round(totals.fat * 10) / 10;
+  entry.carbs   = Math.round(totals.carbs * 10) / 10;
+  if (totals.fibre)   entry.fibre   = Math.round(totals.fibre * 10) / 10;
+  if (totals.polyols) entry.polyols = Math.round(totals.polyols * 10) / 10;
+
+  // Recalculate day totals from log — same reduce pattern already used by
+  // saveHistEntry/deleteHistEntry, so this stays consistent with them.
+  day.totals = day.log.reduce((acc, e) => ({
+    kcal:    acc.kcal    + (e.kcal    || 0),
+    protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
+    fat:     Math.round((acc.fat     + (e.fat     || 0)) * 10) / 10,
+    carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
+    fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+    polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+
+  delete window._histEditWorkingItems[key];
+  saveState();
+  renderHistory();
+
+  if (corrections.length) {
+    showToast(`Entry updated — ${corrections.join('; ')}`, null, null, 4500);
+  } else {
+    showToast('Entry updated ✓');
+  }
 }
 
 function saveHistEntry(dayIdx, entryIdx) {
@@ -18220,6 +18452,7 @@ function deleteHistEntry(dayIdx, entryIdx) {
   const entryName = day.log[entryIdx].name || 'this entry';
   appConfirm(`Delete "${entryName}"?`, () => {
     day.log.splice(entryIdx, 1);
+    if (window._histEditWorkingItems) delete window._histEditWorkingItems[`${dayIdx}-${entryIdx}`];
     day.totals = day.log.reduce((acc, e) => ({
       kcal:    acc.kcal    + (e.kcal    || 0),
       protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
