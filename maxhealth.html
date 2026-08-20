@@ -4362,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.503</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.504</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5140,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.503'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.504'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -16976,7 +16976,26 @@ function editLogEntry(id) {
   // one-ingredient entry adds nothing.
   if (Array.isArray(entry.items) && entry.items.length > 1) {
     window._logEditWorkingItems = window._logEditWorkingItems || {};
-    window._logEditWorkingItems[id] = entry.items.map(it => ({ ...it }));
+    window._logEditWorkingItems[id] = entry.items.map(it => {
+      const copy = { ...it };
+      // Baseline for amount-driven auto-scaling — same approach as the
+      // pre-log preview's editPreviewItem()/scaleEditPreviewAmount(): a
+      // numeric mass parsed from the amount string first, falling back to
+      // the name (e.g. "440ml can"), captured once when the editor opens so
+      // repeated amount edits scale from the same original point rather
+      // than compounding. null when no reliable size exists anywhere —
+      // scaling is skipped rather than guessed in that case.
+      const amtStr = (it.amount || '').toLowerCase();
+      let baseGrams = _extractGramsFromAmount(amtStr);
+      if (!baseGrams) {
+        const nameMatch = (it.name || '').match(/(\d+(?:\.\d+)?)\s*(ml|g|kg|l)\b/i);
+        if (nameMatch) baseGrams = parseFloat(nameMatch[1]);
+      }
+      copy._base = baseGrams > 0
+        ? { grams: baseGrams, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 }
+        : null;
+      return copy;
+    });
     renderLogEditItemsForm(id, entry);
     return;
   }
@@ -17072,15 +17091,16 @@ function renderLogEditItemsList(id) {
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
         <input value="${it.name || ''}" oninput="updateLogEditItem(${id},${idx},'name',this.value)" class="modal-input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="Name">
-        <input value="${it.amount || ''}" oninput="updateLogEditItem(${id},${idx},'amount',this.value)" class="modal-input" style="width:70px;font-size:12px;padding:5px 8px;" placeholder="Amount">
+        <input id="log-edit-amt-${id}-${idx}" value="${it.amount || ''}" oninput="updateLogEditItem(${id},${idx},'amount',this.value)" class="modal-input" style="width:70px;font-size:12px;padding:5px 8px;" placeholder="e.g. 150g">
         <button onclick="removeLogEditItem(${id},${idx})" title="Remove" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
-        <div><div style="font-size:9px;color:var(--text3);">KCAL</div><input type="number" value="${it.kcal||0}" oninput="updateLogEditItem(${id},${idx},'kcal',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
-        <div><div style="font-size:9px;color:var(--green);">PROT g</div><input type="number" step="0.1" value="${it.protein||0}" oninput="updateLogEditItem(${id},${idx},'protein',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
-        <div><div style="font-size:9px;color:#a78bfa;">FAT g</div><input type="number" step="0.1" value="${it.fat||0}" oninput="updateLogEditItem(${id},${idx},'fat',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
-        <div><div style="font-size:9px;color:var(--yellow);">CARBS g</div><input type="number" step="0.1" value="${it.carbs||0}" oninput="updateLogEditItem(${id},${idx},'carbs',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:var(--text3);">KCAL</div><input id="log-edit-kcal-${id}-${idx}" type="number" value="${it.kcal||0}" oninput="updateLogEditItem(${id},${idx},'kcal',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:var(--green);">PROT g</div><input id="log-edit-prot-${id}-${idx}" type="number" step="0.1" value="${it.protein||0}" oninput="updateLogEditItem(${id},${idx},'protein',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:#a78bfa;">FAT g</div><input id="log-edit-fat-${id}-${idx}" type="number" step="0.1" value="${it.fat||0}" oninput="updateLogEditItem(${id},${idx},'fat',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:var(--yellow);">CARBS g</div><input id="log-edit-carb-${id}-${idx}" type="number" step="0.1" value="${it.carbs||0}" oninput="updateLogEditItem(${id},${idx},'carbs',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
       </div>
+      <div id="log-edit-scalenote-${id}-${idx}" style="font-size:10px;color:var(--text3);margin-top:4px;">${it._base ? `Editing Amount auto-scales macros from ${it._base.grams}g` : 'No reliable size in Amount — macros won\'t auto-scale; edit them manually if needed.'}</div>
     </div>
   `).join('');
   updateLogEditTotalLine(id);
@@ -17089,12 +17109,49 @@ function renderLogEditItemsList(id) {
 function updateLogEditItem(id, idx, field, value) {
   const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
   if (!items || !items[idx]) return;
-  if (field === 'name' || field === 'amount') {
-    items[idx][field] = value;
-  } else {
-    const n = parseFloat(value);
-    items[idx][field] = isNaN(n) ? 0 : n;
+  const it = items[idx];
+  const note = document.getElementById(`log-edit-scalenote-${id}-${idx}`);
+
+  if (field === 'name') {
+    it.name = value;
+    return;
   }
+
+  if (field === 'amount') {
+    it.amount = value;
+    if (!it._base) return; // no reliable baseline captured when the editor opened - don't guess a scale, matches editPreviewItem's same rule
+    const newGrams = _extractGramsFromAmount(value.toLowerCase());
+    if (!newGrams || newGrams <= 0) {
+      if (note) note.textContent = 'Type a number + unit (e.g. 150g) to auto-scale the macros.';
+      return;
+    }
+    const factor = newGrams / it._base.grams;
+    it.kcal    = Math.round(it._base.kcal    * factor);
+    it.protein = Math.round(it._base.protein * factor * 10) / 10;
+    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
+    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
+    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
+    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    const kcalEl = document.getElementById(`log-edit-kcal-${id}-${idx}`);
+    const protEl = document.getElementById(`log-edit-prot-${id}-${idx}`);
+    const fatEl  = document.getElementById(`log-edit-fat-${id}-${idx}`);
+    const carbEl = document.getElementById(`log-edit-carb-${id}-${idx}`);
+    if (kcalEl) kcalEl.value = it.kcal;
+    if (protEl) protEl.value = it.protein;
+    if (fatEl)  fatEl.value  = it.fat;
+    if (carbEl) carbEl.value = it.carbs;
+    if (note) note.textContent = `Scaled from ${it._base.grams}g to ${newGrams}g (${Math.round(factor*100)}%)`;
+    updateLogEditTotalLine(id);
+    return;
+  }
+
+  // Direct macro-field edits (KCAL/PROT/FAT/CARBS typed by hand) are
+  // one-off manual overrides — same convention as editPreviewItem(): they
+  // do NOT reset _base, so a later Amount edit still scales from the
+  // ORIGINAL captured baseline, not from whatever was just hand-typed.
+  // Keeps both editors behaving identically for the same interaction.
+  const n = parseFloat(value);
+  it[field] = isNaN(n) ? 0 : n;
   updateLogEditTotalLine(id);
 }
 
