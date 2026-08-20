@@ -4362,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.501</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.502</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5140,7 +5140,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.501'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.502'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13228,7 +13228,14 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
             _per100gBase: p, _amountUnconfirmed: true,
           };
         }
-        return it; // meal-path items already carry final values, untouched
+        // Meal-path items (a plate of food, not a label) already carry final
+        // values with no per-100g data to scale from — but they can carry the
+        // same kind of live ambiguity (the system prompt's own AMBIGUITY RULE:
+        // "pasta vs cooked onions/cabbage, rice vs cauliflower rice, cream
+        // sauce vs yoghurt — do not guess, flag it and ask"). That question
+        // lands in result.message just like the label-path case, so it needs
+        // the same flag even though there's no grams/estimate mechanism here.
+        return { ...it, ...(messageAsksAboutAmount ? { _aiAssumedAmount: true } : {}) };
       });
       const mealItem = {
         name: text.length <= 50 ? text : text.slice(0,47) + '...',
@@ -16940,6 +16947,19 @@ function editLogEntry(id) {
   const entryEl = document.getElementById('log-entry-' + id);
   if (!entryEl || entryEl.querySelector('.log-edit-form')) return; // already open
 
+  // Multi-item entries (e.g. "Vegetable Base Mix + Chicken + 4 more") get a
+  // real per-ingredient editor — swap one component, remove one, add one —
+  // rather than the aggregate-only form below, which had no way to touch
+  // individual ingredients at all. Single-item entries keep the existing
+  // form unchanged since it already works and is well-tested; itemising a
+  // one-ingredient entry adds nothing.
+  if (Array.isArray(entry.items) && entry.items.length > 1) {
+    window._logEditWorkingItems = window._logEditWorkingItems || {};
+    window._logEditWorkingItems[id] = entry.items.map(it => ({ ...it }));
+    renderLogEditItemsForm(id, entry);
+    return;
+  }
+
   const form = document.createElement('div');
   form.className = 'log-edit-form';
   form.style.cssText = 'padding:8px 0 4px;display:flex;flex-direction:column;gap:8px;';
@@ -16984,6 +17004,191 @@ function editLogEntry(id) {
 function cancelLogEdit(id) {
   const form = document.querySelector('#log-entry-' + id + ' .log-edit-form');
   if (form) form.remove();
+  // Working copy was staged in memory only — discard it, nothing was
+  // written to state.todayLog until Save changes, so Cancel is a true no-op.
+  if (window._logEditWorkingItems) delete window._logEditWorkingItems[id];
+}
+
+// ── Per-ingredient editor for multi-item log entries ────────────────────
+// Edits are staged in window._logEditWorkingItems[id] (a working copy) and
+// only committed to state.todayLog on Save changes — mirrors the existing
+// aggregate form's Save/Cancel contract, so Cancel genuinely discards
+// everything rather than partially applying edits.
+function renderLogEditItemsForm(id, entry) {
+  const entryEl = document.getElementById('log-entry-' + id);
+  if (!entryEl) return;
+  const existing = entryEl.querySelector('.log-edit-form');
+  if (existing) existing.remove();
+
+  const form = document.createElement('div');
+  form.className = 'log-edit-form';
+  form.id = 'log-edit-form-' + id;
+  form.style.cssText = 'padding:8px 0 4px;display:flex;flex-direction:column;gap:8px;';
+  form.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">EDIT ENTRY — INGREDIENTS</div>
+    <input id="edit-desc-${id}" class="modal-input" value="${entry.description}" placeholder="Description" style="font-size:13px;padding:7px 10px;">
+    <div id="log-edit-items-${id}"></div>
+    <button class="modal-btn" style="font-size:12px;padding:7px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addLogEditItem(${id})">+ Add ingredient</button>
+    <div id="log-edit-total-${id}" style="font-size:12px;color:var(--text3);padding:4px 0;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="modal-btn" style="flex:1;font-size:12px;padding:8px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteLogEntry(${id})">Delete</button>
+      <button class="modal-btn cancel" style="flex:1;font-size:12px;padding:8px;" onclick="cancelLogEdit(${id})">Cancel</button>
+      <button class="modal-btn confirm-new" style="flex:2;font-size:12px;padding:8px;" onclick="saveLogEditItems(${id})">Save changes</button>
+    </div>`;
+  entryEl.appendChild(form);
+  renderLogEditItemsList(id);
+}
+
+// Full re-render of the item rows — used when the list shape changes
+// (add/remove), since indices shift. Per-keystroke edits use
+// updateLogEditItem() instead, which updates the working copy and the
+// total line only, so typing in one field doesn't lose focus.
+function renderLogEditItemsList(id) {
+  const container = document.getElementById('log-edit-items-' + id);
+  if (!container) return;
+  const items = (window._logEditWorkingItems && window._logEditWorkingItems[id]) || [];
+  container.innerHTML = items.map((it, idx) => `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
+        <input value="${it.name || ''}" oninput="updateLogEditItem(${id},${idx},'name',this.value)" class="modal-input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="Name">
+        <input value="${it.amount || ''}" oninput="updateLogEditItem(${id},${idx},'amount',this.value)" class="modal-input" style="width:70px;font-size:12px;padding:5px 8px;" placeholder="Amount">
+        <button onclick="removeLogEditItem(${id},${idx})" title="Remove" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
+        <div><div style="font-size:9px;color:var(--text3);">KCAL</div><input type="number" value="${it.kcal||0}" oninput="updateLogEditItem(${id},${idx},'kcal',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:var(--green);">PROT g</div><input type="number" step="0.1" value="${it.protein||0}" oninput="updateLogEditItem(${id},${idx},'protein',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:#a78bfa;">FAT g</div><input type="number" step="0.1" value="${it.fat||0}" oninput="updateLogEditItem(${id},${idx},'fat',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+        <div><div style="font-size:9px;color:var(--yellow);">CARBS g</div><input type="number" step="0.1" value="${it.carbs||0}" oninput="updateLogEditItem(${id},${idx},'carbs',this.value)" class="modal-input" style="font-size:13px;padding:5px 6px;"></div>
+      </div>
+    </div>
+  `).join('');
+  updateLogEditTotalLine(id);
+}
+
+function updateLogEditItem(id, idx, field, value) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items || !items[idx]) return;
+  if (field === 'name' || field === 'amount') {
+    items[idx][field] = value;
+  } else {
+    const n = parseFloat(value);
+    items[idx][field] = isNaN(n) ? 0 : n;
+  }
+  updateLogEditTotalLine(id);
+}
+
+function removeLogEditItem(id, idx) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items) return;
+  // FLAG: an entry with zero ingredients is a different action (delete the
+  // whole entry) — refusing here rather than silently allowing an
+  // empty-items save keeps that distinction explicit instead of producing
+  // a logged entry with no items and 0 macros.
+  if (items.length <= 1) {
+    showToast('An entry needs at least one ingredient — use Delete to remove the whole entry instead.');
+    return;
+  }
+  items.splice(idx, 1);
+  renderLogEditItemsList(id);
+}
+
+function addLogEditItem(id) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items) return;
+  // FLAG: deliberately blank/zeroed, not AI-estimated or copied from
+  // another ingredient — matches the app's zero-drift rule (never guess a
+  // value the user hasn't provided). The user types the real numbers,
+  // same as manual entry anywhere else in the app.
+  items.push({ name: '', amount: '', kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  renderLogEditItemsList(id);
+  setTimeout(() => {
+    const container = document.getElementById('log-edit-items-' + id);
+    const rows = container ? container.children : null;
+    const lastRow = rows && rows[rows.length - 1];
+    const nameInput = lastRow ? lastRow.querySelector('input') : null;
+    if (nameInput) nameInput.focus();
+  }, 50);
+}
+
+function updateLogEditTotalLine(id) {
+  const items = (window._logEditWorkingItems && window._logEditWorkingItems[id]) || [];
+  const t = items.reduce((a, i) => ({
+    kcal:    a.kcal    + (parseFloat(i.kcal)    || 0),
+    protein: a.protein + (parseFloat(i.protein) || 0),
+    fat:     a.fat     + (parseFloat(i.fat)     || 0),
+    carbs:   a.carbs   + (parseFloat(i.carbs)   || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0 });
+  const el = document.getElementById('log-edit-total-' + id);
+  if (el) el.innerHTML = `Total: <strong style="color:var(--text);">${Math.round(t.kcal)}kcal · ${Math.round(t.protein*10)/10}g P · ${Math.round(t.fat*10)/10}g F · ${Math.round(t.carbs*10)/10}g C</strong>`;
+}
+
+function saveLogEditItems(id) {
+  const entry = state.todayLog.find(e => e.id === id);
+  if (!entry) return;
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items || !items.length) { showToast('Need at least one ingredient'); return; }
+
+  // Same plausibility checks used everywhere else in the app — meat-carbs,
+  // under-scaled pure fats — but run PER INGREDIENT here, not just on an
+  // aggregate. This is the actual gap the old aggregate-only edit form had:
+  // a bad edit to one ingredient inside a multi-item meal had nothing
+  // checking it at all.
+  const sanitised = sanitiseFatValues(items.map(it => ({
+    name: (it.name || '').trim() || 'Ingredient',
+    amount: it.amount || '',
+    kcal: parseFloat(it.kcal) || 0,
+    protein: parseFloat(it.protein) || 0,
+    fat: parseFloat(it.fat) || 0,
+    carbs: parseFloat(it.carbs) || 0,
+    ...(it.fibre != null ? { fibre: it.fibre } : {}),
+    ...(it.polyols != null ? { polyols: it.polyols } : {}),
+  })));
+  const corrections = [];
+  sanitised.forEach(s => {
+    if (s._carbsAutoCorrected) corrections.push(`${s.name}: carbs ${s._carbsAutoCorrectedFrom}g → 0g (plain meat/fish has none)`);
+    if (s._fatAutoCorrected) corrections.push(`${s.name}: fat ${s._fatAutoCorrectedFrom}g → ${s.fat}g`);
+    if (s._kcalAtwaterCorrected) corrections.push(`${s.name}: kcal ${s._kcalAtwaterCorrectedFrom} → ${s.kcal}`);
+    if (s._implausibleAmountWarning) corrections.push(`⚠ ${s.name}: ${s.amount} is an unusual portion size — check for a typo`);
+  });
+
+  const desc = document.getElementById('edit-desc-' + id)?.value.trim();
+  entry.description = desc || entry.description;
+  entry.items = sanitised;
+
+  // Aggregate is now DERIVED from items rather than typed into separate
+  // fields — this is the actual structural fix, not just a UI addition:
+  // there's no longer a second place for the totals to drift away from
+  // what's itemised, because there's nowhere else to type them.
+  const totals = sanitised.reduce((a, i) => ({
+    kcal:    a.kcal    + (i.kcal    || 0),
+    protein: a.protein + (i.protein || 0),
+    fat:     a.fat     + (i.fat     || 0),
+    carbs:   a.carbs   + (i.carbs   || 0),
+    fibre:   (a.fibre   || 0) + (i.fibre   || 0),
+    polyols: (a.polyols || 0) + (i.polyols || 0),
+  }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+  entry.kcal    = Math.round(totals.kcal);
+  entry.protein = Math.round(totals.protein * 10) / 10;
+  entry.fat     = Math.round(totals.fat * 10) / 10;
+  entry.carbs   = Math.round(totals.carbs * 10) / 10;
+  if (totals.fibre)   entry.fibre   = Math.round(totals.fibre * 10) / 10;
+  if (totals.polyols) entry.polyols = Math.round(totals.polyols * 10) / 10;
+  // amount/portion-% badge doesn't map cleanly onto a per-ingredient edit
+  // (which ingredient's amount would it track?) — cleared rather than left
+  // stale and misleading against the new totals.
+  delete entry._portionPct;
+
+  delete window._logEditWorkingItems[id];
+  const editForm = document.getElementById('log-edit-form-' + id);
+  if (editForm) editForm.remove();
+  saveState();
+  updateDashboard();
+
+  if (corrections.length) {
+    showToast(`Entry updated — ${corrections.join('; ')}`, null, null, 4500);
+  } else {
+    showToast('Entry updated ✓');
+  }
 }
 
 // Swipe to delete log entries
@@ -17048,6 +17253,7 @@ function _doDeleteLogEntry(id) {
   const idx = state.todayLog.findIndex(e => e.id == id);
   if (idx === -1) { showToast('Entry not found'); return; }
   state.todayLog.splice(idx, 1);
+  if (window._logEditWorkingItems) delete window._logEditWorkingItems[id];
   saveState();
   updateDashboard();
   // Force re-render of log list
