@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.536</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.539</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.536'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.539'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6196,9 +6196,23 @@ function categoriesConflict(catsA, catsB) {
 // protein, which a single auto-detected guess could never express),
 // falling back to the auto-detected categories only when no override has
 // been set.
+//
+// Browse-only additions layered on top of a compound match here - nut
+// butter IS genuinely a fat+protein source and useful to find that way,
+// but detectFoodCategory() itself deliberately does NOT return 'fat'/
+// 'protein' for it, since that function is also what fuzzyFindInLibrary
+// uses for match-disqualification - giving nut butter the same 'fat' tag
+// as dairy butter there would let them fuzzy-match each other again,
+// exactly the false-positive this whole compound-category system was
+// built to prevent in the first place. Kept separate here rather than
+// changed at the source, same reasoning as the standalone MEAT_TYPE_WORDS
+// list: browsing and match-safety have different precision needs.
+const BROWSE_ONLY_CATEGORY_ADDITIONS = { 'nut butter': ['fat', 'protein'] };
 function getItemCategories(item) {
   if (item && Array.isArray(item.categories) && item.categories.length) return item.categories;
-  return detectFoodCategory(((item && item.name) || '').toLowerCase());
+  const base = detectFoodCategory(((item && item.name) || '').toLowerCase());
+  const extra = base.flatMap(c => BROWSE_ONLY_CATEGORY_ADDITIONS[c] || []);
+  return extra.length ? [...new Set([...base, ...extra])] : base;
 }
 // Deliberately separate from CATEGORY_MAP and NOT user-editable via Manage
 // Categories - this serves a stricter, different purpose. CATEGORY_MAP now
@@ -7449,6 +7463,20 @@ function openManageCategoriesModal() {
       </div>
       <span onclick="removeCategoryWord('${word}')" style="cursor:pointer;color:var(--text3);padding:4px 8px;font-size:16px;">×</span>
     </div>`;
+  // Per-item manually-assigned categories (the "egg = dairy + baking" case)
+  // live scattered across individual library items, not in one central
+  // list like CATEGORY_MAP above - so a typo like "diary" has no natural
+  // place to spot or fix it except hunting through items one at a time.
+  // Listing every distinct one actually in use here, with a rename that
+  // applies everywhere at once, is what actually closes that gap.
+  const perItemCats = new Set();
+  loadLibrary().forEach(f => { if (Array.isArray(f.categories)) f.categories.forEach(c => perItemCats.add(c)); });
+  const perItemRow = (cat) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-size:13px;color:var(--text);">${cat}</span>
+      <input id="renameTo-${cat.replace(/[^a-z0-9]/gi,'_')}" list="allKnownCategories" placeholder="rename to…" style="width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 7px;font-size:12px;color:var(--text);">
+      <button onclick="renameLibraryCategoryFromInput('${cat}', 'renameTo-${cat.replace(/[^a-z0-9]/gi,'_')}')" style="padding:5px 9px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;font-size:11px;cursor:pointer;">Rename</button>
+    </div>`;
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Manage Categories</div>
@@ -7464,10 +7492,36 @@ function openManageCategoriesModal() {
         <button onclick="addCategoryWord()" style="padding:8px 14px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add</button>
       </div>
 
+      ${perItemCats.size ? `
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Per-item categories in use (${perItemCats.size})</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Manually assigned on individual items - fix a typo (e.g. "diary" → "dairy") here and it updates every item that has it, rather than hunting for which one.</div>
+      <div style="margin-bottom:20px;">${[...perItemCats].sort().map(perItemRow).join('')}</div>
+      ` : ''}
+
       <button onclick="resetCategoryWords()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;margin-bottom:8px;">Reset to defaults</button>
       <button onclick="document.getElementById('manageCategoriesModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">Close</button>
     </div>`;
   document.body.appendChild(modal);
+}
+
+function renameLibraryCategoryFromInput(oldName, inputId) {
+  const input = document.getElementById(inputId);
+  const newName = (input?.value || '').trim().toLowerCase();
+  if (!newName) { showToast('Type the corrected name first'); return; }
+  const lib = loadLibrary();
+  let changed = 0;
+  lib.forEach(f => {
+    if (!Array.isArray(f.categories)) return;
+    const idx = f.categories.indexOf(oldName);
+    if (idx === -1) return;
+    if (f.categories.includes(newName)) { f.categories.splice(idx, 1); } // already has the target too - just drop the old one, don't duplicate
+    else { f.categories[idx] = newName; }
+    changed++;
+  });
+  if (!changed) { showToast('Nothing found with that category'); return; }
+  saveLibrary(lib);
+  openManageCategoriesModal();
+  showToast(`Renamed "${oldName}" → "${newName}" on ${changed} item${changed>1?'s':''} ✓`);
 }
 
 function addCategoryWord() {
@@ -7516,14 +7570,58 @@ function resetCategoryWords() {
 // express. First manual category added on an item fully takes over from
 // the auto-guess from then on (see getItemCategories) - the auto-guess
 // only ever applied while categories was empty/unset.
+// Simple edit-distance check - catches "diary" vs "dairy" as an
+// almost-certain typo of an existing category, rather than a genuinely new
+// one. Standard Levenshtein distance alone gives "diary"/"dairy" a distance
+// of 2 (two separate substitutions), not 1 - it doesn't know a single
+// adjacent-letter swap is really just one mistake. This adds that
+// transposition check (the Damerau-Levenshtein "optimal string alignment"
+// variant), which correctly scores it as 1, catching the actual typo this
+// was built for rather than silently missing it.
+function _levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, () => new Array(n+1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1]) {
+        dp[i][j] = Math.min(dp[i][j], dp[i-2][j-2] + 1); // adjacent transposition, e.g. "ia" <-> "ai"
+      }
+    }
+  }
+  return dp[m][n];
+}
+
 function addItemCategory(origIdx) {
   const input = document.getElementById('lib-edit-newcat-' + origIdx);
   const cat = (input?.value || '').trim().toLowerCase();
   if (!cat) return;
+  // "Snack" is a meal-SIZE concept, not a food category - it already has its
+  // own dedicated, pinned handling in the meal-suggestion picker. Allowing
+  // it as a per-item category created a real, confirmed duplicate (Snack
+  // appearing twice in the picker: once pinned, once from this assignment).
+  if (cat === 'snack' || cat === 'snacks') {
+    showToast('"Snack" is handled separately, not as a food category - try a real food type instead');
+    return;
+  }
   const lib = loadLibrary();
   if (!lib[origIdx]) return;
   if (!Array.isArray(lib[origIdx].categories)) lib[origIdx].categories = [];
   if (lib[origIdx].categories.includes(cat)) { showToast('Already assigned'); return; }
+  // Catches exactly the "diary" vs "dairy" case before it happens again -
+  // a near-identical existing category name is almost always a typo, not
+  // a genuinely new category. Confirmed once via the input's own dataset,
+  // so tapping Add a second time with the same text proceeds anyway.
+  const known = [...getAllKnownCategoryNames()];
+  const closeMatch = known.find(k => k !== cat && _levenshtein(k, cat) <= 1);
+  if (closeMatch && input.dataset.confirmedTypo !== cat) {
+    input.dataset.confirmedTypo = cat;
+    showToast(`Did you mean "${closeMatch}"? Tap Add again to use "${cat}" anyway`);
+    return;
+  }
+  delete input.dataset.confirmedTypo;
   lib[origIdx].categories.push(cat);
   saveLibrary(lib);
   renderLibrary();
@@ -12259,6 +12357,10 @@ function getLibraryCategoriesInUse() {
   const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
   const found = new Set();
   lib.forEach(f => { getItemCategories(f).forEach(c => found.add(c)); });
+  // "snack"/"snacks" shouldn't appear here even if some item was already
+  // (wrongly) assigned it before this was blocked at the source in
+  // addItemCategory - it would duplicate the pinned Snack option below.
+  found.delete('snack'); found.delete('snacks');
   return [...found].sort();
 }
 
@@ -12452,6 +12554,20 @@ async function suggestMealFromLibrary(kind = 'both') {
                   : _hour < 19  ? 'early evening (dinner/tea time)'
                   :               'late evening (supper/snack time)';
   const isLateEvening = _hour >= 19;
+  // "Snack" tapped/typed explicitly had NO special handling at all before this -
+  // it silently behaved identically to "Either", ignoring the actual request.
+  // Three genuinely separate reasons should all favour snack-sized suggestions,
+  // not just time of day: asking for one outright ("when you fancy one"),
+  // it being late, or - previously missing entirely - being close enough to
+  // today's targets that a full meal doesn't really make sense regardless of
+  // the clock. dayKcalTarget guards divide-by-zero on a fresh/unconfigured day.
+  const dayKcalTarget = t.kcal + activityKcal;
+  const isCloseToTargets = dayKcalTarget > 0 && (remaining.kcal / dayKcalTarget) < 0.2;
+  const isExplicitSnackRequest = kind === 'snack';
+  const shouldFavorSnackSize = isExplicitSnackRequest || isLateEvening || isCloseToTargets;
+  const snackSizeReason = isExplicitSnackRequest ? 'a snack was specifically requested'
+                         : isLateEvening ? "it's late evening"
+                         : `only ${Math.round(remaining.kcal / dayKcalTarget * 100)}% of today's calorie target remains`;
 
   // Session-only memory of what's already been suggested recently, so tapping
   // this button twice in a row doesn't just hand back the same combo again.
@@ -12511,7 +12627,7 @@ ${[['fat', remaining.fat], ['protein', remaining.protein], ['carbs', remaining.c
 
 CURRENT TIME OF DAY: ${timeOfDay}
 Where reasonable, prefer combos/recipes that suit this time of day (e.g. breakfast-style items — cereal, toast, eggs, bagels, jam, marmite, cheese, yoghurt — in the morning; lighter snack-style options in the late evening). This is a preference, not a rule — if the best-fitting items for the remaining macro budget genuinely aren't a natural fit for the time of day, still suggest them rather than forcing a worse macro match just to suit the clock.
-${isLateEvening ? 'It\'s late evening specifically - at least a couple of the suggestions should genuinely be snack-sized (a handful of something, a small combo, not a full plated meal), not just "a smaller version of dinner". A full meal is still fine to include if the remaining budget is large enough that a snack alone wouldn\'t sensibly cover it.' : ''}
+${shouldFavorSnackSize ? `Right now, ${snackSizeReason} - at least a couple of the suggestions should genuinely be snack-sized (a handful of something, a small combo, not a full plated meal), not just "a smaller version of dinner". A full meal is still fine to include if the remaining budget is large enough that a snack alone wouldn't sensibly cover it.` : ''}
 
 ${recentText ? `RECENTLY SUGGESTED (avoid repeating these unless nothing else genuinely fits): ${recentText}\n` : ''}
 WHAT'S ACTUALLY BEEN EATEN TODAY:
@@ -12528,7 +12644,7 @@ Rules:
 - Aim for exactly 5 distinct suggestions, mixing recipes and ingredient-combos as appropriate. Only return fewer than 5 if the library genuinely can't support five reasonably different options that fit the budget — check this properly before giving up, rather than defaulting to fewer.
 - CRITICAL — VARIETY: the 5 suggestions should feel like genuinely different meals, not near-duplicates of each other. Repeating a versatile protein like chicken across 2 of the 5 is completely fine if the actual dish/preparation and fat source differ meaningfully (e.g. chicken + salad vs. chicken in a cream sauce) — the goal is avoiding "same meal, barely reworded" five times over, not forcing artificial diversity for its own sake.
 - PATTERN AWARENESS: use what's actually been eaten today (and yesterday, for lighter context) as a soft signal, not a rule. If today's been entirely savoury, a sweet-leaning option is worth including if one genuinely fits the macros. If today's been mostly small snacks with no proper meal yet, a more substantial combo may suit better than another snack. If something very similar has already been eaten multiple times today, lean toward a different option instead — but never let this override what the remaining macro budget actually allows.
-${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}
+${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}${kind === 'snack' ? '- SNACK REQUESTED: all 5 suggestions should be genuinely snack-sized (a handful, a small combo) rather than full plated meals, even if the remaining budget would technically support something larger - a snack was specifically asked for, not just guidance toward one.' : ''}${!['sweet','savoury','snack','both'].includes(kind) ? `- CATEGORY REQUESTED: the user specifically asked for "${kind}" - every suggestion should prominently feature at least one item whose real categories (listed per item below) include "${kind}", not just loosely relate to it. Still respect the remaining macro budget as the hard limit, and still aim for genuinely varied combos rather than 5 near-identical ways of using the same "${kind}" item.` : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
 - COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.
 - Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
@@ -16136,12 +16252,59 @@ function addBubble(text, type, modifier = '') {
   div.className = `chat-bubble bubble-${type}${modifier ? ' ' + modifier : ''}`;
   if (type === 'system') {
     div.innerHTML = '<div class="bubble-label">MAXEDHEALTH</div>' + text.replace(/\n/g, '<br>');
+    // Read-aloud for genuinely lengthy AI/system responses - the "Ask AI"
+    // case specifically asked for, plus keto-status/remaining-macro replies
+    // and anything else that flows through this one shared function. Short
+    // confirmations ("✓ Logged") don't get one - not worth a button tap to
+    // hear four words read out. Uses the browser's own built-in
+    // speechSynthesis (Web Speech API) - works fully offline, no API call
+    // or cost, unlike everything else AI-related in this app.
+    if (text.length > 60) {
+      const speakBtn = document.createElement('span');
+      speakBtn.className = 'bubble-speak-btn';
+      speakBtn.textContent = '🔊';
+      speakBtn.title = 'Read this aloud';
+      speakBtn.style.cssText = 'display:inline-block;margin-left:8px;cursor:pointer;font-size:13px;opacity:0.7;vertical-align:middle;';
+      speakBtn.onclick = () => toggleSpeakBubble(speakBtn, text);
+      div.querySelector('.bubble-label').appendChild(speakBtn);
+    }
   } else {
     div.textContent = text;
   }
   scroll.appendChild(div);
   scroll.scrollTop = scroll.scrollHeight;
   return div;
+}
+
+// Strips markdown/HTML-ish characters that would otherwise be read aloud
+// literally ("hashtag", "asterisk asterisk") - the bubble text itself is
+// plain text already (addBubble does the \n->br conversion separately,
+// after this runs), but AI responses sometimes include stray markdown
+// characters despite being asked not to.
+function _cleanTextForSpeech(text) {
+  return text.replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// One shared "currently speaking" reference so starting a new one always
+// correctly stops whatever was already playing and resets ITS button back
+// to the play icon - without this, tapping a second bubble's speaker while
+// the first is still reading would leave the first button stuck showing
+// "stop" even though it's no longer actually playing.
+let _currentSpeakBtn = null;
+function toggleSpeakBubble(btn, text) {
+  if (!('speechSynthesis' in window)) { showToast('Read-aloud isn\'t supported on this browser'); return; }
+  const wasThisButton = _currentSpeakBtn === btn;
+  window.speechSynthesis.cancel(); // always stop whatever's currently playing first
+  if (_currentSpeakBtn) { _currentSpeakBtn.textContent = '🔊'; _currentSpeakBtn.style.opacity = '0.7'; }
+  if (wasThisButton) { _currentSpeakBtn = null; return; } // second tap on the same bubble = just stop
+  const utterance = new SpeechSynthesisUtterance(_cleanTextForSpeech(text));
+  utterance.onend = utterance.onerror = () => {
+    btn.textContent = '🔊'; btn.style.opacity = '0.7';
+    if (_currentSpeakBtn === btn) _currentSpeakBtn = null;
+  };
+  btn.textContent = '⏹'; btn.style.opacity = '1';
+  _currentSpeakBtn = btn;
+  window.speechSynthesis.speak(utterance);
 }
 
 // Properly formatted recipe card instead of a wall of unstructured prose — the
