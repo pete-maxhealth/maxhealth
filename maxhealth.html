@@ -2917,6 +2917,7 @@
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openLibraryVoiceModal()">🎤 Voice add</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openDuplicateScanModal()">🔍 Find Duplicates</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openCategoryPreviewModal()">🏷️ Preview Categories</button>
+      <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="copyCategoryUpdateRequest()">📋 Copy Category Update Request</button>
     </div>
 
     <div id="dupeScanBanner"></div>
@@ -4369,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.525</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.527</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5167,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.525'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.527'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5984,7 +5985,7 @@ const LIBRARY_KNOWN_BRANDS = ['asda','tesco',"tesco's",'sainsburys','sainsbury',
 function canonicalBrand(matched) {
   return matched.replace(/'s$/, '').replace(/s$/, '');
 }
-const MEAT_TYPE_WORDS = ['chicken','beef','pork','lamb','turkey','duck','venison','salmon','tuna','cod','haddock','prawn','prawns','bacon','ham','gammon'];
+const MEAT_TYPE_WORDS = ['chicken','beef','pork','lamb','turkey','duck','venison','salmon','tuna','cod','haddock','prawn','prawns','bacon','ham','gammon','steak','salami','chorizo','kebab','pate','kabanos','anchovy','anchovies'];
 function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // Same problem as brand/meat-type, one level broader: "Warburtons white bread"
 // and "white cheese (triangular slices)" share two generic descriptor words
@@ -5994,6 +5995,23 @@ function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // are fundamentally different foods regardless of how many descriptor words
 // happen to line up, exactly like a mismatched brand or meat type.
 const FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','pasta','potato','potatoes','butter','cream','flour','oats','cereal','crisps','chocolate','biscuit','biscuits','cracker','crackers','sausage','sausages','mince','nuts',
+  // Extended against a real 102-item "Uncategorized" list from actual
+  // library data, grouped by food type. Meat/fish-specific words (steak,
+  // salami, anchovy etc) went into MEAT_TYPE_WORDS instead - fuzzyFindInLibrary
+  // already checks that list separately for its own meat-mismatch guard, so
+  // duplicating them here would be redundant, not additive.
+  'egg','eggs',
+  'parmesan','mascarpone','babybel','mozzarella', // cheese types whose names don't literally contain "cheese"
+  'mushroom','mushrooms','lettuce','cabbage','kale','spinach','olive','olives','cucumber','celery','cauliflower','broccoli','carrot','carrots','pea','peas','beetroot','onion','onions','tomato','tomatoes','vegetable','vegetables',
+  'berry','berries','blackcurrant','blackcurrants','strawberry','strawberries','raspberry','raspberries','blueberry','blueberries','orange','oranges',
+  'seed','seeds',
+  'oil','coconut','cocoa',
+  'vanilla','erythritol',
+  'whey',
+  'jam','ketchup','mustard','dressing','puree','marmite','kimchi','gravy','sauce',
+  'bagel','bagels','wrap','wraps',
+  'lager','wine','rum','beer',
+  'garlic','chilli','chili','cheddar','spaghetti',
   // Bare seasonings/condiments — a "1 pinch salt" or "1 pinch black pepper"
   // recipe ingredient has no brand, meat type, or main-dish category to
   // anchor against, so it fell through every existing safeguard and matched
@@ -6003,12 +6021,15 @@ const FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','
   // product flavoured WITH cracked black pepper, since both words are
   // genuinely, exactly present in its name too - stricter word-matching
   // alone couldn't have caught that one, only correct categorisation could.
-  // Deliberately appended at the END of this array (not the start) - array
+  // Deliberately kept at the END of this array (not the start) - array
   // order is the priority order for detectFoodCategory's first-match search,
   // so a product like "cracked black pepper sausages" still correctly
   // resolves to its real category (sausage, found earlier in the array)
   // rather than being miscategorised as a seasoning by an incidental
-  // flavour descriptor in its own name.
+  // flavour descriptor in its own name. Same reasoning extends to "sauce"
+  // just above and everything else added here - all appended before this
+  // block, never after, so this ordering guarantee holds for future
+  // additions too.
   'salt','pepper','sugar','vinegar','honey'];
 // Compound terms that would otherwise be silently swallowed by a shorter
 // generic category word - "peanut butter" contains the substring "butter",
@@ -7198,6 +7219,28 @@ function openCategoryPreviewModal() {
       <button onclick="document.getElementById('categoryPreviewModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
     </div>`;
   document.body.appendChild(modal);
+}
+
+// Matches copyResearchRequest()'s exact pattern - computes the real, current
+// uncategorized list (same logic as the preview modal above) and formats it
+// as a ready-to-paste request. Deliberately no "paste the result back and
+// save" step the way Research Digest has: what comes back here is source
+// code (an updated FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS array), not text to
+// store, so it needs an actual coding session and a real deploy, not a
+// form field in the app.
+function copyCategoryUpdateRequest() {
+  const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
+  const uncategorized = lib.filter(f => {
+    const lower = f.name.toLowerCase();
+    if (detectFoodCategory(lower)) return false;
+    if (MEAT_TYPE_WORDS.some(m => lower.includes(m))) return false;
+    return true;
+  }).map(f => f.name);
+  if (!uncategorized.length) { showToast('Nothing uncategorized right now ✓'); return; }
+  const request = `Here are ${uncategorized.length} currently-uncategorized MaxedHealth library items (from FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS/detectFoodCategory in maxhealth.html): ${uncategorized.join(', ')}. Please extend FOOD_CATEGORY_WORDS and/or MEAT_TYPE_WORDS to categorize as many of these as reasonably possible, following the existing grouping/ordering/commenting conventions in the file. Keep in mind this same word list is also used by fuzzyFindInLibrary for false-positive-match prevention, so a word that's too broad or generic can weaken that safety net - flag anything borderline rather than adding it silently.`;
+  navigator.clipboard.writeText(request)
+    .then(() => showToast('Category update request copied — paste it to Claude in a coding session ✓'))
+    .catch(() => showToast('Copy failed — try again'));
 }
 
 // Walks through one pair at a time rather than a long wall of comparisons —
