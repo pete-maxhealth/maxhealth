@@ -4362,7 +4362,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.512</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.514</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4858,8 +4858,16 @@ function calcTDEE() {
   // Auto-fill the calories field
   document.getElementById('onboardKcal').value = target;
 
-  // Auto-suggest protein based on weight
-  const protein = Math.round(weight * 1.8);
+  // Auto-suggest protein based on weight AND condition - previously always
+  // used 1.8g/kg regardless of condition, inconsistent with the real
+  // Suggested Targets calculator (Settings), which correctly only applies
+  // 1.8g/kg to the therapeutic-ketogenic conditions with real evidence for
+  // it (GBM/Epilepsy/Migraine/Cluster Headache) and 1.6g/kg to everything
+  // else, diabetes included. Selecting a non-elevated condition during
+  // onboarding was suggesting a protein figure that only matched what the
+  // app itself would recommend once actually recalculated later.
+  const protMultiplier = ['gbm','epilepsy','migraine','cluster_headache'].includes(_obCondition) ? 1.8 : 1.6;
+  const protein = Math.round(weight * protMultiplier);
   document.getElementById('onboardProtein').value = protein;
 }
 
@@ -5152,7 +5160,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.512'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.514'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12318,11 +12326,14 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'AI Provider Settings', key: 'set-aiprovider', subtab: 'manage' },
   { label: 'Appearance / Theme', key: 'set-appearance', subtab: 'manage' },
   { label: 'Notifications', key: 'set-notifications', subtab: 'manage' },
-  { label: 'Midnight Rollover Debug Log', key: 'set-rollover', subtab: 'manage' },
+  { label: 'Body Comp Debug', key: 'set-bodycompdebug', subtab: 'manage', keywords: 'weight body composition fat muscle bone troubleshooting' },
+  { label: 'Rollover Debug Log', key: 'set-rollover', subtab: 'manage', keywords: 'midnight rollover troubleshooting' },
   { label: 'Data Backup', key: 'set-databackup', subtab: 'manage' },
   { label: 'Carer / Family Access', key: 'set-carer', subtab: 'manage' },
+  { label: 'Log Mutation Debug', key: 'set-logmutation', subtab: 'manage', keywords: 'watch date save troubleshooting' },
+  { label: 'Save Debug Trace', key: 'set-savedebug', subtab: 'manage', keywords: 'library save troubleshooting' },
   { label: 'Settings Change Log', key: 'set-changelog', subtab: 'manage', keywords: 'what changed history' },
-  { label: 'Health Check / Diagnostics', key: 'set-healthcheck', subtab: 'manage' },
+  { label: 'Health Check / Diagnostics', key: 'set-healthcheck', subtab: 'manage', keywords: 'debug troubleshooting' },
   { label: 'Label Read Log', key: 'set-labelread', subtab: 'manage', keywords: 'fibre polyols AI debug' },
   { label: 'About', key: 'set-about', subtab: 'manage', keywords: 'version feedback bug demo mode github' },
   { label: 'Redo Setup Wizard', key: 'set-setup', subtab: 'manage', keywords: 'onboarding restart reset' },
@@ -22079,7 +22090,26 @@ function switchSubTab(parent, tab, el) {
     const el2 = document.getElementById('view-' + tab);
     if (el2) el2.classList.add('active');
     if (tab === 'manage' || tab === 'customise') { initSettings(); renderPrecedenceEditor(); setTimeout(() => makeContainerReorderable(document.getElementById('view-manage'), 'manage'), 100); }
-    if (tab === 'import') { renderSavedDevices(); updateImportStatus(); initSyncUI(); setTimeout(() => makeContainerReorderable(document.getElementById('view-import'), 'import'), 100); }
+    if (tab === 'import') {
+      renderSavedDevices(); updateImportStatus(); initSyncUI();
+      // Collapse state was being saved on every toggle (toggleSection always
+      // writes to localStorage) but never actually read back on load, unlike
+      // every other tab with collapsible sections - cards were silently
+      // reverting to their hardcoded default open/closed state on every
+      // fresh visit regardless of what was explicitly set last time.
+      // defaultOpen values below match each card's real hardcoded default
+      // (no display:none = open) for a genuine first-ever visit.
+      [
+        ['imp-sync',      'imp-sync-wrap',      'imp-sync-icon',      true],
+        ['imp-combined',  'imp-combined-wrap',  'imp-combined-icon',  false],
+        ['imp-advanced',  'imp-advanced-wrap',  'imp-advanced-icon',  false],
+        ['imp-master',    'imp-master-wrap',    'imp-master-icon',    true],
+        ['imp-databulk',  'imp-databulk-wrap',  'imp-databulk-icon',  true],
+        ['imp-preview',   'dataPreviewPanel',   'dataPreviewToggle',  false],
+        ['imp-adddevice', 'imp-adddevice-wrap', 'imp-adddevice-icon', true],
+      ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
+      setTimeout(() => makeContainerReorderable(document.getElementById('view-import'), 'import'), 100);
+    }
   }
 }
 
