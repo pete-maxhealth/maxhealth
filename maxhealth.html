@@ -4368,7 +4368,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.520</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.521</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5166,7 +5166,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.520'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.521'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5992,7 +5992,23 @@ function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // identify the food ("bread" vs "cheese") share zero overlap. Bread and cheese
 // are fundamentally different foods regardless of how many descriptor words
 // happen to line up, exactly like a mismatched brand or meat type.
-const FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','pasta','potato','potatoes','butter','cream','flour','oats','cereal','crisps','chocolate','biscuit','biscuits','cracker','crackers','sausage','sausages','mince','nuts'];
+const FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','pasta','potato','potatoes','butter','cream','flour','oats','cereal','crisps','chocolate','biscuit','biscuits','cracker','crackers','sausage','sausages','mince','nuts',
+  // Bare seasonings/condiments — a "1 pinch salt" or "1 pinch black pepper"
+  // recipe ingredient has no brand, meat type, or main-dish category to
+  // anchor against, so it fell through every existing safeguard and matched
+  // purely on generic word overlap: "salt" as a full substring of "salted"
+  // (KP Salted Peanuts) scored a perfect 1.0 for a 1-word query, sailing
+  // past the short-query 0.99 threshold; "black pepper" matched a sausage
+  // product flavoured WITH cracked black pepper, since both words are
+  // genuinely, exactly present in its name too - stricter word-matching
+  // alone couldn't have caught that one, only correct categorisation could.
+  // Deliberately appended at the END of this array (not the start) - array
+  // order is the priority order for detectFoodCategory's first-match search,
+  // so a product like "cracked black pepper sausages" still correctly
+  // resolves to its real category (sausage, found earlier in the array)
+  // rather than being miscategorised as a seasoning by an incidental
+  // flavour descriptor in its own name.
+  'salt','pepper','sugar','vinegar','honey'];
 // Compound terms that would otherwise be silently swallowed by a shorter
 // generic category word - "peanut butter" contains the substring "butter",
 // so without this it categorised identically to dairy butter and got
@@ -15709,7 +15725,18 @@ function createRecipeFromAISuggestion(recipeKey) {
         name: libItem.name + (convertedAmount != null ? '' : ` (${ing.amount} ${ing.unit} — check amount)`),
         amount,
         kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0,
-        _base: { kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, baseG }
+        _base: { kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, baseG },
+        // fuzzyFindInLibrary's own comment says its result is "a candidate to
+        // CONFIRM, not to silently apply" - this call site wasn't honouring
+        // that at all, pushing straight to a plain, unflagged row that
+        // looked exactly as trustworthy as a genuinely correct match. A
+        // recipe ingredient as generic as "salt" or "garlic", with no brand
+        // or dish type to anchor against, can score a false 100% against an
+        // unrelated saved item (confirmed: "salt" matched "KP Salted
+        // Peanuts" purely because "salted" contains it as a substring).
+        // Flagging every fuzzy match for a quick visual check costs nothing
+        // when the match IS correct, and catches it when it isn't.
+        source: 'fuzzy',
       });
     } else {
       unmatched++;
@@ -20057,6 +20084,8 @@ function renderRecipeIngredients() {
       ? `<span style="font-size:9px;color:var(--blue);background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.3);border-radius:4px;padding:1px 5px;margin-left:6px;">🔍 online</span>`
       : ing.source === 'manual'
       ? `<span style="font-size:9px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;margin-left:6px;">✏️ manual</span>`
+      : ing.source === 'fuzzy'
+      ? `<span style="font-size:9px;color:var(--yellow);background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);border-radius:4px;padding:1px 5px;margin-left:6px;cursor:pointer;" onclick="event.stopPropagation();openRecipeIngredientSearch(${i})" title="Matched from your Library by name similarity, not confirmed exact - tap to search for the right one if this looks wrong">🔍 verify match</span>`
       : '';
     const substitutedNote = ing._substitutedFrom
       ? `<span style="font-size:9px;color:var(--text3);font-style:italic;margin-left:6px;">(swapped from ${ing._substitutedFrom})</span>`
