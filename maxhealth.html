@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.533</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.536</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.533'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.536'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6089,14 +6089,34 @@ const CATEGORY_WORDS_KEY = 'mh_category_words';
 // automatically too, without needing anything manually copied across from
 // Pete's device - only genuinely personal customizations stay separate.
 function loadCategoryWords() {
-  let custom = {}, deleted = [];
+  let custom = {}, deleted = [], migrated = false;
   try {
     const raw = localStorage.getItem(CATEGORY_WORDS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed) {
-        if (parsed.custom && typeof parsed.custom === 'object') custom = parsed.custom;
-        if (Array.isArray(parsed.deleted)) deleted = parsed.deleted;
+        if (parsed.custom && typeof parsed.custom === 'object') {
+          custom = parsed.custom;
+          deleted = Array.isArray(parsed.deleted) ? parsed.deleted : [];
+        } else if (parsed.map && typeof parsed.map === 'object') {
+          // Old format from before this merge-based system existed - a
+          // frozen full snapshot with no way to tell "user customized this"
+          // apart from "this just happened to be the default at the time".
+          // Reverse-engineered into the new shape so nothing already saved
+          // gets silently dropped: anything in the old snapshot that
+          // differs from today's default becomes a tracked customization,
+          // and any current default key missing from the old snapshot
+          // becomes a tracked deletion. Runs once per device - re-saved
+          // immediately below in the new format.
+          const oldMap = parsed.map;
+          Object.keys(oldMap).forEach(k => {
+            if (JSON.stringify(oldMap[k]) !== JSON.stringify(DEFAULT_CATEGORY_MAP[k])) custom[k] = oldMap[k];
+          });
+          Object.keys(DEFAULT_CATEGORY_MAP).forEach(k => {
+            if (!(k in oldMap)) deleted.push(k);
+          });
+          migrated = true;
+        }
       }
     }
   } catch(e) {}
@@ -6104,6 +6124,7 @@ function loadCategoryWords() {
   deleted.forEach(k => { delete merged[k]; });
   _categoryCustom = custom;
   _categoryDeleted = deleted;
+  if (migrated) { try { saveCategoryWords({ custom, deleted }); } catch(e) {} }
   return merged;
 }
 function saveCategoryWords(data) {
@@ -12220,14 +12241,40 @@ Respond ONLY with JSON, no markdown, no preamble: {"grams": 125, "message": "Est
 // old two-tap flow (generic canned guidance, then a separate "check my
 // library" button) that handleNextMealQuery still gives for anyone who
 // types the same request instead of tapping the pill.
+// Small, curated emoji per well-known category, purely cosmetic - anything
+// not in this list (a custom category someone's added via Manage
+// Categories) still works perfectly, just with the generic fallback icon.
+const CATEGORY_EMOJI = {
+  meat: '🥩', fish: '🐟', protein: '💪', dairy: '🧀', vegetable: '🥦',
+  fruit: '🍓', fat: '🧈', cereal: '🌾', bread: '🍞', salad: '🥗',
+  alcohol: '🍷', 'herbs and spices': '🌿', sweet: '🍰', savoury: '🥘',
+};
+
+// Only ever shows categories that at least one real library item actually
+// has right now - not the full theoretical CATEGORY_MAP, which would offer
+// "alcohol" as an option even if nothing alcoholic is saved. Automatically
+// grows or shrinks with the real library, and with anything a person adds
+// via Manage Categories, with nothing to maintain here at all.
+function getLibraryCategoriesInUse() {
+  const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
+  const found = new Set();
+  lib.forEach(f => { getItemCategories(f).forEach(c => found.add(c)); });
+  return [...found].sort();
+}
+
 function startNextMealFlow() {
   addBubble('Next meal idea', 'user');
   const bubble = addBubble('What kind of thing are you after?', 'system');
+  const cats = getLibraryCategoriesInUse();
+  const disableAll = `this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);`;
+  const pill = (kind, label, emoji, color) =>
+    `<button onclick="${disableAll}suggestMealFromLibrary('${kind}')" style="padding:6px 12px;background:var(--surface2);border:1px solid ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label}</button>`;
+  const catPills = cats.map(c => pill(c, c.charAt(0).toUpperCase() + c.slice(1), CATEGORY_EMOJI[c] || '🍽', 'var(--text2)')).join('');
   bubble.innerHTML += `
-    <div style="display:flex;gap:8px;margin-top:10px;">
-      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('sweet')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid #ec4899;border-radius:6px;color:#ec4899;font-size:12px;font-weight:600;cursor:pointer;">🍰 Sweet</button>
-      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('savoury')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid #f59e0b;border-radius:6px;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;">🥘 Savoury</button>
-      <button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('both')" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;">🤷 Either</button>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+      ${pill('snack', 'Snack', '🍿', '#f59e0b')}
+      ${catPills}
+      ${pill('both', 'Either', '🤷', 'var(--accent)')}
     </div>`;
 }
 
@@ -12519,8 +12566,17 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
     }
   }
 
-  async function attemptSuggest() {
-    const result = await callHealthAI(systemPrompt, { maxTokens: 1500 }); // was 1000 for 3 suggestions - 5 needs proportionally more room
+  async function attemptSuggest(isRetry) {
+    // A retry that just resends the identical prompt has no reason to
+    // behave differently the second time - confirmed exactly that happening
+    // (both attempts failed identically with zero JSON content at all, pure
+    // conversational text instead). Appending an explicit correction on
+    // retry gives the model an actual reason to change course, rather than
+    // relying on non-determinism alone to fix a mistake it just made.
+    const promptToUse = isRetry
+      ? systemPrompt + `\n\nYour previous response was not valid JSON - it contained no { } object at all. This time, respond with ONLY the JSON object itself. Do not explain, ask a clarifying question, or add any text before or after it. Start your response with { and end it with }.`
+      : systemPrompt;
+    const result = await callHealthAI(promptToUse, { maxTokens: 1500 }); // was 1000 for 3 suggestions - 5 needs proportionally more room
     if (!result.ok) throw new Error(result.error || 'API error');
     return tryParseComboJSON(result.text);
   }
@@ -12528,10 +12584,10 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
   try {
     let parsed;
     try {
-      parsed = await attemptSuggest();
+      parsed = await attemptSuggest(false);
     } catch (firstErr) {
       addBubble('That attempt came back malformed — trying again…', 'system');
-      parsed = await attemptSuggest();
+      parsed = await attemptSuggest(true);
     }
     renderLibraryComboSuggestions(parsed, lib, recipes);
   } catch (e) {
