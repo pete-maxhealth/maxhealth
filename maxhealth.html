@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.532</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.533</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.532'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.533'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6072,25 +6072,54 @@ function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // CATEGORY_MAP by name keeps working unmodified - only the declaration
 // changed, from a fixed const to loaded, mutable state.
 const CATEGORY_WORDS_KEY = 'mh_category_words';
+// Always starts fresh from the current code-level DEFAULT_CATEGORY_MAP, then
+// layers the user's own changes on top - NOT a one-time seed that then
+// ignores all future default updates forever. Previously, the very first
+// save froze a full copy of the map in localStorage, and every future load
+// used THAT instead of ever looking at DEFAULT_CATEGORY_MAP again - meaning
+// a future improvement to the shipped defaults (exactly what the Copy
+// Category Update Request workflow exists to keep producing) would never
+// reach a device that had already used the feature once, including Pete's
+// own. Two separate pieces of user state make the merge safe: `custom`
+// (explicit additions/overrides, which always win over whatever the
+// default is or becomes) and `deleted` (a tombstone list of default
+// keywords the user explicitly removed, so they don't get silently
+// resurrected by the next merge). This also means Jill, on her own
+// separate device/localStorage, gets every future default-map improvement
+// automatically too, without needing anything manually copied across from
+// Pete's device - only genuinely personal customizations stay separate.
 function loadCategoryWords() {
+  let custom = {}, deleted = [];
   try {
     const raw = localStorage.getItem(CATEGORY_WORDS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.map && typeof parsed.map === 'object') return parsed.map;
+      if (parsed) {
+        if (parsed.custom && typeof parsed.custom === 'object') custom = parsed.custom;
+        if (Array.isArray(parsed.deleted)) deleted = parsed.deleted;
+      }
     }
   } catch(e) {}
-  return Object.assign({}, DEFAULT_CATEGORY_MAP);
+  const merged = Object.assign({}, DEFAULT_CATEGORY_MAP, custom);
+  deleted.forEach(k => { delete merged[k]; });
+  _categoryCustom = custom;
+  _categoryDeleted = deleted;
+  return merged;
 }
 function saveCategoryWords(data) {
   localStorage.setItem(CATEGORY_WORDS_KEY, JSON.stringify(data));
 }
+// Populated by loadCategoryWords() itself - tracks what the user has
+// explicitly customized, separately from the merged CATEGORY_MAP runtime
+// state, so refreshCategoryWords() below can persist just the real
+// customizations rather than a frozen full copy of the map.
+let _categoryCustom = {}, _categoryDeleted = [];
 let CATEGORY_MAP = loadCategoryWords();
 // Call after any add/remove so every consumer (detectFoodCategory,
 // fuzzyFindInLibrary, the category preview modal) sees the change without
 // needing a page reload.
 function refreshCategoryWords() {
-  saveCategoryWords({ map: CATEGORY_MAP });
+  saveCategoryWords({ custom: _categoryCustom, deleted: _categoryDeleted });
 }
 // Compound terms that would otherwise be silently swallowed by a shorter
 // generic category word - "peanut butter" contains the substring "butter",
@@ -7426,7 +7455,10 @@ function addCategoryWord() {
   const word = (wordInput?.value || '').trim().toLowerCase();
   const cats = (valuesInput?.value || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
   if (!word || !cats.length) { showToast('Enter both a word and at least one category'); return; }
-  CATEGORY_MAP[word] = cats; // appended at the end - preserves specific-before-generic priority ordering
+  CATEGORY_MAP[word] = cats; // live update, immediate effect
+  _categoryCustom[word] = cats; // persisted as an explicit customization - always wins over whatever the default is or becomes
+  const di = _categoryDeleted.indexOf(word);
+  if (di > -1) _categoryDeleted.splice(di, 1); // re-adding a previously-deleted default un-deletes it
   refreshCategoryWords();
   wordInput.value = ''; valuesInput.value = '';
   openManageCategoriesModal();
@@ -7435,6 +7467,11 @@ function addCategoryWord() {
 
 function removeCategoryWord(word) {
   delete CATEGORY_MAP[word];
+  // A default keyword needs tombstoning so the next load's merge doesn't
+  // resurrect it; a purely custom one just needs removing from custom -
+  // it was never in DEFAULT_CATEGORY_MAP for the merge to bring back anyway.
+  if (word in DEFAULT_CATEGORY_MAP && !_categoryDeleted.includes(word)) _categoryDeleted.push(word);
+  delete _categoryCustom[word];
   refreshCategoryWords();
   openManageCategoriesModal();
   showToast(`Removed "${word}"`);
@@ -7442,6 +7479,8 @@ function removeCategoryWord(word) {
 
 function resetCategoryWords() {
   appConfirm('Reset the category map back to the built-in defaults? Any words you\'ve added or edited will be lost.', () => {
+    _categoryCustom = {};
+    _categoryDeleted = [];
     CATEGORY_MAP = Object.assign({}, DEFAULT_CATEGORY_MAP);
     refreshCategoryWords();
     openManageCategoriesModal();
