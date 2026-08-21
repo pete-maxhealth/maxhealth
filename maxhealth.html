@@ -2848,7 +2848,7 @@
     <div id="dashSection-libRecipes">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:4px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <div class="section-title" style="margin:0;cursor:pointer;" onclick="toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')">Recipes</div>
+        <div class="section-title" style="margin:0;cursor:pointer;" onclick="toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')">Recipes <span id="lib-recipes-count" style="font-size:12px;color:var(--text3);"></span></div>
         <span id="lib-recipes-icon" style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')">▾ hide</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -4368,7 +4368,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.522</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.524</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5166,7 +5166,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.522'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.524'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6516,7 +6516,14 @@ function renderLibrary() {
     if (sort === 'fat')     return (b.fat || 0) - (a.fat || 0);
     if (sort === 'carbs')   return (b.carbs || 0) - (a.carbs || 0);
     if (sort === 'mostused') return (b.useCount || 0) - (a.useCount || 0);
-    if (sort === 'recent')  return 0; // keep insertion order (most recent last)
+    // Was `return 0` - a comparator that always returns 0 does no sorting at
+    // all, just leaves the array in whatever order it already happened to
+    // be in (oldest-first, since every insertion path is confirmed
+    // append-only) - the exact opposite of what "Recent" should show.
+    // _origIdx directly reflects original array position (higher = added
+    // later), so sorting by it descending puts the newest additions first,
+    // with no new timestamp field or data migration needed.
+    if (sort === 'recent')  return b._origIdx - a._origIdx;
     return 0;
   });
   // Apply search query — filters both meals and ingredients identically, since this
@@ -6656,6 +6663,11 @@ function quickLogDefaultPortion(index) {
     carbs: f.carbs,
     _fromLibrary: true,
   };
+  // "Most Used" sort reads this - was never incremented here, only on the
+  // custom-portion-selection path, meaning anything logged via this faster
+  // one-tap shortcut never counted toward it at all.
+  lib[index].useCount = (lib[index].useCount || 0) + 1;
+  saveLibrary(lib);
   logFoods([food], food.name);
   showToast(`✓ ${f.name} logged at default portion`);
   switchTabById('chat');
@@ -12331,6 +12343,22 @@ function logSuggestedCombo(comboIndex) {
   // match what was originally suggested.
   const mealName = items.map(f => f._substitutedFrom ? `${f.name} (swapped for ${f._substitutedFrom})` : f.name).join(' + ');
   logFoods(foods, mealName);
+  // "Most Used" sort reads this - was never incremented on this path either.
+  // These items don't carry a stored library index (built from a suggestion,
+  // not a direct library lookup), so re-matching by exact name here rather
+  // than adding a new field to thread through the whole suggestion pipeline.
+  // Uses f.name (what's actually being logged) not the original suggestion,
+  // so a substituted item correctly credits the swap target, not the
+  // original suggestion it replaced.
+  try {
+    const lib = loadLibrary();
+    let changed = false;
+    items.forEach(f => {
+      const entry = lib.find(l => l.name === f.name);
+      if (entry) { entry.useCount = (entry.useCount || 0) + 1; changed = true; }
+    });
+    if (changed) saveLibrary(lib);
+  } catch(e) {}
   showToast(`✓ ${mealName} logged`);
   switchTabById('chat');
 }
@@ -21043,9 +21071,24 @@ function saveRecipe() {
 function renderRecipeList() {
   const el = document.getElementById('recipeList');
   if (!el) return;
-  const recipes = loadRecipes();
+  let recipes = loadRecipes();
+  // This never checked the search box at all - every saved recipe rendered
+  // unconditionally regardless of what was typed, while Meals/Ingredients
+  // right below it filtered correctly. Same query, same apostrophe-strip
+  // fix, same case-insensitive substring match as that list - also checks
+  // ingredient names, not just the recipe's own title, since "what has
+  // double cream in it" is as real a search as "creamy pasta bake" by name.
+  const stripApos = s => s.replace(/['’]/g, '');
+  const searchQuery = stripApos((document.getElementById('librarySearch')?.value || '').toLowerCase().trim());
+  if (searchQuery) {
+    recipes = recipes.filter(r =>
+      stripApos(r.name.toLowerCase()).includes(searchQuery) ||
+      (r.ingredients || []).some(ing => stripApos((ing.name || '').toLowerCase()).includes(searchQuery))
+    );
+  }
+  const rc = document.getElementById('lib-recipes-count'); if (rc) rc.textContent = `(${recipes.length})`;
   if (!recipes.length) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No recipes yet — tap + New Recipe to create one.</div>';
+    el.innerHTML = `<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">${searchQuery ? 'No recipes match your search.' : 'No recipes yet — tap + New Recipe to create one.'}</div>`;
     return;
   }
 
