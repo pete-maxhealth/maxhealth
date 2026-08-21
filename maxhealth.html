@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.528</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.529</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.528'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.529'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7238,19 +7238,19 @@ function openDuplicateScanModal() {
 // ingredients into before committing to building it. Deliberately doesn't
 // touch or save anything - purely diagnostic.
 function openCategoryPreviewModal() {
-  const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
+  // origIdx must be captured BEFORE the isMealEntry filter below, not after -
+  // filtering first would make each remaining item's array position no
+  // longer match its real index in loadLibrary(), which quickLogFromLibrary/
+  // openLibraryEdit both need to find the right item. Same fix already
+  // applied in renderLibrary() itself (libWithIdx), same reasoning here.
+  const fullLib = loadLibrary();
+  const lib = fullLib.map((f, origIdx) => ({ ...f, _origIdx: origIdx })).filter(f => f && f.name && !isMealEntry(f));
   const groups = {};
   const uncategorized = [];
   lib.forEach(f => {
     const cats = getItemCategories(f);
-    const isOverride = Array.isArray(f.categories) && f.categories.length > 0;
-    const label = isOverride ? `${f.name} ✋` : f.name; // ✋ marks a manual override, distinct from an auto-detected guess
     if (cats.length) {
-      // A multi-category item (the manual-override "egg = dairy + baking"
-      // case) genuinely belongs in every group it's assigned to, not just
-      // one - auto-detection never produces more than one category, so
-      // this only actually branches for manually-overridden items.
-      cats.forEach(cat => { (groups[cat] = groups[cat] || []).push(label); });
+      cats.forEach(cat => { (groups[cat] = groups[cat] || []).push(f); });
     } else {
       uncategorized.push(f.name);
     }
@@ -7258,6 +7258,7 @@ function openCategoryPreviewModal() {
   const sortedCats = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
   const total = lib.length;
   const categorizedCount = total - uncategorized.length;
+  window._categoryBrowseGroups = groups; // read by openCategoryItemsView below
 
   const existing = document.getElementById('categoryPreviewModal');
   if (existing) existing.remove();
@@ -7266,22 +7267,54 @@ function openCategoryPreviewModal() {
   modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
-      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Category Preview — not saved, just a look</div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">${categorizedCount} of ${total} ingredients categorize (${sortedCats.length} categories found). ${uncategorized.length} would land in "Uncategorized" below. ✋ marks an item you've manually assigned, overriding the auto-guess.</div>
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Browse by Category</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">${categorizedCount} of ${total} ingredients categorized (${sortedCats.length} categories). Tap a category to see and log from it. ${uncategorized.length} still uncategorized.</div>
       ${sortedCats.map(cat => `
-        <div style="margin-bottom:12px;">
-          <div style="font-size:12px;font-weight:700;color:var(--accent);text-transform:capitalize;margin-bottom:4px;">${cat} (${groups[cat].length})</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.7;">${groups[cat].join(' · ')}</div>
+        <div onclick="openCategoryItemsView('${cat}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+          <span style="font-size:13px;font-weight:700;color:var(--text);text-transform:capitalize;">${cat}</span>
+          <span style="font-size:12px;color:var(--text3);">${groups[cat].length} →</span>
         </div>
       `).join('')}
       ${uncategorized.length ? `
-        <div style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:12px;">
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:12px;font-weight:700;color:var(--yellow);margin-bottom:4px;">Uncategorized (${uncategorized.length})</div>
           <div style="font-size:12px;color:var(--text3);line-height:1.7;">${uncategorized.join(' · ')}</div>
         </div>
       ` : ''}
-      <button onclick="document.getElementById('categoryPreviewModal').remove();openManageCategoriesModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;">🏷️ Manage Categories</button>
+      <button onclick="document.getElementById('categoryPreviewModal').remove();openManageCategoriesModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px;">🏷️ Manage Categories</button>
       <button onclick="document.getElementById('categoryPreviewModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+// Drill-down from a tapped category - real actionable items (Log/Edit),
+// reusing the exact same functions the main Ingredients list already uses,
+// not a read-only list. Marks ✋ for anything manually assigned so it's
+// clear at a glance which items are an override vs the auto-guess.
+function openCategoryItemsView(cat) {
+  const items = (window._categoryBrowseGroups || {})[cat] || [];
+  const existing = document.getElementById('categoryPreviewModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'categoryItemsModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-transform:capitalize;margin-bottom:4px;">${cat} (${items.length})</div>
+      ${items.map(f => {
+        const isOverride = Array.isArray(f.categories) && f.categories.length > 0;
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-size:13px;color:var(--text);">${f.name}${isOverride ? ' <span style="font-size:10px;color:var(--text3);" title="Manually assigned">✋</span>' : ''}</div>
+            <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal||0}kcal · ${f.protein||0}g P · ${f.carbs||0}g C</div>
+          </div>
+          <button onclick="document.getElementById('categoryItemsModal').remove();quickLogFromLibrary(${f._origIdx});" style="padding:7px 12px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">LOG</button>
+          <button onclick="document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
+        </div>`;
+      }).join('') || '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No items in this category.</div>'}
+      <button onclick="document.getElementById('categoryItemsModal').remove();openCategoryPreviewModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:12px;font-size:13px;cursor:pointer;margin-top:14px;">← Back to categories</button>
+      <button onclick="document.getElementById('categoryItemsModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
     </div>`;
   document.body.appendChild(modal);
 }
