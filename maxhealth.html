@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.529</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.530</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.529'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.530'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5986,10 +5986,78 @@ function canonicalBrand(matched) {
   return matched.replace(/'s$/, '').replace(/s$/, '');
 }
 // Was a hardcoded const - now editable data (see loadCategoryWords below),
-// seeded from this exact list as the default on first use. Kept as its own
-// named default rather than inlined, so "reset to defaults" in the Manage
-// Categories UI has something real to reset to.
-const DEFAULT_MEAT_TYPE_WORDS = ['chicken','beef','pork','lamb','turkey','duck','venison','salmon','tuna','cod','haddock','prawn','prawns','bacon','ham','gammon','steak','salami','chorizo','kebab','pate','kabanos','anchovy','anchovies'];
+// seeded from this exact map as the default on first use.
+//
+// Each keyword maps to one or more GENERIC categories, not to itself - a
+// category isn't "lettuce", it's "vegetable" and "salad" (lettuce being the
+// ingredient, not a category of anything). Object key order is the match
+// priority order (first key whose word is found in the text wins, same as
+// the old array-order system) - specific dish-type words still need to come
+// before generic seasoning words for the same reason as before (see the
+// pepper/sausage note further down).
+const DEFAULT_CATEGORY_MAP = {
+  'bread':      ['bread','cereal'],
+  'bagel':      ['bread','cereal'], 'bagels': ['bread','cereal'],
+  'wrap':       ['bread','cereal'], 'wraps':  ['bread','cereal'],
+  'spaghetti':  ['cereal'], 'pasta': ['cereal'], 'rice': ['cereal'],
+  'oats':       ['cereal'], 'cereal': ['cereal'], 'flour': ['cereal'],
+  'cheese':     ['dairy'], 'parmesan': ['dairy'], 'mascarpone': ['dairy'],
+  'babybel':    ['dairy'], 'mozzarella': ['dairy'], 'cheddar': ['dairy'],
+  'milk':       ['dairy'], 'yogurt': ['dairy'], 'yoghurt': ['dairy'],
+  'butter':     ['dairy','fat'], 'cream': ['dairy','fat'],
+  'egg':        ['dairy','protein'], 'eggs': ['dairy','protein'],
+  'sausage':    ['meat','protein'], 'sausages': ['meat','protein'], 'mince': ['meat','protein'],
+  'chicken':    ['meat','protein'], 'beef': ['meat','protein'], 'pork': ['meat','protein'],
+  'lamb':       ['meat','protein'], 'turkey': ['meat','protein'], 'duck': ['meat','protein'],
+  'venison':    ['meat','protein'], 'bacon': ['meat','protein'], 'ham': ['meat','protein'],
+  'gammon':     ['meat','protein'], 'steak': ['meat','protein'], 'salami': ['meat','protein'],
+  'chorizo':    ['meat','protein'], 'kebab': ['meat','protein'], 'pate': ['meat','protein'],
+  'kabanos':    ['meat','protein'],
+  'salmon':     ['fish','protein'], 'tuna': ['fish','protein'], 'cod': ['fish','protein'],
+  'haddock':    ['fish','protein'], 'prawn': ['fish','protein'], 'prawns': ['fish','protein'],
+  'anchovy':    ['fish','protein'], 'anchovies': ['fish','protein'],
+  'nuts':       ['protein','fat'], 'seed': ['protein','fat'], 'seeds': ['protein','fat'],
+  'whey':       ['protein'],
+  'oil':        ['fat'], 'coconut': ['fat'],
+  'crisps':     ['savoury','vegetable'], 'cracker': ['savoury','cereal'], 'crackers': ['savoury','cereal'],
+  'mushroom':   ['vegetable'], 'mushrooms': ['vegetable'], 'cabbage': ['vegetable'], 'kale': ['vegetable'],
+  'cauliflower':['vegetable'], 'broccoli': ['vegetable'], 'carrot': ['vegetable'], 'carrots': ['vegetable'],
+  'pea':        ['vegetable'], 'peas': ['vegetable'], 'beetroot': ['vegetable'], 'onion': ['vegetable'],
+  'onions':     ['vegetable'], 'potato': ['vegetable'], 'potatoes': ['vegetable'], 'vegetable': ['vegetable'],
+  'vegetables': ['vegetable'], 'garlic': ['vegetable','herbs and spices'], 'puree': ['vegetable'],
+  'lettuce':    ['vegetable','salad'], // Pete's own example - a category isn't the ingredient itself
+  'spinach':    ['vegetable','salad'], 'cucumber': ['vegetable','salad'], 'tomato': ['vegetable','salad'],
+  'tomatoes':   ['vegetable','salad'], 'olive': ['vegetable','fat'], 'olives': ['vegetable','fat'],
+  'celery':     ['vegetable'], 'kimchi': ['vegetable','savoury'],
+  'berry':      ['fruit','sweet'], 'berries': ['fruit','sweet'], 'blackcurrant': ['fruit','sweet'],
+  'blackcurrants':['fruit','sweet'], 'strawberry': ['fruit','sweet'], 'strawberries': ['fruit','sweet'],
+  'raspberry':  ['fruit','sweet'], 'raspberries': ['fruit','sweet'], 'blueberry': ['fruit','sweet'],
+  'blueberries':['fruit','sweet'], 'orange': ['fruit','sweet'], 'oranges': ['fruit','sweet'],
+  'chocolate':  ['sweet'], 'biscuit': ['sweet','cereal'], 'biscuits': ['sweet','cereal'],
+  'cocoa':      ['sweet'], 'vanilla': ['sweet'], 'erythritol': ['sweet'], 'jam': ['sweet'],
+  'sugar':      ['sweet'], 'honey': ['sweet'],
+  'ketchup':    ['savoury'], 'mustard': ['savoury','herbs and spices'], 'dressing': ['savoury','fat'],
+  'marmite':    ['savoury'], 'gravy': ['savoury'], 'sauce': ['savoury'], 'vinegar': ['savoury'],
+  'salt':       ['savoury','herbs and spices'],
+  'lager':      ['alcohol'], 'wine': ['alcohol'], 'rum': ['alcohol'], 'beer': ['alcohol'],
+  // Bare seasonings — a "1 pinch salt" or "1 pinch black pepper" recipe
+  // ingredient has no brand, meat type, or main-dish category to anchor
+  // against, so it fell through every existing safeguard and matched purely
+  // on generic word overlap: "salt" as a full substring of "salted" (KP
+  // Salted Peanuts) scored a perfect 1.0 for a 1-word query, sailing past
+  // the short-query 0.99 threshold; "black pepper" matched a sausage product
+  // flavoured WITH cracked black pepper, since both words are genuinely,
+  // exactly present in its name too - stricter word-matching alone couldn't
+  // have caught that one, only correct categorisation could. Deliberately
+  // kept near the END of this map (not the start) - key order is the
+  // priority order for the first-match search below, so a product like
+  // "cracked black pepper sausages" still correctly resolves to its real
+  // category (sausage/meat, defined earlier) rather than being
+  // miscategorised as a seasoning by an incidental flavour descriptor in
+  // its own name.
+  'pepper':     ['herbs and spices','savoury'],
+  'chilli':     ['herbs and spices'], 'chili': ['herbs and spices'],
+};
 function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // Same problem as brand/meat-type, one level broader: "Warburtons white bread"
 // and "white cheese (triangular slices)" share two generic descriptor words
@@ -5998,72 +6066,31 @@ function canonicalMeatType(matched) { return matched.replace(/s$/, ''); }
 // identify the food ("bread" vs "cheese") share zero overlap. Bread and cheese
 // are fundamentally different foods regardless of how many descriptor words
 // happen to line up, exactly like a mismatched brand or meat type.
-// Was a hardcoded const - now editable data (see loadCategoryWords below),
-// seeded from this exact list as the default on first use.
-const DEFAULT_FOOD_CATEGORY_WORDS = ['bread','cheese','milk','yogurt','yoghurt','rice','pasta','potato','potatoes','butter','cream','flour','oats','cereal','crisps','chocolate','biscuit','biscuits','cracker','crackers','sausage','sausages','mince','nuts',
-  // Extended against a real 102-item "Uncategorized" list from actual
-  // library data, grouped by food type. Meat/fish-specific words (steak,
-  // salami, anchovy etc) went into MEAT_TYPE_WORDS instead - fuzzyFindInLibrary
-  // already checks that list separately for its own meat-mismatch guard, so
-  // duplicating them here would be redundant, not additive.
-  'egg','eggs',
-  'parmesan','mascarpone','babybel','mozzarella', // cheese types whose names don't literally contain "cheese"
-  'mushroom','mushrooms','lettuce','cabbage','kale','spinach','olive','olives','cucumber','celery','cauliflower','broccoli','carrot','carrots','pea','peas','beetroot','onion','onions','tomato','tomatoes','vegetable','vegetables',
-  'berry','berries','blackcurrant','blackcurrants','strawberry','strawberries','raspberry','raspberries','blueberry','blueberries','orange','oranges',
-  'seed','seeds',
-  'oil','coconut','cocoa',
-  'vanilla','erythritol',
-  'whey',
-  'jam','ketchup','mustard','dressing','puree','marmite','kimchi','gravy','sauce',
-  'bagel','bagels','wrap','wraps',
-  'lager','wine','rum','beer',
-  'garlic','chilli','chili','cheddar','spaghetti',
-  // Bare seasonings/condiments — a "1 pinch salt" or "1 pinch black pepper"
-  // recipe ingredient has no brand, meat type, or main-dish category to
-  // anchor against, so it fell through every existing safeguard and matched
-  // purely on generic word overlap: "salt" as a full substring of "salted"
-  // (KP Salted Peanuts) scored a perfect 1.0 for a 1-word query, sailing
-  // past the short-query 0.99 threshold; "black pepper" matched a sausage
-  // product flavoured WITH cracked black pepper, since both words are
-  // genuinely, exactly present in its name too - stricter word-matching
-  // alone couldn't have caught that one, only correct categorisation could.
-  // Deliberately kept at the END of this array (not the start) - array
-  // order is the priority order for detectFoodCategory's first-match search,
-  // so a product like "cracked black pepper sausages" still correctly
-  // resolves to its real category (sausage, found earlier in the array)
-  // rather than being miscategorised as a seasoning by an incidental
-  // flavour descriptor in its own name. Same reasoning extends to "sauce"
-  // just above and everything else added here - all appended before this
-  // block, never after, so this ordering guarantee holds for future
-  // additions too.
-  'salt','pepper','sugar','vinegar','honey'];
-// Runtime, editable copies of the two lists above, loaded from localStorage
-// (see loadCategoryWords/saveCategoryWords) and falling back to the
-// DEFAULT_* lists on first use. Every function elsewhere that reads
-// FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS by name keeps working unmodified -
-// only the declaration changed, from a fixed const to loaded, mutable state.
+// Runtime, editable copy of the map above, loaded from localStorage (see
+// loadCategoryWords/saveCategoryWords) and falling back to
+// DEFAULT_CATEGORY_MAP on first use. Every function elsewhere that reads
+// CATEGORY_MAP by name keeps working unmodified - only the declaration
+// changed, from a fixed const to loaded, mutable state.
 const CATEGORY_WORDS_KEY = 'mh_category_words';
 function loadCategoryWords() {
   try {
     const raw = localStorage.getItem(CATEGORY_WORDS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.food) && Array.isArray(parsed.meat)) return parsed;
+      if (parsed && parsed.map && typeof parsed.map === 'object') return parsed.map;
     }
   } catch(e) {}
-  return { food: DEFAULT_FOOD_CATEGORY_WORDS.slice(), meat: DEFAULT_MEAT_TYPE_WORDS.slice() };
+  return Object.assign({}, DEFAULT_CATEGORY_MAP);
 }
 function saveCategoryWords(data) {
   localStorage.setItem(CATEGORY_WORDS_KEY, JSON.stringify(data));
 }
-let _categoryWordsData = loadCategoryWords();
-let FOOD_CATEGORY_WORDS = _categoryWordsData.food;
-let MEAT_TYPE_WORDS = _categoryWordsData.meat;
+let CATEGORY_MAP = loadCategoryWords();
 // Call after any add/remove so every consumer (detectFoodCategory,
 // fuzzyFindInLibrary, the category preview modal) sees the change without
 // needing a page reload.
 function refreshCategoryWords() {
-  saveCategoryWords({ food: FOOD_CATEGORY_WORDS, meat: MEAT_TYPE_WORDS });
+  saveCategoryWords({ map: CATEGORY_MAP });
 }
 // Compound terms that would otherwise be silently swallowed by a shorter
 // generic category word - "peanut butter" contains the substring "butter",
@@ -6087,38 +6114,51 @@ const COMPOUND_CATEGORY_CANONICAL = {
   'cashew butter': 'nut butter',
 };
 function canonicalCategory(matched) { return matched.replace(/es$/, '').replace(/s$/, ''); }
-// Single source of truth for category detection, used everywhere
-// FOOD_CATEGORY_WORDS matching happens - previously each of the 4 functions
-// that needed this ran the same inline `.find(c => text.includes(c))` logic
-// independently, which is exactly how this compound-word gap went unnoticed
-// in 3 of the 4 places even after being spotted and reasoned about in one.
+// Single source of truth for category detection, used everywhere CATEGORY_MAP
+// matching happens. Returns an ARRAY (possibly with more than one entry, per
+// Pete's "lettuce = vegetable + salad" example - a category isn't the
+// ingredient's own name) or an empty array if nothing matched. Compound terms
+// (peanut butter etc) are checked first and deliberately return their own
+// single-item array, kept separate from the generic 'fat'/'protein' buckets -
+// that's a genuine, existing safety property (don't suggest peanut butter as
+// a substitute for dairy butter) that giving it overlapping generic
+// categories would quietly break.
 function detectFoodCategory(text) {
   const lower = text.toLowerCase();
   const compound = COMPOUND_CATEGORY_WORDS.find(c => lower.includes(c));
-  if (compound) return COMPOUND_CATEGORY_CANONICAL[compound] || canonicalCategory(compound);
-  const generic = FOOD_CATEGORY_WORDS.find(c => lower.includes(c));
-  return generic ? canonicalCategory(generic) : null;
+  if (compound) return [COMPOUND_CATEGORY_CANONICAL[compound] || canonicalCategory(compound)];
+  const key = Object.keys(CATEGORY_MAP).find(c => lower.includes(c));
+  return key ? CATEGORY_MAP[key] : [];
+}
+// Shared by every fuzzy-match/substitute function that used to compare two
+// single categories for exact equality - now comparing two arrays, "conflict"
+// means they share NOTHING in common. Either side being unknown (empty) means
+// we can't say they conflict either way, so that's never treated as a clash.
+function categoriesConflict(catsA, catsB) {
+  if (!catsA || !catsA.length || !catsB || !catsB.length) return false;
+  return !catsA.some(c => catsB.includes(c));
 }
 // Single source of truth for a library ITEM's effective category/categories -
 // everything that needs to browse, preview, or build a meal suggestion by
 // category should call this, not detectFoodCategory directly. Checks the
 // per-item manual override first (item.categories, an array - a person can
 // genuinely belong to more than one group, e.g. "egg" as both dairy and
-// baking, which the flat auto-detection word list has no way to express at
-// all), falling back to the single auto-detected guess only when no
-// override has been set. Always returns an array (possibly empty), even
-// for the single-category auto-detected case, so callers never need to
-// branch on whether they got a string or a list back.
+// protein, which a single auto-detected guess could never express),
+// falling back to the auto-detected categories only when no override has
+// been set.
 function getItemCategories(item) {
   if (item && Array.isArray(item.categories) && item.categories.length) return item.categories;
-  const lower = ((item && item.name) || '').toLowerCase();
-  let cat = detectFoodCategory(lower);
-  if (!cat) {
-    const meatWord = MEAT_TYPE_WORDS.find(m => lower.includes(m));
-    if (meatWord) cat = canonicalMeatType(meatWord);
-  }
-  return cat ? [cat] : [];
+  return detectFoodCategory(((item && item.name) || '').toLowerCase());
 }
+// Deliberately separate from CATEGORY_MAP and NOT user-editable via Manage
+// Categories - this serves a stricter, different purpose. CATEGORY_MAP now
+// correctly groups chicken and beef together under meat/protein for
+// browsing (that's the whole point), but fuzzyFindInLibrary specifically
+// needs chicken to disqualify a match against beef even though both are
+// "meat" - "Chicken Mince" silently matching "Beef Mince" would be a real
+// logging error, not just a loose browse grouping. Kept as its own strict,
+// specific-type list so the two purposes can't interfere with each other.
+const MEAT_TYPE_WORDS = ['chicken','beef','pork','lamb','turkey','duck','venison','salmon','tuna','cod','haddock','prawn','prawns','bacon','ham','gammon','steak','salami','chorizo','kebab','pate','kabanos','anchovy','anchovies'];
 function fuzzyFindInLibrary(name) {
   const lib = loadLibrary();
   const lowerName = name.toLowerCase();
@@ -6145,7 +6185,7 @@ function fuzzyFindInLibrary(name) {
     const itemMeat = canonicalMeatType(MEAT_TYPE_WORDS.find(m => itemLower.includes(m)) || '') || null;
     if (queryMeat && itemMeat && queryMeat !== itemMeat) continue;
     const itemCategory = detectFoodCategory(itemLower);
-    if (queryCategory && itemCategory && queryCategory !== itemCategory) continue;
+    if (categoriesConflict(queryCategory, itemCategory)) continue;
     const itemWords = itemLower.replace(/['\u2019]/g, '').split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     if (!itemWords.length) continue;
     const matches = queryWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw))).length;
@@ -6193,7 +6233,7 @@ function findLibrarySubstitutes(name, excludeName, limit = 3) {
     // was fixed. A different food category (or brand, or meat type) is a
     // real mismatch signal here too, not noise to score around.
     const itemCategory = detectFoodCategory(itemLower);
-    if (queryCategory && itemCategory && queryCategory !== itemCategory) continue;
+    if (categoriesConflict(queryCategory, itemCategory)) continue;
     const itemMeat = canonicalMeatType(MEAT_TYPE_WORDS.find(m => itemLower.includes(m)) || '') || null;
     if (queryMeat && itemMeat && queryMeat !== itemMeat) continue;
     const itemWords = itemLower.replace(/['\u2019]/g, '').split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
@@ -7164,7 +7204,7 @@ function findComparableLibraryItems(name) {
     // all, and was slipping through as noise the same way it did in the
     // other matching functions.
     const itemCategory = detectFoodCategory(itemLower);
-    if (queryCategory && itemCategory && queryCategory !== itemCategory) return null;
+    if (categoriesConflict(queryCategory, itemCategory)) return null;
     const itemWords = itemLower.split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     if (!itemWords.length) return null;
     const matches = queryWords.filter(w => itemWords.some(iw => iw.includes(w) || w.includes(iw))).length;
@@ -7194,7 +7234,7 @@ function scanForDuplicateLibraryItems() {
     // Same protection as the other matching functions — a genuine category
     // mismatch (bread vs cheese) shouldn't ever be flagged as a possible
     // duplicate no matter how many incidental descriptor words line up.
-    if (catA && catB && catA !== catB) return 0;
+    if (categoriesConflict(catA, catB)) return 0;
     const wordsA = aLower.split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     const wordsB = bLower.split(/\s+/).filter(w => w.length > 2 && !LIBRARY_STOPWORDS.has(w));
     if (!wordsA.length || !wordsB.length) return 0;
@@ -7323,89 +7363,86 @@ function openCategoryItemsView(cat) {
 // uncategorized list (same logic as the preview modal above) and formats it
 // as a ready-to-paste request. Deliberately no "paste the result back and
 // save" step the way Research Digest has: what comes back here is source
-// code (an updated FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS array), not text to
-// store, so it needs an actual coding session and a real deploy, not a
-// form field in the app.
+// code (an updated DEFAULT_CATEGORY_MAP), not text to store, so it needs an
+// actual coding session and a real deploy, not a form field in the app.
 function copyCategoryUpdateRequest() {
   const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
   const uncategorized = lib.filter(f => getItemCategories(f).length === 0).map(f => f.name);
   if (!uncategorized.length) { showToast('Nothing uncategorized right now ✓'); return; }
-  const request = `Here are ${uncategorized.length} currently-uncategorized MaxedHealth library items (from FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS/detectFoodCategory in maxhealth.html): ${uncategorized.join(', ')}. Please extend FOOD_CATEGORY_WORDS and/or MEAT_TYPE_WORDS to categorize as many of these as reasonably possible, following the existing grouping/ordering/commenting conventions in the file. Keep in mind this same word list is also used by fuzzyFindInLibrary for false-positive-match prevention, so a word that's too broad or generic can weaken that safety net - flag anything borderline rather than adding it silently.`;
+  const request = `Here are ${uncategorized.length} currently-uncategorized MaxedHealth library items (from DEFAULT_CATEGORY_MAP/detectFoodCategory in maxhealth.html): ${uncategorized.join(', ')}. Please extend DEFAULT_CATEGORY_MAP to categorize as many of these as reasonably possible - each keyword should map to one or more GENERIC categories (e.g. lettuce -> ['vegetable','salad']), not to the ingredient's own name. Keep new categories consistent with the existing set (alcohol, bread, cereal, dairy, meat, fish, protein, fat, vegetable, fruit, sweet, savoury, herbs and spices, salad) rather than inventing near-duplicates. This same map is also used by fuzzyFindInLibrary for false-positive-match prevention via categoriesConflict(), so a category assignment that's too broad can weaken that safety net - flag anything borderline rather than adding it silently.`;
   navigator.clipboard.writeText(request)
     .then(() => showToast('Category update request copied — paste it to Claude in a coding session ✓'))
     .catch(() => showToast('Copy failed — try again'));
 }
 
-// Direct, in-app editing of the two auto-detection word lists themselves -
-// previously only changeable by editing the app's source code and
-// redeploying. Adding/removing a word here takes effect immediately for
-// every consumer (detectFoodCategory, fuzzyFindInLibrary, the preview modal)
-// since they all read the same FOOD_CATEGORY_WORDS/MEAT_TYPE_WORDS variables
-// by reference, not a snapshot - no reload needed. New words are always
-// appended at the end of their list, preserving the existing convention that
-// array order is match priority (specific dish-type words before generic
-// seasoning words) - see the comment above the seasoning block in
-// DEFAULT_FOOD_CATEGORY_WORDS for why that ordering matters.
+// Direct, in-app editing of CATEGORY_MAP itself - previously only changeable
+// by editing the app's source code and redeploying. Adding/removing/editing
+// a keyword here takes effect immediately for every consumer
+// (detectFoodCategory, fuzzyFindInLibrary, the browse view) since they all
+// read the same CATEGORY_MAP variable by reference, not a snapshot - no
+// reload needed. New keywords are appended at the end (object key order is
+// match priority, same as the old array), preserving the existing
+// convention that specific dish-type words come before generic seasoning
+// words - see the comment above the seasoning entries in DEFAULT_CATEGORY_MAP.
 function openManageCategoriesModal() {
   const existing = document.getElementById('manageCategoriesModal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
   modal.id = 'manageCategoriesModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
-  const wordChip = (word, listName) => `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 4px 3px 9px;font-size:12px;color:var(--text2);margin:2px;">${word}<span onclick="removeCategoryWord('${listName}','${word}')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">×</span></span>`;
+  const keywords = Object.keys(CATEGORY_MAP);
+  const row = (word) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <div style="font-size:13px;color:var(--text);">${word}</div>
+        <div style="font-size:11px;color:var(--text3);text-transform:capitalize;">→ ${CATEGORY_MAP[word].join(', ')}</div>
+      </div>
+      <span onclick="removeCategoryWord('${word}')" style="cursor:pointer;color:var(--text3);padding:4px 8px;font-size:16px;">×</span>
+    </div>`;
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Manage Categories</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:16px;line-height:1.5;">Changes apply immediately. These same two lists also help prevent wrong food matches when logging - a very broad or generic word here can weaken that protection, so keep new words fairly specific.</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:16px;line-height:1.5;">Each word maps to one or more generic categories (e.g. lettuce → vegetable, salad) - a category is never just the ingredient's own name. Changes apply immediately. This same map also helps prevent wrong food matches when logging - very broad categories can weaken that protection, so keep new ones reasonably specific.</div>
 
-      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Food Categories (${FOOD_CATEGORY_WORDS.length})</div>
-      <div id="foodCategoryWordsWrap" style="margin-bottom:10px;">${FOOD_CATEGORY_WORDS.map(w => wordChip(w, 'food')).join('')}</div>
-      <div style="display:flex;gap:6px;margin-bottom:20px;">
-        <input id="newFoodCategoryWord" type="text" placeholder="add a word, e.g. avocado" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;">
-        <button onclick="addCategoryWord('food')" style="padding:8px 14px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add</button>
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Words (${keywords.length})</div>
+      <div id="categoryWordsWrap" style="margin-bottom:16px;">${keywords.map(row).join('')}</div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Add a word</div>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">
+        <input id="newCategoryKeyword" type="text" placeholder="word, e.g. avocado" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;">
+        <input id="newCategoryValues" list="allKnownCategories" type="text" placeholder="categories, comma-separated, e.g. fruit, fat" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;">
+        <button onclick="addCategoryWord()" style="padding:8px 14px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add</button>
       </div>
 
-      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Meat / Protein Types (${MEAT_TYPE_WORDS.length})</div>
-      <div id="meatCategoryWordsWrap" style="margin-bottom:10px;">${MEAT_TYPE_WORDS.map(w => wordChip(w, 'meat')).join('')}</div>
-      <div style="display:flex;gap:6px;margin-bottom:20px;">
-        <input id="newMeatCategoryWord" type="text" placeholder="add a word, e.g. rabbit" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;">
-        <button onclick="addCategoryWord('meat')" style="padding:8px 14px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Add</button>
-      </div>
-
-      <button onclick="resetCategoryWords()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;margin-bottom:8px;">Reset both lists to defaults</button>
+      <button onclick="resetCategoryWords()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;margin-bottom:8px;">Reset to defaults</button>
       <button onclick="document.getElementById('manageCategoriesModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">Close</button>
     </div>`;
   document.body.appendChild(modal);
 }
 
-function addCategoryWord(listName) {
-  const inputId = listName === 'food' ? 'newFoodCategoryWord' : 'newMeatCategoryWord';
-  const input = document.getElementById(inputId);
-  const word = (input?.value || '').trim().toLowerCase();
-  if (!word) return;
-  const list = listName === 'food' ? FOOD_CATEGORY_WORDS : MEAT_TYPE_WORDS;
-  if (list.includes(word)) { showToast('Already in the list'); return; }
-  list.push(word); // appended at the end - preserves the specific-before-generic priority ordering
+function addCategoryWord() {
+  const wordInput = document.getElementById('newCategoryKeyword');
+  const valuesInput = document.getElementById('newCategoryValues');
+  const word = (wordInput?.value || '').trim().toLowerCase();
+  const cats = (valuesInput?.value || '').split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+  if (!word || !cats.length) { showToast('Enter both a word and at least one category'); return; }
+  CATEGORY_MAP[word] = cats; // appended at the end - preserves specific-before-generic priority ordering
   refreshCategoryWords();
-  input.value = '';
+  wordInput.value = ''; valuesInput.value = '';
   openManageCategoriesModal();
   showToast(`Added "${word}" ✓`);
 }
 
-function removeCategoryWord(listName, word) {
-  const list = listName === 'food' ? FOOD_CATEGORY_WORDS : MEAT_TYPE_WORDS;
-  const idx = list.indexOf(word);
-  if (idx === -1) return;
-  list.splice(idx, 1);
+function removeCategoryWord(word) {
+  delete CATEGORY_MAP[word];
   refreshCategoryWords();
   openManageCategoriesModal();
   showToast(`Removed "${word}"`);
 }
 
 function resetCategoryWords() {
-  appConfirm('Reset both category word lists back to the built-in defaults? Any words you\'ve added will be lost.', () => {
-    FOOD_CATEGORY_WORDS = DEFAULT_FOOD_CATEGORY_WORDS.slice();
-    MEAT_TYPE_WORDS = DEFAULT_MEAT_TYPE_WORDS.slice();
+  appConfirm('Reset the category map back to the built-in defaults? Any words you\'ve added or edited will be lost.', () => {
+    CATEGORY_MAP = Object.assign({}, DEFAULT_CATEGORY_MAP);
     refreshCategoryWords();
     openManageCategoriesModal();
     showToast('Reset to defaults ✓');
@@ -7454,8 +7491,7 @@ function refreshKnownCategoriesDatalist(lib) {
     document.body.appendChild(dl);
   }
   const known = new Set();
-  FOOD_CATEGORY_WORDS.forEach(w => known.add(canonicalCategory(w)));
-  MEAT_TYPE_WORDS.forEach(w => known.add(canonicalMeatType(w)));
+  Object.values(CATEGORY_MAP).forEach(cats => cats.forEach(c => known.add(c)));
   (lib || []).forEach(f => { if (Array.isArray(f.categories)) f.categories.forEach(c => known.add(c)); });
   dl.innerHTML = [...known].sort().map(c => `<option value="${c}">`).join('');
 }
