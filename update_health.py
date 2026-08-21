@@ -48,6 +48,13 @@ FIELD_SOURCES_FILE = os.path.join(BASE, 'data', 'field_sources.json')
 
 MAX_BACKUPS   = 7
 MAX_LOG_LINES = 500
+# Deliberately much longer than MAX_BACKUPS' 7 days — these are raw source
+# exports, not backups of already-merged data. They're the only way to
+# re-derive history if a future extractor bug is found (exactly what let
+# the RingConn date-shift bug get diagnosed and fully backfilled rather
+# than just patched going forward) — a short retention here would make that
+# kind of fix impossible for anything older than the window.
+INBOX_OLD_RETENTION_DAYS = 180
 
 # ── Source precedence (default order, user-configurable via prefs) ─────────────
 # health_connect sits last in every list deliberately - it's an aggregate of
@@ -706,6 +713,38 @@ def archive_inbox():
 
     if moved:
         print(f"  [archive] {moved} item(s) moved to inbox/old/")
+
+    trim_inbox_old()
+
+
+def trim_inbox_old():
+    """
+    Delete files and folders in inbox/old/ older than INBOX_OLD_RETENTION_DAYS.
+    Mirrors the cutoff-based trim already used for the backup/ rotation in
+    backup_files() — same pattern, deliberately longer window (see the
+    constant's own comment for why). Walks top-level items only; a dated
+    subfolder (e.g. HEALTH_DATA_20260803_140813/) is removed as a whole
+    once its own mtime crosses the cutoff, not pruned file-by-file inside.
+    """
+    old_dir = os.path.join(INBOX, 'old')
+    if not os.path.exists(old_dir):
+        return
+    cutoff = datetime.now().timestamp() - (INBOX_OLD_RETENTION_DAYS * 24 * 3600)
+    removed = 0
+    for item in os.listdir(old_dir):
+        path = os.path.join(old_dir, item)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                if os.path.isdir(path):
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                removed += 1
+        except Exception as e:
+            log('pipeline', 'trim', 'warn', f"Could not remove {item}: {e}")
+    if removed:
+        log('pipeline', 'trim', 'ok', f"Removed {removed} item(s) from inbox/old/ older than {INBOX_OLD_RETENTION_DAYS} days")
+        print(f"  [trim] {removed} item(s) older than {INBOX_OLD_RETENTION_DAYS} days removed from inbox/old/")
 
 
 if __name__ == '__main__':
