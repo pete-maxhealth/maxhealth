@@ -4370,7 +4370,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.539</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.540</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5168,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.539'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.540'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7448,20 +7448,32 @@ function copyCategoryUpdateRequest() {
 // match priority, same as the old array), preserving the existing
 // convention that specific dish-type words come before generic seasoning
 // words - see the comment above the seasoning entries in DEFAULT_CATEGORY_MAP.
-function openManageCategoriesModal() {
+function openManageCategoriesModal(sortMode) {
+  sortMode = sortMode || 'priority';
   const existing = document.getElementById('manageCategoriesModal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
   modal.id = 'manageCategoriesModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
-  const keywords = Object.keys(CATEGORY_MAP);
+  // Sorting here is purely a DISPLAY concern - it never touches
+  // CATEGORY_MAP's real key order, which is what detectFoodCategory's
+  // first-match search actually depends on for priority (specific words
+  // before generic ones). Reordering the object's keys to match a display
+  // sort would silently break that; this only reorders the array used to
+  // build the rows below.
+  let keywords = Object.keys(CATEGORY_MAP);
+  if (sortMode === 'word') keywords = [...keywords].sort();
+  else if (sortMode === 'category') keywords = [...keywords].sort((a, b) => CATEGORY_MAP[a].join(',').localeCompare(CATEGORY_MAP[b].join(',')) || a.localeCompare(b));
   const row = (word) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="flex:1;">
-        <div style="font-size:13px;color:var(--text);">${word}</div>
-        <div style="font-size:11px;color:var(--text3);text-transform:capitalize;">→ ${CATEGORY_MAP[word].join(', ')}</div>
+    <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <span style="flex:1;font-size:13px;color:var(--text);">${word}</span>
+        <span onclick="removeCategoryWord('${word}')" style="cursor:pointer;color:var(--text3);padding:2px 6px;font-size:16px;" title="Remove this word entirely">×</span>
       </div>
-      <span onclick="removeCategoryWord('${word}')" style="cursor:pointer;color:var(--text3);padding:4px 8px;font-size:16px;">×</span>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+        ${CATEGORY_MAP[word].map(c => `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:2px 3px 2px 7px;font-size:11px;color:var(--text2);text-transform:capitalize;">${c}<span onclick="removeCategoryFromWord('${word}','${c}')" style="cursor:pointer;color:var(--text3);padding:1px 4px;">×</span></span>`).join('')}
+        <input id="addCat-${word.replace(/[^a-z0-9]/gi,'_')}" list="allKnownCategories" placeholder="+ category" style="width:80px;background:transparent;border:1px dashed var(--border);border-radius:5px;padding:2px 5px;font-size:11px;color:var(--text);" onkeydown="if(event.key==='Enter'){addCategoryToWord('${word}','addCat-${word.replace(/[^a-z0-9]/gi,'_')}');event.preventDefault();}">
+      </div>
     </div>`;
   // Per-item manually-assigned categories (the "egg = dairy + baking" case)
   // live scattered across individual library items, not in one central
@@ -7482,7 +7494,14 @@ function openManageCategoriesModal() {
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Manage Categories</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:16px;line-height:1.5;">Each word maps to one or more generic categories (e.g. lettuce → vegetable, salad) - a category is never just the ingredient's own name. Changes apply immediately. This same map also helps prevent wrong food matches when logging - very broad categories can weaken that protection, so keep new ones reasonably specific.</div>
 
-      <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Words (${keywords.length})</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="font-size:12px;font-weight:700;color:var(--accent);">Words (${keywords.length})</div>
+        <select onchange="openManageCategoriesModal(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;padding:4px 6px;">
+          <option value="priority" ${sortMode==='priority'?'selected':''}>Match priority order</option>
+          <option value="word" ${sortMode==='word'?'selected':''}>A–Z, word</option>
+          <option value="category" ${sortMode==='category'?'selected':''}>A–Z, category</option>
+        </select>
+      </div>
       <div id="categoryWordsWrap" style="margin-bottom:16px;">${keywords.map(row).join('')}</div>
 
       <div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px;">Add a word</div>
@@ -7502,6 +7521,43 @@ function openManageCategoriesModal() {
       <button onclick="document.getElementById('manageCategoriesModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">Close</button>
     </div>`;
   document.body.appendChild(modal);
+}
+
+// Inline per-word category editing - previously the only way to change an
+// existing word's categories was to delete the whole entry and re-add it
+// from scratch via the Add a word form below, just to change one category.
+// Must build a FRESH array copy here, not mutate CATEGORY_MAP[word] in
+// place - Object.assign (in loadCategoryWords) copies array values by
+// reference, so an untouched default word's entry in CATEGORY_MAP is
+// literally the same array object as DEFAULT_CATEGORY_MAP's - mutating it
+// directly would corrupt the shared default for the rest of the session
+// AND silently fail to persist, since _categoryCustom would never actually
+// get told about the change.
+function addCategoryToWord(word, inputId) {
+  const input = document.getElementById(inputId);
+  const cat = (input?.value || '').trim().toLowerCase();
+  if (!cat) return;
+  const updated = CATEGORY_MAP[word].slice();
+  if (!updated.includes(cat)) updated.push(cat);
+  CATEGORY_MAP[word] = updated;
+  _categoryCustom[word] = updated;
+  refreshCategoryWords();
+  const sortMode = document.querySelector('#manageCategoriesModal select')?.value || 'priority';
+  openManageCategoriesModal(sortMode);
+}
+
+function removeCategoryFromWord(word, cat) {
+  const current = CATEGORY_MAP[word];
+  if (!current) return;
+  if (current.length <= 1) { showToast('A word needs at least one category - remove the whole word instead if none apply'); return; }
+  const updated = current.slice();
+  const idx = updated.indexOf(cat);
+  if (idx > -1) updated.splice(idx, 1);
+  CATEGORY_MAP[word] = updated;
+  _categoryCustom[word] = updated;
+  refreshCategoryWords();
+  const sortMode = document.querySelector('#manageCategoriesModal select')?.value || 'priority';
+  openManageCategoriesModal(sortMode);
 }
 
 function renameLibraryCategoryFromInput(oldName, inputId) {
