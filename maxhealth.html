@@ -4382,7 +4382,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.560</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.561</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5180,7 +5180,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.560'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.561'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13726,6 +13726,32 @@ function handleTodaySummaryQuery(lower, totals, targets) {
 }
 
 function handleNextMealQuery(lower, totals, targets) {
+  // "meat and 2 veg" / "protein and pasta" style bare structured requests -
+  // checked independently, before the ideaWords gate below, since a message
+  // this structurally specific doesn't need an extra "idea"/"suggestion"
+  // word to be unambiguous. This was the actual gap: typing "protein and
+  // pasta" alone (Pete's exact test) never reached parseMultiCategoryRequest
+  // at all before this fix - it was only ever called from inside the
+  // ideaWords block further down, so testing the parser in isolation and
+  // testing the pinned button (which calls suggestMealFromLibrary directly,
+  // bypassing this whole function) both looked like the feature worked
+  // without ever exercising the real path a bare typed phrase takes.
+  // Guarded against genuine logging attempts ("I had chicken and pasta for
+  // dinner", "200g chicken and 100g pasta") via word count, logging verbs,
+  // and weight/volume quantities - a bare count like "2" in "2 veg" is fine
+  // (that's the structured request's own count syntax), but "200g" is a
+  // strong, specific signal this is a log, not a request. All verified
+  // against real counter-examples, not just the target phrase.
+  const loggingVerbs = ['ate', 'had', 'eaten', 'consumed', 'logged', 'ago', 'breakfast', 'lunch', 'dinner', 'tea', 'yesterday'];
+  const hasLoggingVerb = loggingVerbs.some(v => lower.includes(v));
+  const hasWeightQuantity = /\d+\s*(g|ml|kg|l|gram|grams|oz|lb)\b/i.test(lower);
+  if (lower.split(/\s+/).length <= 6 && !hasLoggingVerb && !hasWeightQuantity) {
+    const bareMultiCat = parseMultiCategoryRequest(lower);
+    if (bareMultiCat.length >= 2) {
+      suggestMealFromLibrary('both', bareMultiCat);
+      return true;
+    }
+  }
   // Direct category/snack requests ("protein ideas", "salad suggestions",
   // "snack ideas") skip the generic advice-text-plus-button flow below
   // entirely and go straight to a real, library-based suggestion - the same
