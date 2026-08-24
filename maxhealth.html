@@ -4385,7 +4385,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.544</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.545</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5183,7 +5183,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.544'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.545'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17063,28 +17063,35 @@ function renderTileTrafficLights(totals, targets, effCarbs, fatTotal, fatTarget)
 // position could disagree with the actual stated goal (e.g. briefly sitting
 // at/above target during a gain phase shouldn't suddenly be read as a lose
 // intention) — reading the real setting directly avoids that entirely.
-function computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange, intention) {
+function computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange, intention, windowDays) {
   if (!displayWeight || avgDailyChange === null) return null;
   intention = intention || localStorage.getItem('mh_goal') || 'gain';
   const weeklyRate = avgDailyChange * 7; // +ve = gaining, -ve = losing
   const FAST_RATE = 1.5;
   const STABLE_BAND = 0.15;
+  // Every label below previously stated a status ("slight loss", "stable")
+  // with no indication of what period it was actually measured over -
+  // reads very differently as "today" vs "the last 2 weeks". windowDays
+  // matches whatever the caller's own recent-entries slice actually used
+  // (both current callers pass 14), rather than a separate hardcoded
+  // number here that could silently drift out of sync with it.
+  const period = windowDays ? ` (last ${windowDays} days)` : '';
 
   let color, label;
 
   if (intention === 'gain') {
-    if (weeklyRate >= STABLE_BAND)      { color = '#2deb8f'; label = 'Gaining — on track for target'; }
-    else if (weeklyRate > -STABLE_BAND) { color = '#f5c542'; label = 'Flat — not progressing toward gain target'; }
-    else                                 { color = '#ff5e5e'; label = 'Losing — moving away from gain target'; }
+    if (weeklyRate >= STABLE_BAND)      { color = '#2deb8f'; label = `Gaining${period} — on track for target`; }
+    else if (weeklyRate > -STABLE_BAND) { color = '#f5c542'; label = `Flat${period} — not progressing toward gain target`; }
+    else                                 { color = '#ff5e5e'; label = `Losing${period} — moving away from gain target`; }
   } else if (intention === 'lose') {
-    if (weeklyRate <= -FAST_RATE)        { color = '#f5c542'; label = 'Losing quickly — worth checking it\'s sustainable'; }
-    else if (weeklyRate <= -STABLE_BAND) { color = '#2deb8f'; label = 'Losing — on track for target'; }
-    else if (weeklyRate < STABLE_BAND)   { color = '#f5c542'; label = 'Flat — not progressing toward loss target'; }
-    else                                  { color = '#ff5e5e'; label = 'Gaining — moving away from loss target'; }
+    if (weeklyRate <= -FAST_RATE)        { color = '#f5c542'; label = `Losing quickly${period} — worth checking it's sustainable`; }
+    else if (weeklyRate <= -STABLE_BAND) { color = '#2deb8f'; label = `Losing${period} — on track for target`; }
+    else if (weeklyRate < STABLE_BAND)   { color = '#f5c542'; label = `Flat${period} — not progressing toward loss target`; }
+    else                                  { color = '#ff5e5e'; label = `Gaining${period} — moving away from loss target`; }
   } else {
-    if (Math.abs(weeklyRate) <= STABLE_BAND) { color = '#2deb8f'; label = 'Stable — maintaining well'; }
-    else if (Math.abs(weeklyRate) <= FAST_RATE) { color = '#f5c542'; label = (weeklyRate < 0 ? 'Slight loss' : 'Slight gain') + ' — within acceptable range'; }
-    else { color = '#ff5e5e'; label = (weeklyRate < 0 ? 'Losing' : 'Gaining') + ' — drifting from maintenance'; }
+    if (Math.abs(weeklyRate) <= STABLE_BAND) { color = '#2deb8f'; label = `Stable${period} — maintaining well`; }
+    else if (Math.abs(weeklyRate) <= FAST_RATE) { color = '#f5c542'; label = (weeklyRate < 0 ? 'Slight loss' : 'Slight gain') + `${period} — within acceptable range`; }
+    else { color = '#ff5e5e'; label = (weeklyRate < 0 ? 'Losing' : 'Gaining') + `${period} — drifting from maintenance`; }
   }
   return { intention, color, label };
 }
@@ -17107,7 +17114,7 @@ function previewWeightIntention(hypotheticalGoal) {
     const daySpan = Math.max(1, Math.round((parseHistDate(newest.date) - parseHistDate(oldest.date)) / 86400000));
     avgDailyChange = (newest.weight - oldest.weight) / daySpan;
   }
-  const status = computeWeightIntentionStatus(displayWeight, null, null, avgDailyChange, hypotheticalGoal);
+  const status = computeWeightIntentionStatus(displayWeight, null, null, avgDailyChange, hypotheticalGoal, 14);
   const el = document.getElementById('weightIntentionPreview');
   if (!el) return;
   if (!status) {
@@ -17123,7 +17130,7 @@ function previewWeightIntention(hypotheticalGoal) {
 function renderWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange) {
   const el = document.getElementById('weightIntentionStatus');
   if (!el) return;
-  const status = computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange);
+  const status = computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange, undefined, 14);
   if (!status) { el.style.display = 'none'; return; }
   el.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${status.color};margin-right:5px;vertical-align:middle;"></span><span style="color:${status.color};">${status.label}</span>`;
   el.style.display = 'block';
