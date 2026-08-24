@@ -4385,7 +4385,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.547</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.548</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5183,7 +5183,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.547'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.548'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -21903,7 +21903,7 @@ function renderRecipeList() {
         Per serving: ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C
       </div>
       <div style="display:flex;gap:6px;">
-        <button class="run-btn" style="flex:1;font-size:12px;padding:8px;" onclick="logRecipe('${r.id}', 1)">Log 1 serving</button>
+        <button class="run-btn" style="flex:1;font-size:12px;padding:8px;" onclick="reviewRecipeBeforeLogging('${r.id}', 1)">Log 1 serving</button>
         ${servings > 1 ? `<button class="copy-btn" style="font-size:12px;padding:8px;" onclick="promptRecipeServings('${r.id}')">Other</button>` : ''}
         ${(r.steps && r.steps.length) ? `<button class="copy-btn" style="font-size:12px;padding:8px;color:var(--accent);border-color:var(--accent-glow);" onclick="openCookMode('${r.id}')">🍳 Cook</button>` : ''}
       </div>
@@ -21927,6 +21927,40 @@ function deleteRecipe(id) {
     null,
     true
   );
+}
+
+// Recipes logged directly (logRecipe/_doLogRecipe below) had zero review
+// step - no way to add, remove, or swap an ingredient before it hit the
+// log, unlike an AI-suggested combo which already has all three. Reuses
+// that exact same editable-card system rather than building anything new -
+// a saved recipe's ingredients already carry the same _base shape
+// _libItemToScalableIngredient produces (both built through the same
+// recipe-builder path), so they slot in directly once scaled for the
+// requested servings.
+function reviewRecipeBeforeLogging(id, servings) {
+  const recipe = loadRecipes().find(r => r.id === id);
+  if (!recipe) return;
+  const factor = servings / (recipe.servings || 1);
+  const items = (recipe.ingredients || []).map(ing => {
+    const base = ing._base || { kcal: ing.kcal, protein: ing.protein, carbs: ing.carbs, fat: ing.fat || 0, fibre: ing.fibre || 0, baseG: ing.amount || 100 };
+    const amount = Math.round((ing.amount || base.baseG) * factor);
+    const scaleFactor = amount / (base.baseG || 100);
+    return {
+      name: ing.name, amount,
+      kcal: Math.round(base.kcal * scaleFactor),
+      protein: Math.round(base.protein * scaleFactor * 10) / 10,
+      fat: Math.round((base.fat||0) * scaleFactor * 10) / 10,
+      carbs: Math.round(base.carbs * scaleFactor * 10) / 10,
+      fibre: Math.round((base.fibre||0) * scaleFactor * 10) / 10,
+      _base: base,
+    };
+  });
+  if (!window._pendingLibraryCombos) window._pendingLibraryCombos = [];
+  const comboIndex = window._pendingLibraryCombos.length;
+  window._pendingLibraryCombos.push({ type: 'items', items, note: `${recipe.name} — ${servings} serving${servings > 1 ? 's' : ''}`, anyMissing: false });
+  switchTabById('chat');
+  const bubble = addBubble(`Review "${recipe.name}" before logging — add, remove, or swap anything, then confirm:`, 'system');
+  bubble.innerHTML += `<div id="combo-card-${comboIndex}">${_buildComboItemsCardHTML(comboIndex)}</div>`;
 }
 
 function logRecipe(id, servings) {
@@ -21958,7 +21992,7 @@ function logRecipe(id, servings) {
 function promptRecipeServings(id) {
   const recipe = loadRecipes().find(r => r.id === id);
   if (!recipe) return;
-  appPrompt(`Servings of "${recipe.name}"?`, `Recipe makes ${recipe.servings}`, (s) => { _doLogRecipe(recipe, s); });
+  appPrompt(`Servings of "${recipe.name}"?`, `Recipe makes ${recipe.servings}`, (s) => { reviewRecipeBeforeLogging(id, parseFloat(s) || 1); });
 }
 
 // ─── MISSED DAY CONVERSATIONAL FLOW ─────────────────────
