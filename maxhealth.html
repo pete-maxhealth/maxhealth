@@ -4382,7 +4382,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.563</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.564</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5180,7 +5180,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.563'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.564'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12601,7 +12601,11 @@ function startNextMealFlow() {
   // Reset fresh every time the picker opens - a stale selection from a
   // previous, already-sent request should never silently carry into a new one.
   window._mealPillSelections = {};
-  const disableAll = `this.closest('.chat-bubble').querySelectorAll('button,input,.mealPillEl').forEach(b=>{b.disabled=true;b.style.pointerEvents='none';b.style.opacity='0.5';});`;
+  // Reset button deliberately excluded from this selector (its own id,
+  // not the shared .mealPillEl/button/input classes) - the whole point of
+  // it is to stay usable after Send so several combinations can be tried
+  // in one sitting, rather than reopening Next meal idea each time.
+  const disableAll = `this.closest('.chat-bubble').querySelectorAll('button,input,.mealPillEl').forEach(b=>{if(b.id!=='mealPillResetBtn'){b.disabled=true;b.style.pointerEvents='none';b.style.opacity='0.5';}});`;
 
   const quickPill = (kind, label, emoji, color) =>
     `<button onclick="${disableAll}suggestMealFromLibrary('${kind}')" style="padding:6px 12px;background:var(--surface2);border:1px solid ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label}</button>`;
@@ -12622,9 +12626,9 @@ function startNextMealFlow() {
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
       ${quickPill('snack', 'Snack', '🍿', '#f59e0b')}
       ${catPills}
-      ${quickPill('both', 'Either', '🤷', 'var(--accent)')}
     </div>
     <button id="mealPillSendBtn" onclick="${disableAll}sendMealPillSelections()" disabled style="width:100%;margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;">Select at least one category above</button>
+    <button id="mealPillResetBtn" onclick="resetMealPillPicker(this)" style="width:100%;margin-top:8px;padding:8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;">🔄 Reset — try a different combination</button>
   `;
 }
 
@@ -12686,6 +12690,32 @@ function sendMealPillSelections() {
   const composition = Object.entries(window._mealPillSelections || {}).map(([category, count]) => ({ category, count: parseInt(count, 10) || 1 }));
   if (!composition.length) return;
   suggestMealFromLibrary('both', composition);
+}
+
+// Clears the current selection and undoes whatever Send's disableAll did,
+// so a different combination can be tried in the same bubble without
+// reopening Next meal idea from scratch each time.
+function resetMealPillPicker(btn) {
+  window._mealPillSelections = {};
+  const wrap = btn.closest('.chat-bubble');
+  if (!wrap) return;
+  wrap.querySelectorAll('button,input,.mealPillEl').forEach(el => {
+    if (el.id === 'mealPillResetBtn') return;
+    el.disabled = false;
+    el.style.pointerEvents = '';
+    el.style.opacity = '';
+  });
+  wrap.querySelectorAll('.mealPillEl[id^="mealPill-"]').forEach(pillEl => {
+    pillEl.style.background = 'var(--surface2)';
+    pillEl.style.color = 'var(--text2)';
+    pillEl.style.borderColor = 'var(--text2)';
+  });
+  wrap.querySelectorAll('.mealPillEl[id^="mealPillCount-"]').forEach(countEl => {
+    countEl.style.display = 'none';
+    countEl.value = 1;
+  });
+  updateMealSendButtonState();
+  showToast('Cleared — pick a new combination');
 }
 
 // ─── RECIPE DISCOVERY (Library area) ─────────────────────────────────────────
