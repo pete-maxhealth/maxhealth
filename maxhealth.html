@@ -2718,6 +2718,12 @@
         <span class="food-amount-unit">g</span>
       </div>
       <div class="food-amount-scaled" id="foodAmountScaled">Enter amount above</div>
+      <!-- Was genuinely missing here too - this save path bypasses even the
+           shared validateAndSaveLibraryEntry infrastructure entirely (its
+           own separate overwrite-by-name check, no modal, no category
+           opportunity at all). Optional, left blank still auto-detects
+           normally. -->
+      <input id="foodAmountCategories" list="allKnownCategories" type="text" placeholder="Categories for library save (optional, comma-separated)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px;">
       <div class="food-amount-btns">
         <div class="food-amount-back" onclick="backToFoodSearch()">← Back</div>
         <button class="food-amount-save" onclick="saveFoodToLibraryFromPanel()">💾 Save</button>
@@ -2917,7 +2923,13 @@
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openLibraryVoiceModal()">🎤 Voice add</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openDuplicateScanModal()">🔍 Find Duplicates</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openCategoryPreviewModal()">🏷️ Preview Categories</button>
+      <!-- Archived 2026-08-24: "Convert Meals to Recipes" button removed
+           from the UI - Pete confirmed the one-time migration is complete,
+           nothing left to convert. Underlying function migrateMealsToRecipes()
+           left in place, just not called from anywhere - restore this line
+           to bring it back if a genuine need resurfaces:
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="migrateMealsToRecipes()">🔄 Convert Meals to Recipes</button>
+      -->
       <!-- Archived 2026-08-22: "Copy Category Update Request" button removed
            from the UI. It copied a request assuming the person has their own
            Claude coding session to paste it into and knowledge of the
@@ -4370,7 +4382,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.554</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.556</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5168,7 +5180,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.554'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.556'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7393,7 +7405,7 @@ function openCategoryPreviewModal() {
   const groups = {};
   const uncategorized = [];
   lib.forEach(f => {
-    const cats = getItemCategories(f);
+    const cats = getItemCategories(f).filter(c => c !== 'snack' && c !== 'snacks');
     if (cats.length) {
       cats.forEach(cat => { (groups[cat] = groups[cat] || []).push(f); });
     } else {
@@ -7458,7 +7470,13 @@ function openCategoryItemsView(cat) {
           <button onclick="document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
         </div>`;
       }).join('') || '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No items in this category.</div>'}
-      <button onclick="document.getElementById('categoryItemsModal').remove();openAddFoodModalForCategory('${cat}');" style="width:100%;padding:12px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:14px;">+ Add ${cat} item</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:12px;">
+        <span style="font-size:12px;color:var(--text2);">+ Add ${cat} item:</span>
+        <div style="display:flex;gap:14px;">
+          <span onclick="document.getElementById('categoryItemsModal').remove();openCategoryItemsSearchOnline('${cat}');" style="font-size:12px;color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online</span>
+          <span onclick="document.getElementById('categoryItemsModal').remove();openAddFoodModalForCategory('${cat}');" style="font-size:12px;color:var(--yellow);text-decoration:underline;cursor:pointer;">✏️ Enter manually</span>
+        </div>
+      </div>
       <button onclick="document.getElementById('categoryItemsModal').remove();openCategoryPreviewModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:12px;font-size:13px;cursor:pointer;margin-top:8px;">← Back to categories</button>
       <button onclick="document.getElementById('categoryItemsModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
     </div>`;
@@ -11854,6 +11872,7 @@ function closeFoodSearch() {
   // No modal to restore for combo mode - just clear the target so a
   // cancelled search doesn't silently apply to a future unrelated one
   _comboSearchTarget = null;
+  _categorySearchTarget = null;
 }
 
 function handleFoodSearchOverlayClick(e) {
@@ -12165,6 +12184,15 @@ function selectFoodResult(i) {
     (_p.salt   ? ` · ${_p.salt}g salt`     : '') +
     (_p.iron   ? ` · ${_p.iron}mg iron`    : '') +
     (_p.polyols ? `<div style="color:var(--accent);margin-top:4px;">🍬 Contains ${_p.polyols}g polyols — subtracted automatically in Net Carbs mode</div>` : '');
+  // If this search was launched from "+ Add [category] item" in the
+  // category browse view, carry that category through to the amount panel
+  // now that a real result's been picked - one-shot, cleared right after
+  // so it doesn't leak into an unrelated later search.
+  if (_categorySearchTarget) {
+    const catEl = document.getElementById('foodAmountCategories');
+    if (catEl) catEl.value = _categorySearchTarget;
+    _categorySearchTarget = null;
+  }
   // Clear input — never pre-fill for a normal new-food search, always make
   // the user confirm a real amount. EXCEPT when arrived here via Search on
   // an already-flagged recipe ingredient that already has a real amount set
@@ -12378,6 +12406,8 @@ function saveFoodToLibraryFromPanel() {
     per100g: true,
     source:  'database',
   };
+  const catInput = (document.getElementById('foodAmountCategories')?.value || '').trim();
+  if (catInput) entry.categories = catInput.split(',').map(c => c.trim().toLowerCase()).filter(c => c && c !== 'snack' && c !== 'snacks');
   // Previously blocked outright with no way to overwrite — meaning a wrong existing
   // entry could never be corrected via this path. Overwrites by name instead.
   const existingIdx = lib.findIndex(l => l.name.toLowerCase() === displayName.toLowerCase());
@@ -12391,6 +12421,8 @@ function saveFoodToLibraryFromPanel() {
     saveLibrary(lib);
     showToast(`"${displayName}" saved to library ✓${polyolNote}`);
   }
+  const catEl = document.getElementById('foodAmountCategories');
+  if (catEl) catEl.value = ''; // clear after use - the field isn't reset every time this panel opens for a new food (several separate entry points do that), so this at least stops a category silently carrying into a later, unrelated save
 }
 
 // ─── CHAT LOGIC ──────────────────────────────────────────
@@ -15278,6 +15310,13 @@ function renderMealPreview() {
     ${impactHtml}
     ${warnings.length ? `<div style="margin-bottom:6px;">${warnings.map(w => `<div style="font-size:11px;color:var(--yellow);line-height:1.5;padding:3px 0;">${w}</div>`).join('')}</div>` : ''}
     ${window._pendingMealMessage && !aiAssumed ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;font-style:italic;">${window._pendingMealMessage}</div>` : ''}
+    <!-- Was genuinely missing here too - "Save only" bypassed both other
+         save-to-library modals entirely (direct push, no confirmation step
+         at all), so neither of those earlier category fixes reached this
+         path. One shared field since this bubble can cover several foods
+         at once - applies to all of them if filled in, left blank they
+         still auto-detect normally same as anything else. -->
+    <input id="mealPreviewCategories" list="allKnownCategories" type="text" placeholder="Categories for Save only (optional, comma-separated)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-top:8px;">
     <div style="display:flex;gap:8px;margin-top:4px;">
       <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
@@ -15967,6 +16006,14 @@ function saveLibraryOnlyFromPreview() {
   const lib = loadLibrary();
   dbg(`Library loaded: ${lib.length} existing item(s)`);
   const saved = [], overwritten = [], needsConfirm = [];
+  // Applied to every entry in this batch if filled in - "snack"/"snacks"
+  // blocked here too, same rule as the per-item category editor (it's a
+  // meal-size concept, not a food category, and already has its own
+  // dedicated pinned handling in the meal-suggestion picker).
+  const sharedCatsInput = (document.getElementById('mealPreviewCategories')?.value || '').trim();
+  const sharedCats = sharedCatsInput
+    ? sharedCatsInput.split(',').map(c => c.trim().toLowerCase()).filter(c => c && c !== 'snack' && c !== 'snacks')
+    : null;
 
   foods.forEach(f => {
     const entry = {
@@ -15981,6 +16028,7 @@ function saveLibraryOnlyFromPreview() {
       locked: true,
       source: 'ai_confirmed'
     };
+    if (sharedCats && sharedCats.length) entry.categories = sharedCats;
     console.log(`[saveLibraryOnlyFromPreview] Processing "${f.name}":`, entry);
     dbg(`Processing "${f.name}" - ${entry.kcal}kcal, ${entry.protein}g P, ${entry.fat}g F, ${entry.carbs}g C, portion: ${entry.portion || '(none)'}`);
     const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
@@ -20906,6 +20954,17 @@ function openComboItemOnlineSearch(comboIndex, itemIndex) {
   const cleanName = item.name.replace(/^⚠️\s*/, '').trim();
   const input = document.getElementById('foodSearchInput');
   if (input) { input.value = cleanName; onFoodSearchInput(cleanName); }
+}
+
+// Same idea again, for "+ Add [category] item" in the category browse view -
+// search first (falls back to Enter manually if nothing's found), with the
+// category carried through to whichever path is actually used. Empty
+// search input, unlike the two above - there's no existing name to search
+// for, this is a genuinely new item.
+let _categorySearchTarget = null;
+function openCategoryItemsSearchOnline(cat) {
+  _categorySearchTarget = cat;
+  openFoodSearch();
 }
 
 async function handleRecipeBarcode(input) {
