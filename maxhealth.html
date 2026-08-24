@@ -4385,7 +4385,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.543</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.544</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5183,7 +5183,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.543'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.544'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24380,6 +24380,17 @@ let _drillMetric = null;
 let _drillPeriod = 30;
 let _drillChart  = null;
 
+// steps.ref below was hardcoded to [7500,10000] regardless of the user's
+// own configured step baseline (mh_steps_baseline) - meaning someone with a
+// different personal target would see "Below range"/"Above range" against
+// a number that was never actually theirs. This computes it dynamically
+// instead; every other metric's ref stays exactly as defined below.
+function getDrillConfig(metric) {
+  const cfg = DRILL_CONFIG[metric];
+  if (!cfg || metric !== 'steps') return cfg;
+  const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+  return Object.assign({}, cfg, { ref: [baseline, baseline + 2500] }); // same +2500 spread as the original hardcoded 7500-10000
+}
 const DRILL_CONFIG = {
   hr:       { title: 'Heart Rate',         unit: 'bpm',   color: '#ff5e5e', icon: '❤️',  field: 'hr_avg',         ref: [60,100], refLabel: 'Normal range' },
   hrv:      { title: 'HRV',                unit: 'ms',    color: '#a78bfa', icon: '💜',  field: 'hrv',            ref: [20,60],  refLabel: 'Good range' },
@@ -24533,7 +24544,7 @@ function getFullBodyCompositionHistory() {
 }
 
 function getDrillData(metric, period) {
-  const cfg   = DRILL_CONFIG[metric];
+  const cfg   = getDrillConfig(metric);
   if (!cfg) return [];
 
   // Body-composition metrics deliberately source from the FULL Withings
@@ -24633,7 +24644,7 @@ function setDrillPeriod(period, btn) {
 
 function renderDrill() {
   const metric = _drillMetric;
-  const cfg    = DRILL_CONFIG[metric];
+  const cfg    = getDrillConfig(metric);
   const data   = getDrillData(metric, _drillPeriod);
   if (!cfg) return;
 
@@ -24952,14 +24963,21 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
   }
 
   else if (metric === 'steps') {
+    // Was hardcoded to 7500 regardless of the user's own configured step
+    // baseline (mh_steps_baseline) - showing "Days >= 7,500 steps" as if
+    // that were everyone's target, when it's really just the app-wide
+    // fallback default. 10,000 and 5,000 below are left as-is - those are
+    // recognisable universal public-health benchmarks, not meant to be
+    // personal, so this fix doesn't touch them.
+    const stepsBaseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
     const daysOver10k = vals.filter(v => v >= 10000).length;
-    const daysOver7500 = vals.filter(v => v >= 7500).length;
+    const daysOverBaseline = vals.filter(v => v >= stepsBaseline).length;
     el.innerHTML += `
       <div class="drill-section">
         <div class="drill-section-title">Activity breakdown</div>
         ${[
           ['Days ≥ 10,000 steps', daysOver10k],
-          ['Days ≥ 7,500 steps', daysOver7500],
+          [`Days ≥ ${stepsBaseline.toLocaleString()} steps (your baseline)`, daysOverBaseline],
           ['Days < 5,000 steps', vals.filter(v=>v<5000).length],
           ['Best day', max ? max.toLocaleString() : '—'],
         ].map(([l,v]) => `<div class="drill-row"><span class="drill-row-label">${l}</span><span class="drill-row-val">${v}</span></div>`).join('')}
@@ -29458,7 +29476,7 @@ function renderLightboxChart() {
   // effect of Chart.js fitting all series together — same fix, same data,
   // now also showing the reference band as useful context instead of
   // needing a trip to Deep Dive just to see it.
-  const cfg = DRILL_CONFIG[_lightboxMetric];
+  const cfg = getDrillConfig(_lightboxMetric);
   const datasets = [{
     data: values,
     borderColor: color,
