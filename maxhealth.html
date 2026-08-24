@@ -4385,7 +4385,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.545</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.547</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5183,7 +5183,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.545'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.547'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -16059,8 +16059,18 @@ function logFoods(foods, originalText, aiMessage = null) {
     saveState();
     const dayTotals = targetDay.totals;
     traceLogMutation('logFoods_pastDay', window._logTargetDate, 'after');
-    addBubble(`✓ Added to ${window._logTargetDate}: ${entry.description} — ${entry.kcal}kcal · ${entry.protein}g P · ${entry.fat}g F · ${entry.carbs}g C<br><span style="font-size:11px;color:var(--text3);">New day total: ${Math.round(dayTotals.kcal)}kcal · ${dayTotals.protein}g P · ${dayTotals.fat}g F · ${dayTotals.carbs}g C</span>`, 'system', 'success');
-    showToast(`Logged to ${window._logTargetDate} ✓`);
+    const loggedDate = window._logTargetDate;
+    // Was sticky indefinitely - only cleared by an explicit "Back to today"
+    // tap, with nothing else ever resetting it. That meant a second,
+    // unrelated logging action later in the same session - genuinely meant
+    // for today - would silently also land on this past day if the yellow
+    // banner went unnoticed. Auto-clearing after every successful log makes
+    // each past-day entry a deliberate, one-shot action instead of a mode
+    // that can be forgotten about.
+    window._logTargetDate = null;
+    renderPastDayLogBanner();
+    addBubble(`✓ Added to ${loggedDate}: ${entry.description} — ${entry.kcal}kcal · ${entry.protein}g P · ${entry.fat}g F · ${entry.carbs}g C<br><span style="font-size:11px;color:var(--text3);">New day total: ${Math.round(dayTotals.kcal)}kcal · ${dayTotals.protein}g P · ${dayTotals.fat}g F · ${dayTotals.carbs}g C — back to logging today normally</span>`, 'system', 'success');
+    showToast(`Logged to ${loggedDate} ✓ — back to today`);
     return;
   }
 
@@ -21740,6 +21750,40 @@ function openVoiceCommandHelp(context) {
 }
 function closeVoiceCommandHelp() {
   document.getElementById('voiceHelpModal').style.display = 'none';
+}
+
+// Recipe ingredients store a frozen snapshot (ing._base) of each item's
+// macros at the moment it was added - correcting that same item's values
+// later in the Library never reaches a recipe already built from it.
+// Re-looks up each ingredient by EXACT name against the current library
+// (deliberately exact, not fuzzy - a fuzzy match here risks silently
+// pulling in the wrong product's numbers, exactly the class of bug fixed
+// earlier for recipe-suggestion matching). Only touches ingredients whose
+// current library values genuinely differ from what's stored; anything
+// with no exact match, or nothing changed, is left alone.
+function refreshRecipeFromLibrary() {
+  const lib = loadLibrary();
+  let updated = 0, checked = 0;
+  _recipeIngredients.forEach(ing => {
+    if (!ing._base) return; // manually-entered ingredients with no library link at all - nothing to refresh against
+    const match = lib.find(f => f.name === ing.name);
+    if (!match) return;
+    checked++;
+    const _ps = (match.portion || '').toLowerCase();
+    const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
+    const baseG = _pg ? (parseFloat(match.portion) || 100) : 100;
+    const newBase = { kcal: match.kcal, protein: match.protein, carbs: match.carbs, fat: match.fat || 0, fibre: match.fibre || 0, polyols: match.polyols || 0, baseG };
+    const changed = ['kcal','protein','carbs','fat'].some(k => Math.abs((ing._base[k]||0) - (newBase[k]||0)) > 0.01);
+    if (!changed) return;
+    ing._base = newBase;
+    const scaled = getScaledIngredient(ing);
+    ing.kcal = scaled.kcal; ing.protein = scaled.protein; ing.fat = scaled.fat; ing.carbs = scaled.carbs; ing.fibre = scaled.fibre; ing.polyols = scaled.polyols;
+    updated++;
+  });
+  renderRecipeIngredients();
+  updateRecipeTotals();
+  if (!checked) { showToast('No ingredients matched anything in your current library'); return; }
+  showToast(updated ? `Updated ${updated} ingredient${updated>1?'s':''} from your library ✓` : 'Already up to date — nothing had changed');
 }
 
 function updateRecipeTotals() {
@@ -30248,6 +30292,15 @@ function dismissInsight() {
       <div id="recipeTotalsText" style="font-size:14px;color:var(--text);font-family:Space Mono,monospace;"></div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px;" id="recipePerServingText"></div>
     </div>
+
+    <!-- Recipe ingredients store a frozen snapshot of each item's macros at
+         the moment it was added (ing._base) - editing that same ingredient's
+         values later in the Library never touches recipes already built from
+         it. Deliberately an explicit action rather than auto-syncing - a
+         silent change to a recipe's numbers would be its own kind of
+         surprise, especially if a value was intentionally corrected/locked
+         for that specific recipe. -->
+    <button class="copy-btn" style="width:100%;margin-bottom:16px;font-size:12px;" onclick="refreshRecipeFromLibrary()">🔄 Refresh from Library</button>
 
     <div style="display:flex;gap:8px;">
       <button class="modal-btn cancel" style="flex:1;" onclick="closeRecipeBuilder()">Cancel</button>
