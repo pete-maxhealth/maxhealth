@@ -208,6 +208,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.466-471 | 17 | Remote diagnostics (`/system-status` + App Health Check) — confirmed solving a real, previously stuck device end-to-end. Personalised Activity Level (real Profile setting, research-backed fitness-adjusted walking pace bands) plus real auto-switch from sustained step-count trends, modelled on but more noise-resistant than the existing weight/goal auto-switch — plus a genuine long-standing structural div-balance bug found via the new diagnostics (stray duplicate closing tag), `bump_and_deploy.sh`'s own safety check fixed to match (it had the same blind spot), 3 debug/settings sections found being silently relocated out of Advanced Tools by the reorder system, and 2 further small pre-existing bugs (a notification setting never restored from backup, Condition History's field never populated on fresh page load) |
 | v3.10.472-499 | 17 | Not individually documented — see CHANGELOG.md's Known Outstanding Items |
 | v3.10.500-510 | 17 | Itemized per-ingredient editors for Today's Log and History (add/remove/edit, amount-driven auto-scale, new bulk "scale entire entry to X%"), photo/label AI pipeline unification (toggle removed, ~140 lines dead code, AI-assumed-amount detector), a critical library-meal portion misparse bug ("1 serving" read as 1 gram via a bare `parseFloat`), weight trend staleness fix, condition-aware Carb Zones tooltip, Open Food Facts text-search fibre/polyols parity with barcode scan — plus, outside `maxhealth.html`'s own versioning: a RingConn sleep date-shift bug found and fixed (affected ~half of all sleep sessions), a full historical backfill from raw export data, and an inbox retention policy added where none existed before |
+| v3.10.510-563 | 18 | Category system built from scratch (editable map, per-item overrides, rename/typo-protection tooling), structured meal requests ("meat + 3 veg" via typed phrase or a multi-select pill picker with real partial-match handling), Meals retired in favour of Recipes (real per-item ingredients, review-before-logging, Refresh from Library), a comprehensive save-to-library category-gap audit (4 separate save paths, not just the one reported), fibre/polyols made editable everywhere, recipes added to site-wide search (previously silently excluded despite the section's own label), past-day logging sticky-flag bug fixed |
 
 ---
 
@@ -594,7 +595,29 @@ Because these operated on entirely different data (structured `getActivities()` 
 
 ## Library-aware meal suggestions
 
-`suggestMealFromLibrary()` sends both the raw Food Library and saved Recipes (shown per-serving, not just totals) to the AI alongside today's actual remaining macros. The AI's role is limited to choosing which real items/recipes fit — it never computes final totals itself. `renderLibraryComboSuggestions()` resolves each suggestion against real library/recipe data and computes totals deterministically in JS (recipe servings math reuses the exact same formula as `logRecipe()` itself, so a suggested recipe logs identically to manually applying it).
+`suggestMealFromLibrary(kind, explicitComposition)` sends both the raw Food Library and saved Recipes (shown per-serving, not just totals) to the AI alongside today's actual remaining macros. The AI's role is limited to choosing which real items/recipes fit — it never computes final totals itself. `renderLibraryComboSuggestions()` resolves each suggestion against real library/recipe data and computes totals deterministically in JS (recipe servings math reuses the exact same formula as `logRecipe()` itself, so a suggested recipe logs identically to manually applying it).
+
+**Structured requests** ("meat + 3 veg", "protein + grain + salad") go through `explicitComposition`, an array of `{category, count, keyword}`. Two entry points: `parseMultiCategoryRequest(lower)` parses a typed chat message (splits on and/comma/+/with, matches each segment against real category names, `CATEGORY_ALIASES`, then `CATEGORY_MAP`'s own keywords as a fallback — "pasta" resolves to the "grain" category while keeping "pasta" itself for extra AI precision), or the Next Meal Idea picker's multi-select pills build the same array directly from user taps, one `{category, count}` per selected pill.
+
+The parser runs both inside the `ideaWords`/`library+suggest` gate (existing behaviour) and independently for a bare structured phrase with no trigger word present — the latter guarded by word count, logging verbs (`ate`/`had`/`dinner` etc), and weight/volume quantities (`\d+\s*(g|ml|kg...)`), so "protein and pasta" triggers a suggestion while "I had chicken and pasta for dinner" and "200g chicken and 100g pasta" still correctly fall through to the food-logging parser.
+
+Before calling the AI at all, a deterministic threshold check runs for any 2+-category request: at least 2 of the requested categories need a real matching library item (checked via `getItemCategories()` across the whole library), or the request is rejected locally with an explanation naming which categories had nothing — one matching category out of three+ requested isn't a genuine partial match worth sending to the AI. Single-category requests are exempt from this check entirely.
+
+---
+
+## Category system
+
+`DEFAULT_CATEGORY_MAP` — a keyword→categories(array) dictionary, e.g. `'chicken': ['meat','protein']`, `'lettuce': ['vegetable','salad']`. A category is deliberately never just the ingredient's own name; multiple categories per keyword are normal. Runtime-editable copy lives in `CATEGORY_MAP` (`Object.assign({}, DEFAULT_CATEGORY_MAP)`), persisted via a merge architecture — `{custom: {...}, deleted: [...]}` layered on top of fresh defaults on load, rather than a frozen snapshot, so a future update to the defaults doesn't silently orphan a user's own additions or get overwritten by them.
+
+`detectFoodCategory(text)` — single source of truth for auto-detection. Checks `COMPOUND_CATEGORY_WORDS` (peanut butter etc) first, returning a single canonical compound category deliberately kept separate from the generic fat/protein buckets (a compound match isn't allowed to also match generically — giving peanut butter the same 'fat' tag as dairy butter would let `fuzzyFindInLibrary` treat them as interchangeable again). Falls back to a plain `Object.keys(CATEGORY_MAP).find(c => text.includes(c))` substring match.
+
+`getItemCategories(item)` — the actual resolver everything else should call, not `detectFoodCategory` directly. Checks `item.categories` (per-item manual override array) first, falls back to `detectFoodCategory()` auto-detection. `BROWSE_ONLY_CATEGORY_ADDITIONS` layers extra categories on top for browsing only (nut butter → also fat+protein) without touching what `detectFoodCategory` itself returns, since that function doubles as `fuzzyFindInLibrary`'s match-disqualification source and broadening it there would weaken that safety property.
+
+`MEAT_TYPE_WORDS` — a deliberately separate, stricter, non-user-editable list from `CATEGORY_MAP`, used only by `fuzzyFindInLibrary` to stop "Chicken Mince" fuzzy-matching "Beef Mince" — both are correctly "meat" for browsing purposes, but that's a different concern from same-species match safety.
+
+Manage Categories modal (`openManageCategoriesModal`) — full CRUD on `CATEGORY_MAP`, per-item override editing, a rename tool (`renameCategoryEverywhere`) for bulk-fixing an existing typo across every affected item at once, typo detection via Damerau-Levenshtein distance (`_levenshtein`, transposition-aware — a standard Levenshtein implementation would score "diary"/"dairy" as distance 2 and miss the exact bug it exists to catch, since that's a transposition, distance 1 under Damerau-Levenshtein). Same scroll-to-top/bottom nav pattern as Library (`toggleManageCategoriesBackToTop`).
+
+"snack"/"snacks" is excluded from `getLibraryCategoriesInUse()` specifically (the meal-suggestion picker's dynamic pill list, where "Snack" is separately pinned) but is a fully valid category everywhere else — per-item tagging, the general category browse view, and all save-to-library paths. The two were previously conflated (blocked everywhere), which was wrong — the redundancy concern only genuinely exists in that one picker.
 
 ---
 
@@ -650,11 +673,16 @@ This is the single-day companion to Activity Credit Balance above — this note 
 - Health Connect bridge app (Kotlin) written but not yet built/run in Android Studio — first build pending, needs verifying against the real current SDK the same way the Wear OS build needed several rounds of fixing wrong assumptions
 - `MET.walking` calorie values (2.8/3.5/4.5) are not yet pace-adjusted the same way the effort-label bands now are — calibrated assuming something close to the old universal pace scale, so calorie estimates outside the "moderately active" tier may be slightly off
 - Heylo crackerbread camera/photo logging reported as "hit and miss" — not yet investigated
+- AI photo-reading occasionally misreading polyols rows on certain label layouts — the manual entry gap this caused is now fixed (any item can have fibre/polyols corrected directly), but the underlying AI vision-reading accuracy itself hasn't been revisited
+- RingConn sleep backfill only covers 19 Aug 2025 onward; same-day multi-session RingConn dates silently keep only the later session; a one-time unexplained `bump_and_deploy.sh` version-revert from Phase 17 was never root-caused
 
 **Resolved this session, previously listed here:**
 - ~~Cloudflare Worker cannot be updated from Android~~ — solved via direct Cloudflare REST API calls through `curl` (see Cloudflare Worker section above)
 - ~~Monthly summary may truncate if Cloudflare Worker caps `max_tokens`~~ — this was the Worker's hardcoded `max_tokens: 500`, now forwards the client's actual request
 - ~~Tab bleeding — occasional, cosmetic only~~ — was specifically the Reset button's text overflowing its container once a 6th hydration button was added; fixed with overflow/ellipsis safety on the button style
+- ~~No fibre/polyols input anywhere~~ — Add Food and the library item edit form both had no field for either at all; a saved item missing them had no way to ever get them added short of deleting and re-adding the whole entry
+- ~~Recipes not included in site-wide search~~ — the section was labelled "Library & Recipes" but only ever searched the library array; recipes live in a separate store and were silently excluded
+- ~~Meals as a concept~~ — retired. "Save as meal" now creates a genuine recipe with real per-item ingredients; existing meals were migrated via an explicit, confirmed one-time conversion
 
 ---
 

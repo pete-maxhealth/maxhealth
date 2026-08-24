@@ -1,3 +1,77 @@
+# MaxedHealth Changelog — Phase 18 (v3.10.510 – v3.10.563)
+
+A long session spanning a full structural bug audit, a category system built from scratch, retiring Meals in favour of Recipes, and a real feature built twice — once wrong, once right — after testing against real data and real phrasing caught what isolated testing had missed both times.
+
+## Category System — Built From Scratch
+
+- **Real food-group categories replace ingredient-name-as-category.** Every library item now auto-categorizes into genuine groups (meat, fish, dairy, vegetable, fruit, fat, protein, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad) via `DEFAULT_CATEGORY_MAP`, a keyword→categories dictionary, with `getItemCategories()` as the single resolver (per-item manual override first, auto-detection fallback).
+- **Split "cereal" into two genuinely different categories** — "grain" (pasta, rice, bread, oats) and "breakfast cereal" (cornflakes, weetabix, muesli, granola, cheerios), which had been conflated under one label. Real product-name detection added for the latter; none of those products were being auto-detected at all before, since their names never happened to contain the literal word "cereal."
+- **Fully in-app editable** via a new Manage Categories modal — add/remove/edit any word→category mapping, per-item category overrides, a rename tool for fixing existing data in bulk (e.g. a stray "diary" → "dairy" typo across every affected item), typo protection using Damerau-Levenshtein distance (catches transpositions like diary/dairy that a standard Levenshtein implementation would miss), and scroll-to-top/bottom navigation matching Library's existing pattern.
+- **Kept deliberately separate from `MEAT_TYPE_WORDS`**, the strict list `fuzzyFindInLibrary` uses to stop "Chicken Mince" fuzzy-matching "Beef Mince" — the browse-category system correctly groups both under meat/protein, but that's a different purpose from match-safety disqualification, and merging the two would have broken the safety property silently.
+- **"Snack"/"snacks" — blocked as a category, then correctly reversed.** Originally blocked from per-item tagging on the reasoning that it would duplicate the picker's own pinned Snack button. That redundancy concern turned out to only actually apply *inside* the meal-suggestion picker itself — per-item tagging, the general browse view, and all four save-to-library paths had no such collision, so blocking it there was simply wrong. Reversed in all four places after being caught directly (a real Caramac bar wouldn't tag).
+- **The snack-sizing instruction itself had a real semantic error, also since fixed**: "a small combo of separate savoury items" is tapas, not a snack. Rewritten using concrete real examples (crisps, chocolate, sweets, peperami, pork scratchings) instead of the wrong abstraction — peperami and pork scratchings turned out to be genuinely uncategorized in the map too, now fixed.
+- **Bulk-tested against a real 219-item library export** — 93.6% auto-categorized correctly out of the box; fixed real gaps found in the process (bare "fish"/"meat"/"salad" weren't keys at all, only specific types like salmon/chicken were; rosemary, thyme, vodka, avocado, caramel, toffee, and baking powder were missing entirely). Coverage now 98.2%.
+
+## Structured Meal Requests — "Meat and 3 Veg"
+
+- **Built, shipped broken, then actually fixed.** The first version only ever reached `parseMultiCategoryRequest` from inside a gate requiring "idea"/"suggestion" to also be present in the message — a bare phrase like "protein and pasta" fell through to the AI's food-logging parser instead, which (correctly, from its own perspective) asked for clarifying detail rather than suggesting anything. The bug shipped because testing exercised the parser in isolation and the pinned button (which calls the suggestion function directly, bypassing the gate) — never the real path a bare typed phrase actually takes. Fixed with an independent check, guarded against genuine logging attempts (logging verbs, weight/volume quantities) via real counter-examples, not just the target phrase — "I had chicken and pasta for dinner" and "200g chicken and 100g pasta" both still correctly log rather than being misread as suggestion requests.
+- **Also generalized beyond category names to real keywords** — "protein and pasta" now resolves "pasta" to the grain category via `CATEGORY_MAP`'s own keywords, not just formal category names, keeping the specific word for extra AI precision (prefer genuinely pasta, not just anything else grain-shaped).
+- **Rebuilt entirely as a multi-select pill UI**, replacing the original single-tap-per-pill picker: tap-to-select category pills with an editable per-category count (hidden/0 until tapped, then 1 and editable), a Send button submitting the full selection as a composition array. The earlier pinned "Meat + 3 Veg" button is now redundant and removed — the general picker covers it directly, alongside anything else (protein + grain + salad, fish + 2 veg + a fat, etc).
+- **Deterministic partial-match threshold**, not left entirely to the AI to notice: a 2+-category request needs at least 2 of those categories to have a real matching library item before it's worth sending to the AI at all — one matching category out of three requested isn't a genuine partial match. Verified against every example given, including the single-category exemption (no partial-match concept applies when only one category was ever requested).
+- **AI-level partial-match instruction strengthened** to explicitly name which category came up short and why, rather than a vague general caveat, for the case where the threshold passes but individual counts still can't be fully met.
+
+## Meals Retired in Favour of Recipes
+
+- **"Save as meal" now creates a genuine recipe** with real per-item ingredients (available at save-time), not a flattened single-entry blob.
+- **Existing meals convertible via an explicit, confirmed migration** — preserves exact total macros (individual item macros were never stored for meals in the first place, only the combined total, so a single-ingredient recipe carrying the real total, with the original component list kept as a note, is the honest ceiling of what's recoverable). Button since archived after Pete confirmed the one-time migration was complete.
+- **Logging a saved recipe now opens a real review step** — add, remove, or swap any ingredient (reusing the existing swap-search/scale/add/remove system already built for AI-suggested meals) before it hits the log, instead of logging directly with zero chance to check it.
+- **"Refresh from Library"** added to the recipe builder — updates a recipe's ingredients if the underlying library item has since been corrected, rather than the recipe silently drifting out of sync forever. Confirmed via code inspection that this genuinely never happened automatically before, and that History being the same way (frozen snapshots, no retroactive rewrite) is correct, deliberate behaviour, not a related bug.
+- **Meals section removed from the Library UI entirely.** A real regression was caught and fixed before shipping: `renderLibrary()` had an early-exit guard depending on the now-deleted Meals element, which would have blanked the entire Library tab, Ingredients included.
+
+## Save-to-Library — Four Separate Paths, Same Category Gap
+
+- **A comprehensive audit, not a single-instance fix.** The first report (the "Save only" button after a multi-AI verify) led to auditing every `lib.push()` call site in the codebase rather than patching just the one hit. Found a genuinely separate fourth save path (`saveFoodToLibraryFromPanel`, the database/barcode search results screen) that bypassed the shared save infrastructure entirely, with no category option at all. Voice Add and CSV wearable import confirmed unrelated or already-correct.
+- **All four now support setting categories at save time**: the Add Food modal, the post-AI-log "Save to Library" modal, the "Save only" meal-preview bubble (shared across however many foods are in that batch), and the database-search amount panel. Left blank, every path still auto-detects normally.
+- **Category browse view had no way to add a new item to it at all** — only LOG/EDIT on what already existed. Added an "+ Add [category] item" flow offering a real choice (Search online or Enter manually, matching the existing pattern used for unmatched recipe ingredients) rather than jumping straight to a blank form, with the category carried through automatically to whichever path is used.
+
+## Fibre & Polyols — Editable At Last
+
+- **Root cause of a real reported miss (Heylo Caramel Granola) wasn't the AI mis-reading a label** — it was that neither the Add Food form nor the library item edit form had a fibre/polyols field at all. Once an item was saved without them, there was no way to add them afterward short of deleting and re-adding the whole entry. Fixed on both forms.
+
+## Site-Wide Search — Real Coverage Gaps
+
+- **Recipes were never actually searched at all**, despite the section being labelled "Library & Recipes" — they live in a separate store from the library array and were silently excluded. Fixed and verified.
+- Twelve settings entries had no search keywords whatsoever (only findable by typing the exact label) — Target Formulas covers BMR/TDEE/MET/walking pace/macro ratio and had none of it indexed. Fixed all twelve, plus one section (Data Preview & Validator) that was completely absent from the index despite existing in the UI.
+
+## Past-Day Logging — Sticky-Flag Bug
+
+- `window._logTargetDate`, set by History's "+ Add food" button, was a sticky mode only ever cleared by an explicit "Back to today" tap — nothing else reset it. If that banner went unnoticed, a later logging action genuinely meant for today would silently also land on the past day. Now auto-clears after every successful past-day log, making each entry a deliberate one-shot action.
+
+## Smaller, Confirmed Fixes
+
+- **Weight status labels now state their actual measurement period** ("Slight loss (last 14 days)"), not an unlabelled snapshot.
+- **Hardcoded 7,500-step target** in two report views now reads the real configured baseline.
+- **TTS keep-alive timer** made explicitly clearable from the read-aloud feature's own cancel path, rather than relying solely on `onend`/`onerror` firing reliably after a direct `.cancel()` call (not always guaranteed across browsers) — a defensive tightening found while investigating a battery-drain report, not a confirmed fix for an actual leak (none was found; the wake locks, camera scanner, sync polling, and service worker were all already correctly built).
+
+## Investigated, No Code Change Needed
+
+- **Activity Credit Balance's "reset" behaviour** — already a true rolling window (recalculated fresh from only the last N days), already goal-aware (different narrative text for maintain/gain/loss). Nothing accumulates forever; nothing needed fixing.
+- **Meat/protein category overlap** — deliberately not redundant. "Protein" is a broader umbrella (also covers fish, eggs, whey) that "meat" doesn't. The multi-select picker already gives the "expanded choice" wanted by simply selecting both pills together.
+- **Export reminder** — already existed from an earlier session (7-day nudge on the EOD summary, escalating to a 14-day dashboard banner), found while about to build a duplicate.
+- **AI data flow** — the three everyday AI calls (logging, recipe building, meal suggestions) send name (if set), today's targets/totals, date, and library item names/macros, but not the specific condition/diagnosis label — that only appears in the GBM-specific features (Monthly Summary, Research Digest) where it's actually the point.
+
+## Known Outstanding Items
+
+- Health Connect bridge (Android) — still not started, deliberately parked.
+- Backup/cloud vs local — discussed, not acted on beyond confirming the existing export-reminder system is genuinely sufficient for now; a full cloud migration remains a real, separate decision if ever wanted.
+- Documentation (this file, README.md, TECHNICAL.md, user-guide.html, changelog.html) had fallen behind again by the time of this entry — all five were stuck at v3.10.510 while the app had reached v3.10.563. Caught up in this pass; the intent going forward is to keep documentation current per-session rather than letting the gap compound.
+
+**Carried forward from Phase 17, still unresolved:**
+- v3.10.472–499 not individually documented (gap predates this entry, not addressed here)
+- RingConn sleep backfill only covers 19 Aug 2025 onward — older history not yet corrected
+- Same-day multi-session dates (RingConn) silently keep only the later session
+- A `bump_and_deploy.sh` version-revert was observed once in Phase 17 (deployed v3.10.508 briefly reverted to v3.10.499 in the working tree before the next deploy) — root cause never identified, not seen recurring since, not actively investigated this session either
+- AI photo-reading occasionally misreading polyols rows on certain label layouts — the *manual* fibre/polyols entry gap this caused is now fixed (see Fibre & Polyols above), but the underlying AI vision-reading accuracy itself hasn't been revisited
 # MaxedHealth Changelog — Phase 17, continued (v3.10.472 – v3.10.510)
 
 **v3.10.472–499 were never individually documented here** — same gap this file already flags for Phase 13-14, now extended. What follows covers 500–510 in detail, plus a related RingConn pipeline fix and backfill that sit outside `maxhealth.html`'s own versioning entirely.
@@ -47,12 +121,7 @@
 - `data/inbox/old/` had no retention policy at all — every processed export accumulated indefinitely. Added an automatic 180-day trim, deliberately far longer than the 7-day backup rotation: these are raw source exports, the only way to re-derive history if a future extractor bug is ever found — exactly what made the RingConn backfill above possible at all. A short retention here would have made that impossible for anything older than the window.
 
 ## Known Outstanding Items
-
-- v3.10.472–499 not individually documented (see note at top)
-- RingConn sleep backfill only covers 19 Aug 2025 onward — older history not yet corrected
-- Same-day multi-session dates (RingConn) silently keep only the later session — pre-existing, unrelated to the date-shift fix, not yet addressed
-- A `bump_and_deploy.sh` version-revert was observed once mid-session (deployed v3.10.508 briefly reverted to v3.10.499 in the working tree before the next deploy) — root cause never identified; recurrence would be worth catching live with a `stat` timestamp check immediately before and after the deploy script runs
-- AI photo-reading occasionally misreading polyols rows on certain label layouts remains a known, deliberately deprioritized issue — affected products are being recorded manually in the meantime
+*(See the Phase 18 entry at the top of this file for the current list — the items below were resolved or carried forward there during this documentation pass, rather than duplicated in two places.)*
 
 # MaxedHealth Changelog — Phase 17 (v3.10.466 – v3.10.471)
 

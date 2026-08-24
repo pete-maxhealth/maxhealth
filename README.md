@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.510
+**Version:** v3.10.563
 
 ---
 
@@ -26,7 +26,11 @@
 - **Library-aware meal suggestions** — "📚 From my library" proposes real combinations of saved ingredients and Recipes (proper per-serving math) against today's actual remaining macros, never inventing values. One-tap logging straight from the suggestion.
 - **Ingredient substitution** — a genuine searchable picker across recipes, Cook Mode, and suggested meals, with an online-search fallback when nothing in your library fits. Deliberately not auto-matching — an earlier automatic version once suggested peanut butter as a substitute for dairy butter, which is the kind of mistake a real search list in front of a person doesn't make regardless of how good the matching heuristic gets.
 - **Saved Prompts library** — every AI question (both the Log-tab chat and the Reports Ask AI panel) draws from one shared, searchable, editable list rather than fixed buttons. Add, edit, delete, dictate new ones by voice, sorted by how often you actually use each one.
-- **Recipes vs Meals** — Recipes support proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly); Meals are simpler single-instance saves for anything eaten in one sitting. Each section explains which fits which use case.
+- **Recipes** — proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly), with a real review step (add/remove/swap any ingredient) before it hits your log, and a "Refresh from Library" action if an ingredient's values have since been corrected. Meals as a separate concept has been retired — saving a logged combo now creates a genuine recipe directly, with real per-item ingredients.
+- **Real food categories, fully in-app editable** — every library item auto-categorizes into genuine food groups (meat, fish, dairy, vegetable, fruit, fat, protein, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad) rather than the ingredient's own name being treated as its category. Add, edit, or remove any category mapping directly in Manage Categories, including a rename tool for fixing existing data in bulk and typo protection. Browse by Category to see and log from a group directly.
+- **Structured meal requests** — a multi-select category picker (tap to select, set a count per category, Send) builds requests like "meat + 3 veg" or "protein + grain + salad" directly, or type it in chat ("protein and pasta"). Honest partial-match handling when the library can't fully cover what was asked.
+- **Fibre and polyols, fully editable** — can be added or corrected directly on any library item, not just when the AI happens to read them correctly at add-time.
+- **Read-aloud** — AI chat responses, the GBM Monthly Summary, and Research Digest entries can be read aloud via a speaker icon, using the browser's built-in text-to-speech, fully offline.
 - **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
 - **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
 - **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
