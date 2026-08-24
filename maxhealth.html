@@ -4385,7 +4385,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.548</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.549</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5183,7 +5183,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.548'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.549'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6793,6 +6793,14 @@ function renderLibrary() {
           <div style="font-size:10px;color:var(--yellow);margin-bottom:3px;font-family:Space Mono,monospace;">CARBS g</div>
           <input class="library-edit-input" id="lib-edit-carb-${origIdx}" type="number" step="0.1" value="${f.carbs}" style="width:100%;">
         </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">FIBRE g</div>
+          <input class="library-edit-input" id="lib-edit-fibre-${origIdx}" type="number" step="0.1" value="${f.fibre||0}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">POLYOLS g</div>
+          <input class="library-edit-input" id="lib-edit-polyols-${origIdx}" type="number" step="0.1" value="${f.polyols||0}" style="width:100%;">
+        </div>
       </div>
       <div class="library-edit-actions">
         ${deleteBtn}
@@ -7141,6 +7149,13 @@ function saveLibraryEdit(index) {
   const prot    = parseFloat(document.getElementById('lib-edit-prot-' + index).value);
   const fat     = parseFloat(document.getElementById('lib-edit-fat-' + index)?.value || 0);
   const carbs   = parseFloat(document.getElementById('lib-edit-carb-' + index).value);
+  // Previously had no way to enter these at all - the ONLY way an item ever
+  // got fibre/polyols was the AI correctly reading them at add-time, with
+  // no manual fallback if it didn't (or couldn't, from whatever source was
+  // used). This is the actual fix for a saved item stuck without polyols -
+  // editable here now, same as every other macro already was.
+  const fibre   = parseFloat(document.getElementById('lib-edit-fibre-' + index)?.value || 0);
+  const polyols = parseFloat(document.getElementById('lib-edit-polyols-' + index)?.value || 0);
   const portionEl = document.getElementById('lib-edit-portion-' + index);
   const portion = portionEl ? portionEl.value.trim() : lib[index].portion;
   if (!name || isNaN(kcal) || isNaN(prot) || isNaN(carbs)) {
@@ -7151,6 +7166,8 @@ function saveLibraryEdit(index) {
   lib[index].protein = Math.round(prot * 10) / 10;
   lib[index].fat     = isNaN(fat) ? null : Math.round(fat * 10) / 10;
   lib[index].carbs   = Math.round(carbs * 10) / 10;
+  lib[index].fibre   = fibre || null;
+  lib[index].polyols = polyols || null;
   lib[index].portion = portion || null;
   saveLibrary(lib);
   renderLibrary();
@@ -7216,6 +7233,8 @@ function openAddFoodModal() {
   document.getElementById('addFoodProt').value = '';
   document.getElementById('addFoodFat').value = '';
   document.getElementById('addFoodCarbs').value = '';
+  document.getElementById('addFoodFibre').value = '';
+  document.getElementById('addFoodPolyols').value = '';
   document.getElementById('addFoodPortion').value = '';
   document.getElementById('addFoodPer').value = 'portion';
   document.getElementById('addFoodModal').classList.add('open');
@@ -7814,12 +7833,15 @@ function confirmAddFood() {
   const prot    = parseFloat(document.getElementById('addFoodProt').value);
   const fat     = parseFloat(document.getElementById('addFoodFat').value) || 0;
   const carbs   = parseFloat(document.getElementById('addFoodCarbs').value);
+  const fibre   = parseFloat(document.getElementById('addFoodFibre').value) || 0;
+  const polyols = parseFloat(document.getElementById('addFoodPolyols').value) || 0;
   const portion = document.getElementById('addFoodPortion').value.trim();
   const per     = document.getElementById('addFoodPer').value;
   if (!name || isNaN(kcal) || isNaN(prot) || isNaN(carbs)) { showToast('Fill in all fields'); return; }
   const newEntry = {
     id: 'manual_' + Date.now(),
     name, kcal, protein: prot, carbs, fat: fat || null,
+    fibre: fibre || null, polyols: polyols || null,
     portion: portion || null,
     per100g: per === '100g',
     locked: true, source: 'pete'
@@ -30642,7 +30664,7 @@ function dismissInsight() {
         </select>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
       <div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">KCAL</div>
         <input class="modal-input" type="number" id="addFoodKcal" placeholder="0" style="font-size:16px;padding:10px;">
@@ -30658,6 +30680,21 @@ function dismissInsight() {
       <div>
         <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;font-family:Space Mono,monospace;">CARBS g</div>
         <input class="modal-input" type="number" id="addFoodCarbs" placeholder="0" step="0.1" style="font-size:16px;padding:10px;">
+      </div>
+    </div>
+    <!-- Previously absent entirely from this form - an item added here could
+         never have fibre/polyols data at all unless the whole entry was
+         deleted and re-added through AI photo parsing in the hope it read
+         them correctly that time. Both optional (default 0), on the label
+         if present under "of which Polyols"/fibre in the carbs breakdown. -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">FIBRE g (optional)</div>
+        <input class="modal-input" type="number" id="addFoodFibre" placeholder="0" step="0.1" style="font-size:14px;padding:10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">POLYOLS g (optional)</div>
+        <input class="modal-input" type="number" id="addFoodPolyols" placeholder="0" step="0.1" style="font-size:14px;padding:10px;">
       </div>
     </div>
     <div class="modal-row">
