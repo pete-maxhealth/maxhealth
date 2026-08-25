@@ -4153,11 +4153,28 @@
 
       <div style="margin-bottom:16px;">
         <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;">BMR (Basal Metabolic Rate)</div>
-        <div style="font-size:12px;color:var(--text2);line-height:1.7;font-family:'Space Mono',monospace;">
-          Men: 10 × weight(kg) + 6.25 × height(cm) − 5 × age + 5<br>
-          Women: 10 × weight(kg) + 6.25 × height(cm) − 5 × age − 161
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Formula used:</div>
+        <select id="bmrFormulaSelect" onchange="saveBMRFormula()" class="modal-input" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px;">
+          <option value="mifflin">Mifflin-St Jeor (default — height, age, sex)</option>
+          <option value="harris">Harris-Benedict, revised (height, age, sex)</option>
+          <option value="katch">Katch-McArdle (weight + body fat % — most accurate if you have real body fat data)</option>
+        </select>
+        <div id="bodyFatPctRow" style="display:none;margin-bottom:10px;">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Body fat %</div>
+          <input type="number" id="bodyFatPctInput" step="0.1" placeholder="e.g. 22" onchange="saveBodyFatPct()" class="modal-input" style="width:100%;padding:8px 10px;font-size:13px;">
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Leave blank and this falls back to Mifflin-St Jeor automatically — Katch-McArdle needs a real body fat figure to mean anything, not a guess.</div>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Mifflin-St Jeor equation. Requires height, age, and sex set in Profile — falls back to a generic estimate otherwise.</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;font-family:'Space Mono',monospace;">
+          Mifflin-St Jeor —<br>
+          Men: 10 × weight(kg) + 6.25 × height(cm) − 5 × age + 5<br>
+          Women: 10 × weight(kg) + 6.25 × height(cm) − 5 × age − 161<br><br>
+          Harris-Benedict (revised) —<br>
+          Men: 88.362 + 13.397 × weight(kg) + 4.799 × height(cm) − 5.677 × age<br>
+          Women: 447.593 + 9.247 × weight(kg) + 3.098 × height(cm) − 4.330 × age<br><br>
+          Katch-McArdle —<br>
+          370 + 21.6 × lean body mass(kg), where lean body mass = weight × (1 − body fat% ÷ 100)
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">All three need height, age, and sex set in Profile (Katch-McArdle also needs body fat %) — falls back to a generic estimate otherwise.</div>
       </div>
 
       <div style="margin-bottom:16px;">
@@ -4361,7 +4378,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.569</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.570</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4865,13 +4882,13 @@ function calcTDEE() {
   const age    = parseFloat(document.getElementById('onboardAge').value);
   if (!weight || !height || !age || !_obActivity) return;
 
-  // Mifflin-St Jeor BMR
-  let bmr;
-  if (_obSex === 'male') {
-    bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5;
-  } else {
-    bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161;
-  }
+  // Deliberately always Mifflin-St Jeor here, not calculateBMR()'s
+  // preference-aware version - onboarding runs before the formula-choice
+  // setting has ever been touched, so a predictable first estimate matters
+  // more than honouring a preference that doesn't exist yet. Still routed
+  // through the shared coefficient function so these numbers only live in
+  // one place in the codebase.
+  const bmr = calcBMR_MifflinStJeor(weight, height, age, _obSex);
 
   const activityFactors = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725 };
   const tdee = Math.round(bmr * activityFactors[_obActivity]);
@@ -5190,7 +5207,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.569'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.570'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8589,6 +8606,84 @@ function saveAutoSwitchDays() {
 // ─── SUGGESTED TARGETS CALCULATOR ────────────────────────────────────────────
 let _suggestedTargets = null;
 
+// Three BMR formulas, user-selectable in Settings (mh_bmr_formula, default
+// 'mifflin') rather than only ever swappable via a code edit. Katch-McArdle
+// needs body fat % for lean body mass - falls back to Mifflin-St Jeor (with
+// the fallback flagged to the caller) if that's not set in Profile, rather
+// than silently producing a wrong number from a missing input.
+function calcBMR_MifflinStJeor(weight, heightCm, age, sex) {
+  return sex === 'female'
+    ? (10 * weight) + (6.25 * heightCm) - (5 * age) - 161
+    : (10 * weight) + (6.25 * heightCm) - (5 * age) + 5;
+}
+function calcBMR_HarrisBenedict(weight, heightCm, age, sex) {
+  // Revised (Roza & Shizgal, 1984) - the commonly-used modern version, not
+  // the original 1919 coefficients, which run several percent higher.
+  return sex === 'female'
+    ? 447.593 + (9.247 * weight) + (3.098 * heightCm) - (4.330 * age)
+    : 88.362 + (13.397 * weight) + (4.799 * heightCm) - (5.677 * age);
+}
+function calcBMR_KatchMcArdle(weight, bodyFatPct) {
+  const lbm = weight * (1 - bodyFatPct / 100);
+  return 370 + (21.6 * lbm);
+}
+function calculateBMR(weight, heightCm, age, sex) {
+  const formula = localStorage.getItem('mh_bmr_formula') || 'mifflin';
+  const bodyFatPct = parseFloat(localStorage.getItem('mh_body_fat_pct'));
+  if (formula === 'katch' && bodyFatPct) {
+    return { bmr: calcBMR_KatchMcArdle(weight, bodyFatPct), formulaUsed: 'katch' };
+  }
+  if (formula === 'harris') {
+    return { bmr: calcBMR_HarrisBenedict(weight, heightCm, age, sex), formulaUsed: 'harris' };
+  }
+  // Default, or Katch-McArdle requested but body fat % missing - the caller
+  // can check formulaUsed against the raw preference to tell these two
+  // "actually chose Mifflin" cases apart if it wants to explain the fallback.
+  return { bmr: calcBMR_MifflinStJeor(weight, heightCm, age, sex), formulaUsed: 'mifflin' };
+}
+
+// Human-readable name for whichever formula is genuinely producing the
+// current BMR figure - respects the same fallback calculateBMR() itself
+// uses, so this says "Mifflin-St Jeor" (not "Katch-McArdle") in the exact
+// case where Katch-McArdle was selected but body fat % isn't set and the
+// calculation silently fell back. Keeps user-facing and AI-facing text
+// honest about what actually ran, not just what's nominally selected.
+function getBMRFormulaLabel() {
+  const formula = localStorage.getItem('mh_bmr_formula') || 'mifflin';
+  const bodyFatPct = parseFloat(localStorage.getItem('mh_body_fat_pct'));
+  if (formula === 'katch' && bodyFatPct) return 'Katch-McArdle';
+  if (formula === 'harris') return 'Harris-Benedict';
+  return 'Mifflin-St Jeor';
+}
+
+function saveBMRFormula() {
+  const sel = document.getElementById('bmrFormulaSelect');
+  if (!sel) return;
+  localStorage.setItem('mh_bmr_formula', sel.value);
+  const row = document.getElementById('bodyFatPctRow');
+  if (row) row.style.display = sel.value === 'katch' ? 'block' : 'none';
+  showToast('BMR formula updated ✓');
+  updateDashboard(); // TDEE/targets depend on this - reflect the change immediately, not just next reload
+}
+
+function saveBodyFatPct() {
+  const el = document.getElementById('bodyFatPctInput');
+  if (!el) return;
+  const val = parseFloat(el.value);
+  if (val) localStorage.setItem('mh_body_fat_pct', val); else localStorage.removeItem('mh_body_fat_pct');
+  updateDashboard();
+}
+
+function initBMRFormulaUI() {
+  const sel = document.getElementById('bmrFormulaSelect');
+  const bfEl = document.getElementById('bodyFatPctInput');
+  const row = document.getElementById('bodyFatPctRow');
+  const formula = localStorage.getItem('mh_bmr_formula') || 'mifflin';
+  if (sel) sel.value = formula;
+  if (bfEl) bfEl.value = localStorage.getItem('mh_body_fat_pct') || '';
+  if (row) row.style.display = formula === 'katch' ? 'block' : 'none';
+}
+
 // Shared current-TDEE calculator — single source of truth for Suggested Targets
 // AND the AI patient context (ketosis / muscle-gain questions need real TDEE, not
 // just the static onboarding figure). Returns null if profile data is incomplete.
@@ -8599,10 +8694,7 @@ function getCurrentTDEE() {
   const weight   = parseFloat(state.weight) || getLastKnownWeight();
   if (!heightCm || !age || !weight) return null;
 
-  // Mifflin-St Jeor BMR
-  const bmr = sex === 'female'
-    ? (10 * weight) + (6.25 * heightCm) - (5 * age) - 161
-    : (10 * weight) + (6.25 * heightCm) - (5 * age) + 5;
+  const { bmr } = calculateBMR(weight, heightCm, age, sex);
 
   // Activity multiplier from avg steps (last 30 days)
   const recentSteps = (state.history || []).slice(0, 30)
@@ -8722,7 +8814,7 @@ function renderSuggestedTargets() {
         ${activeFat && activeFat !== fatTarget ? `<div style="font-size:10px;color:var(--yellow);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">Currently active: ${activeFat}g<span onclick="applySuggestedSingle('fat')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>` : ''}
       </div>
     </div>
-    ${!manualTdee ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;">⚠ No confirmed TDEE set yet — the ${tdee}kcal above is a formula guess (Mifflin-St Jeor + step-based activity), typically accurate to within about ±10-15% for most people, sometimes considerably more off. It's most meaningful as a <strong style="color:var(--text2);">maintenance</strong> starting point specifically — once you've tracked real intake against real weight response for a couple of weeks, enter your own confirmed figure below and this panel will use that instead everywhere, including here.${goal !== 'maintain' ? ` Since your current goal is <strong style="color:var(--text2);">${goal}</strong>, the ${goal === 'lose' ? '−500' : '+400'}kcal adjustment is layered on top of that already-rough estimate, compounding the uncertainty further — treat the ${calTarget}kcal target with proportionally more caution until a confirmed TDEE replaces the guess underneath it.` : ''}</div>` : ''}
+    ${!manualTdee ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;">⚠ No confirmed TDEE set yet — the ${tdee}kcal above is a formula guess (${getBMRFormulaLabel()} + step-based activity), typically accurate to within about ±10-15% for most people, sometimes considerably more off. It's most meaningful as a <strong style="color:var(--text2);">maintenance</strong> starting point specifically — once you've tracked real intake against real weight response for a couple of weeks, enter your own confirmed figure below and this panel will use that instead everywhere, including here.${goal !== 'maintain' ? ` Since your current goal is <strong style="color:var(--text2);">${goal}</strong>, the ${goal === 'lose' ? '−500' : '+400'}kcal adjustment is layered on top of that already-rough estimate, compounding the uncertainty further — treat the ${calTarget}kcal target with proportionally more caution until a confirmed TDEE replaces the guess underneath it.` : ''}</div>` : ''}
     <div style="font-size:11px;color:var(--text3);">Carbs: ≤${carbCeil}g (from your ceiling — unchanged)</div>
     <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${weight}kg · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
     ${isOffTargetMaintain ? `<div style="color:var(--yellow);margin-top:6px;font-size:11px;">⚖️ Weight is currently ${weight > wtHigh ? 'above' : 'below'} your ${wtLow}–${wtHigh}kg target, so this suggests a temporary ${CORRECTION_KCAL}kcal correction rather than pure TDEE — the same adjustment recommended in your Monthly Summary. Once weight is back in range, this reverts to plain TDEE.</div>` : ''}
@@ -9093,6 +9185,7 @@ function initSettings() {
   // Render supplement settings
   renderSupplementSettings();
   initSupplementCheckpointInputs();
+  initBMRFormulaUI();
   // Apply saved collapse states for all Settings sections.
   // defaultOpen is only used on a section's very first visit, before any
   // localStorage preference exists — Profile defaults open since it's the one
@@ -28248,7 +28341,7 @@ CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
-TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? "Pete's own confirmed, weight-trend-validated figure (use this as the authoritative number)" : `Mifflin-St Jeor formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against Pete's actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the Mifflin-St Jeor formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
+TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? "Pete's own confirmed, weight-trend-validated figure (use this as the authoritative number)" : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against Pete's actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
 When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
 
 EVIDENCE FRAMEWORK: ${meta.evidenceNote}
