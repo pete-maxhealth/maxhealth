@@ -4400,7 +4400,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.578</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.579</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5245,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.578'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.579'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25871,12 +25871,33 @@ function renderMMMetricPicker() {
 // something the user actually sees as a number. Min-max per metric over
 // the currently-visible period, not a fixed scale - shapes are what's
 // being compared here, not absolute magnitude.
+//
+// A genuinely stable metric (bone mass fluctuating by 0.1kg on a ~3.7kg
+// base - likely just scale measurement noise, not real change) shouldn't
+// get stretched to fill the full 0-100 range purely because that's all the
+// data it has - that makes essentially-flat data look dramatically
+// volatile, which is actively misleading, not just an aesthetic quirk.
+// Below a 3% relative-range threshold, compressed into a narrow band
+// around the middle instead, so a stable line actually reads as stable.
 function _mmNormalize(vals) {
   const real = vals.filter(v => v != null);
-  if (!real.length) return vals.map(() => null);
+  if (!real.length) return { data: vals.map(() => null), relativeRangePct: null, min: null, max: null };
   const min = Math.min(...real), max = Math.max(...real);
   const range = max - min;
-  return vals.map(v => v == null ? null : (range === 0 ? 50 : Math.round((v - min) / range * 100)));
+  const mean = real.reduce((a, b) => a + b, 0) / real.length;
+  const relativeRangePct = mean !== 0 ? Math.round((range / Math.abs(mean)) * 1000) / 10 : (range === 0 ? 0 : null);
+
+  if (range === 0) return { data: vals.map(v => v == null ? null : 50), relativeRangePct: 0, min, max };
+
+  const isLowVariance = mean !== 0 && (range / Math.abs(mean)) < 0.03;
+  const data = vals.map(v => {
+    if (v == null) return null;
+    const pct = (v - min) / range; // 0-1
+    return isLowVariance
+      ? Math.round(50 + (pct - 0.5) * 20) // compressed band, real shape preserved but not exaggerated
+      : Math.round(pct * 100);
+  });
+  return { data, relativeRangePct, min, max, isLowVariance };
 }
 
 function renderMMChart() {
@@ -25917,13 +25938,17 @@ function renderMMChart() {
   const realValuesByDate = {}; // date -> {metricKey: realValue} - for tooltip/drill-down, never the normalized number
   allDates.forEach(d => { realValuesByDate[d] = {}; });
 
+  const rangeInfoByKey = {}; // for the custom legend below the chart - real min/max and whether this metric was low-variance-dampened
+
   const datasets = perMetricData.map(pm => {
     const byDate = {}; pm.points.forEach(p => { byDate[p.date] = p.val; });
     const rawVals = allDates.map(d => byDate[d] != null ? byDate[d] : null);
     allDates.forEach((d, i) => { if (rawVals[i] != null) realValuesByDate[d][pm.metric.key] = rawVals[i]; });
+    const normResult = _mmNormalize(rawVals);
+    rangeInfoByKey[pm.metric.key] = normResult;
     return {
       label: pm.metric.title,
-      data: _mmNormalize(rawVals),
+      data: normResult.data,
       borderColor: pm.metric.color,
       backgroundColor: pm.metric.color,
       borderWidth: 2,
@@ -25944,7 +25969,13 @@ function renderMMChart() {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', boxWidth: 10, font: { size: 11 } } },
+        // Chart.js's own in-canvas legend was the "scattered squares with
+        // no visible text" mess - with 6+ metrics there simply wasn't
+        // enough width for each label to render inside the canvas itself.
+        // Disabled here; renderMMLegend below builds a proper HTML one
+        // underneath instead, with room to actually show each metric's
+        // real range alongside its name.
+        legend: { display: false },
         tooltip: {
           callbacks: {
             // Real values shown here, never the normalized 0-100 number the
@@ -25960,8 +25991,23 @@ function renderMMChart() {
         },
       },
       scales: {
-        x: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { display: false, min: 0, max: 100 }, // hidden deliberately - normalized values are a visual device only, showing "62%" here would be actively misleading
+        x: {
+          title: { display: true, text: 'Date', color: 'rgba(255,255,255,0.5)', font: { size: 11 } },
+          ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        y: {
+          // Tick numbers deliberately still hidden - a bare "62" means
+          // nothing without knowing which metric's own range it's relative
+          // to, and would be actively misleading shown as one shared scale.
+          // A real title explaining what the axis actually represents is
+          // shown instead of no context at all.
+          display: true,
+          min: 0, max: 100,
+          ticks: { display: false },
+          title: { display: true, text: "% of each metric's own range (not a shared scale)", color: 'rgba(255,255,255,0.5)', font: { size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
       },
       onClick: (evt, elements) => {
         if (!elements.length) return;
@@ -25970,6 +26016,38 @@ function renderMMChart() {
       },
     },
   });
+
+  renderMMLegend(perMetricData, rangeInfoByKey);
+}
+
+// Custom legend, not Chart.js's own - shows each metric's real range
+// alongside its name/color, which the in-canvas one had no room for at
+// 6+ metrics and couldn't show at all. This is also where a stable
+// metric's tiny real range becomes visible in plain numbers, so a
+// dampened, compressed-looking line on the chart makes sense rather than
+// looking like an unexplained inconsistency.
+function renderMMLegend(perMetricData, rangeInfoByKey) {
+  const el = document.getElementById('mmLegend');
+  if (!el) return;
+  el.innerHTML = perMetricData.map(pm => {
+    const info = rangeInfoByKey[pm.metric.key];
+    if (!info || info.min == null) {
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--text3);">
+        <span style="width:10px;height:10px;border-radius:50%;background:${pm.metric.color};flex-shrink:0;"></span>
+        <span style="flex:1;">${pm.metric.title}</span><span>No data this period</span>
+      </div>`;
+    }
+    const rangeText = info.min === info.max
+      ? `${info.min}${pm.metric.unit} (unchanged)`
+      : `${info.min}–${info.max}${pm.metric.unit}${info.isLowVariance ? ' — essentially stable' : ''}`;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
+      <span style="width:10px;height:10px;border-radius:50%;background:${pm.metric.color};flex-shrink:0;"></span>
+      <span style="flex:1;font-weight:600;">${pm.metric.title}</span>
+      <span style="color:${info.isLowVariance ? 'var(--text3)' : 'var(--text)'};">${rangeText}</span>
+    </div>`;
+  }).join('') + (perMetricData.length >= 6
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;">${perMetricData.length} metrics shown at once — try narrowing to 3-4 for an easier read.</div>`
+    : '');
 }
 
 function showMMDayPanel(date, realValues, perMetricData) {
@@ -32214,6 +32292,7 @@ function dismissInsight() {
   <div style="padding:0 20px 20px;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
       <canvas id="mmChart" style="width:100%;height:280px;"></canvas>
+      <div id="mmLegend" style="margin-top:12px;"></div>
     </div>
   </div>
 
