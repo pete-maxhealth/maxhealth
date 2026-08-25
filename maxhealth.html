@@ -4400,7 +4400,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.579</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.580</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5245,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.579'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.580'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25831,7 +25831,13 @@ function openMultiMetricOverlay() {
   document.getElementById('multiMetricOverlay').style.display = 'block';
   document.getElementById('mmDayPanel').style.display = 'none';
   renderMMMetricPicker();
-  renderMMChart();
+  // Deferred to the next frame, not called immediately - constructing the
+  // chart in the same tick as the display:block change measures the canvas
+  // before the browser has actually reflowed the now-visible container, so
+  // Chart.js sees a zero/stale width and lays out badly (the near-vertical
+  // spike rendering, not a normal spread-out line chart). requestAnimationFrame
+  // guarantees a real layout pass has happened first.
+  requestAnimationFrame(() => renderMMChart());
 }
 
 function closeMultiMetricOverlay() {
@@ -25843,6 +25849,7 @@ function setMMPeriod(period, btn) {
   _mmPeriod = period;
   document.querySelectorAll('#mmPeriodBtns .drill-period').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old period's data
   renderMMChart();
 }
 
@@ -25851,6 +25858,7 @@ function toggleMMMetric(key) {
   if (idx > -1) _mmSelectedMetrics.splice(idx, 1); else _mmSelectedMetrics.push(key);
   saveMMSelectedMetrics();
   renderMMMetricPicker();
+  document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old metric selection
   renderMMChart();
 }
 
@@ -26057,25 +26065,32 @@ function showMMDayPanel(date, realValues, perMetricData) {
   renderMMDayPanel('day');
 }
 
-// Week mode averages each metric over the 7 days ending on the clicked
-// date, using the same per-metric points already fetched for the chart -
-// no extra data fetch needed, just a different window over what's already
-// there. Genuinely averaged, not just relabeled - a metric with only 2 of
-// 7 days logged still shows its real average of those 2, not a misleading
-// full-week claim.
-function computeMMWeekSummary(endDateStr, perMetricData) {
+// Averages each metric over whatever period is currently selected at the
+// top of the overlay (_mmPeriod - 7/30/90, or 0 for All), ending on the
+// clicked date - not a separate, hardcoded window the user has to specify
+// again after already choosing a period. "All" uses every point available
+// up to the clicked date rather than an arbitrary fixed number of days,
+// since that's what "All" means everywhere else in this view.
+function computeMMPeriodSummary(endDateStr, perMetricData, periodDays) {
   const [ed, em, ey] = endDateStr.split('/').map(Number);
   const endDate = new Date(2000 + ey, em - 1, ed);
-  const startDate = new Date(endDate); startDate.setDate(startDate.getDate() - 6);
+  const startDate = periodDays > 0 ? (() => { const d = new Date(endDate); d.setDate(d.getDate() - (periodDays - 1)); return d; })() : null;
   return perMetricData.map(pm => {
     const inRange = pm.points.filter(p => {
       const [pd, pm2, py] = p.date.split('/').map(Number);
       const pDate = new Date(2000 + py, pm2 - 1, pd);
-      return pDate >= startDate && pDate <= endDate && p.val != null;
+      return pDate <= endDate && (startDate === null || pDate >= startDate) && p.val != null;
     });
     const avg = inRange.length ? Math.round((inRange.reduce((a, p) => a + p.val, 0) / inRange.length) * 10) / 10 : null;
     return { metric: pm.metric, avg, daysLogged: inRange.length };
   });
+}
+
+// Matches the same labels already shown on the period buttons at the top
+// of this view, so the drill-down button reads as "whatever you already
+// selected" rather than a new, separate choice.
+function getMMPeriodLabel() {
+  return _mmPeriod === 7 ? '7D' : _mmPeriod === 30 ? '30D' : _mmPeriod === 90 ? '90D' : 'All';
 }
 
 function renderMMDayPanel(mode) {
@@ -26084,18 +26099,20 @@ function renderMMDayPanel(mode) {
   const perMetricData = window._mmDrillMetricData;
   if (!panel || !date || !perMetricData) return;
 
-  const isWeek = mode === 'week';
+  const isPeriod = mode === 'period';
+  const periodLabel = getMMPeriodLabel();
   let rows, question, headerLabel;
 
-  if (isWeek) {
-    const weekData = computeMMWeekSummary(date, perMetricData);
-    rows = weekData.map(w => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+  if (isPeriod) {
+    const periodData = computeMMPeriodSummary(date, perMetricData, _mmPeriod);
+    const windowDesc = _mmPeriod > 0 ? `${_mmPeriod}-day` : 'full';
+    rows = periodData.map(w => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
       <span style="color:var(--text2);"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${w.metric.color};margin-right:6px;"></span>${w.metric.title}</span>
-      <span style="color:${w.avg != null ? 'var(--text)' : 'var(--text3)'};font-weight:700;">${w.avg != null ? `${w.avg}${w.metric.unit} avg (${w.daysLogged}/7 days)` : 'No data'}</span>
+      <span style="color:${w.avg != null ? 'var(--text)' : 'var(--text3)'};font-weight:700;">${w.avg != null ? `${w.avg}${w.metric.unit} avg (${w.daysLogged} day${w.daysLogged === 1 ? '' : 's'} logged)` : 'No data'}</span>
     </div>`).join('');
-    const metricList = weekData.filter(w => w.avg != null).map(w => `${w.metric.title} averaged ${w.avg}${w.metric.unit}`).join(', ');
-    question = `What happened in the week ending ${date}? Here's what I tracked, averaged over that week: ${metricList}. Any explanation for how these relate to each other, or anything notable about that week?`;
-    headerLabel = `Week ending ${date}`;
+    const metricList = periodData.filter(w => w.avg != null).map(w => `${w.metric.title} averaged ${w.avg}${w.metric.unit}`).join(', ');
+    question = `What happened over the ${windowDesc} period ending ${date}? Here's what I tracked, averaged over that period: ${metricList}. Any explanation for how these relate to each other, or anything notable?`;
+    headerLabel = `${periodLabel} ending ${date}`;
   } else {
     rows = perMetricData.map(pm => {
       const val = window._mmDrillRealValues?.[pm.metric.key];
@@ -26113,8 +26130,8 @@ function renderMMDayPanel(mode) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${headerLabel}</div>
       <div style="display:flex;gap:6px;">
-        <button onclick="renderMMDayPanel('day')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${!isWeek ? 'var(--accent)' : 'var(--border)'};background:${!isWeek ? 'var(--accent-dim)' : 'transparent'};color:${!isWeek ? 'var(--accent)' : 'var(--text3)'};">Day</button>
-        <button onclick="renderMMDayPanel('week')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${isWeek ? 'var(--accent)' : 'var(--border)'};background:${isWeek ? 'var(--accent-dim)' : 'transparent'};color:${isWeek ? 'var(--accent)' : 'var(--text3)'};">Week</button>
+        <button onclick="renderMMDayPanel('day')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${!isPeriod ? 'var(--accent)' : 'var(--border)'};background:${!isPeriod ? 'var(--accent-dim)' : 'transparent'};color:${!isPeriod ? 'var(--accent)' : 'var(--text3)'};">Day</button>
+        <button onclick="renderMMDayPanel('period')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${isPeriod ? 'var(--accent)' : 'var(--border)'};background:${isPeriod ? 'var(--accent-dim)' : 'transparent'};color:${isPeriod ? 'var(--accent)' : 'var(--text3)'};">${periodLabel}</button>
       </div>
     </div>
     ${rows}
