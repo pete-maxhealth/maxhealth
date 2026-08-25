@@ -4317,6 +4317,10 @@
           <input type="checkbox" id="notif-weekly" onchange="saveNotifPrefs()" style="width:16px;height:16px;accent-color:var(--green);">
           Weekly summary (Sunday 8 AM — 7-day avg vs targets)
         </label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);cursor:pointer;">
+          <input type="checkbox" id="notif-supplement" onchange="saveNotifPrefs()" style="width:16px;height:16px;accent-color:var(--green);">
+          Supplement reminders (checkpoints at 10am/3pm/8pm/11pm if any active supplement for that period is still unchecked)
+        </label>
       </div>
     </div>
     </div>
@@ -4357,7 +4361,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.568</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.569</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4403,7 +4407,38 @@
     </span>
   </div>
   <div id="supplementSettingsContent">
-    <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
+    <!-- Deliberately a fixed part of this wrap, not touched by
+         renderSupplementSettings() (which only targets #supplementListInner
+         below) - toggling one supplement on/off re-renders the list but
+         must never wipe these inputs or drop mid-typing focus. Nested here
+         rather than as a sibling before this wrap so it correctly
+         collapses/expands together with the rest of the section via the
+         existing toggleSection call above, instead of staying visible when
+         the section itself is hidden. -->
+    <div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Reminder checkpoint times — leave any blank to skip that period entirely (e.g. no late-evening reminder). Fires only if something for that period is still unchecked when the time hits.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Morning</div>
+          <input type="time" id="suppCheckpointMorning" onchange="saveSupplementCheckpointTimes()" class="modal-input" style="width:100%;padding:6px 8px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Midday</div>
+          <input type="time" id="suppCheckpointMidday" onchange="saveSupplementCheckpointTimes()" class="modal-input" style="width:100%;padding:6px 8px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Evening</div>
+          <input type="time" id="suppCheckpointEvening" onchange="saveSupplementCheckpointTimes()" class="modal-input" style="width:100%;padding:6px 8px;font-size:13px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Bedtime</div>
+          <input type="time" id="suppCheckpointBedtime" onchange="saveSupplementCheckpointTimes()" class="modal-input" style="width:100%;padding:6px 8px;font-size:13px;">
+        </div>
+      </div>
+    </div>
+    <div id="supplementListInner">
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
+    </div>
     <!-- Scroll spacer lives inside the content wrap itself now, so it always
          travels with this section wherever the reorder system moves it,
          instead of being stranded as a fixed sibling at the page's original
@@ -5155,7 +5190,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.568'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.569'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9057,6 +9092,7 @@ function initSettings() {
   if (stepsBaselineInput) stepsBaselineInput.value = localStorage.getItem('mh_steps_baseline') || 7500;
   // Render supplement settings
   renderSupplementSettings();
+  initSupplementCheckpointInputs();
   // Apply saved collapse states for all Settings sections.
   // defaultOpen is only used on a section's very first visit, before any
   // localStorage preference exists — Profile defaults open since it's the one
@@ -19173,7 +19209,7 @@ function _startSupplementVoiceListening() {
 
 // ── Supplement settings UI ────────────────────────────────
 function renderSupplementSettings() {
-  const el = document.getElementById('supplementSettingsContent');
+  const el = document.getElementById('supplementListInner');
   if (!el) return;
   const defs = loadSupplementDefs();
 
@@ -28849,7 +28885,16 @@ function saveNotifPrefs() {
     eod:    document.getElementById('notif-eod')?.checked    ||false,
     carb:   document.getElementById('notif-carb')?.checked   ||false,
     weekly: document.getElementById('notif-weekly')?.checked ||false,
+    supplement: document.getElementById('notif-supplement')?.checked ||false,
   };
+  // First time this specific pref is turned on, record when - the actual
+  // reminder checks (in checkNotifications) hold off firing for 2 hours
+  // after this moment, so enabling it doesn't immediately start pestering
+  // mid-setup before there's even been a fair chance to check anything off.
+  const prevPrefs = getNotifPrefs();
+  if (prefs.supplement && !prevPrefs.supplement) {
+    localStorage.setItem('mh_notif_supplement_enabled_at', Date.now().toString());
+  }
   localStorage.setItem('mh_notif_prefs', JSON.stringify(prefs));
   showToast('Notification preferences saved');
 }
@@ -28868,7 +28913,7 @@ function initNotifUI() {
     if (settingsEl) settingsEl.style.display='flex';
     if (statusEl) statusEl.textContent='Notifications enabled. Choose which alerts to receive:';
     const p=getNotifPrefs();
-    ['eod','carb','weekly'].forEach(k=>{ const el=document.getElementById(`notif-${k}`); if(el) el.checked=p[k]||false; });
+    ['eod','carb','weekly','supplement'].forEach(k=>{ const el=document.getElementById(`notif-${k}`); if(el) el.checked=p[k]||false; });
   } else if (perm==='denied') {
     if (statusEl) statusEl.textContent='Notifications blocked — enable them in Chrome settings, then reload.';
     if (btn) btn.style.display='none';
@@ -28910,6 +28955,81 @@ function checkNotifications() {
       }
     }
   }
+  if (prefs.supplement) checkSupplementReminders(now, hour, todayKey);
+}
+
+// Time-input defaults populated on first load only (see initSupplementCheckpointInputs) -
+// suggested starting points, not enforced. Any of the four can be cleared
+// to blank, and that period then never fires a reminder at all - "people
+// might not want a reminder late evening", per the actual request.
+function loadSupplementCheckpointTimes() {
+  try {
+    const stored = localStorage.getItem('mh_supplement_checkpoint_times');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return { morning: '10:00', midday: '15:00', evening: '20:00', bedtime: '23:00' };
+}
+
+function saveSupplementCheckpointTimes() {
+  const times = {
+    morning: document.getElementById('suppCheckpointMorning')?.value || '',
+    midday:  document.getElementById('suppCheckpointMidday')?.value  || '',
+    evening: document.getElementById('suppCheckpointEvening')?.value || '',
+    bedtime: document.getElementById('suppCheckpointBedtime')?.value || '',
+  };
+  localStorage.setItem('mh_supplement_checkpoint_times', JSON.stringify(times));
+  showToast('Reminder times saved');
+}
+
+function initSupplementCheckpointInputs() {
+  const times = loadSupplementCheckpointTimes();
+  ['morning','midday','evening','bedtime'].forEach(p => {
+    const el = document.getElementById('suppCheckpoint' + p.charAt(0).toUpperCase() + p.slice(1));
+    if (el) el.value = times[p] || '';
+  });
+}
+
+// Held off entirely for 2 hours after the pref is first turned on, so
+// enabling it mid-afternoon doesn't immediately fire a reminder for a
+// period that's barely begun - see saveNotifPrefs() for where that's set.
+function checkSupplementReminders(now, hour, todayKey) {
+  const enabledAt = parseInt(localStorage.getItem('mh_notif_supplement_enabled_at') || '0', 10);
+  if (!enabledAt || (Date.now() - enabledAt) < 2 * 60 * 60 * 1000) return;
+
+  const times = loadSupplementCheckpointTimes();
+  const order = ['morning', 'midday', 'evening', 'bedtime'];
+  // Only periods with an actual time set - a blank input means "never
+  // remind for this period", not "use some fallback default". Sorted by
+  // hour so ranges between them are computed correctly regardless of which
+  // ones are present (e.g. if midday is blank, morning's range correctly
+  // extends through to whatever evening is set to, not a fixed 15:00 cutoff).
+  const active = order
+    .filter(p => times[p])
+    .map(p => ({ period: p, hour: parseInt((times[p] || '0:0').split(':')[0], 10) }))
+    .sort((a, b) => a.hour - b.hour);
+  if (!active.length) return; // nothing configured at all - notification flag alone isn't enough, matches "if 2 out of 4 have times set, it runs for what's there"
+
+  let due = null;
+  for (let i = 0; i < active.length; i++) {
+    const fromHour = active[i].hour;
+    const toHour = i + 1 < active.length ? active[i + 1].hour : 24;
+    if (hour >= fromHour && hour < toHour) { due = active[i].period; break; }
+  }
+  if (!due) return;
+
+  const key = `mh_notif_supp_${due}_${todayKey}`;
+  if (localStorage.getItem(key)) return; // already fired for this checkpoint today
+
+  const defs = loadSupplementDefs().filter(s => s.active !== false && (s.periods || []).includes(due));
+  if (!defs.length) { localStorage.setItem(key, '1'); return; } // nothing scheduled for this period at all - mark done, not worth checking again today
+
+  const log = loadSupplementLog();
+  const unchecked = defs.filter(s => !log[s.id + '_' + due]);
+  localStorage.setItem(key, '1');
+  if (!unchecked.length) return; // everything for this period already checked off - genuinely nothing to remind about
+
+  const names = unchecked.map(s => s.name).join(', ');
+  sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${names}`, 'today');
 }
 
 function sendLocalNotif(title, body, tab) {
