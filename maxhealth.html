@@ -2308,7 +2308,7 @@
       <div style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="dismissNewUserBanner()">Got it — don't show again</div>
     </div>
 
-
+    <div id="symptomTrackerContent"></div>
 
     <div class="weight-card" id="dashSection-weight">
       <div style="position:absolute;top:8px;right:8px;z-index:2;">
@@ -4337,8 +4337,27 @@
         </label>
         <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);cursor:pointer;">
           <input type="checkbox" id="notif-supplement" onchange="saveNotifPrefs()" style="width:16px;height:16px;accent-color:var(--green);">
-          Supplement reminders (checkpoints at 10am/3pm/8pm/11pm if any active supplement for that period is still unchecked)
+          Supplement reminders (fires if any active supplement for that checkpoint is still unchecked)
         </label>
+        <div style="font-size:11px;color:var(--text3);margin-left:26px;margin-top:-4px;">⚙️ Checkpoint times are set per-period (and can be left blank to skip one entirely) under Manage → Supplements, not here.</div>
+      </div>
+    </div>
+    </div>
+
+
+
+    <div class="section-title" id="title-set-idletimeout" style="cursor:pointer;" onclick="toggleSection('set-idletimeout','set-idletimeout-wrap','set-idletimeout-icon')">Idle Timeout <span id="set-idletimeout-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-idletimeout-wrap">
+    <div class="settings-card" style="padding:14px 16px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">Pauses the app's own background activity (notification checks, chart updates) after a period with no taps, scrolls, or typing - genuinely reduces what the app is doing while you're not actually using it, rather than it quietly running in the background the whole time the tab is open. Nothing you've typed or logged is ever lost - it's a pause, not a reset.</div>
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text2);cursor:pointer;margin-bottom:14px;">
+        <input type="checkbox" id="idleTimeoutEnabled" onchange="saveIdleTimeoutSettings()" style="width:16px;height:16px;accent-color:var(--green);">
+        Enable idle timeout
+      </label>
+      <div id="idleTimeoutMinutesRow" style="display:none;">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Timeout after (minutes)</div>
+        <input type="number" id="idleTimeoutMinutes" min="1" max="60" step="1" onchange="saveIdleTimeoutSettings()" class="modal-input" style="width:100%;padding:8px 10px;font-size:13px;">
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;">Default 5 minutes. A countdown appears once you're genuinely idle (not during active use), with a warning before the pause actually happens.</div>
       </div>
     </div>
     </div>
@@ -4379,7 +4398,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.573</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.575</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4465,6 +4484,22 @@
     <div style="min-height:50vh;" aria-hidden="true"></div>
   </div>
 
+  </div>
+
+
+
+  <div class="section-title" id="title-set-symptoms" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('set-symptoms','symptomSettingsContent','set-symptoms-icon')">
+    <span>Symptom Tracking <span id="set-symptoms-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></span>
+    <span style="display:flex;gap:6px;">
+      <button class="copy-btn" style="font-size:11px;padding:6px 10px;" onclick="event.stopPropagation();if(confirm('Clear all tracked symptoms?')){localStorage.removeItem('mh_symptom_defs');localStorage.removeItem('mh_symptom_log');renderSymptomSettings();renderSymptomTracker();showToast('Symptoms cleared ✓')}">Clear all</button>
+      <button class="settings-save-btn" onclick="event.stopPropagation();addSymptom()">+ Add</button>
+    </span>
+  </div>
+  <div id="symptomSettingsContent">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Track whatever's actually relevant to you day to day - energy, cognitive clarity, sleep quality, headaches, mood, or anything else. Logged 1-5 daily from the Today dashboard. Nothing is tracked by default; add what you actually want to watch.</div>
+    <div id="symptomListInner">
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
+    </div>
   </div>
 
 </div><!-- end view-manage -->
@@ -5208,7 +5243,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.573'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.575'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8757,6 +8792,168 @@ function saveBodyFatPct() {
 // than an invisible choice happening behind the scenes - shows which source
 // is genuinely feeding the calculation right now, not just what's typed in
 // the manual field.
+// ── IDLE TIMEOUT ───────────────────────────────────────────
+// Pauses the app's own background work (notification checks) after a
+// period with no genuine activity, with a visible warning before it
+// happens - a pause via overlay, not a reload/reset, so nothing typed or
+// in progress is ever lost. Default off; opt-in via Settings.
+let _idleCheckInterval = null;
+let _lastActivityTime = Date.now();
+let _idleOverlayActive = false;
+let _idleWarningShown = false;
+// label -> human-readable description, while a tracked operation (AI call,
+// server backup) is genuinely in flight - see parseWithAI/saveFullBackupToServer's
+// wrapper functions for where these get set and cleared.
+window._mhBusyOperations = new Map();
+let _idleBusyGraceStart = null; // when timeout first found something busy - null means no grace period currently running
+
+function loadIdleTimeoutSettings() {
+  return {
+    enabled: localStorage.getItem('mh_idle_timeout_enabled') === '1',
+    minutes: parseInt(localStorage.getItem('mh_idle_timeout_minutes')) || 5,
+  };
+}
+
+function saveIdleTimeoutSettings() {
+  const enabledEl = document.getElementById('idleTimeoutEnabled');
+  const minutesEl = document.getElementById('idleTimeoutMinutes');
+  const row = document.getElementById('idleTimeoutMinutesRow');
+  if (!enabledEl) return;
+  const enabled = enabledEl.checked;
+  localStorage.setItem('mh_idle_timeout_enabled', enabled ? '1' : '0');
+  if (row) row.style.display = enabled ? 'block' : 'none';
+  const minutes = Math.max(1, Math.min(60, parseInt(minutesEl?.value) || 5));
+  if (minutesEl) minutesEl.value = minutes;
+  localStorage.setItem('mh_idle_timeout_minutes', minutes);
+  if (enabled) {
+    startIdleTracking();
+    showToast(`Idle timeout enabled — pauses after ${minutes} minute${minutes > 1 ? 's' : ''} of inactivity`);
+  } else {
+    stopIdleTracking();
+    showToast('Idle timeout disabled');
+  }
+}
+
+function initIdleTimeoutUI() {
+  const settings = loadIdleTimeoutSettings();
+  const enabledEl = document.getElementById('idleTimeoutEnabled');
+  const minutesEl = document.getElementById('idleTimeoutMinutes');
+  const row = document.getElementById('idleTimeoutMinutesRow');
+  if (enabledEl) enabledEl.checked = settings.enabled;
+  if (minutesEl) minutesEl.value = settings.minutes;
+  if (row) row.style.display = settings.enabled ? 'block' : 'none';
+  if (settings.enabled) startIdleTracking();
+}
+
+function recordActivity() {
+  _lastActivityTime = Date.now();
+  _idleWarningShown = false;
+  const badge = document.getElementById('idleCountdownBadge');
+  if (badge && badge.style.display !== 'none') badge.style.display = 'none';
+}
+
+function startIdleTracking() {
+  if (_idleCheckInterval) return; // already running - don't double-attach listeners
+  _lastActivityTime = Date.now();
+  ['click', 'touchstart', 'keydown', 'scroll'].forEach(evt => {
+    document.addEventListener(evt, recordActivity, { passive: true, capture: true });
+  });
+  _idleCheckInterval = setInterval(checkIdleState, 5000); // 5s granularity is plenty for a minute-scale countdown, deliberately not tighter
+}
+
+function stopIdleTracking() {
+  if (_idleCheckInterval) { clearInterval(_idleCheckInterval); _idleCheckInterval = null; }
+  ['click', 'touchstart', 'keydown', 'scroll'].forEach(evt => {
+    document.removeEventListener(evt, recordActivity, { capture: true });
+  });
+  const badge = document.getElementById('idleCountdownBadge');
+  if (badge) badge.style.display = 'none';
+}
+
+function checkIdleState() {
+  if (_idleOverlayActive) return; // already paused - nothing more to check until resumed
+  const settings = loadIdleTimeoutSettings();
+  if (!settings.enabled) { stopIdleTracking(); return; }
+  const remainingMs = (settings.minutes * 60 * 1000) - (Date.now() - _lastActivityTime);
+
+  if (remainingMs <= 0) { attemptIdleTimeout(); return; }
+
+  // Countdown only shown in the final minute - a warning as timeout
+  // approaches, not a permanent fixture while someone's just reading
+  // something on screen without tapping.
+  const badge = document.getElementById('idleCountdownBadge');
+  if (remainingMs <= 60000) {
+    if (badge) { badge.style.display = 'block'; badge.textContent = `⏸ Pausing in ${Math.ceil(remainingMs / 1000)}s — tap to stay active`; }
+    if (!_idleWarningShown) { _idleWarningShown = true; showToast('Pausing in 1 minute due to inactivity'); }
+  } else if (badge) {
+    badge.style.display = 'none';
+  }
+}
+
+// Checked before the overlay ever appears - if something genuinely
+// important is mid-flight (an AI call, a server backup), waits silently up
+// to 60s for it to finish on its own rather than pausing straight over it.
+// If it's still running after that (possibly stuck), asks explicitly
+// instead of guessing - "whatever's running needs to complete, but not
+// given an indefinite amount of time to do it" was the actual request.
+function attemptIdleTimeout() {
+  if (window._mhBusyOperations.size > 0) {
+    if (_idleBusyGraceStart === null) _idleBusyGraceStart = Date.now();
+    if (Date.now() - _idleBusyGraceStart < 60000) return; // still within the silent grace window - check again next tick
+    showIdleBusyPrompt();
+    return;
+  }
+  _idleBusyGraceStart = null;
+  triggerIdleTimeout();
+}
+
+function showIdleBusyPrompt() {
+  if (document.getElementById('idleBusyPrompt')) return; // already showing, don't stack another
+  const labels = Array.from(window._mhBusyOperations.values()).join(', ') || 'Something';
+  const div = document.createElement('div');
+  div.id = 'idleBusyPrompt';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:501;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;';
+  div.innerHTML = `
+    <div style="font-size:32px;margin-bottom:16px;">⏳</div>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--text);margin-bottom:8px;">Still working on something</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:20px;max-width:280px;">${labels} — taking longer than expected. Keep waiting, or pause anyway? Pausing won't cancel it, but check it actually finished when you come back.</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="extendIdleBusyWait()" style="padding:10px 20px;background:var(--accent);color:#080a0d;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">Keep waiting</button>
+      <button onclick="forceIdlePauseAnyway()" style="padding:10px 20px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:10px;font-size:13px;cursor:pointer;">Pause anyway</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function extendIdleBusyWait() {
+  document.getElementById('idleBusyPrompt')?.remove();
+  _idleBusyGraceStart = Date.now(); // another 60s grace window, not indefinite - re-prompts if it's still not done
+}
+
+function forceIdlePauseAnyway() {
+  document.getElementById('idleBusyPrompt')?.remove();
+  _idleBusyGraceStart = null;
+  triggerIdleTimeout();
+}
+
+function triggerIdleTimeout() {
+  _idleOverlayActive = true;
+  const overlay = document.getElementById('idleOverlay');
+  const badge = document.getElementById('idleCountdownBadge');
+  if (overlay) overlay.style.display = 'flex';
+  if (badge) badge.style.display = 'none';
+  // The actual battery-relevant part - genuinely stops the interval, not
+  // just hiding its visible effects behind the overlay.
+  if (window._notifCheckInterval) { clearInterval(window._notifCheckInterval); window._notifCheckInterval = null; }
+}
+
+function resumeFromIdle() {
+  _idleOverlayActive = false;
+  const overlay = document.getElementById('idleOverlay');
+  if (overlay) overlay.style.display = 'none';
+  recordActivity();
+  if (!window._notifCheckInterval) window._notifCheckInterval = setInterval(checkNotifications, 20 * 60 * 1000);
+}
+
 function updateBodyFatSourceStatus() {
   const statusEl = document.getElementById('bodyFatSourceStatus');
   if (!statusEl) return;
@@ -9282,9 +9479,11 @@ function initSettings() {
   if (stepsBaselineInput) stepsBaselineInput.value = localStorage.getItem('mh_steps_baseline') || 7500;
   // Render supplement settings
   renderSupplementSettings();
+  renderSymptomSettings();
   initSupplementCheckpointInputs();
   initBMRFormulaUI();
   refreshActiveScrollContainer();
+  initIdleTimeoutUI();
   // Apply saved collapse states for all Settings sections.
   // defaultOpen is only used on a section's very first visit, before any
   // localStorage preference exists — Profile defaults open since it's the one
@@ -9965,6 +10164,14 @@ function buildFullBackupPayload() {
 // button so the person gets confirmation it actually reached the server,
 // not just Downloads.
 async function saveFullBackupToServer(silent = true) {
+  window._mhBusyOperations.set('backup', 'Saving a backup to your server');
+  try {
+    return await _saveFullBackupToServer_impl(silent);
+  } finally {
+    window._mhBusyOperations.delete('backup');
+  }
+}
+async function _saveFullBackupToServer_impl(silent = true) {
   if (!_serverOnline) return false;
   try {
     const res = await fetch(`${MH_SERVER}/save-full-backup`, {
@@ -10098,7 +10305,20 @@ function clearPhoto() {
 }
 
 // ─── AI MEAL PARSING ─────────────────────────────────────
+// Wrapped rather than edited internally - renaming the implementation and
+// keeping the original name as a thin pass-through means every existing
+// call site (several, across logging/recipes/meal-suggestions) keeps
+// working completely unchanged, while the idle-timeout feature can now see
+// when a real AI call is genuinely in flight before it decides to pause.
 async function parseWithAI(userText, imageBase64, imageMime) {
+  window._mhBusyOperations.set('ai_call', 'Waiting on an AI response');
+  try {
+    return await _parseWithAI_impl(userText, imageBase64, imageMime);
+  } finally {
+    window._mhBusyOperations.delete('ai_call');
+  }
+}
+async function _parseWithAI_impl(userText, imageBase64, imageMime) {
   const { provider, apiKey } = getAIConfig();
   if (provider === 'none' && !apiKey) return null; // proxy always available
 
@@ -13551,6 +13771,8 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'AI Provider Settings', key: 'set-aiprovider', subtab: 'manage', keywords: 'anthropic openai claude gpt model api key' },
   { label: 'Appearance / Theme', key: 'set-appearance', subtab: 'manage', keywords: 'dark light colour color mode display' },
   { label: 'Notifications', key: 'set-notifications', subtab: 'manage', keywords: 'reminders alerts push' },
+  { label: 'Idle Timeout', key: 'set-idletimeout', subtab: 'manage', keywords: 'battery sleep pause inactivity screen timeout' },
+  { label: 'Symptom Tracking', key: 'set-symptoms', subtab: 'manage', keywords: 'energy mood headache pattern correlation how are you today' },
   { label: 'Body Comp Debug', key: 'set-bodycompdebug', subtab: 'manage', keywords: 'weight body composition fat muscle bone troubleshooting' },
   { label: 'Rollover Debug Log', key: 'set-rollover', subtab: 'manage', keywords: 'midnight rollover troubleshooting' },
   { label: 'Data Backup', key: 'set-databackup', subtab: 'manage', keywords: 'export restore json csv full backup' },
@@ -17991,6 +18213,7 @@ function updateDashboard(skipActivityRender) {
   checkFirstLogNudge(); // same pattern - no-ops if already logged today, already shown, or not enough history yet
   updateCarbZonesCondition(); // swaps GBM-specific wording in the carb-zones tooltip based on mh_condition — see its own comment
   applySectionState('dash-guides', 'dash-guides-wrap', 'dash-guides-icon', true); // was never restored on load - saved fine via toggleSection, just never read back
+  renderSymptomTracker();
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
@@ -19199,6 +19422,167 @@ function loadSupplementLog() {
 
 function saveSupplementLog(log) {
   localStorage.setItem('mh_supplement_log', JSON.stringify(log));
+}
+
+function toggleSupplement(id, period) {
+  const log = loadSupplementLog();
+  const key = id + '_' + period;
+  log[key] = !log[key];
+  saveSupplementLog(log);
+  renderSupplements();
+}
+
+// ── SYMPTOM TRACKING ──────────────────────────────────────
+// Mirrors the supplement data model deliberately - user-defined list (no
+// hardcoded symptoms, since what's relevant varies enormously by
+// condition), 1-5 daily score per symptom rather than a binary checkbox.
+// Feeds into state.history (see saveSymptomLog) so the existing Patterns
+// engine can eventually check symptom scores against ketosis/carb
+// adherence the same way it already checks sleep and activity.
+const DEFAULT_SYMPTOMS = []; // empty by default - built by the user, not assumed
+
+function loadSymptomDefs() {
+  if (typeof _demoMode !== 'undefined' && _demoMode) return typeof generateDemoSymptoms === 'function' ? generateDemoSymptoms() : DEFAULT_SYMPTOMS.slice();
+  try {
+    const stored = localStorage.getItem('mh_symptom_defs');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return DEFAULT_SYMPTOMS.slice();
+}
+
+function saveSymptomDefs(defs) {
+  if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  localStorage.setItem('mh_symptom_defs', JSON.stringify(defs));
+}
+
+function loadSymptomLog() {
+  // Daily log: { date, [symptomId]: 1-5 }
+  try {
+    const stored = localStorage.getItem('mh_symptom_log');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.date !== todayStr()) return { date: todayStr() }; // reset on a new day, same as the supplement log
+      return parsed;
+    }
+  } catch(e) {}
+  return { date: todayStr() };
+}
+
+function saveSymptomLog(log) {
+  localStorage.setItem('mh_symptom_log', JSON.stringify(log));
+  // Stamped onto today's own history entry, not just kept in the daily-log
+  // key alone - the daily log resets at midnight same as supplements, but
+  // history is what the Patterns engine actually reads, so this is what
+  // makes a symptom score usable for correlation later, not just visible
+  // for today.
+  if (state.history && state.history[0] && state.history[0].date === todayStr()) {
+    state.history[0].symptoms = Object.assign({}, log);
+    delete state.history[0].symptoms.date;
+    saveState();
+  }
+}
+
+function setSymptomScore(id, score) {
+  const log = loadSymptomLog();
+  log[id] = score;
+  saveSymptomLog(log);
+  renderSymptomTracker();
+}
+
+function renderSymptomSettings() {
+  const el = document.getElementById('symptomListInner');
+  if (!el) return;
+  const defs = loadSymptomDefs();
+
+  if (!defs.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No symptoms tracked yet.<br>Tap + Add to start.</div>';
+    return;
+  }
+
+  el.innerHTML = defs.map(s => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:${s.active===false?'var(--text3)':'var(--text)'};">${s.name}</div>
+        </div>
+        <button onclick="editSymptom('${s.id}')" style="background:transparent;border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:11px;color:var(--text2);cursor:pointer;">Edit</button>
+        <button onclick="toggleSymptomActive('${s.id}')" style="background:transparent;border:1px solid ${s.active===false?'var(--border)':'var(--accent)'};border-radius:4px;padding:4px 8px;font-size:11px;color:${s.active===false?'var(--text3)':'var(--accent)'};cursor:pointer;">${s.active===false?'Off':'On'}</button>
+        <button onclick="deleteSymptom('${s.id}')" style="background:transparent;border:1px solid var(--red);border-radius:4px;padding:4px 8px;font-size:11px;color:var(--red);cursor:pointer;">✕</button>
+      </div>`).join('');
+}
+
+function toggleSymptomActive(id) {
+  const defs = loadSymptomDefs();
+  const s = defs.find(d => d.id === id);
+  if (s) s.active = s.active === false ? true : false;
+  saveSymptomDefs(defs);
+  renderSymptomSettings();
+  renderSymptomTracker();
+}
+
+function deleteSymptom(id) {
+  appConfirm('Remove this symptom? Its past logged scores stay in your history either way, this only stops tracking it going forward.', () => {
+    const defs = loadSymptomDefs().filter(d => d.id !== id);
+    saveSymptomDefs(defs);
+    renderSymptomSettings();
+    renderSymptomTracker();
+  }, null, true);
+}
+
+function addSymptom() {
+  appPrompt('New symptom to track', 'e.g. Energy, Headache, Mood', (name) => {
+    name = (name || '').trim();
+    if (!name) return;
+    const defs = loadSymptomDefs();
+    defs.push({ id: 'symp_' + Date.now(), name, active: true });
+    saveSymptomDefs(defs);
+    renderSymptomSettings();
+    renderSymptomTracker();
+  });
+}
+
+function editSymptom(id) {
+  const defs = loadSymptomDefs();
+  const s = defs.find(d => d.id === id);
+  if (!s) return;
+  appPrompt('Rename symptom', 'e.g. Energy, Headache, Mood', (name) => {
+    name = (name || '').trim();
+    if (!name) return;
+    s.name = name;
+    saveSymptomDefs(defs);
+    renderSymptomSettings();
+    renderSymptomTracker();
+  }, s.name);
+}
+
+function renderSymptomTracker() {
+  const el = document.getElementById('symptomTrackerContent');
+  if (!el) return;
+  const defs = loadSymptomDefs().filter(s => s.active !== false);
+  if (!defs.length) { el.innerHTML = ''; return; } // nothing tracked - no empty card cluttering the dashboard
+
+  const log = loadSymptomLog();
+  const loggedCount = defs.filter(s => log[s.id] != null).length;
+
+  el.innerHTML = `
+    <div class="settings-card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">How are you today?</div>
+        <div style="font-size:11px;color:${loggedCount===defs.length?'var(--green)':'var(--text3)'};">${loggedCount}/${defs.length} logged</div>
+      </div>
+      ${defs.map(s => {
+        const score = log[s.id];
+        return `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:12px;color:var(--text2);margin-bottom:5px;">${s.name}</div>
+          <div style="display:flex;gap:5px;">
+            ${[1,2,3,4,5].map(n => `
+              <button onclick="setSymptomScore('${s.id}',${n})" style="flex:1;padding:8px 0;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid ${score===n?'var(--accent)':'var(--border)'};background:${score===n?'var(--accent)':'var(--surface2)'};color:${score===n?'#080a0d':'var(--text3)'};">${n}</button>
+            `).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">1 = worst, 5 = best. Manage what's tracked in Settings → Symptom Tracking.</div>
+    </div>`;
 }
 
 function toggleSupplement(id, period) {
@@ -29977,7 +30361,10 @@ try {
   // silently skipping the whole recovery for that entire session.
   checkServer().then(ok => { if (!ok) setTimeout(checkServer, 5000); });
   setTimeout(checkNotifications, 3000);
-  setInterval(checkNotifications, 20 * 60 * 1000); // re-check every 20 minutes
+  // Stored globally (not a bare setInterval) so the idle-timeout feature can
+  // genuinely stop this while paused, not just hide its visible effects -
+  // that's the actual battery-relevant part of pausing, not the overlay itself.
+  window._notifCheckInterval = setInterval(checkNotifications, 20 * 60 * 1000); // re-check every 20 minutes
 } catch(e) {
   document.body.innerHTML = `<div style="padding:40px;font-family:monospace;color:#ff5e5e;background:#080a0d;min-height:100vh;">
     <div style="font-size:20px;margin-bottom:16px;">MaxedHealth startup error</div>
@@ -31505,6 +31892,22 @@ function dismissInsight() {
   style="display:none;position:fixed;bottom:90px;right:20px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#000;border:none;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4);z-index:50;cursor:pointer;align-items:center;justify-content:center;">↑</button>
 <button id="globalScrollBottomBtn" onclick="globalScrollToBottom()"
   style="display:none;position:fixed;bottom:38px;right:20px;width:44px;height:44px;border-radius:50%;background:var(--surface2);border:1px solid var(--accent);color:var(--accent);font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4);z-index:50;cursor:pointer;align-items:center;justify-content:center;">↓</button>
+
+<!-- Idle timeout countdown - deliberately hidden during normal active use
+     (see updateIdleCountdown), only appears once genuinely idle so it's a
+     warning as timeout approaches, not clutter sitting on screen the whole
+     time. -->
+<div id="idleCountdownBadge" style="display:none;position:fixed;top:12px;right:12px;background:var(--surface2);border:1px solid var(--yellow);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--yellow);font-family:'Space Mono',monospace;z-index:400;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>
+
+<!-- Shown on timeout itself - a pause, not a reset. Nothing underneath is
+     touched (no reload, no navigation), so whatever was typed or in
+     progress is still exactly there once resumed. -->
+<div id="idleOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:500;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;" onclick="resumeFromIdle()">
+  <div style="font-size:40px;margin-bottom:16px;">⏸</div>
+  <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:var(--text);margin-bottom:8px;">Paused for inactivity</div>
+  <div style="font-size:13px;color:var(--text3);margin-bottom:24px;max-width:280px;">Nothing's been lost — tap anywhere to resume right where you left off.</div>
+  <button onclick="resumeFromIdle()" style="padding:12px 28px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">Resume</button>
+</div>
 
 </body>
 </html>
