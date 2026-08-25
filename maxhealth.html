@@ -2036,35 +2036,6 @@
     padding: 4px 0;
     letter-spacing: 0.05em;
   }
-
-  /* ── MODE TOGGLE ─────────────────────────────────────────── */
-  .mode-toggle {
-    display: flex;
-    gap: 6px;
-    padding: 8px 12px 4px;
-    border-bottom: 1px solid var(--border);
-  }
-  .mode-btn {
-    flex: 1;
-    padding: 7px 8px;
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    font-family: 'Space Mono', monospace;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    cursor: pointer;
-    text-align: center;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text3);
-    transition: all 0.2s;
-  }
-  .mode-btn.active {
-    background: var(--accent-dim);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
 </style>
 </head>
 <body>
@@ -2748,17 +2719,21 @@
     </div>
   </div>
   <div class="chat-input-wrap">
-    <div class="mode-toggle" id="chatModeBar">
-      <div class="mode-btn active" id="modeLog" onclick="setChatMode('log')">🍽 Log food</div>
-      <div class="mode-btn" id="modeQuery" onclick="setChatMode('query')">💬 Ask</div>
-    </div>
+    <!-- Log/Ask mode toggle removed - the difference was almost entirely
+         cosmetic (placeholder text, which row of pills showed) and for any
+         message describing food, both modes ended up logging it anyway -
+         Ask mode just detoured through an extra, wasted AI call first to
+         work that out, then silently switched back and reprocessed the
+         whole message from scratch. One unified input now; the pipeline
+         already correctly handles food, questions, water, EOD, and recipes
+         from a single entry point regardless of any mode. -->
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
       <div class="quick-btn" style="border-color:#facc15;" onclick="startMissedDayFlow()">+ Missed day</div>
       <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
-    <div class="quick-btns" id="quickBtnsQuery" style="display:none;"></div>
+    <div class="quick-btns" id="quickBtnsQuery"></div>
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
       <img id="photoPreview" style="max-height:120px;border-radius:var(--radius-sm);border:1px solid var(--border);display:block;">
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
@@ -4382,7 +4357,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.565</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.566</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5180,7 +5155,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.565'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.566'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12596,7 +12571,7 @@ function getLibraryCategoriesInUse() {
 
 function startNextMealFlow() {
   addBubble('Next meal idea', 'user');
-  const bubble = addBubble('Tap the categories you want (adjust the number if you want more than one), then Send. Or pick one of these directly:', 'system');
+  const bubble = addBubble(`Tap the categories you want, then Send.${helpToggle('mealpicker', 'Adjust the number next to a pill if you want more than one of that category - e.g. tap Meat once, Vegetable and set it to 3. Typing works too, straight into the chat box: "protein and pasta" or "meat and 2 veg" does the same thing without opening this picker. If your library genuinely does not cover what is asked, you will get an explanation of what is missing rather than a suggestion quietly padded out with the wrong thing.')}`, 'system');
   const cats = getLibraryCategoriesInUse();
   // Reset fresh every time the picker opens - a stale selection from a
   // previous, already-sent request should never silently carry into a new one.
@@ -13477,7 +13452,6 @@ function runSavedPromptTrackedById(id) {
   if (!p) return;
   p.useCount = (p.useCount || 0) + 1;
   saveSavedPrompts(prompts);
-  setChatMode('query');
   quickPrompt(p.text);
 }
 
@@ -14074,21 +14048,14 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     return;
   }
 
-  // ── Query mode — skip food parsing, go straight to AI ────
-  if (_chatMode === 'query') {
-    const { provider, apiKey } = getAIConfig();
-    const thinkingBubble = addBubble('Thinking…', 'system');
-    const result = await parseWithAI(text, null, null);
-    thinkingBubble.remove();
-    if (!result) { addBubble("Couldn't reach the AI.", 'system', 'warn'); return; }
-    if (result.type === 'query') { addBubble(result.message, 'system'); return; }
-    if (result.type === 'recipe') { addRecipeBubble(result); return; }
-    if (result.type === 'food') {
-      // User described food in query mode — switch to log mode and proceed
-      setChatMode('log');
-      addBubble('Switched to Log mode — logging this meal…', 'system');
-    }
-  }
+  // Log/Ask mode toggle removed - this used to be a separate shortcut that
+  // sent the message straight to the AI, then silently switched back and
+  // reprocessed it from scratch if the AI decided it was actually food
+  // (a genuine wasted double AI call for that case). The pipeline below
+  // already correctly handles every result type - food, query, recipe,
+  // water, eod - from parseWithAI's own type detection, confirmed by
+  // tracing every branch it falls into, so this shortcut was fully
+  // redundant even before the toggle itself was removed.
 
   // ── Try food library first ────────────────────────────────
   // ── Photos always go straight to AI — never match library or parseFood ──────
@@ -15186,10 +15153,6 @@ function showMealPreview(foods, originalText, aiMessage) {
   window._pendingMealText = originalText;
   window._pendingMealMessage = aiMessage;
 
-  // Hide mode buttons while preview is active to avoid confusion
-  const modeBar = document.getElementById('chatModeBar');
-  if (modeBar) modeBar.style.display = 'none';
-
   renderMealPreview();
 }
 
@@ -15967,8 +15930,6 @@ function confirmMealLog() {
 function finishMealLog(foods) {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
-  const modeBar = document.getElementById('chatModeBar');
-  if (modeBar) modeBar.style.display = '';
   logFoods(foods, window._pendingMealText, window._pendingMealMessage);
   window._pendingMealFoods = null;
   // If this log came from the library multi-match picker, retire it now that
@@ -15986,8 +15947,6 @@ function cancelMealPreview() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   window._pendingMealFoods = null;
-  const modeBar = document.getElementById('chatModeBar');
-  if (modeBar) modeBar.style.display = '';
   addBubble('Cancelled — nothing logged.', 'system');
 }
 
@@ -16272,8 +16231,6 @@ function saveLibraryOnlyFromPreview() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   window._pendingMealFoods = null;
-  const modeBar = document.getElementById('chatModeBar');
-  if (modeBar) modeBar.style.display = '';
 
   const parts = [];
   if (saved.length) parts.push(`Saved ${saved.join(', ')}`);
@@ -23384,6 +23341,10 @@ function switchTab(tab, el) {
       document.getElementById('maintab-log').classList.add('active');
       document.getElementById('view-log').classList.add('active');
       switchSubTab('log', _activeSubTab.log || 'log');
+      // Was only ever populated on switching into the now-removed Query
+      // mode - with one unified input, this needs its own trigger so the
+      // saved-prompts pills actually show up at all.
+      renderSavedPromptPills('quickBtnsQuery', 'quickPrompt');
     } else if (tab === 'insights') {
       document.getElementById('maintab-insights').classList.add('active');
       document.getElementById('view-insights').classList.add('active');
@@ -29644,6 +29605,10 @@ try {
   renderSavedDevices();
   updateHeader();
   updateDashboard();
+  // Was only ever populated on switching into the now-removed Query mode -
+  // with one unified input, needs its own trigger on genuine startup too,
+  // not just relying on switchTab('log') firing at some point.
+  renderSavedPromptPills('quickBtnsQuery', 'quickPrompt');
   checkOnboarding();
   checkDataIntegrity();
   showNewUserBanner();
@@ -30029,19 +29994,10 @@ function renderLightboxChart() {
 }
 
 
-// ── CHAT MODE ──────────────────────────────────────────────
-let _chatMode = 'log'; // 'log' or 'query'
-
-function setChatMode(mode) {
-  _chatMode = mode;
-  document.getElementById('modeLog').classList.toggle('active', mode === 'log');
-  document.getElementById('modeQuery').classList.toggle('active', mode === 'query');
-  document.getElementById('quickBtnsLog').style.display = mode === 'log' ? 'flex' : 'none';
-  document.getElementById('quickBtnsQuery').style.display = mode === 'query' ? 'flex' : 'none';
-  if (mode === 'query') renderSavedPromptPills('quickBtnsQuery', 'quickPrompt'); // data-driven pills - render fresh each time in case they were edited since last shown
-  const inp = document.getElementById('chatInput');
-  if (inp) inp.placeholder = mode === 'log' ? 'Describe a meal, snap a photo, scan a barcode…' : 'Quick question about today…';
-}
+// Log/Ask mode toggle and its supporting setChatMode()/_chatMode removed
+// entirely - see the comment in processMessage() for why. The chat input's
+// placeholder is now permanently the unified "Log a meal or ask..." text
+// set directly in the HTML.
 
 
 // ── WEIGHT UNIT TOGGLE ────────────────────────────────────
