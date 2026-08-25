@@ -4400,7 +4400,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.580</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.581</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5245,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.580'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.581'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25826,6 +25826,8 @@ function saveMMSelectedMetrics() {
   localStorage.setItem('mh_mm_selected_metrics', JSON.stringify(_mmSelectedMetrics));
 }
 
+let _mmResizeHandler = null;
+
 function openMultiMetricOverlay() {
   if (_mmSelectedMetrics === null) _mmSelectedMetrics = loadMMSelectedMetrics();
   document.getElementById('multiMetricOverlay').style.display = 'block';
@@ -25838,11 +25840,26 @@ function openMultiMetricOverlay() {
   // spike rendering, not a normal spread-out line chart). requestAnimationFrame
   // guarantees a real layout pass has happened first.
   requestAnimationFrame(() => renderMMChart());
+
+  // Broader safety net beyond the canvas's own touch-action:pan-y (which
+  // stops pinch-zoom starting on the chart itself) - device rotation and
+  // system-level zoom can still trigger the same measure-before-reflow
+  // issue via a genuine window resize event. Debounced so a rapid zoom
+  // gesture doesn't trigger a full destroy+rebuild on every intermediate
+  // frame, only once it settles. Only attached while this overlay is
+  // actually open, removed on close below.
+  let resizeTimer = null;
+  _mmResizeHandler = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (_mmChart) renderMMChart(); }, 250);
+  };
+  window.addEventListener('resize', _mmResizeHandler);
 }
 
 function closeMultiMetricOverlay() {
   document.getElementById('multiMetricOverlay').style.display = 'none';
   if (_mmChart) { _mmChart.destroy(); _mmChart = null; }
+  if (_mmResizeHandler) { window.removeEventListener('resize', _mmResizeHandler); _mmResizeHandler = null; }
 }
 
 function setMMPeriod(period, btn) {
@@ -25885,7 +25902,7 @@ function renderMMMetricPicker() {
 // get stretched to fill the full 0-100 range purely because that's all the
 // data it has - that makes essentially-flat data look dramatically
 // volatile, which is actively misleading, not just an aesthetic quirk.
-// Below a 3% relative-range threshold, compressed into a narrow band
+// Below a 6% relative-range threshold, compressed into a narrow band
 // around the middle instead, so a stable line actually reads as stable.
 function _mmNormalize(vals) {
   const real = vals.filter(v => v != null);
@@ -25897,7 +25914,11 @@ function _mmNormalize(vals) {
 
   if (range === 0) return { data: vals.map(v => v == null ? null : 50), relativeRangePct: 0, min, max };
 
-  const isLowVariance = mean !== 0 && (range / Math.abs(mean)) < 0.03;
+  // 6%, not 3% - bone mass's real ~3.8% relative range was slipping just
+  // past the original threshold despite being genuinely stable measurement
+  // noise, not real change. Slow-changing body-composition metrics need a
+  // wider band than something that can meaningfully shift day to day.
+  const isLowVariance = mean !== 0 && (range / Math.abs(mean)) < 0.06;
   const data = vals.map(v => {
     if (v == null) return null;
     const pct = (v - min) / range; // 0-1
@@ -26000,9 +26021,9 @@ function renderMMChart() {
       },
       scales: {
         x: {
-          title: { display: true, text: 'Date', color: 'rgba(255,255,255,0.5)', font: { size: 11 } },
-          ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 }, maxTicksLimit: 8 },
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          title: { display: true, text: 'Date', color: '#555a6a', font: { size: 11 } },
+          ticks: { color: '#555a6a', font: { size: 10 }, maxTicksLimit: 8 },
+          grid: { color: 'rgba(0,0,0,0.05)' },
         },
         y: {
           // Tick numbers deliberately still hidden - a bare "62" means
@@ -26013,8 +26034,8 @@ function renderMMChart() {
           display: true,
           min: 0, max: 100,
           ticks: { display: false },
-          title: { display: true, text: "% of each metric's own range (not a shared scale)", color: 'rgba(255,255,255,0.5)', font: { size: 10 } },
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          title: { display: true, text: "% of each metric's own range (not a shared scale)", color: '#555a6a', font: { size: 10 } },
+          grid: { color: 'rgba(0,0,0,0.05)' },
         },
       },
       onClick: (evt, elements) => {
@@ -32308,7 +32329,7 @@ function dismissInsight() {
 
   <div style="padding:0 20px 20px;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
-      <canvas id="mmChart" style="width:100%;height:280px;"></canvas>
+      <canvas id="mmChart" style="width:100%;height:280px;touch-action:pan-y;"></canvas>
       <div id="mmLegend" style="margin-top:12px;"></div>
     </div>
   </div>
