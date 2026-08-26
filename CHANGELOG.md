@@ -1,3 +1,28 @@
+# MaxedHealth Changelog — Phase 19, continued (v3.10.595 – v3.10.598)
+
+## Chart Style Picker — Line / Bar / Point, Per Tile, Remembered
+
+- Every one of the 15 individual Trends metric cards, plus Compare Metrics per-metric (a genuine mixed chart — Steps can show as bars while HRV shows as a line, simultaneously), now has a 📈/📊/• toggle that remembers its own choice.
+- Reference lines (targets, 7-day avg bands) always stay thin dashed guides regardless of style — restyling those alongside the real data added nothing but clutter.
+- Sleep's 4-segment stacked bar drops its stacking automatically when switched away from bar, rather than leaving a stale stacked-axis config fighting a line/point rendering it was never built for.
+- "Point" is built as a line dataset with `showLine:false` and enlarged points, not Chart.js's real `scatter` type — every chart here uses date-label category axes, and true scatter needs numeric x.
+
+## Zepp-Inspired Visual Polish, Kept MaxedHealth
+
+Following a design review against real Zepp app screenshots (clean grids, labeled axes, per-point data labels, threshold-band coloring, the "big number" card pattern), implemented using MaxedHealth's own palette and fonts throughout, not a skin:
+
+- **Two Chart.js plugins registered globally** (`mhTodayHighlightPlugin`, `mhDataLabelPlugin`) — every existing and future chart gets a subtle "you are here" band over the most recent point, and that point's value labeled in the dataset's own color, with zero per-chart wiring needed. Only the *last* real point per dataset is labeled, deliberately — Zepp always has exactly 7 points; MaxedHealth's charts range from a week to "All time," so labeling every point would be noise, not clarity.
+- **Threshold-aware coloring** added to HRV and SpO2 — segments/points turn amber when a value falls outside that metric's real reference range (`DRILL_CONFIG`'s existing `ref` field, previously computed but never used for coloring). Steps deliberately kept its own existing green/blue goal-based coloring instead of being switched to the generic scheme — "more steps" isn't an out-of-range concept the same way HR/HRV/SpO2 are.
+- **New horizontal gauge component** (`renderThresholdGauge`) — the one genuinely new element from the Zepp reference, not a restyle of something already there. Added to Heart Rate, HRV, SpO2, Steps, Sleep, Ketosis Adherence, and the single-metric deep-dive screen, wherever a real reference band exists to draw zones from.
+- The deep-dive (drill) chart's existing shaded reference band was left as-is rather than also adding segment-coloring on top of it — two different but equally valid ways of showing the same threshold information, and doubling both up read as clutter rather than polish.
+
+## Bone Mass / Hydration: kg vs % — Real Investigation, Not a Bug
+
+- Pete flagged both charts as showing an alarming decline compared to Withings' own view, which showed both as healthy and trending well. Traced properly via the existing Body Comp Debug panel (Settings → Manage) rather than guessing at code with no data to test against.
+- **Resolved as correct data, misleading presentation** — weight dropped ~24kg over the tracked period (116.09kg → 92.31kg), so a *rising* percentage of body weight (bone: 3.47%→3.90%, hydration: 49.0%→51.5% — both genuinely improving) still produces a *falling* absolute kg figure, since the same % of a much lighter body is fewer kilograms. Confirmed against the actual first/last rows in the cache, not assumed from a recent-only weight snapshot (an earlier attempt at this same question wrongly assumed weight had only been trending up, based on a screenshot covering just the last few weeks — corrected once the full two-year history was actually checked).
+- Both cards now show both units always — a secondary line under the big number gives the reading not currently in focus — plus a %/kg toggle deciding which one drives the big number, stats, and chart itself. Defaults to % (`mh_bodycomp_unit` in localStorage), since that's what actually tracks a real health trend when body weight is changing substantially, matching how Withings itself presents it. % is computed per-day from that row's own weight, since the bone/hydration kg columns never came with a separate stored percentage the way fat/muscle did.
+- The temporary `console.warn` diagnostic in `getFullBodyCompositionHistory` (added during Phase 18's body-comp chart debugging) removed now that it's done its job — the underlying Body Comp Debug panel it fed stays in Settings, just without the extra console noise on every render.
+
 # MaxedHealth Changelog — Phase 19 (v3.10.585 – v3.10.594)
 
 **v3.10.564–584 not individually documented here** — same gap this file already flags for earlier phases (472–499, 13–14), now extended; this session picked up mid-testing at 585 with no summary of what landed in between.
