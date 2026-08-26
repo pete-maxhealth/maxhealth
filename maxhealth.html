@@ -4400,7 +4400,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.581</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.582</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5245,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.581'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.582'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25786,6 +25786,9 @@ function closeMetricDrill() {
   document.getElementById('metricDrillOverlay').style.display = 'none';
   // document.body.style.overflow = ''; // removed
   if (_drillChart) { _drillChart.destroy(); _drillChart = null; }
+  // Unlocks whatever openChartLightbox may have locked on the way in -
+  // without this, the phone would stay stuck in landscape after closing.
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e) {}
 }
 
 // ── MULTI-METRIC OVERLAY ───────────────────────────────────
@@ -25940,6 +25943,22 @@ function renderMMChart() {
     return;
   }
 
+  // TEMPORARY DIAGNOSTIC - three failed fix attempts (display:none timing,
+  // pinch-zoom, resize debounce) means the real cause hasn't actually been
+  // identified yet, only guessed at. This shows the genuine canvas
+  // dimensions and computed values at the moment of render, so the next
+  // fix is based on real evidence rather than a fourth guess. Remove once
+  // the actual cause is confirmed.
+  const dbgEl = document.getElementById('mmDebugInfo') || (() => {
+    const d = document.createElement('div');
+    d.id = 'mmDebugInfo';
+    d.style.cssText = 'margin-bottom:12px;padding:10px;background:#1a1a1a;color:#0f0;font-family:monospace;font-size:10px;border-radius:8px;white-space:pre-wrap;word-break:break-all;';
+    canvas.parentElement.insertBefore(d, canvas);
+    return d;
+  })();
+  const rect = canvas.getBoundingClientRect();
+  dbgEl.textContent = `CANVAS: css=${rect.width.toFixed(0)}x${rect.height.toFixed(0)}  attr=${canvas.width}x${canvas.height}  devicePixelRatio=${window.devicePixelRatio}\nSELECTED: ${selected.map(m=>m.key).join(', ')}\nPERIOD: ${_mmPeriod}`;
+
   // Each metric's own data can live on a different subset of days (a
   // symptom only logged some days, HRV only on days a wearable synced) -
   // union of every date any selected metric has data for, so the x-axis is
@@ -25956,6 +25975,10 @@ function renderMMChart() {
     }
     return { metric: m, points: getDrillData(m.key, _mmPeriod).map(d => ({ date: d.date, val: d.val })) };
   });
+
+  dbgEl.textContent += `\nRAW POINTS PER METRIC:\n` + perMetricData.map(pm =>
+    `  ${pm.metric.key}: ${pm.points.length} pts — ${JSON.stringify(pm.points.slice(0, 5))}${pm.points.length > 5 ? '...' : ''}`
+  ).join('\n');
 
   const allDates = [...new Set(perMetricData.flatMap(pm => pm.points.map(p => p.date)))];
   // Sort chronologically - dates are dd/mm/yy strings, not natural sort order.
@@ -31034,23 +31057,22 @@ var LIGHTBOX_LABELS = {
   fat_pct: 'Body Fat %', muscle_pct: 'Muscle %', distance: 'Distance', bone_mass: 'Bone Mass'
 };
 
+// Redirects straight to the Deep Dive screen (openMetricDrill) - the
+// intermediate lightbox this used to open was confirmed unnecessary, an
+// extra tap in front of the more polished, more informative screen every
+// metric card/arc/trend-card already led to eventually via "Deep Dive →".
+// Kept this function's name/signature so all 17+ existing call sites
+// across wellness arcs, metric cards, and trend cards work unchanged - the
+// underlying lightbox code itself is left in place but now unused, rather
+// than risking a larger removal pass in the same edit.
 function openChartLightbox(metric) {
-  _lightboxMetric = metric;
-  _lightboxPeriod = (metric === 'weight') ? 0 : 30;
-  document.getElementById('lightboxTitle').textContent = LIGHTBOX_LABELS[metric] || metric;
-  document.getElementById('chartLightbox').classList.add('open');
-  // Set correct period button
-  document.querySelectorAll('.chart-lightbox-period-btn').forEach((b,i) => {
-    b.classList.toggle('active', [30,90,0][i] === _lightboxPeriod);
-  });
-  // Try landscape
+  openMetricDrill(metric);
+  // Preserved from the old lightbox - genuinely useful extra room for a
+  // data-dense chart, no reason to lose it just because the intermediate
+  // screen itself is gone.
   try {
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
-      document.getElementById('lightboxLandscapeHint').style.display = 'none';
-    }
+    if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
   } catch(e) {}
-  renderLightboxChart();
 }
 
 function closeChartLightbox() {
