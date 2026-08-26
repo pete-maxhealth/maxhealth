@@ -3499,11 +3499,13 @@
           <div class="metric-icon" style="color:#e2e8f0;">🦴</div>
           <div class="metric-name">Bone Mass</div>
         </div>
+        <div id="unitToggle_bone_mass" onclick="event.stopPropagation();"></div>
       </div>
       <div class="metric-main">
         <div class="metric-value" id="mcBoneMassVal" style="color:#e2e8f0;">—</div>
-        <div class="metric-unit">kg</div>
+        <div class="metric-unit" id="mcBoneMassUnit">kg</div>
       </div>
+      <div id="mcBoneMassSecondary" style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:8px;"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statBoneMassMin">—</div><div class="metric-stat-lbl">Low</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statBoneMassMax">—</div><div class="metric-stat-lbl">High</div></div>
@@ -3525,11 +3527,13 @@
           <div class="metric-icon" style="color:var(--blue);">💧</div>
           <div class="metric-name">Hydration</div>
         </div>
+        <div id="unitToggle_hydration" onclick="event.stopPropagation();"></div>
       </div>
       <div class="metric-main">
         <div class="metric-value" id="mcHydrationVal" style="color:var(--blue);">—</div>
-        <div class="metric-unit">kg</div>
+        <div class="metric-unit" id="mcHydrationUnit">kg</div>
       </div>
+      <div id="mcHydrationSecondary" style="font-size:11px;color:var(--text3);margin-top:-4px;margin-bottom:8px;"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statHydrationMin">—</div><div class="metric-stat-lbl">Low</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statHydrationMax">—</div><div class="metric-stat-lbl">High</div></div>
@@ -4596,7 +4600,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.597</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.598</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5441,7 +5445,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.597'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.598'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24906,6 +24910,36 @@ function setChartStyleAndRerender(storageKey, metricKey, style, rerenderFnName) 
   else if (rerenderFnName === 'renderMMChart') renderMMChart();
 }
 
+// kg vs % toggle for Bone Mass and Hydration - the two body-comp metrics
+// that only ever had an absolute kg reading, with no percentage shown
+// alongside. Percentage is what actually tracks a real health trend
+// (Withings' own app leads with %) - kg alone can look like it's declining
+// just because total body weight changed, even while the % of body weight
+// is improving. Rather than picking one, both are always shown (the
+// secondary line), and this toggle only decides which one drives the big
+// number and the chart itself.
+const BODYCOMP_UNIT_KEY = 'mh_bodycomp_unit';
+function getBodyCompUnit(metricKey) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(BODYCOMP_UNIT_KEY) || '{}');
+    return stored[metricKey] || 'pct'; // % is the more meaningful default, per the reasoning above
+  } catch(e) { return 'pct'; }
+}
+function setBodyCompUnit(metricKey, unit) {
+  let stored = {};
+  try { stored = JSON.parse(localStorage.getItem(BODYCOMP_UNIT_KEY) || '{}'); } catch(e) {}
+  stored[metricKey] = unit;
+  localStorage.setItem(BODYCOMP_UNIT_KEY, JSON.stringify(stored));
+  renderTrends();
+}
+function renderBodyCompUnitToggle(metricKey) {
+  const current = getBodyCompUnit(metricKey);
+  const opts = [['pct', '%'], ['kg', 'kg']];
+  return `<div style="display:flex;gap:2px;">
+    ${opts.map(([unit, label]) => `<button onclick='setBodyCompUnit(${JSON.stringify(metricKey)},${JSON.stringify(unit)})' style="background:${current === unit ? 'var(--accent-dim)' : 'none'};border:1px solid ${current === unit ? 'var(--accent)' : 'var(--border)'};border-radius:6px;color:${current === unit ? 'var(--accent)' : 'var(--text3)'};font-size:10px;padding:2px 7px;cursor:pointer;touch-action:manipulation;font-family:'Space Mono',monospace;">${label}</button>`).join('')}
+  </div>`;
+}
+
 // ─── Zepp-inspired chart polish, kept MaxedHealth (app's own palette/fonts,
 // not a skin) ───────────────────────────────────────────────────────────
 // Two pieces registered ONCE, globally, via Chart.register - every existing
@@ -26022,16 +26056,33 @@ function renderTrends() {
   // Bone Mass
   const boneVals = fullBodyCompFiltered.map(d => d.bone_mass_kg ? parseFloat(d.bone_mass_kg) : null);
   const boneClean = clean(boneVals);
+  // % of body weight, computed from that same row's weight - not a stored
+  // field (Withings' export gives kg only for bone/hydration, unlike fat/
+  // muscle which come with their own explicit pct columns already).
+  const bonePctVals = fullBodyCompFiltered.map(d => (d.bone_mass_kg && d.weight) ? parseFloat(d.bone_mass_kg) / d.weight * 100 : null);
+  const bonePctClean = clean(bonePctVals);
+  const boneUnit = getBodyCompUnit('bone_mass');
+  const boneDisplayVals = boneUnit === 'pct' ? bonePctVals : boneVals;
+  const boneDisplayClean = boneUnit === 'pct' ? bonePctClean : boneClean;
   const boneStyle = getChartStyle(CHART_STYLE_KEY, 'bone_mass', 'line');
   destroyChart('chartBoneMass');
   if (document.getElementById('chartBoneMass') && boneVals.some(v => v)) {
     showCard('mcBoneMass');
-    document.getElementById('mcBoneMassVal').textContent = boneClean.length ? boneClean[boneClean.length-1] : '—';
-    document.getElementById('statBoneMassMin').textContent = boneClean.length ? Math.min(...boneClean) + 'kg' : '—';
-    document.getElementById('statBoneMassMax').textContent = boneClean.length ? Math.max(...boneClean) + 'kg' : '—';
+    document.getElementById('mcBoneMassVal').textContent = boneDisplayClean.length ? Math.round(boneDisplayClean[boneDisplayClean.length-1]*100)/100 : '—';
+    document.getElementById('mcBoneMassUnit').textContent = boneUnit === 'pct' ? '%' : 'kg';
+    document.getElementById('statBoneMassMin').textContent = boneDisplayClean.length ? Math.round(Math.min(...boneDisplayClean)*100)/100 + (boneUnit==='pct'?'%':'kg') : '—';
+    document.getElementById('statBoneMassMax').textContent = boneDisplayClean.length ? Math.round(Math.max(...boneDisplayClean)*100)/100 + (boneUnit==='pct'?'%':'kg') : '—';
+    const boneSecondaryEl = document.getElementById('mcBoneMassSecondary');
+    if (boneSecondaryEl) {
+      boneSecondaryEl.textContent = boneUnit === 'pct'
+        ? (boneClean.length ? `${Math.round(boneClean[boneClean.length-1]*100)/100}kg of body weight` : '')
+        : (bonePctClean.length ? `${Math.round(bonePctClean[bonePctClean.length-1]*100)/100}% of body weight` : '');
+    }
+    const boneUnitToggleEl = document.getElementById('unitToggle_bone_mass');
+    if (boneUnitToggleEl) boneUnitToggleEl.innerHTML = renderBodyCompUnitToggle('bone_mass');
     chartInstances['chartBoneMass'] = new Chart(document.getElementById('chartBoneMass'), {
       type: 'line',
-      data: { labels: bodyCompLabels, datasets: [applyChartStyle({ label: 'Bone Mass (kg)', data: boneVals, borderColor: '#e2e8f0', backgroundColor: 'rgba(226,232,240,0.1)', borderWidth: 2, pointRadius: 0, fill: boneStyle==='line', tension: 0.3, spanGaps: true }, boneStyle)]},
+      data: { labels: bodyCompLabels, datasets: [applyChartStyle({ label: `Bone Mass (${boneUnit === 'pct' ? '%' : 'kg'})`, data: boneDisplayVals, borderColor: '#e2e8f0', backgroundColor: 'rgba(226,232,240,0.1)', borderWidth: 2, pointRadius: 0, fill: boneStyle==='line', tension: 0.3, spanGaps: true }, boneStyle)]},
       options: { ...CHART_DEFAULTS }
     });
     const stBone = document.getElementById('chartStyleToggle_mcBoneMass');
@@ -26041,16 +26092,30 @@ function renderTrends() {
   // Hydration
   const hydrationVals = fullBodyCompFiltered.map(d => d.hydration_kg ? parseFloat(d.hydration_kg) : null);
   const hydrationClean = clean(hydrationVals);
+  const hydrationPctVals = fullBodyCompFiltered.map(d => (d.hydration_kg && d.weight) ? parseFloat(d.hydration_kg) / d.weight * 100 : null);
+  const hydrationPctClean = clean(hydrationPctVals);
+  const hydrationUnit = getBodyCompUnit('hydration');
+  const hydrationDisplayVals = hydrationUnit === 'pct' ? hydrationPctVals : hydrationVals;
+  const hydrationDisplayClean = hydrationUnit === 'pct' ? hydrationPctClean : hydrationClean;
   const hydrationStyle = getChartStyle(CHART_STYLE_KEY, 'hydration', 'line');
   destroyChart('chartHydration');
   if (document.getElementById('chartHydration') && hydrationVals.some(v => v)) {
     showCard('mcHydration');
-    document.getElementById('mcHydrationVal').textContent = hydrationClean.length ? hydrationClean[hydrationClean.length-1] : '—';
-    document.getElementById('statHydrationMin').textContent = hydrationClean.length ? Math.min(...hydrationClean) + 'kg' : '—';
-    document.getElementById('statHydrationMax').textContent = hydrationClean.length ? Math.max(...hydrationClean) + 'kg' : '—';
+    document.getElementById('mcHydrationVal').textContent = hydrationDisplayClean.length ? Math.round(hydrationDisplayClean[hydrationDisplayClean.length-1]*100)/100 : '—';
+    document.getElementById('mcHydrationUnit').textContent = hydrationUnit === 'pct' ? '%' : 'kg';
+    document.getElementById('statHydrationMin').textContent = hydrationDisplayClean.length ? Math.round(Math.min(...hydrationDisplayClean)*100)/100 + (hydrationUnit==='pct'?'%':'kg') : '—';
+    document.getElementById('statHydrationMax').textContent = hydrationDisplayClean.length ? Math.round(Math.max(...hydrationDisplayClean)*100)/100 + (hydrationUnit==='pct'?'%':'kg') : '—';
+    const hydrationSecondaryEl = document.getElementById('mcHydrationSecondary');
+    if (hydrationSecondaryEl) {
+      hydrationSecondaryEl.textContent = hydrationUnit === 'pct'
+        ? (hydrationClean.length ? `${Math.round(hydrationClean[hydrationClean.length-1]*100)/100}kg of body weight` : '')
+        : (hydrationPctClean.length ? `${Math.round(hydrationPctClean[hydrationPctClean.length-1]*100)/100}% of body weight` : '');
+    }
+    const hydrationUnitToggleEl = document.getElementById('unitToggle_hydration');
+    if (hydrationUnitToggleEl) hydrationUnitToggleEl.innerHTML = renderBodyCompUnitToggle('hydration');
     chartInstances['chartHydration'] = new Chart(document.getElementById('chartHydration'), {
       type: 'line',
-      data: { labels: bodyCompLabels, datasets: [applyChartStyle({ label: 'Hydration (kg)', data: hydrationVals, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.1)', borderWidth: 2, pointRadius: 0, fill: hydrationStyle==='line', tension: 0.3, spanGaps: true }, hydrationStyle)]},
+      data: { labels: bodyCompLabels, datasets: [applyChartStyle({ label: `Hydration (${hydrationUnit === 'pct' ? '%' : 'kg'})`, data: hydrationDisplayVals, borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.1)', borderWidth: 2, pointRadius: 0, fill: hydrationStyle==='line', tension: 0.3, spanGaps: true }, hydrationStyle)]},
       options: { ...CHART_DEFAULTS }
     });
     const stHyd = document.getElementById('chartStyleToggle_mcHydration');
@@ -26237,8 +26302,6 @@ function getFullBodyCompositionHistory() {
       });
     }
     out.sort((a,b) => a.isoDate < b.isoDate ? -1 : 1); // chronological — earliest first
-    // TEMPORARY DIAGNOSTIC — remove once trend box confirmed working correctly
-    console.warn('[BODYCOMP DEBUG] cache length:', text.length, 'rows found:', out.length, 'first:', out[0], 'last:', out[out.length-1]);
     try {
       window._bodyCompDebug = {
         cacheLength: text.length,
