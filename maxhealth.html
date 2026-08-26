@@ -3016,6 +3016,7 @@
             <canvas id="journeyCanvas" style="height:180px;touch-action:pan-x pan-y;"></canvas>
           </div>
         </div>
+        <div id="journeyDayPanel" style="display:none;margin-top:12px;background:var(--surface2);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:12px 14px;"></div>
         <div id="journeyStats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px;"></div>
       </div>
     </div>
@@ -4402,7 +4403,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.588</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.589</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5247,7 +5248,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.588'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.589'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24796,27 +24797,44 @@ function renderJourneyCard() {
   // below ~40 points this still just fills the screen width normally, but
   // full tracked history (which this card always shows, unfiltered) needs a
   // genuine minimum pixel width per point instead of squeezing everything in.
-  const journeyInnerEl = document.getElementById('journeyChartInner');
-  const journeyScrollWrapEl = document.getElementById('journeyChartScrollWrap');
-  if (journeyInnerEl && journeyScrollWrapEl) {
-    const minPxPerPoint = 22;
-    const naturalWidth = journeyScrollWrapEl.clientWidth;
-    const neededWidth = weighed.length * minPxPerPoint;
-    journeyInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
-  }
-
-  destroyChart('journeyChart');
-  chartInstances['journeyChart'] = new Chart(document.getElementById('journeyCanvas'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Weight', data: weightVals, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
-        borderWidth: 1.5, fill: true, tension: 0.2, pointRadius: 2.5, pointBackgroundColor: pointColors, pointBorderWidth: 0 },
-      { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
-    ]},
-    options: { ...CHART_DEFAULTS,
-      plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false } },
-      scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, ticks: { ...CHART_DEFAULTS.scales.x.ticks, maxTicksLimit: 6 } } }
+  //
+  // Deferred to the next frame - this card can render while its own
+  // collapsible section (or the Trends tab itself) is still mid-transition
+  // or not yet the active subview, in which case clientWidth reads 0/stale
+  // and the min-width calc below gets it wrong. Same fix already proven on
+  // the compare-metrics overlay.
+  requestAnimationFrame(() => {
+    const journeyInnerEl = document.getElementById('journeyChartInner');
+    const journeyScrollWrapEl = document.getElementById('journeyChartScrollWrap');
+    if (journeyInnerEl && journeyScrollWrapEl) {
+      const minPxPerPoint = 22;
+      const naturalWidth = journeyScrollWrapEl.clientWidth;
+      const neededWidth = weighed.length * minPxPerPoint;
+      journeyInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
     }
+
+    destroyChart('journeyChart');
+    chartInstances['journeyChart'] = new Chart(document.getElementById('journeyCanvas'), {
+      type: 'line',
+      data: { labels, datasets: [
+        { label: 'Weight', data: weightVals, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
+          borderWidth: 1.5, fill: true, tension: 0.2, pointRadius: 2.5, pointBackgroundColor: pointColors, pointBorderWidth: 0 },
+        { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
+      ]},
+      options: { ...CHART_DEFAULTS,
+        plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false },
+          // Same reasoning as the drill and compare-metrics charts - the
+          // floating tooltip has no dismiss control of its own and (via
+          // Chart.js's own touch tracking) fights the horizontal scroll.
+          // Tap a point instead - journeyDayPanel below, with a ✕.
+          tooltip: { enabled: false } },
+        scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, ticks: { ...CHART_DEFAULTS.scales.x.ticks, maxTicksLimit: 6 } } },
+        onClick: (evt, elements) => {
+          if (!elements.length) return;
+          showJourneyDayPanel(elements[0].index, weighed, pointColors);
+        }
+      }
+    });
   });
 
   const streak = calcKetosisStreak();
@@ -24833,6 +24851,31 @@ function renderJourneyCard() {
     stat('Ketosis adherence', `${adherencePct}% (${ketosisDays}/${loggedDays.length})`) +
     stat('Current streak', `${streak} day${streak===1?'':'s'}`) +
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
+}
+
+// Tap-a-point info panel for Your Journey - same pattern as the compare-
+// metrics and drill-chart panels (tap to open, ✕ to dismiss).
+function showJourneyDayPanel(index, weighed, pointColors) {
+  const panel = document.getElementById('journeyDayPanel');
+  if (!panel) return;
+  const d = weighed[index];
+  const color = pointColors[index];
+  const statusText = color === '#2deb8f' ? 'In ketosis' : color === '#4d9fff' ? 'Over ceiling, addressed' : color === '#f5c542' ? 'Over ceiling' : 'No nutrition logged';
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${d.date}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text);margin-top:4px;">${d.weight}kg</div>
+        <div style="font-size:11px;color:${color};margin-top:2px;">${statusText}</div>
+      </div>
+      <button onclick="closeJourneyDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
+    </div>`;
+  panel.style.display = 'block';
+}
+
+function closeJourneyDayPanel() {
+  const panel = document.getElementById('journeyDayPanel');
+  if (panel) panel.style.display = 'none';
 }
 
 // ─── PATTERNS — bounded correlation checks ───────────────────────────────────
@@ -26413,59 +26456,55 @@ function renderDrill() {
           }
         },
         tooltip: {
-          enabled: true,
-          mode: 'index',
-          intersect: false,
-          backgroundColor: 'rgba(10,12,15,0.95)',
-          borderColor: cfg.color + '60',
-          borderWidth: 1,
-          padding: 6,
-          titleColor: 'rgba(240,242,247,0.6)',
-          titleFont: { family: 'DM Sans', size: 10 },
-          bodyColor: '#f0f2f7',
-          bodyFont: { family: 'Syne', size: 11, weight: '700' },
-          callbacks: {
-            title: ctx => ctx[0]?.label || '',
-            label: ctx => {
-              if (ctx.dataset.label?.startsWith('_')) return null;
-              // Each dataset's own label, not a ternary that silently
-              // defaulted anything besides "7-day avg" to cfg.title - that's
-              // exactly what mislabeled the Normal range dataset as "Heart
-              // Rate: 100 bpm" instead of "Normal range: 100 bpm".
-              const lbl = ctx.dataset.label === '7-day avg' ? '7d avg' : ctx.dataset.label;
-              return ` ${lbl}: ${ctx.parsed.y} ${cfg.unit}`;
-            },
-            filter: item => !item.dataset.label?.startsWith('_'),
-          }
+          // Disabled deliberately, same reasoning as the compare-metrics
+          // chart: this was Chart.js's own floating tooltip, driven by a
+          // touchmove handler below that had to call preventDefault() to
+          // track the drag - which also silently ate the horizontal-scroll
+          // gesture (touch-action:pan-x pan-y on the canvas never got a
+          // chance to run, since the JS-level preventDefault wins). Tap a
+          // point instead (onClick below) - drillDayPanel shows the same
+          // information, dismissible with its own ✕, and doesn't block
+          // scrolling since it only fires on a genuine tap, not every move.
+          enabled: false,
         }
+      },
+      onClick: (evt, elements) => {
+        if (!elements.length) return;
+        showDrillDayPanel(elements[0].index, labels, vals, cfg);
       }
     }
   });
 
-  // Add scrubber line on touch/mouse
-  const canvas = document.getElementById('drillChart');
-  canvas.style.cursor = 'crosshair';
-  const showScrubber = (e) => {
-    if (!_drillChart) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-    const pts = _drillChart.getElementsAtEventForMode(e, 'index', { intersect: false }, true);
-    if (pts.length > 0) {
-      const idx = pts[0].index;
-      const val = vals[idx];
-      const lbl = labels[idx];
-      // Update hero number to show hovered value
-      if (val !== undefined) {
-        document.getElementById('drillHeroNum').textContent = val;
-        document.getElementById('drillSubtitle').textContent = lbl + ' · tap to pin';
-      }
-    }
-  };
-  canvas.addEventListener('mousemove', showScrubber);
-  canvas.addEventListener('touchmove', (e) => { e.preventDefault(); showScrubber(e); }, { passive: false });
+  // Hero number always reflects the latest real value - no live-scrub
+  // override needed now that tapping a point opens drillDayPanel instead.
+  document.getElementById('drillChartScrollWrap').style.cursor = 'pointer';
 
   // Context sections
   renderDrillContext(metric, data, vals, avg, min, max, last, cfg);
+}
+
+// Tap-a-point info panel for the single-metric drill chart - same pattern
+// as the compare-metrics mmDayPanel (tap to open, ✕ to dismiss), replacing
+// the old floating Chart.js tooltip + drag-scrubber combination.
+function showDrillDayPanel(index, labels, vals, cfg) {
+  const panel = document.getElementById('drillDayPanel');
+  if (!panel) return;
+  const val = vals[index];
+  const label = labels[index];
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${label}</div>
+        <div style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800;color:${cfg.color};margin-top:4px;">${val != null ? val + ' ' + cfg.unit : 'No data'}</div>
+      </div>
+      <button onclick="closeDrillDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
+    </div>`;
+  panel.style.display = 'block';
+}
+
+function closeDrillDayPanel() {
+  const panel = document.getElementById('drillDayPanel');
+  if (panel) panel.style.display = 'none';
 }
 
 function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
@@ -32390,6 +32429,7 @@ function dismissInsight() {
         <canvas id="drillChart" style="height:200px;touch-action:pan-x pan-y;"></canvas>
       </div>
     </div>
+    <div id="drillDayPanel" style="display:none;margin-top:12px;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:16px;"></div>
   </div>
 
   <!-- Stats grid -->
