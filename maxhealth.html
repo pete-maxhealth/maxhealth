@@ -4544,6 +4544,8 @@
           Supplement reminders (fires if any active supplement for that checkpoint is still unchecked)
         </label>
         <div style="font-size:11px;color:var(--text3);margin-left:26px;margin-top:-4px;">⚙️ Checkpoint times are set per-period (and can be left blank to skip one entirely) under Manage → Supplements, not here.</div>
+        <button class="copy-btn" style="width:100%;margin-top:4px;" onclick="testSupplementReminder()">🔍 Test supplement reminder now</button>
+        <div id="suppReminderTestResult" style="display:none;font-size:12px;color:var(--text2);background:var(--surface2);border-radius:var(--radius-sm);padding:10px 12px;white-space:pre-wrap;font-family:'Space Mono',monospace;line-height:1.6;"></div>
       </div>
     </div>
     </div>
@@ -4602,7 +4604,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.603</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.606</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5447,7 +5449,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.603'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.606'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25375,6 +25377,61 @@ function closeJourneyDayPanel() {
 // anything at all - and even then, always shows the real day-counts next to
 // the finding, so the honesty is visible, not just asserted. "Tend to"
 // language throughout - this only knows what's in the data so far, never why.
+// ─── SPC-style early-warning check (Western Electric / Nelson rules) ──────
+// Different in kind from every finding inside renderPatternsCard below -
+// those compare two GROUPS against each other (active vs inactive days,
+// weekend vs weekday); this asks whether a single metric has drifted from
+// ITS OWN normal range lately, using the actual statistical methodology
+// built for exactly this (an individuals/XmR control chart - the one SPC
+// tool designed to monitor a single subject's own measurements over time,
+// not a population). Baseline mean/SD comes from history EXCLUDING the
+// most recent test window specifically, so a genuine recent shift can't
+// dilute (and hide within) its own baseline. Requires 20+ baseline days
+// before saying anything at all - the accepted minimum for a trustworthy
+// individuals-chart baseline, not a guessed number.
+//
+// Three rules checked, most to least sensitive, first match wins:
+//  - 2 of the last 3 real values beyond 2 SD from baseline, same side (~1% false-alarm rate)
+//  - 4 of the last 5 real values beyond 1 SD from baseline, same side (~3% false-alarm rate)
+//  - 8 of the last 8 real values on the same side of baseline at all (~1% false-alarm rate)
+// "Real values" - gaps/missing days are skipped over entirely rather than
+// counted as a breach or resetting the streak, so a run of missed logging
+// can't itself manufacture a false signal.
+function checkSPCBreach(series) {
+  const parseDate = s => { const [d, m, y] = s.split('/').map(Number); return new Date(2000 + y, m - 1, d); };
+  const clean = series.filter(p => p.val != null).map(p => ({ ...p, sortKey: parseDate(p.date) })).sort((a, b) => a.sortKey - b.sortKey);
+  if (clean.length < 25) return null; // 20+ baseline, plus a real 5-point test window
+  const testWindow = clean.slice(-5);
+  const baseline = clean.slice(0, -5);
+  if (baseline.length < 20) return null;
+  const mean = baseline.reduce((a, p) => a + p.val, 0) / baseline.length;
+  const variance = baseline.reduce((a, p) => a + Math.pow(p.val - mean, 2), 0) / baseline.length;
+  const sd = Math.sqrt(variance);
+  if (sd === 0) return null; // no real variation in the baseline to measure against at all
+
+  const zOf = v => (v - mean) / sd;
+  const last3z = testWindow.slice(-3).map(p => zOf(p.val));
+  const last5z = testWindow.map(p => zOf(p.val));
+  const last8 = clean.slice(-8);
+  const last8z = last8.map(p => zOf(p.val));
+
+  let rule = null, direction = null;
+  if (last3z.filter(z => z >= 2).length >= 2) { rule = '2 of your last 3 logged days beyond 2 SD from your own baseline'; direction = 'high'; }
+  else if (last3z.filter(z => z <= -2).length >= 2) { rule = '2 of your last 3 logged days beyond 2 SD from your own baseline'; direction = 'low'; }
+  else if (last5z.filter(z => z >= 1).length >= 4) { rule = '4 of your last 5 logged days beyond 1 SD from your own baseline'; direction = 'high'; }
+  else if (last5z.filter(z => z <= -1).length >= 4) { rule = '4 of your last 5 logged days beyond 1 SD from your own baseline'; direction = 'low'; }
+  else if (last8z.length === 8 && last8z.every(z => z > 0)) { rule = 'your last 8 logged days all above your own baseline'; direction = 'high'; }
+  else if (last8z.length === 8 && last8z.every(z => z < 0)) { rule = 'your last 8 logged days all below your own baseline'; direction = 'low'; }
+  else return null;
+
+  return {
+    rule, direction,
+    mean: Math.round(mean * 10) / 10, sd: Math.round(sd * 10) / 10,
+    recentVals: testWindow.map(p => p.val), recentDates: testWindow.map(p => p.date),
+    baselineCount: baseline.length, latest: clean[clean.length - 1].val
+  };
+}
+
 function renderPatternsCard() {
   const card = document.getElementById('patternsCard');
   const content = document.getElementById('patternsContent');
@@ -25383,9 +25440,47 @@ function renderPatternsCard() {
   const targets = getTargets();
   const carbCeilFor = d => targets[d.mode || 'standard']?.carbs ?? targets.standard.carbs;
   const protTargetFor = d => targets[d.mode || 'standard']?.protein ?? targets.standard.protein;
+  const targetKcalFor = d => targets[d.mode || 'standard']?.kcal ?? targets.standard.kcal;
+  const avg = arr => arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0;
   const days = state.history.filter(d => d.totals && (d.totals.kcal || 0) > 0); // genuinely logged days only
 
   const findings = [];
+
+  // ── Early-warning single-metric checks (SPC-style, see checkSPCBreach
+  // above) - rendered first and visually distinct, since these are meant
+  // to catch something drifting NOW, before it's had time to become one
+  // of the group-comparison patterns below. ──
+  const earlyWarnings = [];
+
+  (function calorieDrift() {
+    const series = state.history
+      .filter(d => (d.totals?.kcal || 0) >= 500) // excludes probable incomplete-logging days, same reasoning as the calorie-deficit check above
+      .map(d => ({ date: d.date, val: d.totals.kcal }));
+    const result = checkSPCBreach(series);
+    if (!result) return;
+    const label = result.direction === 'low' ? 'under-eating' : 'over-eating';
+    earlyWarnings.push(`<strong>Calories — possible ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${result.mean}kcal average, ±${result.sd}kcal day to day. Most recent: ${result.recentVals.join(', ')}kcal.`);
+  })();
+
+  (function weightDrift() {
+    const series = state.history.filter(d => d.weight > 0).map(d => ({ date: d.date, val: d.weight }));
+    const result = checkSPCBreach(series);
+    if (!result) return;
+    // Direction-aware against your actual target range, not just "moved" -
+    // during a deliberate gaining or losing phase, weight moving TOWARD
+    // that range is the plan working, not a problem to flag. Only
+    // suppressed when both a low and high target are actually set - with
+    // no target configured, there's no "expected direction" to check
+    // against, so the raw statistical signal is reported as-is.
+    const lo = getWeightTargetLow(), hi = getWeightTargetHigh();
+    if (lo > 0 && hi > 0) {
+      const movingTowardRange = (result.latest < lo && result.direction === 'high') || (result.latest > hi && result.direction === 'low');
+      const alreadyInRange = result.latest >= lo && result.latest <= hi;
+      if (movingTowardRange || alreadyInRange) return; // moving toward - or already within - your own target range: not a problem, don't flag
+    }
+    const label = result.direction === 'high' ? 'trending up' : 'trending down';
+    earlyWarnings.push(`<strong>Weight — ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${result.mean}kg average, ±${result.sd}kg. Most recent: ${result.recentVals.join(', ')}kg.`);
+  })();
 
   // 1. Sleep quality → NEXT day's ketosis adherence. Uses the person's own
   // median sleep duration as the good/poor split point, not an arbitrary
@@ -25439,6 +25534,73 @@ function renderPatternsCard() {
     });
   })();
 
+  // 2b. Same comparison as above, but is it actually changing lately? The
+  // check above uses ALL tracked history (which can span well over a
+  // year), so on its own it can never answer "am I getting better at this
+  // specifically over the last month" - a real question, since a static
+  // finding that never changes reads as the app nagging about the same
+  // thing forever, whether or not real progress is being made. Scoped
+  // explicitly to the last 30 days, split at day 15, comparing the two
+  // halves against each other rather than against the all-time baseline
+  // above (which would conflate "improving recently" with "different from
+  // two years ago", two different questions).
+  (function activityVsProteinTrend() {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+    const recent = days.filter(d => { const [dd,mm,yy] = d.date.split('/').map(Number); return new Date(2000+yy, mm-1, dd) >= cutoff; })
+      .filter(d => d.steps > 0)
+      .sort((a,b) => { const pa=a.date.split('/').map(Number), pb=b.date.split('/').map(Number); return new Date(2000+pa[2],pa[1]-1,pa[0]) - new Date(2000+pb[2],pb[1]-1,pb[0]); });
+    if (recent.length < MIN_GROUP * 2) return; // not enough active days logged in the last 30 to say anything real
+    const mid = Math.floor(recent.length / 2);
+    const earlier = recent.slice(0, mid), later = recent.slice(mid);
+    if (earlier.length < MIN_GROUP || later.length < MIN_GROUP) return;
+    const activeHitRate = arr => { const active = arr.filter(d => d.steps >= medianStepsFallback(arr)); return active.length ? Math.round(active.filter(d => (d.totals.protein||0) >= protTargetFor(d)).length / active.length * 100) : null; };
+    // Uses each half's OWN median as its "active day" threshold, not one
+    // shared median across all 30 days - what counts as an active day for
+    // this specific person doesn't need to be identical week to week, and
+    // this keeps the comparison honest to "hit rate on your more active
+    // days", not accidentally penalised by activity level itself changing.
+    function medianStepsFallback(arr) { const s = [...arr.map(d=>d.steps)].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
+    const earlierPct = activeHitRate(earlier), laterPct = activeHitRate(later);
+    if (earlierPct == null || laterPct == null) return;
+    const delta = laterPct - earlierPct;
+    const verdict = Math.abs(delta) < 10 ? 'about the same' : delta > 0 ? 'improving' : 'slipping';
+    const verdictColor = Math.abs(delta) < 10 ? 'var(--text2)' : delta > 0 ? 'var(--green)' : 'var(--yellow)';
+    findings.push({
+      text: `<strong>Last 30 days, on your more active days specifically:</strong> protein target hit rate was ${earlierPct}% in the first half of that window, ${laterPct}% in the second half — <strong style="color:${verdictColor};">${verdict}</strong> (${earlier.length} vs ${later.length} active days compared).`
+    });
+  })();
+
+  // 2c. Calorie target shortfall, and whether it's worse on active days
+  // specifically. This is a genuinely different question from 2/2b above -
+  // those check whether PROTEIN hits its own target; this checks whether
+  // total CALORIE intake is falling short of target at all, which nothing
+  // in this file checked for before. Filters out days under 500kcal as
+  // probable incomplete logging rather than real near-zero intake (the
+  // Query Builder's own results showed exactly this - a 0kcal and a
+  // 136kcal day sitting alongside genuine 3000+kcal days), since counting
+  // an unlogged day as "severe under-eating" would overstate the finding.
+  (function activeCalorieDeficit() {
+    const kcalDays = days.filter(d => (d.totals.kcal || 0) >= 500 && d.steps > 0);
+    if (kcalDays.length < MIN_GROUP * 2) return;
+    const sortedSteps2 = [...kcalDays.map(d => d.steps)].sort((a,b) => a-b);
+    const medianSteps2 = sortedSteps2[Math.floor(sortedSteps2.length / 2)];
+    const activeGrp = kcalDays.filter(d => d.steps >= medianSteps2);
+    const inactiveGrp = kcalDays.filter(d => d.steps < medianSteps2);
+    if (activeGrp.length < MIN_GROUP || inactiveGrp.length < MIN_GROUP) return;
+    // Positive = under target (a deficit), negative = over target
+    const avgDeficit = arr => Math.round(avg(arr.map(d => targetKcalFor(d) - (d.totals.kcal || 0))));
+    const activeDeficit = avgDeficit(activeGrp), inactiveDeficit = avgDeficit(inactiveGrp);
+    // Only worth surfacing if active days are showing a REAL shortfall
+    // (not just "less over target than inactive days") and it's genuinely
+    // larger than the inactive-day gap - otherwise this is just normal
+    // day-to-day variation, not the specific active-day pattern.
+    if (activeDeficit < 150 || (activeDeficit - inactiveDeficit) < 150) return;
+    findings.push({
+      text: `<strong>On your more active days (${medianSteps2.toLocaleString()}+ steps)</strong>, you're eating <strong>${activeDeficit}kcal under target</strong> on average — on lower-activity days, ${inactiveDeficit >= 0 ? inactiveDeficit + 'kcal under' : Math.abs(inactiveDeficit) + 'kcal over'} target. This is the specific pattern behind the "eat more on active days" guidance elsewhere in the app — real, not a generic nudge.`,
+      scatter: { points: kcalDays.map(d => ({ x: d.steps, y: d.totals.kcal || 0, inCeiling: (d.totals.kcal||0) >= targetKcalFor(d) })), xLabel: 'Steps', yLabel: 'Calories' }
+    });
+  })();
+
   // 3. Weekend vs weekday carb ceiling adherence. No scatter here
   // deliberately - weekend/weekday is a category split, not a continuous
   // x-axis, so a scatter plot wouldn't actually represent this comparison
@@ -25480,7 +25642,7 @@ function renderPatternsCard() {
     });
   })();
 
-  if (!findings.length) {
+  if (!findings.length && !earlyWarnings.length) {
     card.style.display = 'block';
     // Previously just said "not enough history" regardless of why - which
     // was actively misleading with a large total day count, since these
@@ -25495,15 +25657,19 @@ function renderPatternsCard() {
     const dayOfWeekFn = d => { const [dd, mm, yy] = d.date.split('/').map(Number); return new Date(2000 + yy, mm - 1, dd).getDay(); };
     const weekendCount = days.filter(d => [0, 6].includes(dayOfWeekFn(d))).length;
     const weekdayCount = days.filter(d => ![0, 6].includes(dayOfWeekFn(d))).length;
+    const kcalDaysCount = days.filter(d => (d.totals?.kcal || 0) >= 500).length;
+    const weightDaysCount = state.history.filter(d => d.weight > 0).length;
     const symptomDefs2 = (typeof loadSymptomDefs === 'function' ? loadSymptomDefs() : []).filter(s => s.active !== false);
     const symptomLines = symptomDefs2.map(s => {
       const n = days.filter(d => d.symptoms && d.symptoms[s.id] != null).length;
       return `${n} day(s) logged for "${s.name}"${n < MIN_GROUP * 2 ? ' — not enough yet for this one specifically' : ''}`;
     }).join('<br>');
     content.innerHTML = `<div style="color:var(--text3);">
-      Not enough paired data yet to surface a genuine pattern — needs at least ${MIN_GROUP} days in each comparison group, or the difference found wasn't large enough to be worth mentioning (under 15 percentage points).
+      Not enough paired data yet to surface a genuine pattern — group checks need at least ${MIN_GROUP} days in each comparison group (or the difference found wasn't large enough to be worth mentioning); the early-warning checks need 20+ baseline days plus 5 recent ones.
       <div style="margin-top:8px;font-size:11px;font-family:Space Mono,monospace;">
         ${days.length} day(s) with nutrition logged<br>
+        ${kcalDaysCount} day(s) with a real (500kcal+) calorie log${kcalDaysCount < 25 ? ' — this is the limiting factor for the calorie early-warning check' : ''}<br>
+        ${weightDaysCount} day(s) with weight logged${weightDaysCount < 25 ? ' — this is the limiting factor for the weight early-warning check' : ''}<br>
         ${sleepDaysCount} day(s) with sleep data synced${sleepDaysCount < MIN_GROUP * 2 ? ' — this is the limiting factor for the sleep pattern check' : ''}<br>
         ${stepDaysCount} day(s) with step data synced${stepDaysCount < MIN_GROUP * 2 ? ' — this is the limiting factor for the activity pattern check' : ''}<br>
         ${weekendCount} weekend / ${weekdayCount} weekday day(s) logged${symptomLines ? '<br>' + symptomLines : ''}
@@ -25512,12 +25678,17 @@ function renderPatternsCard() {
     return;
   }
   card.style.display = 'block';
+  // Early warnings render first and visually distinct (amber border) from
+  // the group-comparison findings below - these are meant to read as "look
+  // at this now", not blend into the same grey list as the slower-moving
+  // group patterns.
+  const earlyWarningsHtml = earlyWarnings.map(text => `<div style="margin-bottom:10px;padding:10px 12px;border:1px solid rgba(255,159,69,0.4);background:rgba(255,159,69,0.06);border-radius:var(--radius-sm);">⚠️ ${text}</div>`).join('');
   // Each finding with real x/y data gets a small 📊 toggle to reveal the
   // actual scatter underneath - closed by default, since the prose finding
   // is the headline and the scatter is supporting evidence, not the other
   // way round. Category-only findings (weekend/weekday) get no toggle at
   // all rather than a disabled one, since there's genuinely nothing to plot.
-  content.innerHTML = findings.map((f, i) => {
+  content.innerHTML = earlyWarningsHtml + findings.map((f, i) => {
     const scatterToggle = f.scatter
       ? `<button onclick="togglePatternScatter(${i})" id="patternScatterBtn${i}" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:10px;padding:2px 8px;cursor:pointer;touch-action:manipulation;margin-top:6px;">📊 Show data</button>
          <div id="patternScatter${i}" style="display:none;height:180px;margin-top:8px;"><canvas id="patternScatterCanvas${i}"></canvas></div>`
@@ -31270,6 +31441,91 @@ function checkSupplementReminders(now, hour, todayKey) {
 
   const names = unchecked.map(s => s.name).join(', ');
   sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${names}`, 'today');
+}
+
+// Runs the exact same logic as checkSupplementReminders, but bypasses the
+// 2-hour post-enable holdoff and the "already fired today" flag, and
+// reports each decision point instead of silently returning - lets a
+// person actually see WHERE the real chain is stopping (no permission, no
+// checkpoint times configured, wrong period for the current hour, nothing
+// scheduled for this period, or everything already checked off) rather
+// than only ever seeing "notification didn't arrive" with no way to know
+// why not.
+function testSupplementReminder() {
+  const el = document.getElementById('suppReminderTestResult');
+  if (!el) return;
+  el.style.display = 'block';
+  let lines = [];
+
+  if (!('Notification' in window)) {
+    lines.push('❌ This browser has no Notification API at all.');
+    el.textContent = lines.join('\n'); return;
+  }
+  lines.push(`Notification permission: ${Notification.permission}`);
+  if (Notification.permission !== 'granted') {
+    lines.push('❌ STOPS HERE — permission not granted. Nothing in the app can fire until this is "granted" (the ' +
+      'Enable Notifications button above).');
+    el.textContent = lines.join('\n'); return;
+  }
+
+  const prefs = getNotifPrefs();
+  lines.push(`Supplement reminders enabled in prefs: ${prefs.supplement ? 'yes' : 'no'}`);
+  if (!prefs.supplement) {
+    lines.push('❌ STOPS HERE — the checkbox above is off. (Test still continues past this point so you can see the rest of the chain.)');
+  }
+
+  const now = new Date();
+  const hour = now.getHours();
+  const todayKey = now.toISOString().slice(0, 10);
+  const times = loadSupplementCheckpointTimes();
+  lines.push(`Current time: ${now.toLocaleTimeString()} (hour ${hour})`);
+  lines.push(`Checkpoint times configured: morning=${times.morning || '(blank — skipped)'}, midday=${times.midday || '(blank — skipped)'}, evening=${times.evening || '(blank — skipped)'}, bedtime=${times.bedtime || '(blank — skipped)'}`);
+
+  const order = ['morning', 'midday', 'evening', 'bedtime'];
+  const active = order.filter(p => times[p]).map(p => ({ period: p, hour: parseInt((times[p] || '0:0').split(':')[0], 10) })).sort((a, b) => a.hour - b.hour);
+  if (!active.length) {
+    lines.push('❌ STOPS HERE — all four checkpoint times are blank, so there is nothing to ever trigger on.');
+    el.textContent = lines.join('\n'); return;
+  }
+
+  let due = null;
+  for (let i = 0; i < active.length; i++) {
+    const fromHour = active[i].hour;
+    const toHour = i + 1 < active.length ? active[i + 1].hour : 24;
+    if (hour >= fromHour && hour < toHour) { due = active[i].period; break; }
+  }
+  if (!due) {
+    lines.push(`❌ STOPS HERE — current hour (${hour}) is before the earliest configured checkpoint (${active[0].period} at ${active[0].hour}:00), so no period is "due" yet today.`);
+    el.textContent = lines.join('\n'); return;
+  }
+  lines.push(`Checkpoint currently due: ${due}`);
+
+  const key = `mh_notif_supp_${due}_${todayKey}`;
+  const alreadyFired = !!localStorage.getItem(key);
+  lines.push(`Already fired for "${due}" today: ${alreadyFired ? 'yes — this is why nothing new arrives right now' : 'no'}`);
+
+  const defs = loadSupplementDefs().filter(s => s.active !== false && (s.periods || []).includes(due));
+  lines.push(`Active supplements scheduled for "${due}": ${defs.length ? defs.map(s => s.name).join(', ') : '(none)'}`);
+  if (!defs.length) {
+    lines.push('❌ Nothing is scheduled for this period specifically — check each supplement\'s assigned periods under Manage → Supplements.');
+    el.textContent = lines.join('\n'); return;
+  }
+
+  const log = loadSupplementLog();
+  const unchecked = defs.filter(s => !log[s.id + '_' + due]);
+  lines.push(`Still unchecked for "${due}": ${unchecked.length ? unchecked.map(s => s.name).join(', ') : '(none — everything already logged)'}`);
+
+  if (!prefs.supplement) {
+    lines.push('\n(Reminder: this whole chain is currently disabled by the unchecked box above — turn it on for real reminders to fire.)');
+  } else if (alreadyFired) {
+    lines.push('\n✓ Chain is healthy — it already ran for this checkpoint today. It will run again at the next checkpoint, or tomorrow.');
+  } else if (!unchecked.length) {
+    lines.push('\n✓ Chain is healthy — nothing to remind about, everything for this checkpoint is already checked off.');
+  } else {
+    lines.push('\n✓ A real notification would fire right now. Sending it as a live test...');
+    sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${unchecked.map(s => s.name).join(', ')}`, 'today');
+  }
+  el.textContent = lines.join('\n');
 }
 
 function sendLocalNotif(title, body, tab) {
