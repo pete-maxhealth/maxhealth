@@ -4400,7 +4400,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.582</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.584</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5245,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.582'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.584'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25804,7 +25804,7 @@ let _mmSelectedMetrics = null; // lazy-loaded from localStorage on first open
 function getAllOverlayableMetrics() {
   const base = Object.keys(DRILL_CONFIG).map(key => {
     const cfg = getDrillConfig(key);
-    return { key, title: cfg.title, color: cfg.color, unit: cfg.unit, isSymptom: false };
+    return { key, title: cfg.title, color: cfg.color, unit: cfg.unit, icon: cfg.icon, isSymptom: false };
   });
   // Symptoms are user-defined, not a fixed registry entry - generated fresh
   // each time rather than hardcoded, since the list changes as symptoms are
@@ -25812,7 +25812,7 @@ function getAllOverlayableMetrics() {
   const symptomColors = ['#f97316', '#38bdf8', '#e879f9', '#facc15', '#4ade80', '#fb7185'];
   const symptomDefs = (typeof loadSymptomDefs === 'function' ? loadSymptomDefs() : []).filter(s => s.active !== false);
   const symptoms = symptomDefs.map((s, i) => ({
-    key: 'symptom_' + s.id, title: s.name, color: symptomColors[i % symptomColors.length], unit: '/5', isSymptom: true, symptomId: s.id,
+    key: 'symptom_' + s.id, title: s.name, color: symptomColors[i % symptomColors.length], unit: '/5', icon: '📝', isSymptom: true, symptomId: s.id,
   }));
   return base.concat(symptoms);
 }
@@ -25889,7 +25889,7 @@ function renderMMMetricPicker() {
   el.innerHTML = all.map(m => {
     const on = _mmSelectedMetrics.includes(m.key);
     return `<button onclick="toggleMMMetric('${m.key}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on ? m.color : 'var(--border)'};background:${on ? m.color + '18' : 'var(--surface2)'};color:${on ? m.color : 'var(--text3)'};">
-      <span style="width:8px;height:8px;border-radius:50%;background:${m.color};opacity:${on ? '1' : '0.3'};"></span>${m.title}
+      <span style="opacity:${on ? '1' : '0.4'};">${m.icon || '●'}</span>${m.title}
     </button>`;
   }).join('');
 }
@@ -25943,22 +25943,6 @@ function renderMMChart() {
     return;
   }
 
-  // TEMPORARY DIAGNOSTIC - three failed fix attempts (display:none timing,
-  // pinch-zoom, resize debounce) means the real cause hasn't actually been
-  // identified yet, only guessed at. This shows the genuine canvas
-  // dimensions and computed values at the moment of render, so the next
-  // fix is based on real evidence rather than a fourth guess. Remove once
-  // the actual cause is confirmed.
-  const dbgEl = document.getElementById('mmDebugInfo') || (() => {
-    const d = document.createElement('div');
-    d.id = 'mmDebugInfo';
-    d.style.cssText = 'margin-bottom:12px;padding:10px;background:#1a1a1a;color:#0f0;font-family:monospace;font-size:10px;border-radius:8px;white-space:pre-wrap;word-break:break-all;';
-    canvas.parentElement.insertBefore(d, canvas);
-    return d;
-  })();
-  const rect = canvas.getBoundingClientRect();
-  dbgEl.textContent = `CANVAS: css=${rect.width.toFixed(0)}x${rect.height.toFixed(0)}  attr=${canvas.width}x${canvas.height}  devicePixelRatio=${window.devicePixelRatio}\nSELECTED: ${selected.map(m=>m.key).join(', ')}\nPERIOD: ${_mmPeriod}`;
-
   // Each metric's own data can live on a different subset of days (a
   // symptom only logged some days, HRV only on days a wearable synced) -
   // union of every date any selected metric has data for, so the x-axis is
@@ -25976,16 +25960,25 @@ function renderMMChart() {
     return { metric: m, points: getDrillData(m.key, _mmPeriod).map(d => ({ date: d.date, val: d.val })) };
   });
 
-  dbgEl.textContent += `\nRAW POINTS PER METRIC:\n` + perMetricData.map(pm =>
-    `  ${pm.metric.key}: ${pm.points.length} pts — ${JSON.stringify(pm.points.slice(0, 5))}${pm.points.length > 5 ? '...' : ''}`
-  ).join('\n');
-
   const allDates = [...new Set(perMetricData.flatMap(pm => pm.points.map(p => p.date)))];
   // Sort chronologically - dates are dd/mm/yy strings, not natural sort order.
   allDates.sort((a, b) => {
     const [ad,am,ay] = a.split('/').map(Number), [bd,bm,by] = b.split('/').map(Number);
     return new Date(2000+ay, am-1, ad) - new Date(2000+by, bm-1, bd);
   });
+
+  // Same horizontal-scroll pattern as the single-metric drill chart - below
+  // ~40 points this still just fills the screen width normally, but a
+  // longer period (90D/All) gets a genuine minimum pixel width per point
+  // instead of being squeezed thinner and thinner.
+  const mmInnerEl = document.getElementById('mmChartInner');
+  const mmScrollWrapEl = document.getElementById('mmChartScrollWrap');
+  if (mmInnerEl && mmScrollWrapEl) {
+    const minPxPerPoint = 22;
+    const naturalWidth = mmScrollWrapEl.clientWidth;
+    const neededWidth = allDates.length * minPxPerPoint;
+    mmInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
+  }
 
   const realValuesByDate = {}; // date -> {metricKey: realValue} - for tooltip/drill-down, never the normalized number
   allDates.forEach(d => { realValuesByDate[d] = {}; });
@@ -26029,6 +26022,12 @@ function renderMMChart() {
         // real range alongside its name.
         legend: { display: false },
         tooltip: {
+          backgroundColor: 'rgba(10,12,15,0.95)',
+          padding: 6,
+          titleColor: 'rgba(240,242,247,0.6)',
+          titleFont: { family: 'DM Sans', size: 10 },
+          bodyColor: '#f0f2f7',
+          bodyFont: { family: 'Syne', size: 11, weight: '700' },
           callbacks: {
             // Real values shown here, never the normalized 0-100 number the
             // chart itself is actually plotting.
@@ -26081,24 +26080,44 @@ function renderMMChart() {
 function renderMMLegend(perMetricData, rangeInfoByKey) {
   const el = document.getElementById('mmLegend');
   if (!el) return;
-  el.innerHTML = perMetricData.map(pm => {
-    const info = rangeInfoByKey[pm.metric.key];
-    if (!info || info.min == null) {
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--text3);">
-        <span style="width:10px;height:10px;border-radius:50%;background:${pm.metric.color};flex-shrink:0;"></span>
-        <span style="flex:1;">${pm.metric.title}</span><span>No data this period</span>
+
+  // Most recent value per metric, found by actually comparing dates rather
+  // than assuming array order - point arrays aren't guaranteed sorted here.
+  const mostRecentOf = points => {
+    const withVal = points.filter(p => p.val != null);
+    if (!withVal.length) return null;
+    return withVal.reduce((latest, p) => {
+      const [d, m, y] = p.date.split('/').map(Number);
+      const [ld, lm, ly] = latest.date.split('/').map(Number);
+      return new Date(2000 + y, m - 1, d) > new Date(2000 + ly, lm - 1, ld) ? p : latest;
+    });
+  };
+
+  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">` +
+    perMetricData.map(pm => {
+      const info = rangeInfoByKey[pm.metric.key];
+      const recent = mostRecentOf(pm.points);
+      const icon = pm.metric.icon || '●';
+      if (!info || info.min == null) {
+        return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;">
+            <span>${icon}</span><span>${pm.metric.title}</span>
+          </div>
+          <div style="font-size:13px;color:var(--text3);">No data this period</div>
+        </div>`;
+      }
+      const rangeText = info.min === info.max
+        ? 'unchanged'
+        : `${info.min}–${info.max}${pm.metric.unit}${info.isLowVariance ? ' · stable' : ''}`;
+      return `<div style="background:var(--surface2);border:1px solid ${pm.metric.color}33;border-left:3px solid ${pm.metric.color};border-radius:var(--radius-sm);padding:10px 12px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;">
+          <span>${icon}</span><span style="font-weight:600;">${pm.metric.title}</span>
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${pm.metric.color};line-height:1.1;">${recent ? recent.val + pm.metric.unit : '—'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">${rangeText}</div>
       </div>`;
-    }
-    const rangeText = info.min === info.max
-      ? `${info.min}${pm.metric.unit} (unchanged)`
-      : `${info.min}–${info.max}${pm.metric.unit}${info.isLowVariance ? ' — essentially stable' : ''}`;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);">
-      <span style="width:10px;height:10px;border-radius:50%;background:${pm.metric.color};flex-shrink:0;"></span>
-      <span style="flex:1;font-weight:600;">${pm.metric.title}</span>
-      <span style="color:${info.isLowVariance ? 'var(--text3)' : 'var(--text)'};">${rangeText}</span>
-    </div>`;
-  }).join('') + (perMetricData.length >= 6
-    ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;font-style:italic;">${perMetricData.length} metrics shown at once — try narrowing to 3-4 for an easier read.</div>`
+    }).join('') + `</div>` + (perMetricData.length >= 6
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;font-style:italic;">${perMetricData.length} metrics shown at once — try narrowing to 3-4 for an easier read.</div>`
     : '');
 }
 
@@ -26268,6 +26287,19 @@ function renderDrill() {
 
   // Main chart
   if (_drillChart) { _drillChart.destroy(); _drillChart = null; }
+  // Horizontal scroll for longer ranges - below ~40 points the chart still
+  // just fills the screen width normally (nothing to scroll), but past
+  // that each point gets a genuine minimum pixel width instead of being
+  // squeezed thinner and thinner as the period grows (90D was cramming 90
+  // points into one screen width before this).
+  const innerEl = document.getElementById('drillChartInner');
+  const scrollWrapEl = document.getElementById('drillChartScrollWrap');
+  if (innerEl && scrollWrapEl) {
+    const minPxPerPoint = 22;
+    const naturalWidth = scrollWrapEl.clientWidth - 32; // minus the wrap's own padding
+    const neededWidth = data.length * minPxPerPoint;
+    innerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
+  }
   const ctx = document.getElementById('drillChart').getContext('2d');
   const labels = data.map(d => {
     const p = d.date.split('/');
@@ -26354,16 +26386,21 @@ function renderDrill() {
           backgroundColor: 'rgba(10,12,15,0.95)',
           borderColor: cfg.color + '60',
           borderWidth: 1,
-          padding: 10,
+          padding: 6,
           titleColor: 'rgba(240,242,247,0.6)',
-          titleFont: { family: 'DM Sans', size: 11 },
+          titleFont: { family: 'DM Sans', size: 10 },
           bodyColor: '#f0f2f7',
-          bodyFont: { family: 'Syne', size: 14, weight: '700' },
+          bodyFont: { family: 'Syne', size: 11, weight: '700' },
           callbacks: {
             title: ctx => ctx[0]?.label || '',
             label: ctx => {
               if (ctx.dataset.label?.startsWith('_')) return null;
-              return ` ${ctx.dataset.label !== '7-day avg' ? cfg.title : '7d avg'}: ${ctx.parsed.y} ${cfg.unit}`;
+              // Each dataset's own label, not a ternary that silently
+              // defaulted anything besides "7-day avg" to cfg.title - that's
+              // exactly what mislabeled the Normal range dataset as "Heart
+              // Rate: 100 bpm" instead of "Normal range: 100 bpm".
+              const lbl = ctx.dataset.label === '7-day avg' ? '7d avg' : ctx.dataset.label;
+              return ` ${lbl}: ${ctx.parsed.y} ${cfg.unit}`;
             },
             filter: item => !item.dataset.label?.startsWith('_'),
           }
@@ -32315,8 +32352,10 @@ function dismissInsight() {
 
   <!-- Main chart -->
   <div style="padding:0 20px 20px;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
-      <canvas id="drillChart" style="width:100%;height:200px;"></canvas>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;" id="drillChartScrollWrap">
+      <div id="drillChartInner" style="height:200px;">
+        <canvas id="drillChart" style="height:200px;"></canvas>
+      </div>
     </div>
   </div>
 
@@ -32351,7 +32390,11 @@ function dismissInsight() {
 
   <div style="padding:0 20px 20px;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
-      <canvas id="mmChart" style="width:100%;height:280px;touch-action:pan-y;"></canvas>
+      <div id="mmChartScrollWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        <div id="mmChartInner" style="height:280px;">
+          <canvas id="mmChart" style="height:280px;touch-action:pan-y;"></canvas>
+        </div>
+      </div>
       <div id="mmLegend" style="margin-top:12px;"></div>
     </div>
   </div>
