@@ -3165,6 +3165,7 @@
         <div class="metric-unit">bpm</div>
       </div>
       <div class="metric-status neutral" id="mcHRStatus">—</div>
+      <div id="mcHRGauge"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statHRAvg">—</div><div class="metric-stat-lbl">Avg</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statHRMin">—</div><div class="metric-stat-lbl">Min</div></div>
@@ -3194,6 +3195,7 @@
         <div class="metric-unit">%</div>
       </div>
       <div class="metric-status neutral" id="mcSpO2Status">—</div>
+      <div id="mcSpO2Gauge"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statSpO2Avg">—</div><div class="metric-stat-lbl">Avg</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statSpO2Min">—</div><div class="metric-stat-lbl">Min</div></div>
@@ -3224,6 +3226,7 @@
         <div class="metric-unit">ms</div>
       </div>
       <div class="metric-status neutral" id="mcHRVStatus">—</div>
+      <div id="mcHRVGauge"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statHRVAvg">—</div><div class="metric-stat-lbl">Avg</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statHRVMin">—</div><div class="metric-stat-lbl">Min</div></div>
@@ -3254,6 +3257,7 @@
         <div class="metric-unit">steps</div>
       </div>
       <div class="metric-status neutral" id="mcStepsStatus">—</div>
+      <div id="mcStepsGauge"></div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statStepsAvg">—</div><div class="metric-stat-lbl">Avg</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statStepsOver">—</div><div class="metric-stat-lbl">Days &gt;10k</div></div>
@@ -3284,6 +3288,7 @@
         <div class="metric-unit">hrs avg</div>
       </div>
       <div class="metric-status neutral" id="mcSleepStatus">—</div>
+      <div id="mcSleepGauge"></div>
       <!-- Sleep stage timeline -->
       <div class="sleep-timeline" id="sleepTimeline"></div>
       <div class="sleep-legend">
@@ -3392,6 +3397,7 @@
           <div id="chartStyleToggle_chartKetosis"></div>
         </div>
         <div class="trend-canvas-wrap"><canvas id="chartKetosis"></canvas></div>
+        <div id="mcKetosisGauge"></div>
       </div>
     </div>
 
@@ -4590,7 +4596,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.596</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.597</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5435,7 +5441,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.596'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.597'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24900,6 +24906,130 @@ function setChartStyleAndRerender(storageKey, metricKey, style, rerenderFnName) 
   else if (rerenderFnName === 'renderMMChart') renderMMChart();
 }
 
+// ─── Zepp-inspired chart polish, kept MaxedHealth (app's own palette/fonts,
+// not a skin) ───────────────────────────────────────────────────────────
+// Two pieces registered ONCE, globally, via Chart.register - every existing
+// and future `new Chart(...)` call gets them automatically, no per-chart
+// wiring needed. A chart can opt out via options.mhTodayHighlight:false or
+// options.mhDataLabels:false if either genuinely doesn't suit it.
+
+// Subtle band over the most recent point - "you are here", same idea as
+// the translucent current-day column in Zepp's weekly charts.
+const mhTodayHighlightPlugin = {
+  id: 'mhTodayHighlight',
+  beforeDatasetsDraw(chart) {
+    if (chart.options.mhTodayHighlight === false) return;
+    const xScale = chart.scales.x;
+    if (!xScale || !xScale.ticks || xScale.ticks.length < 2) return;
+    const lastIdx = xScale.ticks.length - 1;
+    const x = xScale.getPixelForTick(lastIdx);
+    if (x == null || isNaN(x)) return;
+    const { top, bottom } = chart.chartArea;
+    const halfStep = (xScale.getPixelForTick(lastIdx) - xScale.getPixelForTick(Math.max(0, lastIdx - 1))) / 2 || 10;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    ctx.fillRect(x - halfStep, top, halfStep * 2, bottom - top);
+    ctx.restore();
+  }
+};
+
+// Labels only the LAST real value per dataset, in that dataset's own
+// color - not every point. Zepp labels every point because their charts
+// are always exactly 7 days; ours range from a week to "All", so labeling
+// every point would just be noise. This still closes most of the gap
+// (the number that actually matters - where things stand right now - is
+// visible on the chart itself, not just in the legend/tooltip).
+const mhDataLabelPlugin = {
+  id: 'mhDataLabels',
+  afterDatasetsDraw(chart) {
+    if (chart.options.mhDataLabels === false) return;
+    const ctx = chart.ctx;
+    chart.data.datasets.forEach((ds, dsIndex) => {
+      if (ds.label && ds.label.startsWith('_')) return; // internal/reference-only datasets stay unlabeled
+      const meta = chart.getDatasetMeta(dsIndex);
+      if (meta.hidden) return;
+      let lastRealIdx = -1;
+      for (let i = ds.data.length - 1; i >= 0; i--) {
+        if (ds.data[i] != null) { lastRealIdx = i; break; }
+      }
+      if (lastRealIdx === -1) return;
+      const point = meta.data[lastRealIdx];
+      if (!point) return;
+      const val = ds.data[lastRealIdx];
+      const label = typeof val === 'number' ? (Math.round(val * 10) / 10).toString() : String(val);
+      ctx.save();
+      ctx.font = "700 10px 'Space Mono', monospace";
+      ctx.fillStyle = Array.isArray(ds.borderColor) ? (ds.borderColor[lastRealIdx] || '#8b90a0') : (ds.borderColor || '#8b90a0');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(label, point.x, point.y - 8);
+      ctx.restore();
+    });
+  }
+};
+Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin);
+
+// Threshold-aware colour, reused for both segment coloring (line style)
+// and per-point coloring (bar/point style) - one metric, one rule, applied
+// consistently regardless of which of the three chart styles is picked.
+// Only meaningful for metrics with a real reference band (DRILL_CONFIG's
+// `ref`) - weight/calories/protein/carbs etc have none, since a
+// population-general "normal" range would be actively misleading against
+// Pete's specific protocol (same reasoning DRILL_CONFIG's own comments
+// already give for leaving those refs null).
+function mhThresholdColor(val, ref, baseColor) {
+  if (val == null || !ref) return baseColor;
+  if (val < ref[0] || val > ref[1]) return '#ff9f45'; // out of range - warm amber, not alarm-red (this is "notice", not "danger")
+  return baseColor;
+}
+// Wires threshold colouring into a dataset built by applyChartStyle. Pass
+// the raw (un-normalized) values array and the metric's ref band; no-ops
+// cleanly if ref is null, so calling this on every chart is always safe.
+function applyThresholdStyling(dataset, rawVals, ref, baseColor) {
+  if (!ref) return dataset;
+  if (dataset.type === 'bar' || dataset.showLine === false) {
+    // Bar and point styles: colour each point/bar individually.
+    const colors = rawVals.map(v => mhThresholdColor(v, ref, baseColor));
+    return { ...dataset, backgroundColor: colors, pointBackgroundColor: colors };
+  }
+  // Line style: colour each SEGMENT by its end-point value, via Chart.js's
+  // own segment API - this is what makes a single line change colour
+  // partway through, matching Zepp's Hypopnea chart exactly.
+  return { ...dataset, segment: {
+    borderColor: ctx => mhThresholdColor(rawVals[ctx.p1DataIndex], ref, baseColor)
+  }};
+}
+
+// Horizontal segmented gauge - the one genuinely new element from the Zepp
+// reference (their HR-zone/PAI/Stress bars), not just a restyle of
+// something MaxedHealth already had. Zones are drawn from `ref` (below
+// range / in range / above range) with a marker at the real value's
+// position. Only rendered for metrics that have a real ref band - same
+// reasoning as threshold colouring above.
+function renderThresholdGauge(value, ref, unit, color) {
+  if (value == null || !ref) return '';
+  const [lo, hi] = ref;
+  const span = hi - lo;
+  const padLo = Math.max(span * 0.4, 1);
+  const padHi = Math.max(span * 0.4, 1);
+  const gaugeMin = lo - padLo, gaugeMax = hi + padHi;
+  const pct = v => Math.max(0, Math.min(100, ((v - gaugeMin) / (gaugeMax - gaugeMin)) * 100));
+  const loPct = pct(lo), hiPct = pct(hi), markerPct = pct(value);
+  const inRange = value >= lo && value <= hi;
+  return `<div style="margin-top:8px;">
+    <div style="position:relative;height:6px;border-radius:3px;overflow:visible;background:linear-gradient(to right,
+        rgba(255,159,69,0.35) 0%, rgba(255,159,69,0.35) ${loPct}%,
+        ${color}55 ${loPct}%, ${color}55 ${hiPct}%,
+        rgba(255,159,69,0.35) ${hiPct}%, rgba(255,159,69,0.35) 100%);">
+      <div style="position:absolute;top:-3px;left:${markerPct}%;width:2px;height:12px;background:${inRange ? color : '#ff9f45'};transform:translateX(-1px);border-radius:1px;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:3px;font-family:'Space Mono',monospace;">
+      <span>${lo}${unit}</span><span>${hi}${unit}</span>
+    </div>
+  </div>`;
+}
+
 function getTrendsData() {
   const todayTotals = calcTotals(state.todayLog);
   const histData = [...state.history];
@@ -25459,6 +25589,8 @@ function renderTrends() {
     statusEl.textContent = latest <= 60 ? `${latest} bpm · Excellent` : latest <= 70 ? `${latest} bpm · Good` : latest <= 80 ? `${latest} bpm · Normal` : `${latest} bpm · Elevated`;
     statusEl.className = `metric-status ${latest <= 70 ? 'good' : latest <= 80 ? 'warn' : 'bad'}`;
     drawSparkline('sparkHR', hrVals, '#ff5e5e');
+    const hrGaugeEl = document.getElementById('mcHRGauge');
+    if (hrGaugeEl) hrGaugeEl.innerHTML = renderThresholdGauge(latest, getDrillConfig('hr').ref, '', '#ff5e5e');
   }
 
   // ── SpO2 ──
@@ -25478,8 +25610,9 @@ function renderTrends() {
     if (document.getElementById('chartSpO2')) {
     destroyChart('chartSpO2');
     const spo2Style = getChartStyle(CHART_STYLE_KEY, 'spo2', 'line');
+    const spo2Ref = getDrillConfig('spo2').ref;
     chartInstances['chartSpO2'] = new Chart(document.getElementById('chartSpO2'), {
-      type:'line', data:{ labels, datasets:[applyChartStyle({ label:'SpO2', data:spo2Vals, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.08)', borderWidth:2, fill:spo2Style==='line', tension:0.3, pointRadius:spo2Vals.map(v=>v?2:0) }, spo2Style)]},
+      type:'line', data:{ labels, datasets:[applyThresholdStyling(applyChartStyle({ label:'SpO2', data:spo2Vals, borderColor:'#34d399', backgroundColor:'rgba(52,211,153,0.08)', borderWidth:2, fill:spo2Style==='line', tension:0.3, pointRadius:spo2Vals.map(v=>v?2:0) }, spo2Style), spo2Vals, spo2Ref, '#34d399')]},
       options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales.y, min:88, max:100 }}}
     });
     const st = document.getElementById('chartStyleToggle_mcSpO2');
@@ -25488,6 +25621,8 @@ function renderTrends() {
     document.getElementById('statSpO2Avg').textContent = Math.round(avg(spo2Clean)*10)/10 + '%';
     document.getElementById('statSpO2Min').textContent = Math.min(...spo2Clean) + '%';
     document.getElementById('statSpO2Max').textContent = Math.max(...spo2Clean) + '%';
+    const spo2GaugeEl = document.getElementById('mcSpO2Gauge');
+    if (spo2GaugeEl) spo2GaugeEl.innerHTML = renderThresholdGauge(latest, getDrillConfig('spo2').ref, '%', '#34d399');
   }
 
   // ── HRV ──
@@ -25507,13 +25642,16 @@ function renderTrends() {
     if (document.getElementById('chartHRV')) {
     destroyChart('chartHRV');
     const hrvStyle = getChartStyle(CHART_STYLE_KEY, 'hrv', 'line');
+    const hrvRef = getDrillConfig('hrv').ref;
     chartInstances['chartHRV'] = new Chart(document.getElementById('chartHRV'), {
-      type:'line', data:{ labels, datasets:[applyChartStyle({ label:'HRV', data:hrvVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)', borderWidth:2, fill:hrvStyle==='line', tension:0.3, pointRadius:hrvVals.map(v=>v?2:0) }, hrvStyle)]},
+      type:'line', data:{ labels, datasets:[applyThresholdStyling(applyChartStyle({ label:'HRV', data:hrvVals, borderColor:'#a78bfa', backgroundColor:'rgba(167,139,250,0.08)', borderWidth:2, fill:hrvStyle==='line', tension:0.3, pointRadius:hrvVals.map(v=>v?2:0) }, hrvStyle), hrvVals, hrvRef, '#a78bfa')]},
       options:{ ...CHART_DEFAULTS }
     });
     const st = document.getElementById('chartStyleToggle_mcHRV');
     if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'hrv', 'renderTrends');
     }
+    const hrvGaugeEl = document.getElementById('mcHRVGauge');
+    if (hrvGaugeEl) hrvGaugeEl.innerHTML = renderThresholdGauge(latest, getDrillConfig('hrv').ref, 'ms', '#a78bfa');
   }
 
   // ── Steps ──
@@ -25541,6 +25679,8 @@ function renderTrends() {
     const st = document.getElementById('chartStyleToggle_mcSteps');
     if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'steps', 'renderTrends');
     }
+    const stepsGaugeEl = document.getElementById('mcStepsGauge');
+    if (stepsGaugeEl) stepsGaugeEl.innerHTML = renderThresholdGauge(avgSteps, getDrillConfig('steps').ref, '', '#4d9fff');
   }
 
   // ── Sleep ──
@@ -25561,6 +25701,8 @@ function renderTrends() {
     const statusEl = document.getElementById('mcSleepStatus');
     statusEl.textContent = avgSleep >= 7 ? `${h}h ${m}m · Good` : avgSleep >= 6 ? `${h}h ${m}m · Fair` : `${h}h ${m}m · Short`;
     statusEl.className = `metric-status ${avgSleep >= 7 ? 'good' : avgSleep >= 6 ? 'warn' : 'bad'}`;
+    const sleepGaugeEl = document.getElementById('mcSleepGauge');
+    if (sleepGaugeEl) sleepGaugeEl.innerHTML = renderThresholdGauge(Math.round(avgSleep*10)/10, getDrillConfig('sleep').ref, 'h', '#a78bfa');
     // Sleep stage timeline for most recent night
     const latest = data[data.length-1];
     const tl = document.getElementById('sleepTimeline');
@@ -25713,6 +25855,10 @@ function renderTrends() {
     const st = document.getElementById('chartStyleToggle_chartKetosis');
     if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'ketosis', 'renderTrends');
     }
+    const ketosisRealVals = ketosisVals.filter(v => v != null);
+    const ketosisAdherencePct = ketosisRealVals.length ? Math.round(ketosisRealVals.filter(v => v === 1).length / ketosisRealVals.length * 100) : null;
+    const ketosisGaugeEl = document.getElementById('mcKetosisGauge');
+    if (ketosisGaugeEl) ketosisGaugeEl.innerHTML = renderThresholdGauge(ketosisAdherencePct, getDrillConfig('ketosis').ref, '%', '#2deb8f');
   }
 
   // Applied after every showCard() above, not before - a card's data-driven
@@ -26992,6 +27138,8 @@ function renderDrill() {
   document.getElementById('drillTrend').textContent = trendDelta !== null
     ? ` · ${trendDelta >= 0 ? '+' : ''}${trendDelta} vs prev week`
     : '';
+  const drillGaugeEl = document.getElementById('drillGauge');
+  if (drillGaugeEl) drillGaugeEl.innerHTML = renderThresholdGauge(last, cfg.ref, cfg.unit === 'steps' ? '' : cfg.unit, cfg.color);
 
   // Stats grid
   const statsGrid = document.getElementById('drillStatsGrid');
@@ -33058,6 +33206,7 @@ function dismissInsight() {
       <span id="drillResultText" style="font-size:13px;font-family:'Syne',sans-serif;font-weight:700;"></span>
       <span id="drillTrend" style="font-size:12px;color:var(--text3);"></span>
     </div>
+    <div id="drillGauge" style="max-width:280px;margin-bottom:16px;"></div>
   </div>
 
   <!-- Main chart -->
