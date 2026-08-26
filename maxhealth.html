@@ -4403,7 +4403,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.590</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.591</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5248,7 +5248,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.590'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.591'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25894,6 +25894,7 @@ function openMultiMetricOverlay() {
   document.getElementById('multiMetricOverlay').style.display = 'block';
   document.getElementById('mmDayPanel').style.display = 'none';
   renderMMMetricPicker();
+  applyMMSectionOrderAndVisibility();
   // Deferred to the next frame, not called immediately - constructing the
   // chart in the same tick as the display:block change measures the canvas
   // before the browser has actually reflowed the now-visible container, so
@@ -26132,7 +26133,162 @@ function renderMMChart() {
     },
   });
 
+  // Cached so moveMMLegendCard/toggleMMLegendHidden can redraw just the
+  // legend afterward, without rebuilding the whole chart for a reorder/hide
+  // action that doesn't touch the chart itself.
+  _mmLastPerMetricData = perMetricData;
+  _mmLastRangeInfo = rangeInfoByKey;
   renderMMLegend(perMetricData, rangeInfoByKey);
+}
+
+let _mmLastPerMetricData = null;
+let _mmLastRangeInfo = null;
+
+// Reorder + hide for the legend cards - same persisted-order pattern as the
+// dashboard sections (getDashboardOrder/moveDashboardSection), applied here
+// per metric key instead of per dashboard section. Kept independent of
+// _mmSelectedMetrics (which changes every time a pill is tapped) - a
+// metric's position/hidden state should survive being deselected and
+// reselected later, not reset each time.
+const MM_LEGEND_ORDER_KEY = 'mh_mm_legend_order';
+const MM_LEGEND_HIDDEN_KEY = 'mh_mm_legend_hidden';
+
+function getMMLegendOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MM_LEGEND_ORDER_KEY) || 'null');
+    if (Array.isArray(stored)) return stored;
+  } catch(e) {}
+  return [];
+}
+function saveMMLegendOrder(order) {
+  localStorage.setItem(MM_LEGEND_ORDER_KEY, JSON.stringify(order));
+}
+function getMMLegendHidden() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MM_LEGEND_HIDDEN_KEY) || 'null');
+    if (Array.isArray(stored)) return stored;
+  } catch(e) {}
+  return [];
+}
+function saveMMLegendHidden(hidden) {
+  localStorage.setItem(MM_LEGEND_HIDDEN_KEY, JSON.stringify(hidden));
+}
+// Applies the saved order to whatever metric keys are actually present
+// right now - known keys in their saved relative order first, then any
+// key the order array has never seen (a newly-selected metric) appended at
+// the end, same "unseen keys keep their natural place" approach as the
+// dashboard's own order-merge.
+function sortByMMLegendOrder(perMetricData) {
+  const order = getMMLegendOrder();
+  const idx = k => { const i = order.indexOf(k); return i === -1 ? Infinity : i; };
+  return [...perMetricData].sort((a, b) => idx(a.metric.key) - idx(b.metric.key));
+}
+function moveMMLegendCard(key, direction, visibleKeys) {
+  // Reorders within the *currently visible* set only, so an up/down tap
+  // moves a card past its visible neighbour, not past a hidden metric
+  // sitting invisibly between them in the full saved order.
+  let order = getMMLegendOrder();
+  // Seed any keys missing from the saved order (first time reordering)
+  visibleKeys.forEach(k => { if (!order.includes(k)) order.push(k); });
+  const visibleInOrder = order.filter(k => visibleKeys.includes(k));
+  const idx = visibleInOrder.indexOf(key);
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= visibleInOrder.length) {
+    showToast('Already at the ' + (direction === 'up' ? 'top' : 'bottom'));
+    return;
+  }
+  [visibleInOrder[idx], visibleInOrder[swapIdx]] = [visibleInOrder[swapIdx], visibleInOrder[idx]];
+  // Splice the reordered visible keys back into their original slots in
+  // the full order array, leaving hidden metrics' positions untouched.
+  let vi = 0;
+  order = order.map(k => visibleKeys.includes(k) ? visibleInOrder[vi++] : k);
+  saveMMLegendOrder(order);
+  if (_mmLastPerMetricData) renderMMLegend(_mmLastPerMetricData, _mmLastRangeInfo);
+}
+function toggleMMLegendHidden(key) {
+  const hidden = getMMLegendHidden();
+  const idx = hidden.indexOf(key);
+  if (idx > -1) hidden.splice(idx, 1); else hidden.push(key);
+  saveMMLegendHidden(hidden);
+  if (_mmLastPerMetricData) renderMMLegend(_mmLastPerMetricData, _mmLastRangeInfo);
+}
+
+// Whole-section reorder + hide (Chart / Day-Period panel / Legend) - same
+// pattern as the dashboard's own DEFAULT_DASHBOARD_ORDER/moveDashboardSection,
+// one level up from the per-card legend reordering above.
+const MM_SECTION_ORDER_KEY = 'mh_mm_section_order';
+const MM_SECTION_HIDDEN_KEY = 'mh_mm_section_hidden';
+const DEFAULT_MM_SECTIONS = ['chart', 'daypanel', 'legend'];
+const MM_SECTION_IDS = { chart: 'mmSection-chart', daypanel: 'mmSection-daypanel', legend: 'mmSection-legend' };
+
+function getMMSectionOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MM_SECTION_ORDER_KEY) || 'null');
+    if (Array.isArray(stored) && stored.length === DEFAULT_MM_SECTIONS.length
+        && DEFAULT_MM_SECTIONS.every(k => stored.includes(k))) return stored;
+  } catch(e) {}
+  return [...DEFAULT_MM_SECTIONS];
+}
+function saveMMSectionOrder(order) { localStorage.setItem(MM_SECTION_ORDER_KEY, JSON.stringify(order)); }
+function getMMSectionHidden() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(MM_SECTION_HIDDEN_KEY) || 'null');
+    if (Array.isArray(stored)) return stored;
+  } catch(e) {}
+  return [];
+}
+function saveMMSectionHidden(hidden) { localStorage.setItem(MM_SECTION_HIDDEN_KEY, JSON.stringify(hidden)); }
+
+function applyMMSectionOrderAndVisibility() {
+  const order = getMMSectionOrder();
+  const hidden = getMMSectionHidden();
+  const els = order.map(k => document.getElementById(MM_SECTION_IDS[k])).filter(Boolean);
+  if (!els.length) return;
+  const parent = els[0].parentNode;
+  if (!parent) return;
+  // Same reason as applyDashboardOrder - appendChild on an already-placed
+  // node still forces a real remove+reinsert, so only touch the DOM when
+  // the order has actually changed.
+  const currentOrder = Array.from(parent.children).filter(c => els.includes(c));
+  const alreadyCorrect = currentOrder.length === els.length && currentOrder.every((el, i) => el === els[i]);
+  if (!alreadyCorrect) els.forEach(el => parent.appendChild(el));
+  order.forEach(k => {
+    const el = document.getElementById(MM_SECTION_IDS[k]);
+    if (el) el.style.display = hidden.includes(k) ? 'none' : 'flex';
+  });
+}
+function moveMMSection(key, direction) {
+  const order = getMMSectionOrder();
+  const idx = order.indexOf(key);
+  if (idx === -1) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction === 'up' ? 'top' : 'bottom')); return; }
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  saveMMSectionOrder(order);
+  applyMMSectionOrderAndVisibility();
+}
+function toggleMMSectionHidden(key) {
+  const hidden = getMMSectionHidden();
+  const idx = hidden.indexOf(key);
+  if (idx > -1) hidden.splice(idx, 1); else hidden.push(key);
+  saveMMSectionHidden(hidden);
+  applyMMSectionOrderAndVisibility();
+}
+
+// Clears the pill selection back to empty, for exactly the case Pete hit -
+// extra pills tapped, then the overlay left open/closed with orphaned
+// selections that may no longer have a matching visible line (a metric
+// with genuinely no data in the current period still stays "selected").
+// Deliberately empty rather than back to the original 3-metric default -
+// a genuine reset should hand back a blank slate to choose from, not
+// silently reintroduce metrics the person didn't just ask for.
+function resetMMSelection() {
+  _mmSelectedMetrics = [];
+  saveMMSelectedMetrics();
+  renderMMMetricPicker();
+  closeMMDayPanel();
+  renderMMChart();
+  showToast('Selection cleared');
 }
 
 // Custom legend, not Chart.js's own - shows each metric's real range
@@ -26157,15 +26313,27 @@ function renderMMLegend(perMetricData, rangeInfoByKey) {
     });
   };
 
-  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">` +
-    perMetricData.map(pm => {
+  const hidden = getMMLegendHidden();
+  const visibleKeys = perMetricData.map(pm => pm.metric.key).filter(k => !hidden.includes(k));
+  const ordered = sortByMMLegendOrder(perMetricData).filter(pm => visibleKeys.includes(pm.metric.key));
+  const hiddenHere = perMetricData.filter(pm => hidden.includes(pm.metric.key));
+
+  const cards = ordered.map((pm, i) => {
       const info = rangeInfoByKey[pm.metric.key];
       const recent = mostRecentOf(pm.points);
       const icon = pm.metric.icon || '●';
+      // ▲▼ move within the visible set, 👁 hides this card - same
+      // up/down-arrow pattern as the dashboard's own reorderable sections,
+      // applied per metric key here instead of per dashboard section.
+      const controls = `<div style="display:flex;gap:2px;margin-left:auto;">
+          <button onclick='moveMMLegendCard(${JSON.stringify(pm.metric.key)},"up",${JSON.stringify(visibleKeys)})' ${i === 0 ? 'disabled' : ''} style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;opacity:${i === 0 ? '0.3' : '1'};touch-action:manipulation;">▲</button>
+          <button onclick='moveMMLegendCard(${JSON.stringify(pm.metric.key)},"down",${JSON.stringify(visibleKeys)})' ${i === ordered.length - 1 ? 'disabled' : ''} style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;opacity:${i === ordered.length - 1 ? '0.3' : '1'};touch-action:manipulation;">▼</button>
+          <button onclick='toggleMMLegendHidden(${JSON.stringify(pm.metric.key)})' title="Hide" style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">👁</button>
+        </div>`;
       if (!info || info.min == null) {
         return `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;">
           <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;">
-            <span>${icon}</span><span>${pm.metric.title}</span>
+            <span>${icon}</span><span>${pm.metric.title}</span>${controls}
           </div>
           <div style="font-size:13px;color:var(--text3);">No data this period</div>
         </div>`;
@@ -26175,13 +26343,24 @@ function renderMMLegend(perMetricData, rangeInfoByKey) {
         : `${info.min}–${info.max}${pm.metric.unit}${info.isLowVariance ? ' · stable' : ''}`;
       return `<div style="background:var(--surface2);border:1px solid ${pm.metric.color}33;border-left:3px solid ${pm.metric.color};border-radius:var(--radius-sm);padding:10px 12px;">
         <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;">
-          <span>${icon}</span><span style="font-weight:600;">${pm.metric.title}</span>
+          <span>${icon}</span><span style="font-weight:600;">${pm.metric.title}</span>${controls}
         </div>
         <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${pm.metric.color};line-height:1.1;">${recent ? recent.val + pm.metric.unit : '—'}</div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px;">${rangeText}</div>
       </div>`;
-    }).join('') + `</div>` + (perMetricData.length >= 6
-    ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;font-style:italic;">${perMetricData.length} metrics shown at once — try narrowing to 3-4 for an easier read.</div>`
+    }).join('');
+
+  const restoreStrip = hiddenHere.length
+    ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+        <span style="font-size:10px;color:var(--text3);">Hidden:</span>
+        ${hiddenHere.map(pm => `<button onclick='toggleMMLegendHidden(${JSON.stringify(pm.metric.key)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${pm.metric.icon || '●'} ${pm.metric.title} +</button>`).join('')}
+      </div>`
+    : '';
+
+  el.innerHTML = (ordered.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">${cards}</div>` : `<div style="font-size:12px;color:var(--text3);">All legend cards hidden.</div>`)
+    + restoreStrip
+    + (ordered.length >= 6
+    ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;font-style:italic;">${ordered.length} metrics shown at once — try narrowing to 3-4 for an easier read.</div>`
     : '');
 }
 
@@ -26189,6 +26368,14 @@ function showMMDayPanel(date, realValues, perMetricData) {
   window._mmDrillDate = date;
   window._mmDrillMetricData = perMetricData;
   window._mmDrillRealValues = realValues;
+  // A direct tap is an explicit request to see this - overrides a passive
+  // "hidden" section preference rather than silently doing nothing, since
+  // there'd otherwise be no visible sign the tap even registered.
+  const hidden = getMMSectionHidden();
+  if (hidden.includes('daypanel')) {
+    saveMMSectionHidden(hidden.filter(k => k !== 'daypanel'));
+    applyMMSectionOrderAndVisibility();
+  }
   renderMMDayPanel('day');
 }
 
@@ -32459,21 +32646,62 @@ function dismissInsight() {
 
   <!-- Metric picker - built dynamically (renderMMMetricPicker) since the
        symptom list is user-defined, not fixed like the rest of DRILL_CONFIG. -->
+  <div style="padding:12px 20px 0;display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.04em;">Metrics</div>
+    <button onclick="resetMMSelection()" style="background:none;border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">↺ Reset</button>
+  </div>
   <div id="mmMetricPicker" style="padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;"></div>
 
-  <div style="padding:0 20px 20px;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
-      <div id="mmChartScrollWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-        <div id="mmChartInner" style="height:280px;">
-          <canvas id="mmChart" style="height:280px;touch-action:pan-x pan-y;"></canvas>
+  <!-- Three independently reorderable/hideable sections - chart, the tap-a-
+       point day/period panel, and the legend cards. Same order+hidden
+       persistence pattern as the dashboard sections and the legend cards
+       above, applied here at the whole-section level. -->
+  <div id="mmSectionsContainer" style="padding:0 20px 40px;display:flex;flex-direction:column;gap:16px;">
+
+    <div id="mmSection-chart" style="display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;">📈 Chart</span>
+        <div style="display:flex;gap:2px;margin-left:auto;">
+          <button onclick="moveMMSection('chart','up')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▲</button>
+          <button onclick="moveMMSection('chart','down')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▼</button>
+          <button onclick="toggleMMSectionHidden('chart')" title="Hide" style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">👁</button>
         </div>
       </div>
-      <div id="mmLegend" style="margin-top:12px;"></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
+        <div id="mmChartScrollWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <div id="mmChartInner" style="height:280px;">
+            <canvas id="mmChart" style="height:280px;touch-action:pan-x pan-y;"></canvas>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <!-- Day drill-down - populated on chart click, hidden until then -->
-  <div id="mmDayPanel" style="display:none;margin:0 20px 40px;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:16px;"></div>
+    <div id="mmSection-daypanel" style="display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;">📅 Day / Period Info</span>
+        <div style="display:flex;gap:2px;margin-left:auto;">
+          <button onclick="moveMMSection('daypanel','up')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▲</button>
+          <button onclick="moveMMSection('daypanel','down')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▼</button>
+          <button onclick="toggleMMSectionHidden('daypanel')" title="Hide" style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">👁</button>
+        </div>
+      </div>
+      <!-- Day drill-down - populated on chart click, hidden until then -->
+      <div id="mmDayPanel" style="display:none;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);padding:16px;"></div>
+    </div>
+
+    <div id="mmSection-legend" style="display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--text3);font-weight:600;">🏷️ Legend</span>
+        <div style="display:flex;gap:2px;margin-left:auto;">
+          <button onclick="moveMMSection('legend','up')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▲</button>
+          <button onclick="moveMMSection('legend','down')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▼</button>
+          <button onclick="toggleMMSectionHidden('legend')" title="Hide" style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">👁</button>
+        </div>
+      </div>
+      <div id="mmLegend"></div>
+    </div>
+
+  </div>
 </div></div>
 </div><!-- end app-wrapper -->
 
