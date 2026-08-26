@@ -1,3 +1,38 @@
+# MaxedHealth Changelog — Phase 19 (v3.10.585 – v3.10.594)
+
+**v3.10.564–584 not individually documented here** — same gap this file already flags for earlier phases (472–499, 13–14), now extended; this session picked up mid-testing at 585 with no summary of what landed in between.
+
+## Compare Metrics — Multi-Line Overlay, Built and Then Actually Fixed
+
+- **Single-metric drill chart and Your Journey both lost horizontal scroll** after 586's `touch-action:pan-x pan-y` fix — because the real blocker on both wasn't touch-action at all. The single-metric chart had a `touchmove` handler calling `preventDefault()` on every move to drive a floating tooltip/scrubber, which overrides touch-action CSS outright; Your Journey never had a scroll wrapper in the first place. Fixed both: floating tooltips replaced with tap-to-open info panels (✕ to dismiss) on both charts, same pattern the compare-metrics chart already used, which also removed the JS-level `preventDefault` that was the actual cause.
+- **Selected metrics disappearing from the compare-metrics overlay** — not a selection bug (the array-based toggle was already correct), but `pointRadius` being computed once from the *combined* date range across every selected metric rather than per-dataset. Combined with `spanGaps:false`, any metric with its own gaps (sleep only synced some days, ketosis only computed on logged days) lost both its connecting line and its points on 90D/All views, leaving only continuously-synced metrics (Hydration) visible. Radius now decided per-dataset from that metric's own real data coverage.
+- **Reorder + hide added at three levels**: individual legend cards, the three compare-metrics sections (Chart / Day-Period Info / Legend — reordered so Day/Period sits between Chart and Legend), and separately the 15 individual Trends metric cards — all using the same persisted-order-array pattern as the dashboard's own `moveDashboardSection`.
+- **Real lockout bug shipped and then fixed same-session**: the ▲▼👁 controls lived inside each section/card's own header, so hiding a section also hid its own restore control — no way back in the UI. Fixed with a persistent restore strip, independent of any single section, applied to both the compare-metrics sections and the Trends cards from the start once the bug was found.
+- **Reset button** added next to the metric picker — clears pill selection to empty (deliberately not back to the original 3-metric default; a genuine reset shouldn't reintroduce metrics that weren't asked for).
+- **Day/period drill-down panel** — tapping a point shows real values for that day, or (toggle) an average over the currently-selected top period ending on that date. Confirmed this doesn't duplicate the top 7D/30D/90D/All selector: the top selector controls what the chart displays, the panel toggle is a rolling window of the same length ending wherever you tapped, independent of the chart's own visible range.
+
+## Full Charts Section Removed, Then Substantially Rebuilt Inline
+
+- **The old "Full Charts" collapsible (14 duplicate mini-charts at the foot of Trends) removed** as redundant now that Compare Metrics covers the same ground with proper scrolling — but this also silently deleted the only chart some metrics had, which wasn't the intent.
+- **Restored properly**: all 9 metrics that already had a summary card (Weight, HR\*, SpO2, HRV, Steps, Sleep, Calories, Protein, Carbs) got their detailed chart moved back inline into their existing card, appearing with the rest of that metric's stats instead of behind a separate link. Ketosis Adherence (no card of its own) folded into the Carbs card, where its data was already being computed.
+  - \*Heart Rate never had a detailed chart in the first place, before or after — nothing was removed there, there was never a `chartHR`.
+- **6 metrics that only ever lived in the old Full Charts section got real cards built for them**: Water, Fat %, Muscle %, Bone Mass, Hydration, Distance — simpler than the other 9 (no sparkline, no multi-stat grid, since none of that machinery existed for them before) but same chart-in-card treatment, and now included in the same reorder/hide system as everything else.
+- **`water` added to `DRILL_CONFIG`** — it had a card and a chart but no drill-down entry, so tapping it did nothing and it was invisible to Compare Metrics' own metric list. Consistent with the other 5 added in an earlier phase for the same reason (a real tappable UI element with no backing config entry).
+- 9 direct `new Chart(document.getElementById(...))` calls (one per always-rendered metric) were guarded with an existence check before the HTML was fully restored — defensive, kept in place since it costs nothing and protects against the same class of bug if a canvas is ever conditionally absent again.
+
+## Trends Page Reordered
+
+- **Analysis period filter (Today/30/60/All) moved to the very top of the page and deliberately excluded from the hide system** — every chart and card on the page reads through this filter, so hiding it would strand everything else with no way to change what's showing.
+- **Today's Wellness, Your Journey, and Patterns grouped together** immediately below the period filter, ahead of Compare Metrics and the metric card grid — previously interleaved with the filter and the Compare Metrics button in a less coherent order.
+
+## Known Outstanding Items
+
+- Health Connect bridge (Android) — still parked, not started.
+- GitHub Releases page cleanup — not actioned this session.
+- RingConn sleep backfill still only covers 19 Aug 2025 onward — older history not yet corrected.
+- AI photo-reading occasional polyols misreads on certain label layouts — unchanged; needs a real failed example to fix safely rather than a blind prompt edit.
+- Documentation (this file, README.md, TECHNICAL.md, user-guide.html, changelog.html) had drifted again — README was at v3.10.577, changelog.html and this file at v3.10.563, user-guide.html's footer at v3.10.471, while the app had reached v3.10.594. Caught up in this pass.
+
 # MaxedHealth Changelog — Phase 18 (v3.10.510 – v3.10.563)
 
 A long session spanning a full structural bug audit, a category system built from scratch, retiring Meals in favour of Recipes, and a real feature built twice — once wrong, once right — after testing against real data and real phrasing caught what isolated testing had missed both times.
