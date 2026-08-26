@@ -3011,8 +3011,10 @@
       <div class="section-title" id="title-trends-journey" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-journey','trends-journey-wrap','trends-journey-icon')">🗺️ Your Journey <span id="trends-journey-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
       <div id="trends-journey-wrap">
         <div id="journeyLegend" style="font-size:11px;color:var(--text3);margin-bottom:8px;">Weight over your whole tracked history · <span style="color:var(--accent);">●</span> in ketosis &nbsp; <span style="color:var(--yellow);">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day</div>
-        <div style="position:relative;height:180px;">
-          <canvas id="journeyCanvas"></canvas>
+        <div id="journeyChartScrollWrap" style="position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <div id="journeyChartInner" style="height:180px;">
+            <canvas id="journeyCanvas" style="height:180px;touch-action:pan-x pan-y;"></canvas>
+          </div>
         </div>
         <div id="journeyStats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px;"></div>
       </div>
@@ -4400,7 +4402,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.586</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.587</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5245,7 +5247,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.586'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.587'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24790,6 +24792,19 @@ function renderJourneyCard() {
   const wMinForMarker = Math.min(...weightVals) - 0.5;
   const treatmentMarkers = weighed.map(d => isTreatmentDay(d) ? wMinForMarker : null);
 
+  // Same horizontal-scroll pattern as the drill and compare-metrics charts -
+  // below ~40 points this still just fills the screen width normally, but
+  // full tracked history (which this card always shows, unfiltered) needs a
+  // genuine minimum pixel width per point instead of squeezing everything in.
+  const journeyInnerEl = document.getElementById('journeyChartInner');
+  const journeyScrollWrapEl = document.getElementById('journeyChartScrollWrap');
+  if (journeyInnerEl && journeyScrollWrapEl) {
+    const minPxPerPoint = 22;
+    const naturalWidth = journeyScrollWrapEl.clientWidth;
+    const neededWidth = weighed.length * minPxPerPoint;
+    journeyInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
+  }
+
   destroyChart('journeyChart');
   chartInstances['journeyChart'] = new Chart(document.getElementById('journeyCanvas'), {
     type: 'line',
@@ -26149,6 +26164,17 @@ function getMMPeriodLabel() {
   return _mmPeriod === 7 ? '7D' : _mmPeriod === 30 ? '30D' : _mmPeriod === 90 ? '90D' : 'All';
 }
 
+// The × on the day/period drill-down panel - clears the drilled-into date
+// so a stray tap on the chart edge afterward can't silently reopen a panel
+// referencing state that's just been dismissed.
+function closeMMDayPanel() {
+  const panel = document.getElementById('mmDayPanel');
+  if (panel) panel.style.display = 'none';
+  window._mmDrillDate = null;
+  window._mmDrillMetricData = null;
+  window._mmDrillRealValues = null;
+}
+
 function renderMMDayPanel(mode) {
   const panel = document.getElementById('mmDayPanel');
   const date = window._mmDrillDate;
@@ -26185,9 +26211,10 @@ function renderMMDayPanel(mode) {
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${headerLabel}</div>
-      <div style="display:flex;gap:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
         <button onclick="renderMMDayPanel('day')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${!isPeriod ? 'var(--accent)' : 'var(--border)'};background:${!isPeriod ? 'var(--accent-dim)' : 'transparent'};color:${!isPeriod ? 'var(--accent)' : 'var(--text3)'};">Day</button>
         <button onclick="renderMMDayPanel('period')" style="padding:4px 10px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${isPeriod ? 'var(--accent)' : 'var(--border)'};background:${isPeriod ? 'var(--accent-dim)' : 'transparent'};color:${isPeriod ? 'var(--accent)' : 'var(--text3)'};">${periodLabel}</button>
+        <button onclick="closeMMDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
       </div>
     </div>
     ${rows}
@@ -32347,7 +32374,7 @@ function dismissInsight() {
   <div style="padding:0 20px 20px;">
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;" id="drillChartScrollWrap">
       <div id="drillChartInner" style="height:200px;">
-        <canvas id="drillChart" style="height:200px;"></canvas>
+        <canvas id="drillChart" style="height:200px;touch-action:pan-x pan-y;"></canvas>
       </div>
     </div>
   </div>
