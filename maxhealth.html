@@ -3397,6 +3397,7 @@
           <div id="chartStyleToggle_chartKetosis"></div>
         </div>
         <div class="trend-canvas-wrap"><canvas id="chartKetosis"></canvas></div>
+        <div id="chartKetosisHeatmap" style="display:none;"></div>
         <div id="mcKetosisGauge"></div>
       </div>
     </div>
@@ -4600,7 +4601,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.598</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.600</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5445,7 +5446,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.598'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.600'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24295,6 +24296,19 @@ function switchSubTab(parent, tab, el) {
         ['set-labelread',     'set-labelread-wrap',     'set-labelread-icon',     true],
         ['set-logmutation',   'set-logmutation-wrap',   'set-logmutation-icon',   true],
         ['set-savedebug',     'set-savedebug-wrap',     'set-savedebug-icon',     true],
+        // Found via a direct user report (Symptom Tracking left open despite
+        // being explicitly closed last visit) - prompted re-auditing this
+        // whole list against every real toggleSection() call in the app
+        // rather than trusting the two prior "full audit sweep" passes above
+        // had actually caught everything. They hadn't: these 5 were still
+        // missing, including 4 of the 5 Advanced Tools debug sections that
+        // got explicit sibling entries added in the second sweep but were
+        // themselves skipped.
+        ['set-symptoms',      'symptomSettingsContent', 'set-symptoms-icon',      true],
+        ['set-idletimeout',   'set-idletimeout-wrap',   'set-idletimeout-icon',   true],
+        ['set-bodycompdebug', 'set-bodycompdebug-wrap', 'set-bodycompdebug-icon', true],
+        ['set-healthcheck',   'set-healthcheck-wrap',   'set-healthcheck-icon',   true],
+        ['set-rollover',      'set-rollover-wrap',      'set-rollover-icon',      true],
       ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
       setTimeout(() => makeContainerReorderable(document.getElementById('view-manage'), 'manage'), 100);
     }
@@ -24893,13 +24907,15 @@ function applyChartStyle(datasetBase, style) {
 }
 
 // Small always-visible 📈/📊/• row, same visual language as the ▲▼👁
-// reorder/hide controls added alongside it. Renders inert (no picker) when
-// only ever called with a metric that genuinely can't take another shape -
-// none currently, but kept as an explicit hook rather than assuming every
-// future card can.
-function renderChartStyleToggle(storageKey, metricKey, rerenderFnName) {
+// reorder/hide controls added alongside it. `extraOpts` lets a specific
+// tile add its own special view (a donut, a heatmap) onto the SAME row
+// rather than as a separate always-visible block - one tile, one chart
+// area, switchable. Renders inert (no picker) when only ever called with
+// a metric that genuinely can't take another shape - none currently, but
+// kept as an explicit hook rather than assuming every future card can.
+function renderChartStyleToggle(storageKey, metricKey, rerenderFnName, extraOpts) {
   const current = getChartStyle(storageKey, metricKey, 'line');
-  const opts = [['line', '📈'], ['bar', '📊'], ['point', '•']];
+  const opts = [['line', '📈'], ['bar', '📊'], ['point', '•'], ...(extraOpts || [])];
   return `<div style="display:flex;gap:2px;" onclick="event.stopPropagation();">
     ${opts.map(([style, icon]) => `<button onclick='setChartStyleAndRerender(${JSON.stringify(storageKey)},${JSON.stringify(metricKey)},${JSON.stringify(style)},${JSON.stringify(rerenderFnName)})' title="${style}" style="background:${current === style ? 'var(--accent-dim)' : 'none'};border:1px solid ${current === style ? 'var(--accent)' : 'var(--border)'};border-radius:6px;color:${current === style ? 'var(--accent)' : 'var(--text3)'};font-size:11px;padding:2px 7px;cursor:pointer;touch-action:manipulation;line-height:1.4;">${icon}</button>`).join('')}
   </div>`;
@@ -24908,6 +24924,50 @@ function setChartStyleAndRerender(storageKey, metricKey, style, rerenderFnName) 
   setChartStyle(storageKey, metricKey, style);
   if (rerenderFnName === 'renderTrends') renderTrends();
   else if (rerenderFnName === 'renderMMChart') renderMMChart();
+}
+
+// GitHub-contributions-style calendar heatmap - one column per week, 7 rows
+// (Mon-Sun), plain SVG rather than Chart.js since this isn't really a
+// "chart" in the axis/scale sense. Horizontally scrollable for a long
+// history, same pattern as the line/bar/point charts elsewhere. points
+// must be [{date:'dd/mm/yy', val}] - val's meaning and colour come from
+// colorFn, so this one function serves ketosis (0/1/null) today and any
+// other day-scored metric later without changes here.
+function renderCalendarHeatmap(containerId, points, colorFn, legendItems) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!points.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:12px 0;">Not enough data yet.</div>'; return; }
+  const parsed = points.map(p => {
+    const [d, m, y] = p.date.split('/').map(Number);
+    return { date: new Date(2000 + y, m - 1, d), val: p.val };
+  }).sort((a, b) => a.date - b.date);
+  const first = parsed[0].date, last = parsed[parsed.length - 1].date;
+  const start = new Date(first);
+  const dow = (start.getDay() + 6) % 7; // 0=Mon..6=Sun
+  start.setDate(start.getDate() - dow);
+  const byIso = {}; parsed.forEach(p => { byIso[p.date.toISOString().slice(0, 10)] = p.val; });
+  const totalDays = Math.round((last - start) / 86400000) + 1;
+  const totalWeeks = Math.ceil(totalDays / 7);
+  const cellSize = 11, gap = 3;
+  let svg = '';
+  for (let w = 0; w < totalWeeks; w++) {
+    for (let d = 0; d < 7; d++) {
+      const cellDate = new Date(start); cellDate.setDate(cellDate.getDate() + w * 7 + d);
+      if (cellDate > last) continue;
+      const iso = cellDate.toISOString().slice(0, 10);
+      const val = byIso[iso];
+      const color = colorFn(val);
+      const x = w * (cellSize + gap), y = d * (cellSize + gap);
+      svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" fill="${color}"><title>${iso}</title></rect>`;
+    }
+  }
+  const width = totalWeeks * (cellSize + gap), height = 7 * (cellSize + gap);
+  el.innerHTML = `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 0;">
+      <svg width="${width}" height="${height}" style="display:block;">${svg}</svg>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--text3);">
+      ${legendItems.map(([label, color]) => `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:${color};display:inline-block;"></span>${label}</span>`).join('')}
+    </div>`;
 }
 
 // kg vs % toggle for Bone Mass and Hydration - the two body-comp metrics
@@ -24930,7 +24990,14 @@ function setBodyCompUnit(metricKey, unit) {
   try { stored = JSON.parse(localStorage.getItem(BODYCOMP_UNIT_KEY) || '{}'); } catch(e) {}
   stored[metricKey] = unit;
   localStorage.setItem(BODYCOMP_UNIT_KEY, JSON.stringify(stored));
-  renderTrends();
+  // Compare Metrics is a modal sitting on top of Trends, not the same DOM -
+  // toggling from inside it needs its own chart re-rendered directly, or
+  // the visible screen would keep showing the old unit until closed and
+  // reopened. Refresh whichever is actually open; harmless to call both,
+  // since each function no-ops cleanly if its own container isn't present.
+  const mmOpen = document.getElementById('multiMetricOverlay')?.style.display === 'block';
+  if (mmOpen) renderMMChart();
+  else renderTrends();
 }
 function renderBodyCompUnitToggle(metricKey) {
   const current = getBodyCompUnit(metricKey);
@@ -25323,7 +25390,7 @@ function renderPatternsCard() {
       const nextDateStr = `${String(nd.getDate()).padStart(2,'0')}/${String(nd.getMonth()+1).padStart(2,'0')}/${String(nd.getFullYear()).slice(2)}`;
       const nextDay = byDate[nextDateStr];
       if (!nextDay) return;
-      pairs.push({ sleptWell: d.sleep_duration >= medianDur, nextInCeiling: (nextDay.totals.carbs || 0) <= carbCeilFor(nextDay) });
+      pairs.push({ sleptWell: d.sleep_duration >= medianDur, nextInCeiling: (nextDay.totals.carbs || 0) <= carbCeilFor(nextDay), sleepHrs: Math.round(d.sleep_duration/60*10)/10, nextCarbs: nextDay.totals.carbs || 0 });
     });
     const wellGroup = pairs.filter(p => p.sleptWell);
     const poorGroup = pairs.filter(p => !p.sleptWell);
@@ -25332,7 +25399,10 @@ function renderPatternsCard() {
     const poorPct = Math.round(poorGroup.filter(p => p.nextInCeiling).length / poorGroup.length * 100);
     if (Math.abs(wellPct - poorPct) < 15) return; // not a meaningful enough difference to be worth mentioning
     const medianHrs = Math.round(medianDur / 60 * 10) / 10;
-    findings.push(`After a night of ${medianHrs}h+ sleep, you stayed within your carb ceiling the next day <strong>${wellPct}%</strong> of the time (${wellGroup.length} nights) — after shorter sleep, <strong>${poorPct}%</strong> (${poorGroup.length} nights).`);
+    findings.push({
+      text: `After a night of ${medianHrs}h+ sleep, you stayed within your carb ceiling the next day <strong>${wellPct}%</strong> of the time (${wellGroup.length} nights) — after shorter sleep, <strong>${poorPct}%</strong> (${poorGroup.length} nights).`,
+      scatter: { points: pairs.map(p => ({ x: p.sleepHrs, y: p.nextCarbs, inCeiling: p.nextInCeiling })), xLabel: 'Sleep that night (hrs)', yLabel: 'Next day carbs (g)' }
+    });
   })();
 
   // 2. Activity level (same day) → protein target hit that day.
@@ -25347,10 +25417,16 @@ function renderPatternsCard() {
     const hitRate = arr => Math.round(arr.filter(d => (d.totals.protein || 0) >= protTargetFor(d)).length / arr.length * 100);
     const highPct = hitRate(highGroup), lowPct = hitRate(lowGroup);
     if (Math.abs(highPct - lowPct) < 15) return;
-    findings.push(`On your more active days (${medianSteps.toLocaleString()}+ steps), you hit your protein target <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on lower-activity days, <strong>${lowPct}%</strong> (${lowGroup.length} days).`);
+    findings.push({
+      text: `On your more active days (${medianSteps.toLocaleString()}+ steps), you hit your protein target <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on lower-activity days, <strong>${lowPct}%</strong> (${lowGroup.length} days).`,
+      scatter: { points: stepDays.map(d => ({ x: d.steps, y: d.totals.protein || 0, inCeiling: (d.totals.protein||0) >= protTargetFor(d) })), xLabel: 'Steps', yLabel: 'Protein (g)' }
+    });
   })();
 
-  // 3. Weekend vs weekday carb ceiling adherence.
+  // 3. Weekend vs weekday carb ceiling adherence. No scatter here
+  // deliberately - weekend/weekday is a category split, not a continuous
+  // x-axis, so a scatter plot wouldn't actually represent this comparison
+  // honestly (there'd be nothing meaningful on the x-axis to plot against).
   (function weekendVsWeekday() {
     const dayOfWeek = d => { const [dd, mm, yy] = d.date.split('/').map(Number); return new Date(2000 + yy, mm - 1, dd).getDay(); };
     const weekend = days.filter(d => [0, 6].includes(dayOfWeek(d)));
@@ -25359,7 +25435,7 @@ function renderPatternsCard() {
     const inCeilRate = arr => Math.round(arr.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d)).length / arr.length * 100);
     const wePct = inCeilRate(weekend), wdPct = inCeilRate(weekday);
     if (Math.abs(wePct - wdPct) < 15) return;
-    findings.push(`Weekends: within your carb ceiling <strong>${wePct}%</strong> of days (${weekend.length} logged) — weekdays: <strong>${wdPct}%</strong> (${weekday.length} logged).`);
+    findings.push({ text: `Weekends: within your carb ceiling <strong>${wePct}%</strong> of days (${weekend.length} logged) — weekdays: <strong>${wdPct}%</strong> (${weekday.length} logged).` });
   })();
 
   // 4. Symptom score (same day) → carb ceiling adherence that day. Loops
@@ -25381,7 +25457,10 @@ function renderPatternsCard() {
       const inCeilRate = arr => Math.round(arr.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d)).length / arr.length * 100);
       const highPct = inCeilRate(highGroup), lowPct = inCeilRate(lowGroup);
       if (Math.abs(highPct - lowPct) < 15) return;
-      findings.push(`On days you rated <strong>${symp.name}</strong> 4-5, you stayed within your carb ceiling <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on days rated 1-2, <strong>${lowPct}%</strong> (${lowGroup.length} days).`);
+      findings.push({
+        text: `On days you rated <strong>${symp.name}</strong> 4-5, you stayed within your carb ceiling <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on days rated 1-2, <strong>${lowPct}%</strong> (${lowGroup.length} days).`,
+        scatter: { points: scored.map(d => ({ x: d.symptoms[symp.id], y: d.totals.carbs || 0, inCeiling: (d.totals.carbs||0) <= carbCeilFor(d) })), xLabel: `${symp.name} score (1-5)`, yLabel: 'Carbs (g)' }
+      });
     });
   })();
 
@@ -25417,7 +25496,53 @@ function renderPatternsCard() {
     return;
   }
   card.style.display = 'block';
-  content.innerHTML = findings.map(f => `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${f}</div>`).join('');
+  // Each finding with real x/y data gets a small 📊 toggle to reveal the
+  // actual scatter underneath - closed by default, since the prose finding
+  // is the headline and the scatter is supporting evidence, not the other
+  // way round. Category-only findings (weekend/weekday) get no toggle at
+  // all rather than a disabled one, since there's genuinely nothing to plot.
+  content.innerHTML = findings.map((f, i) => {
+    const scatterToggle = f.scatter
+      ? `<button onclick="togglePatternScatter(${i})" id="patternScatterBtn${i}" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:10px;padding:2px 8px;cursor:pointer;touch-action:manipulation;margin-top:6px;">📊 Show data</button>
+         <div id="patternScatter${i}" style="display:none;height:180px;margin-top:8px;"><canvas id="patternScatterCanvas${i}"></canvas></div>`
+      : '';
+    return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border);">${f.text}${scatterToggle}</div>`;
+  }).join('');
+  window._patternFindings = findings; // read by togglePatternScatter below - only built the once per render, not recomputed per click
+}
+
+// Lazily builds the scatter chart the first time its finding is expanded,
+// rather than rendering all of them upfront - most people won't open every
+// single one, and Chart.js instances aren't free.
+const _patternScatterCharts = {};
+function togglePatternScatter(i) {
+  const wrap = document.getElementById('patternScatter' + i);
+  const btn = document.getElementById('patternScatterBtn' + i);
+  if (!wrap) return;
+  const showing = wrap.style.display !== 'none';
+  wrap.style.display = showing ? 'none' : 'block';
+  if (btn) btn.textContent = showing ? '📊 Show data' : '📊 Hide data';
+  if (showing) return;
+  const finding = window._patternFindings?.[i];
+  if (!finding?.scatter) return;
+  if (_patternScatterCharts[i]) { _patternScatterCharts[i].destroy(); }
+  const { points, xLabel, yLabel } = finding.scatter;
+  _patternScatterCharts[i] = new Chart(document.getElementById('patternScatterCanvas' + i), {
+    type: 'scatter',
+    data: { datasets: [{
+      data: points.map(p => ({ x: p.x, y: p.y })),
+      backgroundColor: points.map(p => p.inCeiling ? 'rgba(45,235,143,0.7)' : 'rgba(255,94,94,0.7)'),
+      pointRadius: 4,
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false, mhTodayHighlight: false, mhDataLabels: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { title: { display: true, text: xLabel, color: '#8b90a0', font: { size: 9 } }, ticks: { color: '#555a6a', font: { size: 9 } }, grid: { color: '#1a1d23' } },
+        y: { title: { display: true, text: yLabel, color: '#8b90a0', font: { size: 9 } }, ticks: { color: '#555a6a', font: { size: 9 } }, grid: { color: '#1a1d23' } }
+      }
+    }
+  });
 }
 
 // Extracted verbatim from renderTrends — fully self-contained, only reads
@@ -25739,12 +25864,12 @@ function renderTrends() {
     if (sleepGaugeEl) sleepGaugeEl.innerHTML = renderThresholdGauge(Math.round(avgSleep*10)/10, getDrillConfig('sleep').ref, 'h', '#a78bfa');
     // Sleep stage timeline for most recent night
     const latest = data[data.length-1];
+    const light = latest.sleep_light || 0;
+    const deep  = latest.sleep_deep  || 0;
+    const rem   = latest.sleep_rem   || 0;
+    const wake  = latest.sleep_wake  || 0;
     const tl = document.getElementById('sleepTimeline');
     if (tl) {
-      const light = latest.sleep_light || 0;
-      const deep  = latest.sleep_deep  || 0;
-      const rem   = latest.sleep_rem   || 0;
-      const wake  = latest.sleep_wake  || 0;
       const total = light + deep + rem + wake;
       if (total > 0) {
         tl.innerHTML = [
@@ -25762,6 +25887,19 @@ function renderTrends() {
     // over a stacked y-axis they were never designed for.
     const sleepStyle = getChartStyle(CHART_STYLE_KEY, 'sleep', 'bar');
     const sleepStacked = sleepStyle === 'bar';
+    if (sleepStyle === 'donut') {
+      // Most recent night's actual split, not an average across the period -
+      // the bar-over-time above already shows how composition changes day
+      // to day; this answers a different question ("how did I sleep last
+      // night specifically"), reusing the same light/deep/rem/wake values
+      // already computed for the timeline bar just above.
+      chartInstances['chartSleep'] = new Chart(document.getElementById('chartSleep'), {
+        type: 'doughnut',
+        data: { labels: ['Light', 'Deep', 'REM', 'Awake'], datasets: [{ data: [light, deep, rem, wake], backgroundColor: ['#4c6ef5', '#7048e8', '#34d399', 'rgba(200,200,210,0.5)'], borderWidth: 0 }]},
+        options: { responsive: true, maintainAspectRatio: false, mhTodayHighlight: false, mhDataLabels: false,
+          plugins: { legend: { display: true, position: 'bottom', labels: { color: '#8b90a0', font: { size: 9 }, padding: 8, boxWidth: 8 } } } }
+      });
+    } else {
     chartInstances['chartSleep'] = new Chart(document.getElementById('chartSleep'), {
       type:'bar', data:{ labels, datasets:[
         applyChartStyle({ label:'Light', data:data.map(d=>d.sleep_light||null), backgroundColor:'rgba(76,110,245,0.7)', borderColor:'#4c6ef5', borderRadius:2, fill:false }, sleepStyle),
@@ -25773,8 +25911,9 @@ function renderTrends() {
         plugins:{ ...CHART_DEFAULTS.plugins, legend:{ display:true, position:'bottom', labels:{ color:'#8b90a0', font:{size:9}, padding:8, boxWidth:8 }}}
       }
     });
+    }
     const st = document.getElementById('chartStyleToggle_mcSleep');
-    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'sleep', 'renderTrends');
+    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'sleep', 'renderTrends', [['donut','🍩']]);
     }
   }
 
@@ -25796,14 +25935,38 @@ function renderTrends() {
     if (document.getElementById('chartCal')) {
     destroyChart('chartCal');
     const calStyle = getChartStyle(CHART_STYLE_KEY, 'calories', 'line');
+    if (calStyle === 'donut') {
+      // Average macro split as % of calories for the whole selected period,
+      // not just the latest day - the same period this card's other stats
+      // (avg/min/max) already summarise. Uses getEntryFat() (the same
+      // real-vs-derived fallback used everywhere else fat is shown) rather
+      // than reading totals.fat directly, so a day missing a stored fat
+      // value doesn't just drop out of the average.
+      const macroDays = data.filter(d => (d.totals?.kcal || 0) > 0);
+      const avgProteinG = macroDays.length ? avg(macroDays.map(d => d.totals?.protein || 0)) : 0;
+      const avgCarbsG = macroDays.length ? avg(macroDays.map(d => d.totals?.carbs || 0)) : 0;
+      const avgFatG = macroDays.length ? avg(macroDays.map(d => getEntryFat(d))) : 0;
+      chartInstances['chartCal'] = new Chart(document.getElementById('chartCal'), {
+        type: 'doughnut',
+        data: { labels: ['Protein', 'Carbs', 'Fat'], datasets: [{ data: [avgProteinG*4, avgCarbsG*4, avgFatG*9], backgroundColor: ['#2deb8f', '#f5c542', '#ff9f45'], borderWidth: 0 }]},
+        options: { responsive: true, maintainAspectRatio: false, mhTodayHighlight: false, mhDataLabels: false,
+          plugins: { legend: { display: true, position: 'bottom', labels: { color: '#8b90a0', font: { size: 9 }, padding: 8, boxWidth: 8 } },
+            tooltip: { callbacks: { label: ctx => {
+              const grams = ctx.label === 'Protein' ? avgProteinG : ctx.label === 'Carbs' ? avgCarbsG : avgFatG;
+              return `${ctx.label}: ${Math.round(grams)}g avg`;
+            } } } }
+        }
+      });
+    } else {
     chartInstances['chartCal'] = new Chart(document.getElementById('chartCal'), {
       type:'line', data:{ labels, datasets:[
         applyChartStyle({ label:'Calories', data:calVals, borderColor:'#4d9fff', backgroundColor:'rgba(77,159,255,0.08)', borderWidth:2, fill:calStyle==='line', tension:0.3, pointRadius:0 }, calStyle),
         { label:'Target', data:Array(calVals.length).fill(tgt), borderColor:'rgba(77,159,255,0.3)', borderWidth:1, borderDash:[4,3], pointRadius:0, fill:false }
       ]}, options:{ ...CHART_DEFAULTS }
     });
+    }
     const st = document.getElementById('chartStyleToggle_mcCal');
-    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'calories', 'renderTrends');
+    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'calories', 'renderTrends', [['donut','🍩']]);
     }
   }
 
@@ -25882,12 +26045,37 @@ function renderTrends() {
     if (document.getElementById('chartKetosis')) {
     destroyChart('chartKetosis');
     const ketosisStyle = getChartStyle(CHART_STYLE_KEY, 'ketosis', 'bar');
-    chartInstances['chartKetosis'] = new Chart(document.getElementById('chartKetosis'), {
-      type:'bar', data:{ labels, datasets:[applyChartStyle({ label:'In ceiling', data:ketosisVals, backgroundColor:ketosisVals.map(v=>v===1?'rgba(45,235,143,0.6)':v===0?'rgba(255,94,94,0.6)':'rgba(255,255,255,0.05)'), borderColor:'#2deb8f', borderRadius:3 }, ketosisStyle)]},
-      options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales?.y, min:0, max:1, ticks:{ ...CHART_DEFAULTS.scales?.y?.ticks, stepSize:1, callback:v=>v===1?'✓':v===0?'✗':'' } } } }
-    });
+    const ketosisCanvasWrap = document.getElementById('chartKetosis').closest('.trend-canvas-wrap');
+    const ketosisHeatmapEl = document.getElementById('chartKetosisHeatmap');
+    if (ketosisStyle === 'heatmap') {
+      if (ketosisCanvasWrap) ketosisCanvasWrap.style.display = 'none';
+      if (ketosisHeatmapEl) ketosisHeatmapEl.style.display = 'block';
+      const heatPointsReal = data.map((d, i) => ({ date: d.date, val: ketosisVals[i] }));
+      renderCalendarHeatmap('chartKetosisHeatmap', heatPointsReal, v =>
+        v === 1 ? '#2deb8f' : v === 0 ? '#ff5e5e' : 'rgba(255,255,255,0.06)',
+        [['In ceiling', '#2deb8f'], ['Over ceiling', '#ff5e5e'], ['No data', 'rgba(255,255,255,0.15)']]
+      );
+    } else if (ketosisStyle === 'donut') {
+      if (ketosisCanvasWrap) ketosisCanvasWrap.style.display = 'block';
+      if (ketosisHeatmapEl) ketosisHeatmapEl.style.display = 'none';
+      const inCount = ketosisVals.filter(v => v === 1).length;
+      const overCount = ketosisVals.filter(v => v === 0).length;
+      chartInstances['chartKetosis'] = new Chart(document.getElementById('chartKetosis'), {
+        type: 'doughnut',
+        data: { labels: ['In ceiling', 'Over ceiling'], datasets: [{ data: [inCount, overCount], backgroundColor: ['#2deb8f', '#ff5e5e'], borderWidth: 0 }]},
+        options: { responsive: true, maintainAspectRatio: false, mhTodayHighlight: false, mhDataLabels: false,
+          plugins: { legend: { display: true, position: 'bottom', labels: { color: '#8b90a0', font: { size: 9 }, padding: 8, boxWidth: 8 } } } }
+      });
+    } else {
+      if (ketosisCanvasWrap) ketosisCanvasWrap.style.display = 'block';
+      if (ketosisHeatmapEl) ketosisHeatmapEl.style.display = 'none';
+      chartInstances['chartKetosis'] = new Chart(document.getElementById('chartKetosis'), {
+        type:'bar', data:{ labels, datasets:[applyChartStyle({ label:'In ceiling', data:ketosisVals, backgroundColor:ketosisVals.map(v=>v===1?'rgba(45,235,143,0.6)':v===0?'rgba(255,94,94,0.6)':'rgba(255,255,255,0.05)'), borderColor:'#2deb8f', borderRadius:3 }, ketosisStyle)]},
+        options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales?.y, min:0, max:1, ticks:{ ...CHART_DEFAULTS.scales?.y?.ticks, stepSize:1, callback:v=>v===1?'✓':v===0?'✗':'' } } } }
+      });
+    }
     const st = document.getElementById('chartStyleToggle_chartKetosis');
-    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'ketosis', 'renderTrends');
+    if (st) st.innerHTML = renderChartStyleToggle(CHART_STYLE_KEY, 'ketosis', 'renderTrends', [['donut','🍩'],['heatmap','📆']]);
     }
     const ketosisRealVals = ketosisVals.filter(v => v != null);
     const ketosisAdherencePct = ketosisRealVals.length ? Math.round(ketosisRealVals.filter(v => v === 1).length / ketosisRealVals.length * 100) : null;
@@ -26583,7 +26771,19 @@ function renderMMChart() {
         : days;
       return { metric: m, points: filtered.map(d => ({ date: d.date, val: d.symptoms[m.symptomId] })) };
     }
-    return { metric: m, points: getDrillData(m.key, _mmPeriod).map(d => ({ date: d.date, val: d.val })) };
+    // Bone Mass and Hydration are the two metrics with the same kg-vs-%
+    // ambiguity the Trends cards have (Withings gives no separate stored
+    // % column for these two, unlike fat/muscle) - reuses the SAME
+    // mh_bodycomp_unit preference as those cards, deliberately, so the two
+    // screens never disagree about which unit "bone mass" means right now.
+    const rawPoints = getDrillData(m.key, _mmPeriod);
+    if (['bone_mass', 'hydration'].includes(m.key) && getBodyCompUnit(m.key) === 'pct') {
+      const pctPoints = rawPoints
+        .map(d => ({ date: d.date, val: (d.raw?.weight && d.val != null) ? Math.round(d.val / d.raw.weight * 1000) / 10 : null }))
+        .filter(d => d.val != null);
+      return { metric: { ...m, unit: '%' }, points: pctPoints };
+    }
+    return { metric: m, points: rawPoints.map(d => ({ date: d.date, val: d.val })) };
   });
 
   const allDates = [...new Set(perMetricData.flatMap(pm => pm.points.map(p => p.date)))];
@@ -27009,6 +27209,14 @@ function renderMMLegend(perMetricData, rangeInfoByKey) {
       const rangeText = info.min === info.max
         ? 'unchanged'
         : `${info.min}–${info.max}${pm.metric.unit}${info.isLowVariance ? ' · stable' : ''}`;
+      // kg/% toggle only for the two metrics that actually have the
+      // ambiguity - shows alongside the chart-style toggle, not instead of
+      // it, since they control different things (style is per-screen via
+      // MM_CHART_STYLE_KEY; unit is the shared mh_bodycomp_unit preference
+      // also used by the Trends cards, so both screens always agree).
+      const unitToggle = ['bone_mass', 'hydration'].includes(pm.metric.key)
+        ? `<div style="margin-top:6px;">${renderBodyCompUnitToggle(pm.metric.key)}</div>`
+        : '';
       return `<div style="background:var(--surface2);border:1px solid ${pm.metric.color}33;border-left:3px solid ${pm.metric.color};border-radius:var(--radius-sm);padding:10px 12px;">
         <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;">
           <span>${icon}</span><span style="font-weight:600;">${pm.metric.title}</span>${controls}
@@ -27016,6 +27224,7 @@ function renderMMLegend(perMetricData, rangeInfoByKey) {
         <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${pm.metric.color};line-height:1.1;">${recent ? recent.val + pm.metric.unit : '—'}</div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px;">${rangeText}</div>
         <div style="margin-top:6px;">${renderChartStyleToggle(MM_CHART_STYLE_KEY, pm.metric.key, 'renderMMChart')}</div>
+        ${unitToggle}
       </div>`;
     }).join('');
 
