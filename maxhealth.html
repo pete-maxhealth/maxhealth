@@ -4604,7 +4604,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.607</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.609</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5449,7 +5449,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.607'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.609'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -24934,10 +24934,27 @@ function applyChartStyle(datasetBase, style) {
 function renderChartStyleToggle(storageKey, metricKey, rerenderFnName, extraOpts) {
   const current = getChartStyle(storageKey, metricKey, 'line');
   const opts = [['line', '📈'], ['bar', '📊'], ['point', '•'], ...(extraOpts || [])];
+  // data-* attributes + one delegated listener (see boot-time setup below),
+  // not inline onclick with embedded JSON.stringify values - this is the
+  // second time an inline handler holding a dynamic string has produced a
+  // real parse error in production (the first was the apostrophe in
+  // askAboutMMSelection's question text). data-* attributes can't break an
+  // attribute boundary regardless of what characters end up in them, so
+  // this closes the whole bug class here rather than fixing one more
+  // instance of it.
   return `<div style="display:flex;gap:2px;" onclick="event.stopPropagation();">
-    ${opts.map(([style, icon]) => `<button onclick='setChartStyleAndRerender(${JSON.stringify(storageKey)},${JSON.stringify(metricKey)},${JSON.stringify(style)},${JSON.stringify(rerenderFnName)})' title="${style}" style="background:${current === style ? 'var(--accent-dim)' : 'none'};border:1px solid ${current === style ? 'var(--accent)' : 'var(--border)'};border-radius:6px;color:${current === style ? 'var(--accent)' : 'var(--text3)'};font-size:11px;padding:2px 7px;cursor:pointer;touch-action:manipulation;line-height:1.4;">${icon}</button>`).join('')}
+    ${opts.map(([style, icon]) => `<button class="mh-chart-style-btn" data-storage-key="${storageKey}" data-metric-key="${metricKey}" data-style="${style}" data-rerender="${rerenderFnName}" title="${style}" style="background:${current === style ? 'var(--accent-dim)' : 'none'};border:1px solid ${current === style ? 'var(--accent)' : 'var(--border)'};border-radius:6px;color:${current === style ? 'var(--accent)' : 'var(--text3)'};font-size:11px;padding:2px 7px;cursor:pointer;touch-action:manipulation;line-height:1.4;">${icon}</button>`).join('')}
   </div>`;
 }
+// One delegated listener for every chart-style button, attached once at
+// boot - survives every re-render naturally (renderTrends/renderMMChart
+// replace the buttons' innerHTML constantly, but delegation only cares
+// about the stable document root, never the buttons themselves).
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mh-chart-style-btn');
+  if (!btn) return;
+  setChartStyleAndRerender(btn.dataset.storageKey, btn.dataset.metricKey, btn.dataset.style, btn.dataset.rerender);
+});
 function setChartStyleAndRerender(storageKey, metricKey, style, rerenderFnName) {
   setChartStyle(storageKey, metricKey, style);
   if (rerenderFnName === 'renderTrends') renderTrends();
@@ -25457,13 +25474,30 @@ function renderPatternsCard() {
   const earlyWarnings = [];
 
   (function calorieDrift() {
-    const series = state.history
-      .filter(d => (d.totals?.kcal || 0) >= 500) // excludes probable incomplete-logging days, same reasoning as the calorie-deficit check above
-      .map(d => ({ date: d.date, val: d.totals.kcal }));
+    // Runs on intake NET of that day's own logged exercise credit, not raw
+    // kcal - eating more on a day with more exercise logged isn't
+    // over-eating, it's the exact thing exercise credit exists to allow
+    // for (see getUnclaimedActivityCredit/Activity Credit Balance, which
+    // already does this same subtraction elsewhere). Checking raw kcal
+    // alone would flag genuinely justified higher-activity days as "over-
+    // eating" purely because they're also the days with more exercise
+    // logged - exactly the kind of false pattern this needs to avoid.
+    const kcalDays = state.history.filter(d => (d.totals?.kcal || 0) >= 500);
+    const series = kcalDays.map(d => {
+      const exerciseCredit = (d.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0);
+      return { date: d.date, val: d.totals.kcal - exerciseCredit, raw: d.totals.kcal, credit: exerciseCredit };
+    });
     const result = checkSPCBreach(series);
     if (!result) return;
     const label = result.direction === 'low' ? 'under-eating' : 'over-eating';
-    earlyWarnings.push(`<strong>Calories — possible ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${result.mean}kcal average, ±${result.sd}kcal day to day. Most recent: ${result.recentVals.join(', ')}kcal.`);
+    // Show the real (raw) kcal alongside what was actually checked, so
+    // the exercise-credit adjustment is genuinely verifiable, not a hidden
+    // subtraction someone has to just trust.
+    const evidenceDetail = result.recentDates.map((date, i) => {
+      const match = series.find(s => s.date === date);
+      return match?.credit > 0 ? `${match.raw}kcal (${match.credit} exercise credit)` : `${match?.raw ?? result.recentVals[i]}kcal`;
+    }).join(', ');
+    earlyWarnings.push(`<strong>Calories — possible ${label}:</strong> ${result.rule} (checked net of logged exercise credit, not raw intake). Your baseline (last ${result.baselineCount} logged days): ${result.mean}kcal average, ±${result.sd}kcal day to day, net of exercise credit. Most recent: ${evidenceDetail}.`);
   })();
 
   (function weightDrift() {
