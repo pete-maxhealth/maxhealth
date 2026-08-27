@@ -4603,7 +4603,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.612</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.614</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5448,7 +5448,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.612'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.614'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17316,7 +17316,7 @@ function showEODSummary(message, csvLine) {
     <div style="margin-top:12px;background:rgba(245,197,66,0.08);border:1px solid rgba(245,197,66,0.25);border-radius:var(--radius-sm);padding:10px 12px;">
       <div style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">💾 Back up your data</div>
       <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:8px;">Your data lives in Chrome's storage — if Chrome clears it, it's gone. Export regularly to keep it safe.</div>
-      <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';"
+      <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';this.disabled=true;setTimeout(()=>{this.textContent='📦 EXPORT ALL DATA';this.style.opacity='1';this.disabled=false;},2500);"
         style="width:100%;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);color:var(--yellow);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">
         📦 EXPORT ALL DATA
       </button>
@@ -17628,7 +17628,7 @@ function checkBackupReminder() {
   el.style.display = 'block';
   el.innerHTML = `<div style="position:relative;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);border-radius:10px;padding:12px 30px 12px 14px;margin-bottom:12px;font-size:12px;color:var(--yellow);line-height:1.6;">
     💾 <strong>Back up your data:</strong> ${msg}
-    <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';" style="display:block;width:100%;margin-top:8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.35);color:var(--yellow);border-radius:6px;padding:7px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">📦 Export now</button>
+    <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';this.disabled=true;setTimeout(()=>{document.getElementById('backupReminderBanner').style.display='none';},2500);" style="display:block;width:100%;margin-top:8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.35);color:var(--yellow);border-radius:6px;padding:7px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">📦 Export now</button>
     <span onclick="dismissWarning(this)" data-warning-key="${msg.replace(/"/g,'&quot;')}" data-rerender="checkBackupReminder" style="position:absolute;top:8px;right:10px;cursor:pointer;color:var(--yellow);opacity:0.6;font-size:16px;line-height:1;padding:4px;">×</span>
   </div>`;
 }
@@ -25685,6 +25685,139 @@ function renderPatternsCard() {
         text: `On days you rated <strong>${symp.name}</strong> 4-5, you stayed within your carb ceiling <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on days rated 1-2, <strong>${lowPct}%</strong> (${lowGroup.length} days).`,
         scatter: { points: scored.map(d => ({ x: d.symptoms[symp.id], y: d.totals.carbs || 0, inCeiling: (d.totals.carbs||0) <= carbCeilFor(d) })), xLabel: `${symp.name} score (1-5)`, yLabel: 'Carbs (g)' }
       });
+    });
+  })();
+
+  // 5. Fat intake → ketosis adherence. Not circular with the existing
+  // carb-ceiling checks - ketosis adherence is defined purely by carbs vs
+  // ceiling, fat plays no part in that definition, so a real association
+  // here (or its absence) is a genuine finding, not the same fact
+  // restated. Biologically the most directly relevant pairing missing
+  // before this - fat is the substitution fuel ketosis actually runs on.
+  (function fatVsKetosis() {
+    const fatDays = days.filter(d => (d.totals.carbs || 0) >= 0); // all logged days; fat itself may be derived (getEntryFat), not required stored
+    if (fatDays.length < MIN_GROUP * 2) return;
+    const sortedFat = [...fatDays.map(d => getEntryFat(d))].sort((a,b) => a-b);
+    const medianFat = sortedFat[Math.floor(sortedFat.length / 2)];
+    const highGroup = fatDays.filter(d => getEntryFat(d) >= medianFat);
+    const lowGroup = fatDays.filter(d => getEntryFat(d) < medianFat);
+    if (highGroup.length < MIN_GROUP || lowGroup.length < MIN_GROUP) return;
+    const inCeilRate = arr => Math.round(arr.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d)).length / arr.length * 100);
+    const highPct = inCeilRate(highGroup), lowPct = inCeilRate(lowGroup);
+    if (Math.abs(highPct - lowPct) < 15) return;
+    findings.push({
+      text: `On days with higher fat intake (${Math.round(medianFat)}g+), you stayed within your carb ceiling <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on lower-fat days, <strong>${lowPct}%</strong> (${lowGroup.length} days).`,
+      scatter: { points: fatDays.map(d => ({ x: getEntryFat(d), y: d.totals.carbs || 0, inCeiling: (d.totals.carbs||0) <= carbCeilFor(d) })), xLabel: 'Fat (g)', yLabel: 'Carbs (g)' }
+    });
+  })();
+
+  // 6/7. HRV ↔ ketosis adherence, both directions - genuinely different
+  // questions (does last night's recovery predict today's adherence, vs
+  // does staying in ketosis predict better recovery), not circular with
+  // each other despite using the same two variables.
+  (function hrvVsKetosis() {
+    const hrvDays = days.filter(d => d.hrv > 0);
+    if (hrvDays.length < MIN_GROUP * 2) return;
+    const sortedHrv = [...hrvDays.map(d => d.hrv)].sort((a,b) => a-b);
+    const medianHrv = sortedHrv[Math.floor(sortedHrv.length / 2)];
+    const highGroup = hrvDays.filter(d => d.hrv >= medianHrv);
+    const lowGroup = hrvDays.filter(d => d.hrv < medianHrv);
+    if (highGroup.length < MIN_GROUP || lowGroup.length < MIN_GROUP) return;
+    const inCeilRate = arr => Math.round(arr.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d)).length / arr.length * 100);
+    const highPct = inCeilRate(highGroup), lowPct = inCeilRate(lowGroup);
+    if (Math.abs(highPct - lowPct) < 15) return;
+    findings.push({
+      text: `On days your HRV was higher (${Math.round(medianHrv)}ms+), you stayed within your carb ceiling <strong>${highPct}%</strong> of the time (${highGroup.length} days) — on lower-HRV days, <strong>${lowPct}%</strong> (${lowGroup.length} days).`,
+      scatter: { points: hrvDays.map(d => ({ x: d.hrv, y: d.totals.carbs || 0, inCeiling: (d.totals.carbs||0) <= carbCeilFor(d) })), xLabel: 'HRV (ms)', yLabel: 'Carbs (g)' }
+    });
+  })();
+
+  (function ketosisVsHrv() {
+    const hrvDays = days.filter(d => d.hrv > 0);
+    if (hrvDays.length < MIN_GROUP * 2) return;
+    const inGroup = hrvDays.filter(d => (d.totals.carbs || 0) <= carbCeilFor(d));
+    const outGroup = hrvDays.filter(d => (d.totals.carbs || 0) > carbCeilFor(d));
+    if (inGroup.length < MIN_GROUP || outGroup.length < MIN_GROUP) return;
+    const avgHrv = arr => Math.round(arr.reduce((a,d) => a + d.hrv, 0) / arr.length);
+    const inHrv = avgHrv(inGroup), outHrv = avgHrv(outGroup);
+    if (Math.abs(inHrv - outHrv) < inHrv * 0.15) return; // same 15%-relative-difference bar as the percentage-based checks, applied to a continuous outcome instead
+    findings.push({
+      text: `On days you stayed within your carb ceiling, your HRV averaged <strong>${inHrv}ms</strong> (${inGroup.length} days) — on days you went over, <strong>${outHrv}ms</strong> (${outGroup.length} days).`,
+      scatter: { points: hrvDays.map(d => ({ x: (d.totals.carbs||0) <= carbCeilFor(d) ? 1 : 0, y: d.hrv, inCeiling: (d.totals.carbs||0) <= carbCeilFor(d) })), xLabel: 'In ceiling (1) / Over (0)', yLabel: 'HRV (ms)' }
+    });
+  })();
+
+  // 8. Protein target adherence → muscle % trend. Body composition moves
+  // far slower than daily nutrition, so a day-level median split (like
+  // every check above) doesn't fit here - muscle % barely changes day to
+  // day regardless of that single day's protein. Instead splits the whole
+  // tracked window in half and compares protein adherence RATE against
+  // muscle % CHANGE across each half - the only shape that actually
+  // matches how body composition responds to sustained intake, not a
+  // single day's number.
+  (function proteinVsMuscleTrend() {
+    const bodyComp = (typeof getFullBodyCompositionHistory === 'function' ? getFullBodyCompositionHistory() : [])
+      .filter(d => d.muscle_pct)
+      .map(d => ({ ...d, muscle_pct: parseFloat(d.muscle_pct) }));
+    if (bodyComp.length < 10) return; // needs real body-comp history spanning both halves, not just a couple of readings
+    const proteinDays = days.filter(d => (d.totals.protein || 0) >= 0)
+      .sort((a,b) => { const pa=a.date.split('/').map(Number), pb=b.date.split('/').map(Number); return new Date(2000+pa[2],pa[1]-1,pa[0]) - new Date(2000+pb[2],pb[1]-1,pb[0]); });
+    if (proteinDays.length < MIN_GROUP * 2) return;
+    const mid = Math.floor(proteinDays.length / 2);
+    const firstHalf = proteinDays.slice(0, mid), secondHalf = proteinDays.slice(mid);
+    const hitRate = arr => Math.round(arr.filter(d => (d.totals.protein||0) >= protTargetFor(d)).length / arr.length * 100);
+    const firstPct = hitRate(firstHalf), secondPct = hitRate(secondHalf);
+    if (Math.abs(secondPct - firstPct) < 15) return; // adherence itself needs to have genuinely shifted between halves for this comparison to mean anything
+    const bcSorted = [...bodyComp].sort((a,b) => new Date(a.isoDate) - new Date(b.isoDate));
+    const muscleChange = Math.round((bcSorted[bcSorted.length-1].muscle_pct - bcSorted[0].muscle_pct) * 10) / 10;
+    const direction = secondPct > firstPct ? 'improved' : 'dropped';
+    const muscleDirection = muscleChange > 0 ? 'up' : muscleChange < 0 ? 'down' : 'unchanged';
+    findings.push({
+      text: `Your protein target adherence ${direction} from <strong>${firstPct}%</strong> to <strong>${secondPct}%</strong> across your tracked history — over the same period, muscle % moved <strong>${muscleDirection}</strong> (${muscleChange > 0 ? '+' : ''}${muscleChange}%). Association only — many other things affect muscle % over a long period.`
+    });
+  })();
+
+  // 9. Hydration → HRV. Uses the same daily hydration_kg source as the
+  // Trends body-comp cards, cross-referenced against HRV for the first
+  // time anywhere in the app.
+  (function hydrationVsHrv() {
+    const bodyComp = (typeof getFullBodyCompositionHistory === 'function' ? getFullBodyCompositionHistory() : [])
+      .filter(d => d.hydration_kg).map(d => ({ date: d.date, hydration: parseFloat(d.hydration_kg) }));
+    if (bodyComp.length < MIN_GROUP * 2) return;
+    const byDate2 = {}; days.forEach(d => { if (d.hrv > 0) byDate2[d.date] = d.hrv; });
+    const paired = bodyComp.filter(d => byDate2[d.date] != null).map(d => ({ hydration: d.hydration, hrv: byDate2[d.date] }));
+    if (paired.length < MIN_GROUP * 2) return;
+    const sortedHyd = [...paired.map(d => d.hydration)].sort((a,b) => a-b);
+    const medianHyd = sortedHyd[Math.floor(sortedHyd.length / 2)];
+    const highGroup = paired.filter(d => d.hydration >= medianHyd);
+    const lowGroup = paired.filter(d => d.hydration < medianHyd);
+    if (highGroup.length < MIN_GROUP || lowGroup.length < MIN_GROUP) return;
+    const avgHrv2 = arr => Math.round(arr.reduce((a,d) => a + d.hrv, 0) / arr.length);
+    const highHrv = avgHrv2(highGroup), lowHrv = avgHrv2(lowGroup);
+    if (Math.abs(highHrv - lowHrv) < highHrv * 0.15) return;
+    findings.push({
+      text: `On days with higher hydration (${Math.round(medianHyd*10)/10}kg+), your HRV averaged <strong>${highHrv}ms</strong> (${highGroup.length} days) — on lower-hydration days, <strong>${lowHrv}ms</strong> (${lowGroup.length} days).`,
+      scatter: { points: paired.map(d => ({ x: d.hydration, y: d.hrv, inCeiling: d.hydration >= medianHyd })), xLabel: 'Hydration (kg)', yLabel: 'HRV (ms)' }
+    });
+  })();
+
+  // 10. SpO2 → same-night sleep duration. Same-night pairing (not next-
+  // day), since SpO2 during sleep is what's actually plausibly linked to
+  // that night's own sleep quality, not the following day.
+  (function spo2VsSleep() {
+    const spo2Days = days.filter(d => d.spo2 > 0 && d.sleep_duration > 0);
+    if (spo2Days.length < MIN_GROUP * 2) return;
+    const sortedSpo2 = [...spo2Days.map(d => d.spo2)].sort((a,b) => a-b);
+    const medianSpo2 = sortedSpo2[Math.floor(sortedSpo2.length / 2)];
+    const highGroup = spo2Days.filter(d => d.spo2 >= medianSpo2);
+    const lowGroup = spo2Days.filter(d => d.spo2 < medianSpo2);
+    if (highGroup.length < MIN_GROUP || lowGroup.length < MIN_GROUP) return;
+    const avgSleepHrs = arr => Math.round(arr.reduce((a,d) => a + d.sleep_duration, 0) / arr.length / 60 * 10) / 10;
+    const highSleep = avgSleepHrs(highGroup), lowSleep = avgSleepHrs(lowGroup);
+    if (Math.abs(highSleep - lowSleep) < highSleep * 0.15) return;
+    findings.push({
+      text: `On nights with higher SpO2 (${medianSpo2}%+), you slept <strong>${highSleep}h</strong> on average (${highGroup.length} nights) — on lower-SpO2 nights, <strong>${lowSleep}h</strong> (${lowGroup.length} nights).`,
+      scatter: { points: spo2Days.map(d => ({ x: d.spo2, y: Math.round(d.sleep_duration/60*10)/10, inCeiling: d.spo2 >= medianSpo2 })), xLabel: 'SpO2 (%)', yLabel: 'Sleep (hrs)' }
     });
   })();
 
