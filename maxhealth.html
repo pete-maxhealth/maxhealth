@@ -4520,7 +4520,7 @@
     </div>
     </div>
 
-    <div class="section-title" id="title-set-notifications" style="cursor:pointer;" onclick="toggleSection('set-notifications','set-notifications-wrap','set-notifications-icon')">Notifications <span id="set-notifications-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div class="section-title" id="title-set-notifications" style="cursor:pointer;" onclick="toggleSection('set-notifications','set-notifications-wrap','set-notifications-icon');initNotifUI();">Notifications <span id="set-notifications-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-notifications-wrap">
     <div class="settings-card" style="padding:14px 16px;">
       <div id="rpt-notif-status" style="font-size:13px;color:var(--text3);margin-bottom:12px;">Enable daily reminders and weekly summaries.</div>
@@ -4603,7 +4603,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.611</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.612</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5448,7 +5448,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.611'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.612'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -31344,6 +31344,21 @@ function initNotifUI() {
   } else if (perm==='denied') {
     if (statusEl) statusEl.textContent='Notifications blocked — enable them in Chrome settings, then reload.';
     if (btn) btn.style.display='none';
+    if (settingsEl) settingsEl.style.display='none';
+  } else {
+    // 'default' - permission neither granted nor denied yet. Previously
+    // unhandled, which left the UI showing whatever it happened to be
+    // last time this ran (often the checkbox view, stale from an earlier
+    // 'granted' read) rather than the actual current state - this is
+    // very likely what produced the flip-flop between "already enabled"
+    // and "Enable Notifications" for the same session: the OS/browser
+    // permission genuinely isn't stable at 'granted' the whole time (a
+    // real Android/Chrome PWA quirk this code can't control), but the UI
+    // wasn't refreshing to reflect that until now (see the section
+    // header's onclick, which calls this on every open, not just at boot).
+    btn.style.display='';
+    if (settingsEl) settingsEl.style.display='none';
+    if (statusEl) statusEl.textContent='Enable daily reminders and weekly summaries.';
   }
 }
 
@@ -31364,8 +31379,11 @@ function checkNotifications() {
     if (!localStorage.getItem(eodKey)) {
       const log=state.todayLog||[];
       if (log.length===0) {
-        sendLocalNotif('MaxedHealth','End of day — nothing logged yet. Don\'t forget to record your meals.','chat');
-        localStorage.setItem(eodKey,'1');
+        // Same fix as the supplement reminder - only marks "fired" once
+        // the send genuinely succeeds, not the moment it was attempted.
+        sendLocalNotif('MaxedHealth','End of day — nothing logged yet. Don\'t forget to record your meals.','chat').then(sent => {
+          if (sent) localStorage.setItem(eodKey,'1');
+        });
       }
     }
   }
@@ -31377,8 +31395,9 @@ function checkNotifications() {
         const t=getTargets();
         const avgC=Math.round(week.reduce((a,e)=>a+(e.totals?.carbs||0),0)/week.length);
         const msg=avgC<=t.carbs?`7-day avg carbs: ${avgC}g — within your ${t.carbs}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${t.carbs}g ceiling. Check Reports.`;
-        sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports');
-        localStorage.setItem(weekKey,'1');
+        sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports').then(sent => {
+          if (sent) localStorage.setItem(weekKey,'1');
+        });
       }
     }
   }
@@ -31452,11 +31471,19 @@ function checkSupplementReminders(now, hour, todayKey) {
 
   const log = loadSupplementLog();
   const unchecked = defs.filter(s => !log[s.id + '_' + due]);
-  localStorage.setItem(key, '1');
-  if (!unchecked.length) return; // everything for this period already checked off - genuinely nothing to remind about
+  if (!unchecked.length) { localStorage.setItem(key, '1'); return; } // everything for this period already checked off - genuinely nothing to remind about, correctly mark done
 
   const names = unchecked.map(s => s.name).join(', ');
-  sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${names}`, 'today');
+  // Only marks this checkpoint "fired" once the notification actually,
+  // genuinely succeeded - previously this was set unconditionally before
+  // even attempting the send, so a failed delivery (permission not truly
+  // granted despite the UI saying so, service worker not ready, anything
+  // else) still got recorded as done and would silently never retry for
+  // the rest of the day. Now a failure leaves the flag unset, so the next
+  // 20-minute check tries again instead of staying silent.
+  sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${names}`, 'today').then(sent => {
+    if (sent) localStorage.setItem(key, '1');
+  });
 }
 
 // Runs the exact same logic as checkSupplementReminders, but bypasses the
@@ -31533,33 +31560,57 @@ function testSupplementReminder() {
 
   if (!prefs.supplement) {
     lines.push('\n(Reminder: this whole chain is currently disabled by the unchecked box above — turn it on for real reminders to fire.)');
+    el.textContent = lines.join('\n');
   } else if (alreadyFired) {
     lines.push('\n✓ Chain is healthy — it already ran for this checkpoint today. It will run again at the next checkpoint, or tomorrow.');
+    el.textContent = lines.join('\n');
   } else if (!unchecked.length) {
     lines.push('\n✓ Chain is healthy — nothing to remind about, everything for this checkpoint is already checked off.');
+    el.textContent = lines.join('\n');
   } else {
-    lines.push('\n✓ A real notification would fire right now. Sending it as a live test...');
-    sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${unchecked.map(s => s.name).join(', ')}`, 'today');
+    lines.push('\nSending a live test now…');
+    el.textContent = lines.join('\n');
+    // Reports the REAL outcome, not just that a send was attempted - this
+    // is the same distinction the real checkSupplementReminders now makes:
+    // "attempted" and "actually delivered" are different things, and this
+    // diagnostic exists specifically so that difference is visible instead
+    // of assumed.
+    sendLocalNotif('MaxedHealth', `Still to take this ${due}: ${unchecked.map(s => s.name).join(', ')}`, 'today').then(sent => {
+      lines[lines.length - 1] = sent
+        ? '\n✓ Notification actually delivered — check your notification tray now.'
+        : '\n❌ Send attempted but did NOT succeed — permission may not be truly granted despite the checkbox above, or the service worker isn\'t ready. This is exactly the gap that could make a real reminder silently not arrive.';
+      el.textContent = lines.join('\n');
+    });
   }
-  el.textContent = lines.join('\n');
 }
 
 function sendLocalNotif(title, body, tab) {
-  if (Notification.permission!=='granted') return;
-  // A page controlled by a service worker (which describes any installed
-  // PWA - exactly this app's normal running state) is not allowed to use
-  // the raw Notification constructor at all - Chrome throws "Illegal
-  // constructor" and insists on going through the service worker's own
-  // showNotification() instead. Falls back to the direct constructor only
-  // when no service worker is active (e.g. testing in a plain browser tab).
+  // Returns a real promise the caller can act on, rather than fire-and-
+  // forget - this is what checkSupplementReminders below now waits on
+  // before marking a checkpoint as "fired", instead of marking it fired
+  // unconditionally the moment it decided to try. A failed send (denied
+  // permission, service worker not ready, anything else) used to be
+  // swallowed silently while the app still recorded success - meaning a
+  // checkpoint could show as "already fired today" despite no
+  // notification ever having actually reached the OS.
+  if (Notification.permission!=='granted') return Promise.resolve(false);
+  // A page controlled by a service worker (any installed PWA - this app's
+  // normal running state) can't use the raw Notification constructor at
+  // all - Chrome throws "Illegal constructor" and requires the service
+  // worker's own showNotification() instead. Falls back to the direct
+  // constructor only when no service worker is active (e.g. a plain
+  // browser tab during testing).
   if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.ready.then(reg => {
-      reg.showNotification(title, { body, icon: './icons/icon-192.png', tag: `mh-${tab}`, data: { tab } });
-    }).catch(() => {}); // fails silently rather than throwing into the chat log - a missed notification isn't worth surfacing as an error
-    return;
+    return navigator.serviceWorker.ready
+      .then(reg => reg.showNotification(title, { body, icon: './icons/icon-192.png', tag: `mh-${tab}`, data: { tab } }))
+      .then(() => true)
+      .catch(() => false);
   }
-  const n=new Notification(title,{body,icon:'./icons/icon-192.png',tag:`mh-${tab}`});
-  n.onclick=()=>{ window.focus(); switchTabById(tab); n.close(); };
+  try {
+    const n=new Notification(title,{body,icon:'./icons/icon-192.png',tag:`mh-${tab}`});
+    n.onclick=()=>{ window.focus(); switchTabById(tab); n.close(); };
+    return Promise.resolve(true);
+  } catch(e) { return Promise.resolve(false); }
 }
 
 function checkCarbCeilingNotif(currentCarbs) {
@@ -31569,9 +31620,12 @@ function checkCarbCeilingNotif(currentCarbs) {
   const threshold=t.carbs*0.8;
   const sentKey=`mh_carb_notif_${new Date().toISOString().slice(0,10)}`;
   if (currentCarbs>=threshold && !localStorage.getItem(sentKey)) {
-    localStorage.setItem(sentKey,'1');
+    // Same fix as the other three notification types - "fired" only once
+    // genuinely delivered, not the moment a send was attempted.
     sendLocalNotif('MaxedHealth — Carb Alert',
-      `${currentCarbs}g carbs — ${Math.round(t.carbs-currentCarbs)}g remaining before ceiling.`,'chat');
+      `${currentCarbs}g carbs — ${Math.round(t.carbs-currentCarbs)}g remaining before ceiling.`,'chat').then(sent => {
+      if (sent) localStorage.setItem(sentKey,'1');
+    });
   }
 }
 
