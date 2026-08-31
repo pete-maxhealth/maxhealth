@@ -4603,7 +4603,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.617</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.618</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5448,7 +5448,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.617'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.618'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -28611,15 +28611,31 @@ function processCombinedText(text, silent, outEl) {
         };
 
         if (existingDates.has(isoDate)) {
-          // PRIORITY RULE: manually logged nutrition always wins.
-          // Device data (steps, sleep, HRV, SpO2, weight) fills in only if not already present.
-          // combined.csv nutrition values are ignored if the date already has a manual entry.
+          // PRIORITY RULE: manually logged nutrition always wins - kcal/
+          // protein/carbs from combined.csv are ignored once a date has a
+          // real nutrition entry, and that's untouched below (nutrition
+          // is never part of this merge block, only ever set on brand-new
+          // entries above).
+          //
+          // Device metrics (steps, sleep, HRV, SpO2, HR, weight, body
+          // comp) used to follow the same "only fill if blank" rule -
+          // which sounds safe but actually meant NO re-import could ever
+          // update them again once any value landed, manual placeholder
+          // or a prior import alike, permanently, regardless of newer or
+          // higher-precedence device data arriving later. A fresh import
+          // now always updates these fields when it has real data - this
+          // is "last import wins" for device data specifically, not true
+          // per-field device precedence (combined.csv carries no per-row
+          // source-device column to make that possible client-side), but
+          // it correctly lets a deliberate re-import - importing a lower-
+          // precedence source first, a higher one after, exactly the
+          // workflow this is for - actually take effect.
           const existing = history.find(h => {
             const p = h.date.split('/');
             return p.length === 3 && `20${p[2]}-${p[1]}-${p[0]}` === isoDate;
           });
           if (existing) {
-            const f=(e,n,v)=>{if(!e[n]&&v)e[n]=v;};
+            const f=(e,n,v)=>{if(v)e[n]=v;};
             f(existing,'steps',steps); f(existing,'distance_m',distanceM);
             f(existing,'calories_active',calActive); f(existing,'elevation_m',elevationM);
             f(existing,'sleep_duration',sleepMin); f(existing,'sleep_deep',deepMin);
@@ -28634,7 +28650,7 @@ function processCombinedText(text, silent, outEl) {
             f(existing,'muscle_pct',musclePct); f(existing,'muscle_mass_kg',muscleMassKg);
             f(existing,'bone_mass_kg',boneMassKg); f(existing,'hydration_kg',hydrationKg);
             f(existing,'pwv',pwv);
-            if (!existing.weight && weightKg) existing.weight = weightKg;
+            if (weightKg) existing.weight = weightKg;
             merged++;
           }
         } else {
