@@ -2909,6 +2909,7 @@
       <button class="settings-save-btn" onclick="openAddFoodModal()">+ Add Food</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openLibraryVoiceModal()">🎤 Voice add</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openDuplicateScanModal()">🔍 Find Duplicates</button>
+      <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="autoCategorizeLibrary()">🏷️ Auto-Categorize</button>
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openCategoryPreviewModal()">🏷️ Preview Categories</button>
       <!-- Archived 2026-08-24: "Convert Meals to Recipes" button removed
            from the UI - Pete confirmed the one-time migration is complete,
@@ -4615,7 +4616,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.621</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.623</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5292,6 +5293,21 @@ function checkOnboarding() {
     document.getElementById('onboardingOverlay').style.display = 'block';
     return true;
   }
+  // Explicit "Redo setup wizard" request (see resetOnboarding) - checked
+  // BEFORE the hasData escape hatch below, deliberately. That escape hatch
+  // exists to stop an organically-unset flag from re-nagging someone who
+  // clearly already has real data - which is exactly the wrong behaviour
+  // for a person who just explicitly asked to redo it, since anyone who'd
+  // ever tap that button by definition already has data. Without this
+  // check first, the hasData branch would silently re-mark onboarded=true
+  // again on this very same load, before the overlay even had a chance to
+  // matter - the redo button would keep doing nothing regardless of what
+  // resetOnboarding itself cleared.
+  if (localStorage.getItem('mh_force_onboarding')) {
+    localStorage.removeItem('mh_force_onboarding'); // one-time - consumed here, not a standing override
+    document.getElementById('onboardingOverlay').style.display = 'block';
+    return true;
+  }
   try {
     const parsed = JSON.parse(s);
     if (!parsed.onboarded) {
@@ -5460,7 +5476,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.621'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.623'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7751,6 +7767,172 @@ function openDuplicateScanModal() {
   if (!pairs.length) { showToast('No likely duplicates found ✓'); return; }
   window._pendingDupePairs = pairs;
   renderDupeScanModal();
+}
+
+// ─── AUTO-CATEGORIZE LIBRARY ───────────────────────────────────────────────
+// Two passes, matching the confidence split explicitly asked for: assign
+// what a real macro profile can genuinely support without guessing, queue
+// everything else for a one-at-a-time human decision (same review-queue
+// pattern as the duplicate scanner above), rather than forcing a guess
+// into every empty category.
+//
+// Deliberately NOT name-keyword matching - detectFoodCategory (via
+// DEFAULT_CATEGORY_MAP) already does that, and "uncategorized" by
+// definition means it already failed there. This works from the actual
+// numbers instead: Atwater calorie-ratio, not raw grams, so it's fair
+// regardless of the item's own portion size (100g vs a whole packet).
+//
+// Only two categories get auto-assigned, deliberately - they're the only
+// ones a macro profile alone can genuinely support with real confidence.
+// A carb-dominant item could be bread, fruit, or a sweet with equal
+// plausibility from the numbers alone - that ambiguity is exactly what
+// "ask for manual intervention" was for, not a reason to guess anyway.
+function _categorizeByMacros(f) {
+  const kcal = f.kcal || 0;
+  if (kcal < 20) return null; // too small a base for a calorie-ratio to mean anything
+  const fatRatio = ((f.fat || 0) * 9) / kcal;
+  const proteinRatio = ((f.protein || 0) * 4) / kcal;
+  const carbRatio = ((f.carbs || 0) * 4) / kcal;
+  if (fatRatio >= 0.85) return ['fat'];
+  if (proteinRatio >= 0.5 && carbRatio <= 0.15) return ['protein'];
+  return null;
+}
+
+// Softer version of the same ratios, for the review queue only - never
+// auto-applied, just pre-ticked as a starting point so agreeing is one tap
+// ("Save & Next") instead of hunting through 15 pills from a blank slate
+// every single time. Whichever of the three macros contributes the most
+// calories, shown plainly so the actual reasoning is visible, not just an
+// unexplained pre-selected pill.
+function _suggestCategoryFromMacros(f) {
+  const kcal = f.kcal || 0;
+  if (kcal < 20) return null;
+  const fatPct = Math.round(((f.fat || 0) * 9) / kcal * 100);
+  const proteinPct = Math.round(((f.protein || 0) * 4) / kcal * 100);
+  const carbPct = Math.round(((f.carbs || 0) * 4) / kcal * 100);
+  const top = [['fat', fatPct], ['protein', proteinPct], ['carbs', carbPct]].sort((a, b) => b[1] - a[1])[0];
+  // Carbs alone doesn't map to one real category (bread/fruit/sweet all
+  // read the same in macros) - only suggest a pill for fat/protein, where
+  // there's a genuine 1:1 category to point at. Still shows the % text
+  // either way, so a carb-dominant item at least gets the numbers.
+  const suggestedPill = top[0] === 'carbs' ? null : top[0];
+  return { text: `${fatPct}% fat · ${proteinPct}% protein · ${carbPct}% carbs (by calories)`, pill: suggestedPill };
+}
+
+// Same hierarchy DEFAULT_CATEGORY_MAP already encodes for automatic
+// keyword matches (meat/fish keywords always carry 'protein' alongside
+// their own category) - applied here too, so a manual pick in this review
+// queue ends up tagged the same way an automatic keyword match would have
+// been, not a thinner result just because a human chose it instead of the
+// keyword map. Dairy deliberately excluded, same reasoning as the keyword
+// map itself: not all dairy is protein-dominant (butter, cream aren't),
+// so it isn't implied automatically the way meat and fish are.
+const CATEGORY_IMPLICATIONS = { meat: ['protein'], fish: ['protein'] };
+
+function autoCategorizeLibrary() {
+  const lib = loadLibrary();
+  const uncategorizedIdx = lib
+    .map((f, idx) => ({ f, idx }))
+    .filter(({ f }) => f && f.name && !isMealEntry(f) && getItemCategories(f).length === 0);
+
+  if (!uncategorizedIdx.length) { showToast('Nothing uncategorized right now ✓'); return; }
+
+  let autoCount = 0;
+  const needsReview = [];
+  uncategorizedIdx.forEach(({ f, idx }) => {
+    const guess = _categorizeByMacros(f);
+    if (guess) {
+      lib[idx].categories = guess;
+      autoCount++;
+    } else {
+      needsReview.push(f);
+    }
+  });
+
+  if (autoCount) saveLibrary(lib);
+  showToast(`${autoCount} auto-categorized by macro profile${needsReview.length ? ` — ${needsReview.length} need a quick decision` : ' ✓'}`);
+  renderLibrary();
+
+  if (needsReview.length) {
+    window._pendingCategoryReview = needsReview;
+    renderCategoryReviewModal();
+  }
+}
+
+const CATEGORY_REVIEW_OPTIONS = ['meat','fish','dairy','protein','fat','vegetable','salad','fruit','grain','bread','breakfast cereal','sweet','savoury','herbs and spices','alcohol'];
+let _categoryReviewSelected = [];
+
+function renderCategoryReviewModal() {
+  const queue = window._pendingCategoryReview || [];
+  const existing = document.getElementById('categoryReviewModal');
+  if (existing) existing.remove();
+  if (!queue.length) { showToast('Done — every item now has a category ✓'); renderLibrary(); return; }
+
+  const f = queue[0];
+  const suggestion = _suggestCategoryFromMacros(f);
+  _categoryReviewSelected = suggestion?.pill ? [...(CATEGORY_IMPLICATIONS[suggestion.pill] || []), suggestion.pill] : [];
+  const modal = document.createElement('div');
+  modal.id = 'categoryReviewModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Needs a category${queue.length > 1 ? ` (1 of ${queue.length})` : ''}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin:8px 0 2px;">${f.name}</div>
+      <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:${suggestion ? '4px' : '14px'};">${f.kcal||0}kcal · ${f.protein||0}g P · ${f.fat||0}g F · ${f.carbs||0}g C</div>
+      ${suggestion ? `<div style="font-size:11px;color:var(--text3);margin-bottom:14px;">💡 ${suggestion.text}${suggestion.pill ? ` — leans <strong style="color:var(--accent);text-transform:capitalize;">${suggestion.pill}</strong>, pre-selected below` : ''}</div>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;" id="categoryReviewChips">
+        ${CATEGORY_REVIEW_OPTIONS.map(cat => {
+          const on = _categoryReviewSelected.includes(cat);
+          return `<button onclick="_toggleCategoryReviewChip(this,'${cat}')" style="padding:6px 12px;background:${on ? 'var(--accent-dim)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:14px;color:${on ? 'var(--accent)' : 'var(--text2)'};font-size:12px;cursor:pointer;text-transform:capitalize;">${cat}</button>`;
+        }).join('')}
+      </div>
+      <button onclick="resolveCategoryReview()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;">Save & Next</button>
+      <button onclick="skipCategoryReview()" style="width:100%;padding:12px;background:none;border:1px solid var(--border);color:var(--text2);border-radius:10px;font-size:14px;cursor:pointer;margin-bottom:8px;">Skip for now</button>
+      <button onclick="document.getElementById('categoryReviewModal').remove()" style="width:100%;padding:10px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;">Close (review the rest later)</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+// When picking a "parent" category that carries an implication (meat, fish
+// - see CATEGORY_IMPLICATIONS), its implied category gets auto-checked
+// alongside it, same hierarchy the keyword map already applies automatically.
+// The implied pill still toggles normally afterward though - ticking meat
+// pre-checks protein, but a genuine disagreement (tapping protein back off)
+// is respected, not fought.
+function _toggleCategoryReviewChip(btn, cat) {
+  const i = _categoryReviewSelected.indexOf(cat);
+  if (i > -1) {
+    _categoryReviewSelected.splice(i, 1);
+    btn.style.background = 'var(--surface2)'; btn.style.borderColor = 'var(--border)'; btn.style.color = 'var(--text2)';
+  } else {
+    _categoryReviewSelected.push(cat);
+    btn.style.background = 'var(--accent-dim)'; btn.style.borderColor = 'var(--accent)'; btn.style.color = 'var(--accent)';
+    (CATEGORY_IMPLICATIONS[cat] || []).forEach(implied => {
+      if (_categoryReviewSelected.includes(implied)) return;
+      _categoryReviewSelected.push(implied);
+      const impliedBtn = [...document.querySelectorAll('#categoryReviewChips button')].find(b => b.textContent.trim().toLowerCase() === implied);
+      if (impliedBtn) { impliedBtn.style.background = 'var(--accent-dim)'; impliedBtn.style.borderColor = 'var(--accent)'; impliedBtn.style.color = 'var(--accent)'; }
+    });
+  }
+}
+
+function resolveCategoryReview() {
+  const queue = window._pendingCategoryReview || [];
+  const f = queue[0];
+  if (!f) return;
+  if (!_categoryReviewSelected.length) { showToast('Pick at least one category, or Skip'); return; }
+  const lib = loadLibrary();
+  const match = lib.find(x => x.id === f.id);
+  if (match) { match.categories = [..._categoryReviewSelected]; saveLibrary(lib); }
+  queue.shift();
+  renderLibrary();
+  renderCategoryReviewModal();
+}
+
+function skipCategoryReview() {
+  const queue = window._pendingCategoryReview || [];
+  queue.shift();
+  renderCategoryReviewModal();
 }
 
 // Read-only preview, not a real feature yet - reuses detectFoodCategory()
@@ -33160,6 +33342,31 @@ function resetOnboarding() {
   appConfirm(
     '⚠ Redo setup wizard?',
     () => {
+      // This previously cleared mh_onboarded/mh_onboard_step - neither of
+      // which checkOnboarding() actually reads. The real flag is
+      // .onboarded, INSIDE the maxhealth_v1 state blob, not a separate
+      // top-level key at all - meaning this button almost certainly did
+      // nothing before now beyond reloading the page. Also has its own
+      // "has real data, so treat as onboarded regardless" escape hatch
+      // (checkOnboarding's hasData check) - genuinely resetting has to
+      // account for that too, or a person with existing history would
+      // still get silently skipped past the wizard even with the flag
+      // cleared.
+      try {
+        const raw = localStorage.getItem('maxhealth_v1');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          parsed.onboarded = false;
+          localStorage.setItem('maxhealth_v1', JSON.stringify(parsed));
+        }
+      } catch(e) {}
+      // Consumed once by checkOnboarding on the very next load - see there
+      // for why this is needed on top of clearing .onboarded above (the
+      // hasData escape hatch would otherwise immediately re-mark onboarded
+      // true again before the overlay ever got a chance to show, for
+      // anyone who - like whoever is tapping this button - already has
+      // real data, which is everyone this button is actually for).
+      localStorage.setItem('mh_force_onboarding', '1');
       localStorage.removeItem('mh_onboarded');
       localStorage.removeItem('mh_onboard_step');
       location.reload();
