@@ -4603,7 +4603,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.618</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.619</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5448,7 +5448,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.618'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.619'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13510,6 +13510,83 @@ function addRecentMealSuggestions(names) {
   } catch(e) {}
 }
 
+// ─── EATING HABITS SUMMARY ─────────────────────────────────────────────────
+// Everything below is genuinely observed from real logged history - counts
+// and co-occurrences, nothing inferred or guessed. Gives suggestMealFromLibrary
+// real multi-week pattern awareness (today/yesterday alone, added earlier,
+// only ever sees the last ~36 hours - too narrow to know "this person
+// usually pairs X with Y" or "hasn't touched Z in a month" at all).
+//
+// Three signals, each reusing data the app already tracks rather than
+// inventing a new tracking system:
+//  - FREQUENCY: library useCount, already incremented on every real log
+//    (Library's own "Most Used" sort uses this exact same field).
+//  - PAIRING: which CATEGORIES actually co-occur in real multi-item log
+//    entries - not a generic "protein pairs with veg" rule, but what this
+//    specific person's own logged meals actually show. Capped to a
+//    reasonable history window for relevance (someone's eating habits from
+//    18 months ago matter less than the last few months) and performance
+//    (scanning years of daily entries on every suggestion tap would be
+//    wasteful for a signal that shouldn't need that much data anyway).
+//  - RARELY USED: real library items sitting at 0-1 uses despite being
+//    saved a while ago - genuine variety candidates, not just "hasn't
+//    come up in today/yesterday" which barely means anything on its own.
+function getEatingHabitsSummary() {
+  const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
+
+  // Most-used real foods - excludes anything with fewer than 2 uses, since
+  // "used once" isn't a habit, it's a single data point.
+  const topUsed = [...lib]
+    .filter(f => (f.useCount || 0) >= 2)
+    .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
+    .slice(0, 12);
+
+  // Category co-occurrence - scans every real multi-item log entry within
+  // the window (today's log always included regardless of date filtering
+  // logic below, since it's not yet a state.history row).
+  const pairCounts = {};
+  const tallyEntry = (items) => {
+    if (!items || items.length < 2) return;
+    const cats = new Set();
+    items.forEach(it => {
+      const libMatch = lib.find(f => f.name.toLowerCase() === (it.name || '').toLowerCase());
+      (libMatch ? getItemCategories(libMatch) : []).forEach(c => cats.add(c));
+    });
+    const catList = [...cats];
+    for (let i = 0; i < catList.length; i++) {
+      for (let j = i + 1; j < catList.length; j++) {
+        const key = [catList[i], catList[j]].sort().join(' + ');
+        pairCounts[key] = (pairCounts[key] || 0) + 1;
+      }
+    }
+  };
+  (state.todayLog || []).forEach(e => tallyEntry(e.items));
+  (state.history || []).forEach(h => {
+    const d = parseDateStr(h.date);
+    if (!d || d < cutoff) return;
+    (h.log || []).forEach(e => tallyEntry(e.items));
+  });
+  const topPairs = Object.entries(pairCounts)
+    .filter(([, count]) => count >= 3) // a real recurring pattern, not two meals that happened to share a category once
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+
+  // Rarely-used library items - genuine variety candidates. No "added N
+  // days ago" gate here, deliberately - checked, and library items don't
+  // actually carry a save-date field anywhere in this app, so there's no
+  // real data to gate on. useCount alone is still a genuine signal: an
+  // item sitting at 0-1 uses is rarely reached for regardless of when it
+  // was saved, not fabricated staleness.
+  const rarelyUsed = lib.filter(f => (f.useCount || 0) <= 1).slice(0, 10);
+
+  return {
+    topUsedText: topUsed.length ? topUsed.map(f => `${f.name} (used ${f.useCount}x)`).join(', ') : null,
+    topPairsText: topPairs.length ? topPairs.map(([pair, count]) => `${pair} (${count}x)`).join(', ') : null,
+    rarelyUsedText: rarelyUsed.length ? rarelyUsed.map(f => f.name).join(', ') : null,
+  };
+}
+
 async function suggestMealFromLibrary(kind = 'both', explicitComposition = null) {
   const lib = loadLibrary();
   const recipes = loadRecipes();
@@ -13620,6 +13697,8 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
     ? _yesterdayEntry.log.map(e => `${e.time || '??:??'} - ${e.description || 'meal'}`).join('\n')
     : '(no data for yesterday)';
 
+  const habits = getEatingHabitsSummary();
+
   addBubble('📚 Checking your library and recipes against what today still needs…', 'system');
 
   const libText = lib.map(f => {
@@ -13664,18 +13743,23 @@ ${_todayEatenText}
 
 WHAT WAS EATEN YESTERDAY (for pattern context only):
 ${_yesterdayEatenText}
-
+${(habits.topUsedText || habits.topPairsText || habits.rarelyUsedText) ? `
+ESTABLISHED EATING PATTERNS (from real logged history, not just today/yesterday - genuine observed habits, not assumptions):
+${habits.topUsedText ? `Most-used foods: ${habits.topUsedText}` : ''}
+${habits.topPairsText ? `Most common category pairings in real logged meals: ${habits.topPairsText}` : ''}
+${habits.rarelyUsedText ? `In the library but rarely used (genuine variety candidates - worth including occasionally where the macro budget allows): ${habits.rarelyUsedText}` : ''}
+` : ''}
 Rules:
 - Carbs are the hardest ceiling — never combine items that would push carbs negative, even slightly.
 - If protein remaining is negative or near zero, favour fat/calorie-dense items over protein-heavy ones.
 - If protein remaining is meaningfully positive, prioritise protein-heavy items to help close that gap.
 - A saved recipe is often a better single suggestion than combining several raw ingredients — prefer a recipe when one genuinely fits well, but don't force one if the remaining budget doesn't suit any recipe's per-serving numbers.
 - Aim for exactly 5 distinct suggestions, mixing recipes and ingredient-combos as appropriate. Only return fewer than 5 if the library genuinely can't support five reasonably different options that fit the budget — check this properly before giving up, rather than defaulting to fewer.
-- CRITICAL — VARIETY: the 5 suggestions should feel like genuinely different meals, not near-duplicates of each other. Repeating a versatile protein like chicken across 2 of the 5 is completely fine if the actual dish/preparation and fat source differ meaningfully (e.g. chicken + salad vs. chicken in a cream sauce) — the goal is avoiding "same meal, barely reworded" five times over, not forcing artificial diversity for its own sake.
+- CRITICAL — VARIETY: the 5 suggestions should feel like genuinely different meals, not near-duplicates of each other. Repeating a versatile protein like chicken across 2 of the 5 is completely fine if the actual dish/preparation and fat source differ meaningfully (e.g. chicken + salad vs. chicken in a cream sauce) — the goal is avoiding "same meal, barely reworded" five times over, not forcing artificial diversity for its own sake.${habits.rarelyUsedText ? ` Where the macro budget allows, try to work in at least one item from the "rarely used" list above — genuine variety means occasionally surfacing something they own but don't reach for, not just cycling the same favourites.` : ''}
 - PATTERN AWARENESS: use what's actually been eaten today (and yesterday, for lighter context) as a soft signal, not a rule. If today's been entirely savoury, a sweet-leaning option is worth including if one genuinely fits the macros. If today's been mostly small snacks with no proper meal yet, a more substantial combo may suit better than another snack. If something very similar has already been eaten multiple times today, lean toward a different option instead — but never let this override what the remaining macro budget actually allows.
 ${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}${kind === 'snack' ? '- SNACK REQUESTED: all 5 suggestions should be a real snack - a single, self-contained snack-type food eaten on its own (crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts), not a curated combination of two or more separate savoury ingredients - that\'s tapas, a different thing entirely, even at a small portion. A snack was specifically asked for, not just guidance toward one, so this applies even if the remaining budget would technically support something larger.' : ''}${explicitComposition ? `- EXACT COMPOSITION REQUESTED ("${explicitComposition.map(c=>`${c.count} ${c.category}`).join(' + ')}"): every suggestion should follow this exact shape as closely as the real library allows - ${explicitComposition.map(c => `${c.count} genuinely different item${c.count>1?'s':''} from the "${c.category}" category${c.keyword ? ` (the user specifically said "${c.keyword}" - prefer an item that's genuinely that, not just anything else tagged "${c.category}", if the library has it)` : ' (real categories are listed per item below)'}`).join(', plus ')}. This is the deliberate "meat and veg" style structured request, not a loose preference. If the library can't fully cover every part - fewer distinct items in a category than the count asked for, or (rarely, since this was checked before you were even asked) a category with nothing at all - return the closest real partial match rather than refusing or inventing something: use what's genuinely there, and the note must explicitly name which category came up short and why (e.g. "only 1 vegetable-tagged item in your library, so used it once rather than the 3 asked for"). Never silently substitute a different category to make the numbers look right. Still respect the remaining macro budget as the hard limit.` : !explicitComposition && !['sweet','savoury','snack','both'].includes(kind) ? `- CATEGORY REQUESTED: the user specifically asked for "${kind}" - every suggestion should prominently feature at least one item whose real categories (listed per item below) include "${kind}", not just loosely relate to it. Still respect the remaining macro budget as the hard limit, and still aim for genuinely varied combos rather than 5 near-identical ways of using the same "${kind}" item.` : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
-- COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.
+- COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.${habits.topPairsText ? ` Where it also fits the macro budget, prefer pairings that match this person's own established combos (listed above under "most common category pairings") over generic pairing logic — that's a genuinely stronger cohesion signal than a general rule, since it's what they actually eat together in practice.` : ''}
 - Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
 - Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
 
