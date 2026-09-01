@@ -2850,6 +2850,18 @@
          browsing/trying something new, worth its own moment rather than
          being squeezed into a chat quick-action. -->
     <button class="copy-btn" style="width:100%;font-size:13px;padding:10px;margin-bottom:10px;color:var(--accent);border-color:var(--accent-glow);" onclick="openRecipeDiscoverModal()">🆕 Try something new</button>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+      <select id="recipeSort" onchange="renderRecipeList()"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:6px 10px;font-family:Space Mono,monospace;">
+        <option value="name">A–Z</option>
+        <option value="mostused">Most Used</option>
+        <option value="kcal">Kcal/serving ↓</option>
+        <option value="protein">Protein/serving ↓</option>
+        <option value="fat">Fat/serving ↓</option>
+        <option value="carbs">Carbs/serving ↓</option>
+        <option value="recent">Recent</option>
+      </select>
+    </div>
     <div id="recipeList" style="margin-bottom:20px;">
       <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No recipes yet — tap + New Recipe to create one.</div>
     </div>
@@ -4603,7 +4615,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.620</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.621</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5448,7 +5460,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.620'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.621'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -23284,6 +23296,32 @@ function renderRecipeList() {
     return;
   }
 
+  // Same sort pattern as Library (renderLibrary) - per-serving macros for
+  // the numeric options, since that's the unit actually shown on each
+  // card, not the recipe's raw total. _origIdx preserved before sorting
+  // for "Recent" - recipes are append-only same as library items, so
+  // original array position descending is genuinely newest-first with no
+  // separate timestamp field needed, same reasoning as Library's own.
+  const sortEl = document.getElementById('recipeSort');
+  const sort = sortEl ? sortEl.value : 'name';
+  const perServing = r => {
+    const total = (r.total && typeof r.total === 'object') ? r.total : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    const servings = r.servings || 1;
+    return { kcal: total.kcal / servings, protein: total.protein / servings, fat: (total.fat || 0) / servings, carbs: total.carbs / servings };
+  };
+  const recipesWithIdx = recipes.map((r, origIdx) => ({ ...r, _origIdx: origIdx }));
+  recipesWithIdx.sort((a, b) => {
+    if (sort === 'name')     return a.name.localeCompare(b.name);
+    if (sort === 'mostused') return (b.useCount || 0) - (a.useCount || 0);
+    if (sort === 'kcal')     return perServing(b).kcal - perServing(a).kcal;
+    if (sort === 'protein')  return perServing(b).protein - perServing(a).protein;
+    if (sort === 'fat')      return perServing(b).fat - perServing(a).fat;
+    if (sort === 'carbs')    return perServing(b).carbs - perServing(a).carbs;
+    if (sort === 'recent')   return b._origIdx - a._origIdx;
+    return 0;
+  });
+  recipes = recipesWithIdx;
+
   el.innerHTML = recipes.map(r => {
     // Defensive fallback — loadRecipes() migrates any recipe missing total{}
     // on load, but rendering shouldn't ever be able to crash the whole
@@ -23394,6 +23432,13 @@ function logRecipe(id, servings) {
     ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
+  // Same useCount pattern already used for library items and saved prompts
+  // (both already sortable by "Most Used") - incremented here, at the
+  // point a recipe is actually logged, not just viewed or opened for
+  // review, matching how library items only count on real use too.
+  const allRecipes = loadRecipes();
+  const match = allRecipes.find(r => r.id === id);
+  if (match) { match.useCount = (match.useCount || 0) + 1; saveRecipes(allRecipes); }
   showToast(`${recipe.name} logged ✓`);
   switchTabById('chat');
 }
@@ -24806,6 +24851,12 @@ function _doLogRecipe(recipe, s) {
     ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, recipe.name + ' (×' + servings + ')');
+  // Same useCount increment as logRecipe() above - this is the OTHER
+  // logging path (custom-servings prompt rather than the quick "Log 1
+  // serving" button), so it needs its own increment to stay in sync.
+  const allRecipes2 = loadRecipes();
+  const match2 = allRecipes2.find(r => r.id === recipe.id);
+  if (match2) { match2.useCount = (match2.useCount || 0) + 1; saveRecipes(allRecipes2); }
   switchTabById('chat');
 }
 
