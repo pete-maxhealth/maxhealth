@@ -4653,7 +4653,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.655</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.656</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5561,7 +5561,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.655'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.656'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -33450,7 +33450,58 @@ function registerServiceWorker() {
     navigator.serviceWorker.addEventListener('message', event => {
       if (event.data?.action === 'switchTab') switchTabById(event.data.tab);
     });
+    // There was previously no way to know a new version had deployed at
+    // all - the old code (still unregistering+re-registering on every load,
+    // above) relies on that happening to ever pick up fresh files, but
+    // gives zero indication to the person if a new deploy exists while
+    // they're mid-session, or even on a fresh load if something upstream
+    // (an HTTP cache, a stale open tab) still serves the old sw.js. Real
+    // report: stuck three versions behind, silently, with several shipped
+    // fixes invisible the whole time. This surfaces it instead of leaving
+    // it silent - a real "new version" banner, not just hoping a hard
+    // refresh happens to get tried eventually.
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        // 'installed' + an existing controller means this is a genuine
+        // UPDATE (a new SW replacing an active one), not the very first
+        // install on a brand new device - only the update case is worth
+        // telling anyone about.
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateAvailableBanner(newWorker);
+        }
+      });
+    });
+    // Service workers don't reliably check for updates on their own just
+    // from being open - explicitly asking on load, and again whenever the
+    // tab comes back into focus (returning to an already-open PWA is
+    // exactly the scenario that left this stuck silently before), makes
+    // sure a real check actually happens instead of only whenever the
+    // browser feels like it.
+    reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
   }).catch(err => console.warn('SW registration failed (non-fatal):', err));
+}
+
+function showUpdateAvailableBanner(newWorker) {
+  if (document.getElementById('swUpdateBanner')) return; // already showing - don't stack a second one
+  const banner = document.createElement('div');
+  banner.id = 'swUpdateBanner';
+  banner.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:var(--accent);color:#080a0d;padding:12px 16px;border-radius:12px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+  banner.innerHTML = `<span>🔄 A new version is ready</span><span style="text-decoration:underline;cursor:pointer;">Reload now</span>`;
+  banner.onclick = () => {
+    // skipWaiting has to be triggered from the new worker itself (a
+    // postMessage the sw.js side needs to already listen for) - if it
+    // doesn't, the reload below still works, it just relies on the browser
+    // naturally activating the new worker once nothing controls the old
+    // one anymore, same as it would without this banner at all.
+    newWorker.postMessage({ action: 'skipWaiting' });
+    window.location.reload();
+  };
+  document.body.appendChild(banner);
 }
 
 function getNotifPrefs() {
