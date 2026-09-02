@@ -4653,7 +4653,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.657</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.658</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5561,7 +5561,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.657'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.658'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17592,16 +17592,63 @@ function logFoods(foods, originalText, aiMessage = null) {
         || (rName.length > 5 && normalizedText.includes(rName))
         || (normalizedText.length > 5 && rName.startsWith(normalizedText));
     });
+    let matchedByIngredients = null;
     if (matchedRecipe) {
       matchedRecipe.useCount = (matchedRecipe.useCount || 0) + 1;
       saveRecipes(allRecipes);
+    } else {
+      // Real bug found via a live debug trace: logSuggestedCombo has two
+      // branches - one references a saved recipe by name directly (the
+      // check above already covers it), the other builds its combo from
+      // individual LIBRARY ITEMS, joining their own names into the logged
+      // text ("tomatoes + Turkey extra lean mince + ... + Keto Pasta...").
+      // When the AI's suggestion happens to be built from the same
+      // ingredients as a saved recipe, there is no recipe reference
+      // anywhere in that code path at all for name-matching to find - the
+      // recipe concept never existed in that call, only a list of
+      // separately-looked-up library items that happen to add up to it.
+      // No text-matching fix can ever catch this; it needs a genuinely
+      // different comparison - the SET of logged ingredient names against
+      // each saved recipe's own ingredient list; substantial overlap
+      // counts as "using" that recipe even though it was never referenced
+      // by name. Deliberately a fallback, only tried once name-matching
+      // has already failed - a real name match is always more certain
+      // than an ingredient overlap could be.
+      const loggedNames = (foods || []).map(f => (f.name || '').trim().toLowerCase()).filter(Boolean);
+      if (loggedNames.length >= 2) {
+        let bestMatch = null, bestScore = 0;
+        allRecipes.forEach(r => {
+          const ingNames = (r.ingredients || []).map(ing => (ing.name || '').trim().toLowerCase()).filter(Boolean);
+          // Recipes under 3 ingredients are too easy to overlap by
+          // coincidence (e.g. "salt" + "olive oil" alone could match half
+          // the library) - not worth the false-positive risk.
+          if (ingNames.length < 3) return;
+          const overlapCount = ingNames.filter(ingName =>
+            loggedNames.some(ln => ln === ingName || ln.includes(ingName) || ingName.includes(ln))
+          ).length;
+          const score = overlapCount / ingNames.length;
+          // Requires most of the RECIPE's own ingredients to be present
+          // (not most of what was logged - logging a recipe alongside a
+          // side dish shouldn't fail the recipe's own match), and a
+          // reasonably high bar since this is inherently less certain
+          // than a real name match.
+          if (score >= 0.75 && score > bestScore) { bestScore = score; bestMatch = r; }
+        });
+        if (bestMatch) {
+          bestMatch.useCount = (bestMatch.useCount || 0) + 1;
+          saveRecipes(allRecipes);
+          matchedByIngredients = { recipe: bestMatch, score: bestScore };
+        }
+      }
     }
     // Real diagnostic, not a guess - records exactly what text this match
     // was attempted against and what (if anything) it found, right in the
     // same call trace already used to debug logFoods. Answers "was a match
     // even attempted, and against what text" directly instead of guessing
     // at what the AI-parsed flow actually passes as originalText.
-    window._lastRecipeMatchAttempt = { originalText, normalizedText, matchedRecipeName: matchedRecipe?.name || null, matchedNewCount: matchedRecipe?.useCount || null };
+    window._lastRecipeMatchAttempt = matchedByIngredients
+      ? { originalText, normalizedText, matchedRecipeName: matchedByIngredients.recipe.name, matchedNewCount: matchedByIngredients.recipe.useCount, matchedVia: `ingredient overlap (${Math.round(matchedByIngredients.score*100)}% of recipe's ingredients present)` }
+      : { originalText, normalizedText, matchedRecipeName: matchedRecipe?.name || null, matchedNewCount: matchedRecipe?.useCount || null };
   } else {
     window._lastRecipeMatchAttempt = { originalText: null, note: 'logFoods called with no originalText at all - recipe match never attempted' };
   }
@@ -22090,7 +22137,7 @@ function renderLogMutationDebug() {
       `  Used past-day branch: ${e.willUsePastDayBranch}\n` +
       `  Foods: ${e.foodNames.join(', ')}\n` +
       `  Original text: ${e.originalText || '—'}\n` +
-      `  Recipe match: ${e.recipeMatch ? (e.recipeMatch.matchedRecipeName ? `MATCHED "${e.recipeMatch.matchedRecipeName}" — new count: ${e.recipeMatch.matchedNewCount}` : (e.recipeMatch.note || `no match found (compared against: "${e.recipeMatch.normalizedText}")`)) : '(not recorded — older entry from before this diagnostic existed)'}`
+      `  Recipe match: ${e.recipeMatch ? (e.recipeMatch.matchedRecipeName ? `MATCHED "${e.recipeMatch.matchedRecipeName}" via ${e.recipeMatch.matchedVia || 'name'} — new count: ${e.recipeMatch.matchedNewCount}` : (e.recipeMatch.note || `no match found (compared against: "${e.recipeMatch.normalizedText}")`)) : '(not recorded — older entry from before this diagnostic existed)'}`
     ).join('\n\n---\n\n');
   }
   out.textContent = text;
