@@ -4684,7 +4684,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.643</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.646</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5560,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.643'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.646'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6838,7 +6838,7 @@ window._activeScrollContainerId = null;
 // buttons do. Every other view here is a plain scroll area with nothing
 // else anchored down there, so the fixed bottom:38-90px position never
 // collided with anything until this one.
-const GLOBAL_SCROLL_NAV_IDS = ['dashScroll','histScroll','trendsScroll','reportsScroll','manageScroll','customiseScroll','importScroll','supplementsScroll'];
+const GLOBAL_SCROLL_NAV_IDS = ['dashScroll','histScroll','trendsScroll','reportsScroll','manageScroll','customiseScroll','importScroll','supplementsScroll','multiMetricScroll'];
 
 function trackScrollNav(el) {
   if (!el || !el.id) return;
@@ -12783,6 +12783,26 @@ function _startVoiceListening() {
         _voiceMultiItems = [];
         return;
       }
+      // isRecipeVoiceDonePhrase requires the WHOLE utterance to be 5 words
+      // or fewer - fine for a recipe's short ingredient names, but this
+      // input is also used for full-sentence questions/requests ("Log a
+      // meal or ask...") that are naturally much longer. If someone
+      // doesn't pause long enough before saying "done", continuous mode
+      // can merge the whole thing into one long final result - which then
+      // fails the 5-word check even though it genuinely ends in "done".
+      // This catches that case specifically: a trailing done-phrase on an
+      // otherwise-long utterance strips it off, keeps the real content as
+      // the item, and finishes exactly as if "done" had been its own
+      // separate utterance.
+      const trailingDoneMatch = text.match(/\s+(done|finished|that'?s (?:it|all|everything)|stop)\s*[.!]?$/i);
+      if (trailingDoneMatch) {
+        const withoutDone = text.slice(0, trailingDoneMatch.index).trim();
+        if (withoutDone) _voiceMultiItems.push(withoutDone);
+        _pauseOrFinishVoiceInput();
+        if (!_voiceMultiItems.length) showToast('No items captured');
+        _voiceMultiItems = [];
+        return;
+      }
       _voiceMultiItems.push(text);
       showToast(`✓ "${text}" — say the next item, or "done" to finish`, null, null, 3000);
     }
@@ -14374,13 +14394,13 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Exercise Calorie Offset', key: 'set-exoffset', subtab: 'manage', keywords: 'wearable mismatch calibration adjustment MET' },
   { label: 'Steps Baseline', key: 'set-stepsbaseline', subtab: 'manage', keywords: 'daily step target goal 7500 activity' },
   { label: 'Water Target', key: 'set-water', subtab: 'manage', keywords: 'hydration ml ounces daily goal' },
-  { label: 'Supplements', key: 'set-supplements', subtab: 'manage', keywords: 'vitamins pills medication reminders' },
+  { label: 'Supplements', key: 'set-supplements', subtab: 'manage', wrapId: 'supplementSettingsContent', keywords: 'vitamins pills medication reminders' },
   { label: 'AI Provider Settings', key: 'set-aiprovider', subtab: 'manage', keywords: 'anthropic openai claude gpt model api key' },
   { label: 'Appearance / Theme', key: 'set-appearance', subtab: 'manage', keywords: 'dark light colour color mode display' },
   { label: 'Notifications', key: 'set-notifications', subtab: 'manage', keywords: 'reminders alerts push' },
   { label: 'Idle Timeout', key: 'set-idletimeout', subtab: 'manage', keywords: 'battery sleep pause inactivity screen timeout' },
-  { label: 'Symptom Tracking', key: 'set-symptoms', subtab: 'manage', keywords: 'energy mood headache pattern correlation how are you today' },
-  { label: 'Treatment Tracking', key: 'set-treatments', subtab: 'manage', keywords: 'pemf physio massage session therapy' },
+  { label: 'Symptom Tracking', key: 'set-symptoms', subtab: 'manage', wrapId: 'symptomSettingsContent', keywords: 'energy mood headache pattern correlation how are you today' },
+  { label: 'Treatment Tracking', key: 'set-treatments', subtab: 'manage', wrapId: 'treatmentSettingsContent', keywords: 'pemf physio massage session therapy' },
   { label: 'Body Comp Debug', key: 'set-bodycompdebug', subtab: 'manage', keywords: 'weight body composition fat muscle bone troubleshooting' },
   { label: 'Rollover Debug Log', key: 'set-rollover', subtab: 'manage', keywords: 'midnight rollover troubleshooting' },
   { label: 'Data Backup', key: 'set-databackup', subtab: 'manage', keywords: 'export restore json csv full backup' },
@@ -14402,8 +14422,46 @@ const SITE_SEARCH_SETTINGS = [
   // Previously missing from this index entirely - integrated into the
   // standard toggle system a while ago (v3.10.512) but never added here,
   // so it was findable by scrolling but not by search at all.
-  { label: 'Data Preview & Validator', key: 'imp-preview', subtab: 'import', keywords: 'check validate before import review' },
+  { label: 'Data Preview & Validator', key: 'imp-preview', subtab: 'import', wrapId: 'dataPreviewPanel', keywords: 'check validate before import review' },
   { label: 'Restore from Server Backup', key: 'imp-restore', subtab: 'import', keywords: 'zip zepp password sync restore' },
+  // Reports (Insights tab) was entirely absent from this index before now -
+  // not just "Ask AI" specifically, the whole tab and all its sections
+  // were unsearchable. Found via a real report: searching "AI" turned up
+  // nothing despite the Ask AI button existing right there in Reports.
+  { label: 'Ask AI (Reports)', key: 'rpt-askai', subtab: 'reports', tab: 'insights', keywords: 'ask AI question full summary interpret findings claude gpt anthropic openai' },
+  { label: 'Trend Analysis Summary', key: 'rpt-summary', subtab: 'reports', tab: 'insights', keywords: 'overview stats report' },
+  { label: 'Insights (Reports)', key: 'rpt-insights-box', subtab: 'reports', tab: 'insights', wrapId: 'rpt-insights-wrap', keywords: 'patterns findings observations' },
+  { label: 'Activity Credit Balance (Reports)', key: 'activitycredit', subtab: 'reports', tab: 'insights', wrapId: 'activity-credit-wrap', keywords: 'exercise calories earned unclaimed' },
+  { label: 'Seasonal Compare', key: 'seasonal', subtab: 'reports', tab: 'insights', wrapId: 'seasonal-compare-wrap', keywords: 'year over year same period last year' },
+  { label: 'Query Builder', key: 'rpt-query', subtab: 'reports', tab: 'insights', keywords: 'custom query filter above below between saved queries' },
+  { label: 'Export & Share', key: 'rpt-export', subtab: 'reports', tab: 'insights', keywords: 'PDF print clinical personal custom send doctor clinician' },
+  { label: 'Sleep & Ketosis', key: 'rpt-sleepketo', subtab: 'reports', tab: 'insights', keywords: 'correlation sleep quality carbs adherence' },
+  { label: 'Weight vs Protocol', key: 'rpt-weightproto', subtab: 'reports', tab: 'insights', keywords: 'weight trend target ceiling adherence' },
+  { label: 'Treatment Analysis (Reports)', key: 'rpt-treatment', subtab: 'reports', tab: 'insights', keywords: 'chemotherapy radiotherapy keyword notes' },
+  { label: 'Treatment Sessions (Reports)', key: 'rpt-sessions', subtab: 'reports', tab: 'insights', keywords: 'pemf physio massage before after day window period' },
+  { label: 'GBM Monthly Summary', key: 'rpt-gbm', subtab: 'reports', tab: 'insights', keywords: 'oncology clinical report doctor monthly' },
+  { label: 'GBM Research Digest', key: 'rpt-research', subtab: 'reports', tab: 'insights', keywords: 'glioblastoma studies papers research news' },
+  // The rest of this batch found the same way — cross-checked every real
+  // toggleSection() call in the app against this index and found these 15
+  // genuinely missing too, not just Reports. Two more toggleSection calls
+  // (activity-detail, steps-detail) were deliberately left out — they're
+  // minor "show breakdown" sub-toggles inside the Steps/Activity cards
+  // themselves, not independent named sections anyone would search for.
+  { label: "Today's Activity", key: 'dash-activity', subtab: 'dash', tab: 'today', keywords: 'exercise calories burned summary' },
+  { label: 'Dashboard Guides', key: 'dash-guides', subtab: 'dash', tab: 'today', keywords: 'help tips how to use' },
+  { label: 'Macro Advice', key: 'dash-macroadvice', subtab: 'dash', tab: 'today', wrapId: 'macroAdviceWrap', keywords: 'what changing targets does explanation' },
+  { label: 'Daily Steps (Today)', key: 'dash-steps', subtab: 'dash', tab: 'today', keywords: 'walking activity count' },
+  { label: 'Strength Training (Today)', key: 'dash-strength-list', subtab: 'dash', tab: 'today', wrapId: 'strengthRowsWrap', keywords: 'weights resistance exercise log' },
+  { label: 'How Are You Today? (Symptoms)', key: 'dash-symptoms', subtab: 'dash', tab: 'today', wrapId: 'symptomsCardBody', keywords: 'symptom score energy mood pain' },
+  { label: 'Treatment Sessions Today', key: 'dash-treatment', subtab: 'dash', tab: 'today', wrapId: 'treatmentCardBody', keywords: 'pemf physio massage log session' },
+  { label: 'Library A-Z', key: 'lib-az', subtab: 'library', tab: 'log', keywords: 'alphabetical browse all foods' },
+  { label: 'Food Library', key: 'lib-food', subtab: 'library', tab: 'log', keywords: 'saved foods items browse search' },
+  { label: 'Ingredients', key: 'lib-ingredients', subtab: 'library', tab: 'log', keywords: 'recipe building blocks raw items' },
+  { label: 'Recipes', key: 'lib-recipes', subtab: 'library', tab: 'log', keywords: 'cook mode meal combinations saved' },
+  { label: "Today's Log", key: 'log-today', subtab: 'log', tab: 'log', keywords: 'food entries chat meal logging' },
+  { label: 'Your Journey (Trends)', key: 'trends-journey', subtab: 'trends', tab: 'insights', keywords: 'weight over time ketosis treatment markers' },
+  { label: 'Patterns (Trends)', key: 'trends-patterns', subtab: 'trends', tab: 'insights', keywords: 'findings correlations early warning cross-metric' },
+  { label: "Today's Wellness", key: 'trends-wellness', subtab: 'trends', tab: 'insights', keywords: 'sleep activity vitals nutrition score summary' },
 ];
 
 function openSiteSearch() {
@@ -14463,7 +14521,7 @@ function filterSiteSearch(query) {
   if (settings.length) {
     sections.push({
       title: '⚙️ Settings',
-      rows: settings.map(s => `<div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="siteSearchOpenSettings('${s.key}','${s.subtab}')"><span style="font-size:13px;color:var(--text);">${escape(s.label)}</span></div>`).join('')
+      rows: settings.map(s => `<div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="siteSearchOpenSettings('${s.key}','${s.subtab}','${s.tab || 'settings'}','${s.wrapId || ''}')"><span style="font-size:13px;color:var(--text);">${escape(s.label)}</span></div>`).join('')
     });
   }
 
@@ -14513,18 +14571,28 @@ function runSavedPromptTrackedById(id) {
   quickPrompt(p.text);
 }
 
-function siteSearchOpenSettings(key, subtab) {
+function siteSearchOpenSettings(key, subtab, tab, wrapId) {
   closeSiteSearch();
-  switchTab('settings');
+  // Defaults to 'settings' - every existing index entry was written before
+  // this parameter existed, so this keeps all of them working exactly as
+  // before. Only entries that explicitly pass a different tab (Reports
+  // sections, added alongside this fix) use it.
+  switchTab(tab || 'settings');
   // Settings has its own sub-tabs (Manage/Customise/Import) - switchTab
   // alone lands on whichever was last active, which may not be the one
   // this section actually lives in. Missing this is exactly why searching
   // for Withings/Zepp/sync-related terms silently found nothing before -
   // the Import sub-tab's sections were never even switched into view for
   // scrollIntoView to find.
-  if (subtab) switchSubTab('settings', subtab);
+  if (subtab) switchSubTab(tab || 'settings', subtab);
   setTimeout(() => {
-    const wrap = document.getElementById(key + '-wrap');
+    // Most sections follow key+'-wrap' as their real DOM id, but a few
+    // (dash-symptoms/dash-treatment, built well before this index existed)
+    // use their own distinct wrap ids - wrapId lets an index entry specify
+    // the real one instead of silently failing this lookup and stopping
+    // short of the actual scroll/expand.
+    const realWrapId = wrapId || (key + '-wrap');
+    const wrap = document.getElementById(realWrapId);
     if (!wrap) return;
     // A collapsed section has display:none - scrollIntoView on a hidden
     // element does nothing at all, so a search result for something
@@ -14532,7 +14600,7 @@ function siteSearchOpenSettings(key, subtab) {
     // first (same toggleSection call its own header uses) so there's
     // actually something visible to land on.
     if (wrap.style.display === 'none') {
-      toggleSection(key, key + '-wrap', key + '-icon');
+      toggleSection(key, realWrapId, key + '-icon');
     }
     wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 300);
@@ -24047,7 +24115,7 @@ function renderRecipeList() {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--text);">${r.name}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${(r.ingredients||[]).length} ingredients · ${servings} serving${servings > 1 ? 's' : ''}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${(r.ingredients||[]).length} ingredients · ${servings} serving${servings > 1 ? 's' : ''}${sort === 'mostused' ? ` · used ${r.useCount || 0}×` : ''}</div>
         </div>
         <div style="display:flex;gap:6px;">
           <button class="copy-btn" style="font-size:11px;padding:5px 10px;" onclick="editRecipe('${r.id}')">Edit</button>
@@ -28050,6 +28118,11 @@ function openMultiMetricOverlay() {
   document.getElementById('mmDayPanel').style.display = 'none';
   renderMMMetricPicker();
   applyMMSectionOrderAndVisibility();
+  // Without this, the ▲▼ scroll-nav buttons wouldn't appear until the
+  // person had already scrolled once (trackScrollNav only fires on an
+  // actual scroll event) - same call every tab/subtab switch already
+  // makes, needed here too since opening this overlay isn't a tab switch.
+  refreshActiveScrollContainer();
   // Deferred to the next frame, not called immediately - constructing the
   // chart in the same tick as the display:block change measures the canvas
   // before the browser has actually reflowed the now-visible container, so
@@ -35601,7 +35674,7 @@ function dismissInsight() {
      deliberately, rather than extending it, to avoid any risk to something
      that already works while building something genuinely different
      (multiple normalized layers on one chart vs one metric's own real scale). -->
-<div id="multiMetricOverlay" style="display:none;position:fixed;inset:0;z-index:401;background:var(--bg);overflow:hidden;"><div id="multiMetricScroll" style="height:100vh;overflow-y:scroll;-webkit-overflow-scrolling:touch;">
+<div id="multiMetricOverlay" style="display:none;position:fixed;inset:0;z-index:401;background:var(--bg);overflow:hidden;"><div id="multiMetricScroll" onscroll="trackScrollNav(this)" style="height:100vh;overflow-y:scroll;-webkit-overflow-scrolling:touch;">
   <div style="position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;">
     <button onclick="closeMultiMetricOverlay()" style="background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;">←</button>
     <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--text);">Compare Metrics</div>
