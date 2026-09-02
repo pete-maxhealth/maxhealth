@@ -4684,7 +4684,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.647</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.649</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5560,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.647'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.649'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12805,6 +12805,17 @@ function _startVoiceListening() {
       }
       _voiceMultiItems.push(text);
       showToast(`✓ "${text}" — say the next item, or "done" to finish`, null, null, 3000);
+      // Writes what's been captured into the REAL, visible input box as it
+      // happens, not just at the end - this is the actual fix for "the
+      // arrow does nothing": sendChat() correctly refuses to send an empty
+      // box, and before this, nothing was ever written to the visible box
+      // until the done-phrase flow succeeded. Spoken words were sitting in
+      // an invisible variable with only a brief toast as feedback - now
+      // there's always something real in the box to see and to send
+      // manually, a reliable fallback independent of whether "done" gets
+      // detected by voice at all.
+      const liveInput = document.getElementById('chatInput');
+      if (liveInput) { liveInput.value = _voiceMultiItems.join(', '); autoResize(liveInput); }
     }
     _setVoiceLogStatus(`🎤 Captured so far: ${_voiceMultiItems.join(', ')} — say the next item, or "done" to finish.`);
   };
@@ -13418,6 +13429,21 @@ function sendChat() {
   const text = input.value.trim();
   const hasPhoto = !!_pendingPhotoBase64;
   if (!text && !hasPhoto) return;
+  // If voice is still actively listening when the arrow is tapped
+  // manually, stop it cleanly here - otherwise recognition kept running in
+  // the background after a manual send, and whatever was said next would
+  // confusingly start appending to the now-emptied box. Doesn't call
+  // _pauseOrFinishVoiceInput (that would re-send this same text a second
+  // time) - just stops listening and resets the mic button's own visual
+  // state, matching what toggleVoiceInput does for that part.
+  if (_voiceListening) {
+    _voiceListening = false;
+    _voiceRecognition?.stop();
+    _voiceMultiItems = [];
+    _setVoiceLogStatus(null);
+    const voiceBtn = document.getElementById('voiceBtn');
+    if (voiceBtn) { voiceBtn.style.background = ''; voiceBtn.style.borderColor = ''; }
+  }
   input.value = '';
   autoResize(input);
 
@@ -31153,6 +31179,20 @@ function renderWeightProtocol() {
 // treatment, compared against what" only makes sense as an explicit
 // choice - there's no single default pairing that would mean anything
 // for everyone using this.
+// Multi-select treatments, matching how Compare Metrics' own pills work
+// (tap to toggle, active state shown by color) - previously a single
+// <select>, one treatment at a time. Selection persists across re-renders
+// via this module-level array, same pattern _mmSelectedMetrics already
+// uses for Compare Metrics.
+let _treatmentSessionsSelected = [];
+
+function toggleTreatmentSessionPill(id) {
+  const idx = _treatmentSessionsSelected.indexOf(id);
+  if (idx > -1) _treatmentSessionsSelected.splice(idx, 1);
+  else _treatmentSessionsSelected.push(id);
+  renderTreatmentSessionsPicker();
+}
+
 function renderTreatmentSessionsPicker() {
   const el = document.getElementById('treatment-sessions-content');
   const section = document.getElementById('treatment-sessions-section');
@@ -31161,12 +31201,24 @@ function renderTreatmentSessionsPicker() {
   if (!defs.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
 
+  // Default to all treatments selected the first time this renders (empty
+  // array means "never touched yet") - an empty pill row with nothing
+  // selected and no results would look broken on first open, not like an
+  // intentional starting state.
+  if (_treatmentSessionsSelected.length === 0) _treatmentSessionsSelected = defs.map(t => t.id);
+  // Drop any selected id whose treatment no longer exists (deleted since)
+  _treatmentSessionsSelected = _treatmentSessionsSelected.filter(id => defs.some(t => t.id === id));
+
   const metricOpts = Object.keys(DRILL_CONFIG).map(k => `<option value="${k}">${getDrillConfig(k).title}</option>`).join('');
   el.innerHTML = `
+    <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">TREATMENTS (tap to include/exclude)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+      ${defs.map(t => {
+        const active = _treatmentSessionsSelected.includes(t.id);
+        return `<button onclick="toggleTreatmentSessionPill('${t.id}')" style="padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;border:1px solid ${active ? '#a855f7' : 'var(--border)'};background:${active ? 'rgba(168,85,247,0.15)' : 'var(--surface2)'};color:${active ? '#a855f7' : 'var(--text3)'};">${t.name}</button>`;
+      }).join('')}
+    </div>
     <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-      <select id="treatmentSessionPick" onchange="renderTreatmentSessionsResult()" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
-        ${defs.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-      </select>
       <select id="treatmentMetricPick" onchange="renderTreatmentSessionsResult()" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
         ${metricOpts}
       </select>
@@ -31193,21 +31245,12 @@ function renderTreatmentSessionsPicker() {
   renderTreatmentSessionsResult();
 }
 
-function renderTreatmentSessionsResult() {
-  const resultEl = document.getElementById('treatmentSessionsResult');
-  if (!resultEl) return;
-  const treatmentId = document.getElementById('treatmentSessionPick')?.value;
-  const metricKey = document.getElementById('treatmentMetricPick')?.value;
-  const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
-  const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
-  if (!treatmentId || !metricKey) return;
-
+// Extracted from the old single-treatment renderTreatmentSessionsResult so
+// the same real calculation runs once per selected treatment, rather than
+// copy-pasting it - one source of truth for both the on-screen result and
+// the CSV export below, so they can never quietly disagree.
+function computeTreatmentSessionStats(treatmentId, metricKey, windowDays, periodChoice) {
   let sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
-  // Period restriction happens on which SESSIONS count as "a session
-  // happened", not on which comparison-metric readings count - restricting
-  // to, say, the last 30 days should mean "only sessions logged in that
-  // window", with each session's own before/after window still pulled from
-  // its real surrounding dates regardless of the period boundary.
   if (periodChoice === 'custom') {
     const from = document.getElementById('treatmentDateFrom')?.value;
     const to = document.getElementById('treatmentDateTo')?.value;
@@ -31217,37 +31260,37 @@ function renderTreatmentSessionsResult() {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - parseInt(periodChoice, 10));
     sessions = sessions.filter(s => parseDateStr(s.date) >= cutoff);
   }
-
-  // One comparison per calendar day a session happened, not per individual
-  // session - two PEMF sessions the same day still only contribute one
-  // "day of" data point, or a day with an unusually high session count
-  // would silently outweigh every other day in the average.
   const sessionDates = [...new Set(sessions.map(s => s.date))];
-  if (sessionDates.length < 3) {
-    resultEl.innerHTML = `<div style="font-size:12px;color:var(--text3);">Only ${sessionDates.length} day(s) with a logged session in this period — need at least 3 before a comparison means anything.</div>`;
-    return;
-  }
+  if (sessionDates.length < 3) return { sessionDates, before: [], during: [], after: [], insufficientData: true };
 
-  const cfg = getDrillConfig(metricKey);
-  const allPoints = getDrillData(metricKey, 0); // 0 = all time, same convention as Compare Metrics
+  const allPoints = getDrillData(metricKey, 0);
   const byDate = {}; allPoints.forEach(p => { if (p.val != null) byDate[p.date] = p.val; });
-
   const shiftDate = (dateStr, days) => {
     const [d, m, y] = dateStr.split('/').map(Number);
     const dt = new Date(2000 + y, m - 1, d + days);
     return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getFullYear()).slice(2)}`;
   };
-
-  // "Before" and "after" now average EVERY day within the window, not just
-  // the single adjacent day - a ±7 window genuinely means "the week either
-  // side", not "day -7 and day +7 only".
   const before = [], during = [], after = [];
   sessionDates.forEach(date => {
     for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, -i)]; if (v != null) before.push(v); }
     const d = byDate[date]; if (d != null) during.push(d);
     for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, i)]; if (v != null) after.push(v); }
   });
+  return { sessionDates, before, during, after, insufficientData: false };
+}
 
+function renderTreatmentSessionsResult() {
+  const resultEl = document.getElementById('treatmentSessionsResult');
+  if (!resultEl) return;
+  const metricKey = document.getElementById('treatmentMetricPick')?.value;
+  const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
+  const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
+  if (!metricKey || !_treatmentSessionsSelected.length) {
+    resultEl.innerHTML = `<div style="font-size:12px;color:var(--text3);">Select at least one treatment above.</div>`;
+    return;
+  }
+  const defs = loadTreatmentDefs();
+  const cfg = getDrillConfig(metricKey);
   const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : null;
   const col = (label, arr) => `
     <div style="text-align:center;flex:1;">
@@ -31255,21 +31298,78 @@ function renderTreatmentSessionsResult() {
       <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${arr.length ? cfg.color : 'var(--text3)'};">${avg(arr) != null ? avg(arr) : '—'}</div>
       <div style="font-size:10px;color:var(--text3);">${arr.length ? `${cfg.unit} · ${arr.length} reading(s)` : 'no data'}</div>
     </div>`;
-
   const windowLabel = windowDays === 1 ? 'Day before' : `${windowDays}d before`;
   const windowLabelAfter = windowDays === 1 ? 'Day after' : `${windowDays}d after`;
+
+  // One block per selected treatment, same "each gets its own card"
+  // principle as Compare Metrics' legend - lets several be compared
+  // side by side against the same metric without re-running the query
+  // for each one individually.
+  const blocks = _treatmentSessionsSelected.map(id => {
+    const def = defs.find(t => t.id === id);
+    const stats = computeTreatmentSessionStats(id, metricKey, windowDays, periodChoice);
+    if (stats.insufficientData) {
+      return `<div style="padding:10px 0;border-top:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:600;color:#a855f7;margin-bottom:4px;">${def ? def.name : '(deleted)'}</div>
+        <div style="font-size:11px;color:var(--text3);">Only ${stats.sessionDates.length} day(s) with a logged session in this period — need at least 3.</div>
+      </div>`;
+    }
+    return `<div style="padding:10px 0;border-top:1px solid var(--border);">
+      <div style="font-size:12px;font-weight:600;color:#a855f7;margin-bottom:6px;">${def ? def.name : '(deleted)'}</div>
+      <div style="display:flex;gap:8px;">
+        ${col(windowLabel, stats.before)}
+        ${col('Day of', stats.during)}
+        ${col(windowLabelAfter, stats.after)}
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">${stats.sessionDates.length} logged session day(s) in this period.</div>
+    </div>`;
+  });
+
   resultEl.innerHTML = `
-    <div style="display:flex;gap:8px;padding:12px 0;border-top:1px solid var(--border);">
-      ${col(windowLabel, before)}
-      ${col('Day of', during)}
-      ${col(windowLabelAfter, after)}
-    </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:8px;">Association only, from ${sessionDates.length} logged session day(s) in this period — not proof the treatment caused any difference shown here.</div>
-    <div style="display:flex;gap:8px;margin-top:10px;">
-      <button onclick="saveTreatmentSessionsQuery()" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">💾 Save this query</button>
-      <button onclick="emailTreatmentSessionsReport()" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">📧 Email this</button>
+    ${blocks.join('')}
+    <div style="font-size:11px;color:var(--text3);margin-top:10px;">Association only — not proof any treatment caused a difference shown here.</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button onclick="saveTreatmentSessionsQuery()" style="flex:1;min-width:100px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">💾 Save this query</button>
+      <button onclick="emailTreatmentSessionsReport()" style="flex:1;min-width:100px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">📧 Email this</button>
+      <button onclick="exportTreatmentSessionsCSV()" style="flex:1;min-width:100px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">📄 Export CSV</button>
     </div>
   `;
+}
+
+// Real CSV, not a screenshot or copied text - one row per treatment with
+// its before/during/after averages and reading counts, so the actual
+// numbers behind the on-screen result can be opened in a spreadsheet,
+// re-sorted, or handed to someone else directly. Reuses
+// computeTreatmentSessionStats - the exact same numbers shown on screen,
+// never a separately-computed set that could quietly drift from it.
+function exportTreatmentSessionsCSV() {
+  const metricKey = document.getElementById('treatmentMetricPick')?.value;
+  const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
+  const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
+  if (!metricKey || !_treatmentSessionsSelected.length) { showToast('Select at least one treatment first'); return; }
+  const defs = loadTreatmentDefs();
+  const cfg = getDrillConfig(metricKey);
+  const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : '';
+  const rows = [['Treatment', 'Metric', 'Window (± days)', `Before (${cfg.unit})`, 'Before readings', `Day of (${cfg.unit})`, 'Day-of readings', `After (${cfg.unit})`, 'After readings', 'Session days']];
+  _treatmentSessionsSelected.forEach(id => {
+    const def = defs.find(t => t.id === id);
+    const stats = computeTreatmentSessionStats(id, metricKey, windowDays, periodChoice);
+    rows.push([
+      def ? def.name : '(deleted)', cfg.title, windowDays,
+      avg(stats.before), stats.before.length,
+      avg(stats.during), stats.during.length,
+      avg(stats.after), stats.after.length,
+      stats.sessionDates.length
+    ]);
+  });
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `treatment-sessions-${cfg.title.replace(/\s+/g,'-').toLowerCase()}-${todayStr().replace(/\//g,'-')}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast('📄 CSV downloaded');
 }
 
 // Reuses the SAME mh_saved_queries store and Saved Queries list as the
@@ -31280,20 +31380,21 @@ function renderTreatmentSessionsResult() {
 // they can share one list and one Run button without either one guessing
 // at fields the other doesn't have.
 function saveTreatmentSessionsQuery() {
-  const treatmentId = document.getElementById('treatmentSessionPick')?.value;
+  const treatmentIds = [..._treatmentSessionsSelected];
   const metricKey = document.getElementById('treatmentMetricPick')?.value;
   const windowDays = document.getElementById('treatmentWindowPick')?.value;
   const periodChoice = document.getElementById('treatmentPeriodPick')?.value;
   const customFrom = document.getElementById('treatmentDateFrom')?.value || '';
   const customTo = document.getElementById('treatmentDateTo')?.value || '';
-  if (!treatmentId || !metricKey) { showToast('Nothing to save yet'); return; }
-  const treatmentName = loadTreatmentDefs().find(t => t.id === treatmentId)?.name || 'treatment';
+  if (!treatmentIds.length || !metricKey) { showToast('Nothing to save yet'); return; }
+  const defs = loadTreatmentDefs();
+  const treatmentNames = treatmentIds.map(id => defs.find(t => t.id === id)?.name || 'treatment').join(', ');
   const metricName = getDrillConfig(metricKey)?.title || metricKey;
-  const defaultName = `${treatmentName} vs ${metricName}`;
+  const defaultName = `${treatmentNames} vs ${metricName}`;
   const name = prompt('Name this query:', defaultName);
   if (!name) return;
   const saved = JSON.parse(localStorage.getItem('mh_saved_queries') || '[]');
-  saved.push({ name, type: 'treatment', treatmentId, metricKey, windowDays, periodChoice, customFrom, customTo, saved: new Date().toISOString() });
+  saved.push({ name, type: 'treatment', treatmentIds, metricKey, windowDays, periodChoice, customFrom, customTo, saved: new Date().toISOString() });
   localStorage.setItem('mh_saved_queries', JSON.stringify(saved));
   renderSavedQueries();
   showToast('Query saved ✓');
@@ -31308,17 +31409,18 @@ function saveTreatmentSessionsQuery() {
 // attached manually by whoever's sending it, since it isn't reachable
 // from a mailto link at all.
 function emailTreatmentSessionsReport() {
-  const treatmentId = document.getElementById('treatmentSessionPick')?.value;
+  const treatmentIds = _treatmentSessionsSelected;
   const metricKey = document.getElementById('treatmentMetricPick')?.value;
   const resultEl = document.getElementById('treatmentSessionsResult');
-  if (!treatmentId || !metricKey || !resultEl) { showToast('Nothing to email yet'); return; }
-  const treatmentName = loadTreatmentDefs().find(t => t.id === treatmentId)?.name || 'Treatment';
+  if (!treatmentIds.length || !metricKey || !resultEl) { showToast('Nothing to email yet'); return; }
+  const defs = loadTreatmentDefs();
+  const treatmentNames = treatmentIds.map(id => defs.find(t => t.id === id)?.name || 'Treatment').join(', ');
   const metricName = getDrillConfig(metricKey)?.title || metricKey;
   // Pulls the plain text straight from what's already on screen rather
   // than recomputing - guarantees the email matches what was actually
   // being looked at, same principle as the Compare Metrics export.
   const bodyText = resultEl.innerText || resultEl.textContent || '';
-  const subject = `MaxedHealth — ${treatmentName} vs ${metricName}`;
+  const subject = `MaxedHealth — ${treatmentNames} vs ${metricName}`;
   const body = `${subject}\n\n${bodyText}`;
   const carerEmail = localStorage.getItem('mh_carer_email') || '';
   window.location.href = `mailto:${encodeURIComponent(carerEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -31912,7 +32014,12 @@ function renderSavedQueries() {
     ${saved.map((q,i) => {
       let metaLine;
       if (q.type === 'treatment') {
-        const tName = loadTreatmentDefs().find(t => t.id === q.treatmentId)?.name || '(deleted treatment)';
+        // Backward-compatible with queries saved before multi-select existed
+        // (old shape had a single treatmentId, not an array) - a query saved
+        // under the old system should still load and display correctly, not
+        // silently break just because the picker changed underneath it.
+        const ids = q.treatmentIds || (q.treatmentId ? [q.treatmentId] : []);
+        const tName = ids.map(id => loadTreatmentDefs().find(t => t.id === id)?.name || '(deleted)').join(', ') || '(deleted treatment)';
         const mName = getDrillConfig(q.metricKey)?.title || q.metricKey;
         metaLine = `${tName} vs ${mName} · ±${q.windowDays || 1}d`;
       } else {
@@ -31943,7 +32050,9 @@ function loadSavedQuery(i) {
     // every Reports render, same as everything else on this tab).
     document.getElementById('treatment-sessions-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setTimeout(() => {
-      const tp = document.getElementById('treatmentSessionPick'); if (tp) tp.value = q.treatmentId;
+      // Same backward-compatibility as the meta-line display above.
+      _treatmentSessionsSelected = q.treatmentIds || (q.treatmentId ? [q.treatmentId] : []);
+      renderTreatmentSessionsPicker(); // rebuilds the pill row with the right ones active
       const mp = document.getElementById('treatmentMetricPick'); if (mp) mp.value = q.metricKey;
       const wp = document.getElementById('treatmentWindowPick'); if (wp) wp.value = q.windowDays || '1';
       const pp = document.getElementById('treatmentPeriodPick'); if (pp) pp.value = q.periodChoice || '0';
