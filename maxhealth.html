@@ -4670,7 +4670,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.640</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.641</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5546,7 +5546,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.640'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.641'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -26038,7 +26038,7 @@ function renderThresholdGauge(value, ref, unit, color) {
   </div>`;
 }
 
-function getTrendsData() {
+function getTrendsData(forceFullHistory) {
   const todayTotals = calcTotals(state.todayLog);
   const histData = [...state.history];
 
@@ -26054,12 +26054,23 @@ function getTrendsData() {
     // it explains any specific symptom already reported. Now merges the
     // fresh totals into the existing today row when one exists, instead
     // of ever creating a second one.
+    //
+    // NOTE ON A SECOND BUG FOUND ALONGSIDE THIS ONE: mutating
+    // existingToday directly here writes straight into the real
+    // state.history object (histData is a shallow copy - the elements
+    // inside it are the SAME references as state.history's own elements,
+    // not clones). getTrendsData is meant to be read-only; this was
+    // quietly overwriting the real saved today-record on every single
+    // call. Fixed below by cloning the object before mutating it.
     const todayDateStr = todayStr();
-    const existingToday = histData.find(d => d.date === todayDateStr);
-    if (existingToday) {
-      existingToday.totals = todayTotals;
-      existingToday.mode = state.dayMode;
-      if (state.weight) existingToday.weight = state.weight;
+    const existingTodayIdx = histData.findIndex(d => d.date === todayDateStr);
+    if (existingTodayIdx > -1) {
+      histData[existingTodayIdx] = {
+        ...histData[existingTodayIdx],
+        totals: todayTotals,
+        mode: state.dayMode,
+        ...(state.weight ? { weight: state.weight } : {}),
+      };
     } else {
       histData.unshift({
         date: todayDateStr,
@@ -26091,8 +26102,23 @@ function getTrendsData() {
     spo2:           d.spo2           || d.spo2_avg   || null,
   });
 
-  // Handle daily view mode
-  if (trendsWindow === 'today') {
+  // Handle daily view mode - THE ACTUAL ROOT CAUSE of "Compare Metrics
+  // shows only one point / nothing at all, but works if Trends' own
+  // period was already changed away from Today first". trendsWindow is a
+  // module-level variable belonging to the TRENDS PAGE's own Today/multi-
+  // day toggle - Compare Metrics has always called this same function,
+  // inheriting whatever trendsWindow happens to be set to, with zero
+  // awareness that it exists. Left on Trends' default "today" (which is
+  // exactly what a fresh app open or direct navigation to Compare Metrics
+  // leaves it as), this branch returns a SINGLE DAY regardless of
+  // whatever period Compare Metrics' own 7D/30D/90D/All selector has
+  // chosen - explains every symptom reported: color collisions and the
+  // duplicate-row bug were real and worth fixing, but neither was ever
+  // the actual reason whole metrics were missing. forceFullHistory lets a
+  // caller that manages its own independent period filtering (Compare
+  // Metrics, via getDrillData below) explicitly bypass this branch
+  // instead of silently inheriting a different screen's own view state.
+  if (trendsWindow === 'today' && !forceFullHistory) {
     const d = new Date();
     d.setDate(d.getDate() + _trendsDayOffset);
     const dd = d.getDate().toString().padStart(2,'0');
@@ -26155,7 +26181,7 @@ function destroyChart(id) {
 function renderJourneyCard() {
   const card = document.getElementById('journeyCard');
   if (!card) return;
-  const data = getTrendsData();
+  const data = getTrendsData(true); // "Always full history" per the comment above - was actually still inheriting Trends' own Today/multi-day toggle before this fix, contradicting its own stated intent
   const weighed = data.filter(d => d.weight);
   if (weighed.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
@@ -27771,7 +27797,13 @@ function getDrillData(metric, period) {
     }).filter(d => d.val !== null);
   }
 
-  const allData = getTrendsData();
+  // getDrillData always has its own explicit period parameter (used here
+  // and below) - it should never inherit whatever Trends' own Today/multi-
+  // day toggle happens to be set to, which is what forceFullHistory=true
+  // guarantees. This was the actual root cause of metrics going missing
+  // in Compare Metrics (and the single-metric Deep Dive view, which also
+  // calls getDrillData) depending on unrelated Trends page state.
+  const allData = getTrendsData(true);
 
   // Ketosis adherence - computed per-day (within that day's own mode-specific
   // ceiling or not), not a raw stored field like every other metric here.
