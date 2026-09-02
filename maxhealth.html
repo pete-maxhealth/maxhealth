@@ -4652,7 +4652,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.659</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.661</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4908,7 +4908,7 @@
   <div class="import-scroll" id="importScroll" onscroll="trackScrollNav(this)">
 
     <div class="card-unit" style="margin-top:16px;">
-    <div class="section-title" id="title-set-databackup" style="cursor:pointer;" onclick="toggleSection('set-databackup','set-databackup-wrap','set-databackup-icon')">Data &amp; Backup <span id="set-databackup-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div class="import-label" id="title-set-databackup" style="cursor:pointer;margin-bottom:0;" onclick="toggleSection('set-databackup','set-databackup-wrap','set-databackup-icon')">Data &amp; Backup <span id="set-databackup-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▾ hide</span></div>
     <div id="set-databackup-wrap">
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div id="dataBackupStatusBlock">
@@ -5560,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.659'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.661'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -28097,10 +28097,41 @@ function getDrillData(metric, period) {
       ? (() => { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - period);
           return fullHistory.filter(d => new Date(d.isoDate) >= cutoff); })()
       : fullHistory;
-    return filtered.map(d => {
+    const sparse = filtered.map(d => {
       const val = parseFloat(d[cfg.field]);
       return { date: d.date, val: (val && !isNaN(val) && val > 0) ? val : null, raw: d };
     }).filter(d => d.val !== null);
+    // Real gap found: a scale reading might only happen every few days, so
+    // this returned only the handful of days actually measured - a chart
+    // line joining just those points looks like a short segment stuck at
+    // one edge of the "All" range rather than spanning it, even though the
+    // person's body composition obviously didn't just not exist on the
+    // days between readings. Forward-fills against every day nutrition was
+    // actually logged (the closest available "every day" reference this
+    // app already tracks) using the most recent prior reading - never
+    // backfills before the very first real measurement, since there is
+    // nothing genuine to carry forward from before that point.
+    if (!sparse.length) return sparse;
+    const allDays = (state.history || [])
+      .filter(d => period <= 0 || (() => { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - period); return new Date(isoDate(d.date)) >= cutoff; })())
+      .map(d => d.date)
+      .sort((a,b) => isoDate(a) < isoDate(b) ? -1 : 1);
+    const sparseByDate = new Map(sparse.map(d => [d.date, d]));
+    const firstRealIdx = allDays.findIndex(d => isoDate(d) >= sparse[0].raw.isoDate);
+    if (firstRealIdx < 0) return sparse;
+    const filled = [];
+    let lastVal = null, lastRaw = null;
+    for (let i = firstRealIdx; i < allDays.length; i++) {
+      const day = allDays[i];
+      if (sparseByDate.has(day)) {
+        const entry = sparseByDate.get(day);
+        lastVal = entry.val; lastRaw = entry.raw;
+        filled.push(entry);
+      } else if (lastVal !== null) {
+        filled.push({ date: day, val: lastVal, raw: lastRaw, carriedForward: true });
+      }
+    }
+    return filled;
   }
 
   // getDrillData always has its own explicit period parameter (used here
@@ -28305,6 +28336,17 @@ function setMMPeriod(period, btn) {
   document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old period's data
   const customRow = document.getElementById('mmCustomDateRow');
   if (customRow) customRow.style.display = period === -1 ? 'flex' : 'none';
+  // Same defensive re-sync as Trends' setTrendsFilter - _mmCustomFrom/
+  // _mmCustomTo are the real source of truth once picked; restoring the
+  // input's displayed value from them here guards against the input's own
+  // DOM value being lost for any reason, rather than the date silently
+  // showing as reset.
+  if (period === -1) {
+    const fromEl = document.getElementById('mmCustomFromInput');
+    const toEl = document.getElementById('mmCustomToInput');
+    if (fromEl && _mmCustomFrom) fromEl.value = _mmCustomFrom;
+    if (toEl && _mmCustomTo) toEl.value = _mmCustomTo;
+  }
   // Custom with no dates picked yet has nothing to filter to - render once
   // the person has actually chosen at least a "from" date (the date
   // inputs' own onchange calls renderMMChart themselves once that
@@ -29925,6 +29967,20 @@ function setTrendsFilter(days, btn) {
   const dayNav = document.getElementById('trendsDayNav');
   const customRow = document.getElementById('trendsCustomDateRow');
   if (customRow) customRow.style.display = days === -1 ? 'flex' : 'none';
+  // Defensive re-sync: whatever the exact cause turns out to be (a parent
+  // re-render, a tab switch rebuilding this section, or something else not
+  // yet pinned down), _trendsCustomFrom/_trendsCustomTo are the real source
+  // of truth once a date's been picked - restoring the input's displayed
+  // value from them here, every time Custom is selected, means even a lost
+  // DOM value shows the date the user actually chose rather than resetting
+  // silently to blank (which several mobile date pickers then default to
+  // showing as today when reopened).
+  if (days === -1) {
+    const fromEl = document.getElementById('trendsCustomFromInput');
+    const toEl = document.getElementById('trendsCustomToInput');
+    if (fromEl && _trendsCustomFrom) fromEl.value = _trendsCustomFrom;
+    if (toEl && _trendsCustomTo) toEl.value = _trendsCustomTo;
+  }
 
   if (days === 'today') {
     trendsWindow = 'today';
