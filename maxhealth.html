@@ -4684,7 +4684,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.649</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.651</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5560,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.649'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.651'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -14349,15 +14349,11 @@ function logSuggestedCombo(comboIndex) {
       fibre:   Math.round((ing.fibre  || 0) * factor * 10) / 10,
     }));
     logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
-    // Third, independently-written recipe-logging path found during a
-    // "Recipes/Most Used doesn't work" report - this one (via a suggested-
-    // combo, not the direct recipe-list Log button or Cook Mode) never had
-    // the useCount increment at all, so any recipe logged through this
-    // path specifically was invisible to Most Used regardless of how many
-    // times it was actually used. Same pattern as the other two.
-    const allRecipesForCombo = loadRecipes();
-    const matchForCombo = allRecipesForCombo.find(r => r.id === recipe.id);
-    if (matchForCombo) { matchForCombo.useCount = (matchForCombo.useCount || 0) + 1; saveRecipes(allRecipesForCombo); }
+    // useCount now handled centrally inside logFoods() itself (matched by
+    // name against originalText, covering every logging path including
+    // free-text/voice descriptions, not just this one) - the explicit
+    // increment that used to live here was removed to avoid double-
+    // counting now that logFoods does it for every path.
     showToast(`✓ ${recipe.name} logged`);
     switchTabById('chat');
     return;
@@ -17541,6 +17537,40 @@ function logFoods(foods, originalText, aiMessage = null) {
   // including any added later. Idempotent — already-corrected items pass through
   // unchanged, safe even if a path also calls this upstream.
   foods = sanitiseFatValues(foods);
+
+  // Recipe useCount, matched by NAME against originalText - moved here from
+  // three separate explicit increments (logRecipe/_doLogRecipe/
+  // logSuggestedCombo) after a real bug report: a recipe logged by
+  // describing it in a message ("I had keto custard") never went through
+  // any of those three functions at all, so its count stayed at 0
+  // regardless of real usage - exactly the same "individually patching each
+  // path keeps missing new ones" problem the comment above already
+  // describes for fat sanitization, just not yet applied to this. Doing it
+  // here instead means EVERY path counts, including free-text/voice
+  // descriptions, without needing to find and patch each one individually
+  // (or catch the next one that gets added later). The three old explicit
+  // increments were removed - this single check covers what they did too,
+  // since logRecipe's own originalText already starts with the exact
+  // recipe name.
+  if (originalText) {
+    const normalizedText = originalText.trim().toLowerCase();
+    const allRecipes = loadRecipes();
+    const matchedRecipe = allRecipes.find(r => {
+      const rName = (r.name || '').trim().toLowerCase();
+      if (!rName) return false;
+      // Exact match, or originalText starting with the recipe name (the
+      // "(N servings)" suffix logRecipe/_doLogRecipe/logSuggestedCombo all
+      // append), or a real fuzzy contains-match for free-text descriptions -
+      // gated to names over 5 characters so something short like "eggs"
+      // doesn't wrongly match half of everything logged.
+      return normalizedText === rName || normalizedText.startsWith(rName)
+        || (rName.length > 5 && normalizedText.includes(rName));
+    });
+    if (matchedRecipe) {
+      matchedRecipe.useCount = (matchedRecipe.useCount || 0) + 1;
+      saveRecipes(allRecipes);
+    }
+  }
 
   // Records every single logFoods() call with the ACTUAL _logTargetDate seen at
   // that exact moment, regardless of which branch it takes - built specifically
@@ -24234,13 +24264,9 @@ function logRecipe(id, servings) {
     ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
-  // Same useCount pattern already used for library items and saved prompts
-  // (both already sortable by "Most Used") - incremented here, at the
-  // point a recipe is actually logged, not just viewed or opened for
-  // review, matching how library items only count on real use too.
-  const allRecipes = loadRecipes();
-  const match = allRecipes.find(r => r.id === id);
-  if (match) { match.useCount = (match.useCount || 0) + 1; saveRecipes(allRecipes); }
+  // useCount now handled centrally inside logFoods() itself - see its own
+  // comment for why (a name-matched free-text log was found to bypass
+  // every explicit increment that used to live at each call site).
   showToast(`${recipe.name} logged ✓`);
   switchTabById('chat');
 }
@@ -25675,12 +25701,9 @@ function _doLogRecipe(recipe, s) {
     ...(ing.polyols ? { polyols: Math.round(ing.polyols * factor * 10) / 10 } : {}),
   }));
   logFoods(foods, recipe.name + ' (×' + servings + ')');
-  // Same useCount increment as logRecipe() above - this is the OTHER
-  // logging path (custom-servings prompt rather than the quick "Log 1
-  // serving" button), so it needs its own increment to stay in sync.
-  const allRecipes2 = loadRecipes();
-  const match2 = allRecipes2.find(r => r.id === recipe.id);
-  if (match2) { match2.useCount = (match2.useCount || 0) + 1; saveRecipes(allRecipes2); }
+  // useCount now handled centrally inside logFoods() itself - see its own
+  // comment. Its startsWith(recipeName) check still correctly matches this
+  // path's slightly different "(×N)" suffix format, same as the others.
   switchTabById('chat');
 }
 
@@ -28203,15 +28226,64 @@ function toggleMMMetric(key) {
   renderMMChart();
 }
 
+// Category grouping for the metric picker - "Top level pills house
+// associated pills... just an easier way to view things" (Pete's own
+// words). Two categories are dynamic (Treatment, Symptoms - whatever's
+// actually defined in Settings); the rest are fixed groupings of
+// DRILL_CONFIG's 16 base metrics. Every base metric key must appear in
+// exactly one group here, or it would silently vanish from the picker
+// entirely once grouped rendering replaced the flat list.
+const MM_METRIC_GROUPS = [
+  { label: 'Treatment', match: m => m.isTreatment },
+  { label: 'Exercise', match: m => ['steps', 'distance'].includes(m.key) },
+  { label: 'Vitals & Sleep', match: m => ['hr', 'hrv', 'spo2', 'sleep'].includes(m.key) },
+  { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'ketosis', 'water'].includes(m.key) },
+  { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
+  { label: 'Symptoms', match: m => m.isSymptom },
+];
+// Which groups are currently expanded - collapsed by default except the
+// first one with an active selection in it (so opening the overlay with a
+// prior selection doesn't hide it inside a closed group), persisted only
+// for this session, not saved across app restarts.
+let _mmExpandedGroups = null;
+
+function toggleMMGroup(label) {
+  if (_mmExpandedGroups.has(label)) _mmExpandedGroups.delete(label);
+  else _mmExpandedGroups.add(label);
+  renderMMMetricPicker();
+}
+
 function renderMMMetricPicker() {
   const el = document.getElementById('mmMetricPicker');
   if (!el) return;
   const all = getAllOverlayableMetrics();
-  el.innerHTML = all.map(m => {
-    const on = _mmSelectedMetrics.includes(m.key);
-    return `<button onclick="toggleMMMetric('${m.key}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on ? m.color : 'var(--border)'};background:${on ? m.color + '18' : 'var(--surface2)'};color:${on ? m.color : 'var(--text3)'};">
-      <span style="opacity:${on ? '1' : '0.4'};">${m.icon || '●'}</span>${m.title}
-    </button>`;
+
+  if (_mmExpandedGroups === null) {
+    _mmExpandedGroups = new Set();
+    const firstActive = MM_METRIC_GROUPS.find(g => all.some(m => g.match(m) && _mmSelectedMetrics.includes(m.key)));
+    if (firstActive) _mmExpandedGroups.add(firstActive.label);
+  }
+
+  el.innerHTML = MM_METRIC_GROUPS.map(g => {
+    const members = all.filter(g.match);
+    if (!members.length) return ''; // e.g. no treatments defined yet - no empty group header to tap for nothing
+    const selectedCount = members.filter(m => _mmSelectedMetrics.includes(m.key)).length;
+    const expanded = _mmExpandedGroups.has(g.label);
+    return `
+      <div style="margin-bottom:8px;">
+        <button onclick="toggleMMGroup('${g.label}')" style="display:flex;align-items:center;justify-content:space-between;width:100%;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text);margin-bottom:${expanded ? '6px' : '0'};">
+          <span>${g.label}${selectedCount ? ` <span style="color:var(--accent);font-weight:800;">(${selectedCount})</span>` : ''}</span>
+          <span style="color:var(--text3);font-size:10px;">${expanded ? '▾ hide' : '▸ show'}</span>
+        </button>
+        ${expanded ? `<div style="display:flex;flex-wrap:wrap;gap:6px;padding-left:4px;">
+          ${members.map(m => {
+            const on = _mmSelectedMetrics.includes(m.key);
+            return `<button onclick="toggleMMMetric('${m.key}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on ? m.color : 'var(--border)'};background:${on ? m.color + '18' : 'var(--surface2)'};color:${on ? m.color : 'var(--text3)'};">
+              <span style="opacity:${on ? '1' : '0.4'};">${m.icon || '●'}</span>${m.title}
+            </button>`;
+          }).join('')}
+        </div>` : ''}
+      </div>`;
   }).join('');
 }
 
@@ -35807,7 +35879,7 @@ function dismissInsight() {
     <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.04em;">Metrics</div>
     <button onclick="resetMMSelection()" style="background:none;border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">↺ Reset</button>
   </div>
-  <div id="mmMetricPicker" style="padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;"></div>
+  <div id="mmMetricPicker" style="padding:12px 20px;display:block;"></div>
 
   <!-- Always visible regardless of section hidden state - the ▲▼👁
        controls live inside each section's own header, so hiding a section
