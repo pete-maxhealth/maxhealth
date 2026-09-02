@@ -4670,7 +4670,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.639</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.640</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5546,7 +5546,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.639'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.640'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -27997,7 +27997,24 @@ function _mmNormalize(vals) {
   return { data, relativeRangePct, min, max, isLowVariance };
 }
 
+let _mmRenderGen = 0;
 function renderMMChart() {
+  // Real race found via a precise repro: opening Compare Metrics defers
+  // its first render via requestAnimationFrame (so the canvas is measured
+  // AFTER a real layout pass, not before - see openMultiMetricOverlay's
+  // own comment on why). Tapping a period/metric button quickly after
+  // opening fires a SECOND, synchronous render via setMMPeriod/
+  // toggleMMMetric. If the original deferred render THEN fires afterward,
+  // it re-measures and rebuilds the canvas again, on top of the already-
+  // correct render - "works if the period was already set before opening
+  // the screen, breaks if changed within it" is exactly what a stale
+  // deferred render clobbering a fresh one looks like. This generation
+  // counter lets a render check, right before it actually touches the
+  // canvas, whether a NEWER render has started since it began - if so, it
+  // was already stale before it finished and gets skipped instead of
+  // overwriting the real result. Can only ever skip redundant work, never
+  // skip real data.
+  const myGen = ++_mmRenderGen;
   const all = getAllOverlayableMetrics();
   const selected = all.filter(m => _mmSelectedMetrics.includes(m.key));
   const canvas = document.getElementById('mmChart');
@@ -28127,6 +28144,11 @@ function renderMMChart() {
   });
 
   const labels = allDates.map(d => { const p = d.split('/'); return p.length === 3 ? `${p[0]}/${p[1]}` : d; });
+
+  // The actual guard - everything above this point is pure computation
+  // (no DOM/canvas touched yet), safe to let finish regardless. Only the
+  // commit itself needs skipping if a newer render has already started.
+  if (myGen !== _mmRenderGen) return;
 
   _mmChart = new Chart(canvas.getContext('2d'), {
     type: 'line',
