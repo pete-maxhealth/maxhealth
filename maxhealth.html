@@ -4562,6 +4562,8 @@
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px;"><span class="help-slot" data-id="carerclinician" data-text="Share a read-only view of your nutrition history with a carer, family member or clinician. Shows totals only — no food log details. Valid for 7 days."></span></div>
       <button class="copy-btn" onclick="generateCarerLink()" style="width:100%;">👁 GENERATE CARER VIEW LINK</button>
       <div id="carerLinkOutput" style="display:none;margin-top:10px;"></div>
+      <div style="font-size:11px;color:var(--text3);margin:14px 0 6px;">Email address for reports (e.g. Treatment Sessions → Email this) — pre-fills the recipient, nothing is sent automatically:</div>
+      <input type="email" id="carerEmailInput" placeholder="clinician@example.com" onchange="localStorage.setItem('mh_carer_email', this.value.trim());showToast('Saved ✓')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;">
     </div>
     </div>
 
@@ -4648,7 +4650,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.627</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.629</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5524,7 +5526,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.627'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.629'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9947,6 +9949,8 @@ function initSettings() {
   renderSupplementSettings();
   renderSymptomSettings();
   renderTreatmentSettings();
+  const carerEmailInput = document.getElementById('carerEmailInput');
+  if (carerEmailInput) carerEmailInput.value = localStorage.getItem('mh_carer_email') || '';
   initSupplementCheckpointInputs();
   initBMRFormulaUI();
   refreshActiveScrollContainer();
@@ -14989,6 +14993,29 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     return;
   }
 
+  // ── Resume pending numbered options — user is selecting one, not asking
+  // something new (see addBubble's pending-options tracking above). Fires
+  // on genuinely ANY next text message, same as the clarification check
+  // above - not narrowed to "looks like a bare number", because the actual
+  // bug this fixes covers both a bare "1" AND a full sentence naming the
+  // chosen option ("yes please, the steak and blue cheese"). The AI itself
+  // is perfectly capable of matching either form against the option list
+  // once it's actually given that list as real context - the fix is
+  // ensuring that context survives into this message, not writing a
+  // parser to guess the user's intent before the AI even sees it. Expires
+  // after 10 minutes so a stale list can't hijack an unrelated later
+  // message, and is cleared here regardless of outcome - a second
+  // ambiguous-looking reply in a row should not keep re-triggering this. ──
+  if (window._pendingNumberedOptions && !imageBase64 && text) {
+    const po = window._pendingNumberedOptions;
+    window._pendingNumberedOptions = null;
+    if (Date.now() - po.t < 10 * 60 * 1000) {
+      const selectionText = `[You just suggested these options:]\n${po.text}\n\n[User's reply:] ${text}\n\n[If this reply is selecting one of the options above by number, name, or a clear reference to it — such as "1", "yes", "the steak one", or a phrase matching one of the listed items — log EXACTLY that option using the ingredients and amounts already stated for it, immediately, without asking for clarification or treating this as a new food search. If the reply genuinely isn't selecting any of the options, respond to it normally instead.]`;
+      processMessage(selectionText, null, null);
+      return;
+    }
+  }
+
   // ── If a new image arrives, any pending clarification is stale — clear it ──
   if (imageBase64 && window._pendingClarification) {
     window._pendingClarification = null;
@@ -17735,13 +17762,23 @@ function addBubble(text, type, modifier = '') {
   div.className = `chat-bubble bubble-${type}${modifier ? ' ' + modifier : ''}`;
   if (type === 'system') {
     div.innerHTML = '<div class="bubble-label">MAXEDHEALTH</div>' + text.replace(/\n/g, '<br>');
-    // Read-aloud for genuinely lengthy AI/system responses - the "Ask AI"
-    // case specifically asked for, plus keto-status/remaining-macro replies
-    // and anything else that flows through this one shared function. Short
-    // confirmations ("✓ Logged") don't get one - not worth a button tap to
-    // hear four words read out. Uses the browser's own built-in
-    // speechSynthesis (Web Speech API) - works fully offline, no API call
-    // or cost, unlike everything else AI-related in this app.
+    // Tracks a genuine numbered list of options (2+ lines starting "1. ",
+    // "2. " etc) so a short follow-up reply - a bare number, "yes" plus a
+    // name, or anything else referencing one of them - can be replayed
+    // WITH this message as real context (see processMessage's pending-
+    // options check) instead of being classified as a fresh, ambiguous
+    // request. This was the actual bug behind "replying '1' searches the
+    // library for the literal text 1" and "confirming a suggested meal by
+    // name re-asks whether I want a recipe or a quick log" - the
+    // conversation history technically still contained the suggestion,
+    // but nothing told the AI that a short reply right after was
+    // SELECTING from it rather than starting something new. 10-minute
+    // expiry (checked in processMessage) so a stale list from ages ago
+    // can't wrongly hijack an unrelated later message.
+    const numberedLines = text.match(/^\s*\d+[\.\)]\s+.+$/gm);
+    if (numberedLines && numberedLines.length >= 2) {
+      window._pendingNumberedOptions = { text, t: Date.now() };
+    }
     if (text.length > 60) {
       const speakBtn = document.createElement('span');
       speakBtn.className = 'bubble-speak-btn';
@@ -30586,13 +30623,30 @@ function renderTreatmentSessionsPicker() {
 
   const metricOpts = Object.keys(DRILL_CONFIG).map(k => `<option value="${k}">${getDrillConfig(k).title}</option>`).join('');
   el.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
       <select id="treatmentSessionPick" onchange="renderTreatmentSessionsResult()" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
         ${defs.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
       </select>
       <select id="treatmentMetricPick" onchange="renderTreatmentSessionsResult()" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
         ${metricOpts}
       </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+      <select id="treatmentWindowPick" onchange="renderTreatmentSessionsResult()" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+        <option value="1">±1 day (before/of/after)</option>
+        <option value="3">±3 days</option>
+        <option value="7">±7 days (week either side)</option>
+      </select>
+      <select id="treatmentPeriodPick" onchange="renderTreatmentSessionsResult();document.getElementById('treatmentCustomDates').style.display=this.value==='custom'?'flex':'none';" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+        <option value="0">All logged sessions</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="custom">Custom date range…</option>
+      </select>
+    </div>
+    <div id="treatmentCustomDates" style="display:none;gap:8px;margin-bottom:12px;">
+      <input type="date" id="treatmentDateFrom" onchange="renderTreatmentSessionsResult()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+      <input type="date" id="treatmentDateTo" onchange="renderTreatmentSessionsResult()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
     </div>
     <div id="treatmentSessionsResult"></div>
   `;
@@ -30604,16 +30658,33 @@ function renderTreatmentSessionsResult() {
   if (!resultEl) return;
   const treatmentId = document.getElementById('treatmentSessionPick')?.value;
   const metricKey = document.getElementById('treatmentMetricPick')?.value;
+  const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
+  const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
   if (!treatmentId || !metricKey) return;
 
-  const sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
+  let sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
+  // Period restriction happens on which SESSIONS count as "a session
+  // happened", not on which comparison-metric readings count - restricting
+  // to, say, the last 30 days should mean "only sessions logged in that
+  // window", with each session's own before/after window still pulled from
+  // its real surrounding dates regardless of the period boundary.
+  if (periodChoice === 'custom') {
+    const from = document.getElementById('treatmentDateFrom')?.value;
+    const to = document.getElementById('treatmentDateTo')?.value;
+    if (from) { const fromDt = new Date(from); sessions = sessions.filter(s => parseDateStr(s.date) >= fromDt); }
+    if (to) { const toDt = new Date(to); toDt.setHours(23,59,59,999); sessions = sessions.filter(s => parseDateStr(s.date) <= toDt); }
+  } else if (periodChoice !== '0') {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - parseInt(periodChoice, 10));
+    sessions = sessions.filter(s => parseDateStr(s.date) >= cutoff);
+  }
+
   // One comparison per calendar day a session happened, not per individual
   // session - two PEMF sessions the same day still only contribute one
   // "day of" data point, or a day with an unusually high session count
   // would silently outweigh every other day in the average.
   const sessionDates = [...new Set(sessions.map(s => s.date))];
   if (sessionDates.length < 3) {
-    resultEl.innerHTML = `<div style="font-size:12px;color:var(--text3);">Only ${sessionDates.length} day(s) with a logged session so far — need at least 3 before a before/during/after comparison means anything.</div>`;
+    resultEl.innerHTML = `<div style="font-size:12px;color:var(--text3);">Only ${sessionDates.length} day(s) with a logged session in this period — need at least 3 before a comparison means anything.</div>`;
     return;
   }
 
@@ -30627,11 +30698,14 @@ function renderTreatmentSessionsResult() {
     return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getFullYear()).slice(2)}`;
   };
 
+  // "Before" and "after" now average EVERY day within the window, not just
+  // the single adjacent day - a ±7 window genuinely means "the week either
+  // side", not "day -7 and day +7 only".
   const before = [], during = [], after = [];
   sessionDates.forEach(date => {
-    const b = byDate[shiftDate(date, -1)]; if (b != null) before.push(b);
+    for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, -i)]; if (v != null) before.push(v); }
     const d = byDate[date]; if (d != null) during.push(d);
-    const a = byDate[shiftDate(date, 1)]; if (a != null) after.push(a);
+    for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, i)]; if (v != null) after.push(v); }
   });
 
   const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : null;
@@ -30639,17 +30713,76 @@ function renderTreatmentSessionsResult() {
     <div style="text-align:center;flex:1;">
       <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${label}</div>
       <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${arr.length ? cfg.color : 'var(--text3)'};">${avg(arr) != null ? avg(arr) : '—'}</div>
-      <div style="font-size:10px;color:var(--text3);">${arr.length ? `${cfg.unit} · ${arr.length} day(s)` : 'no data'}</div>
+      <div style="font-size:10px;color:var(--text3);">${arr.length ? `${cfg.unit} · ${arr.length} reading(s)` : 'no data'}</div>
     </div>`;
 
+  const windowLabel = windowDays === 1 ? 'Day before' : `${windowDays}d before`;
+  const windowLabelAfter = windowDays === 1 ? 'Day after' : `${windowDays}d after`;
   resultEl.innerHTML = `
     <div style="display:flex;gap:8px;padding:12px 0;border-top:1px solid var(--border);">
-      ${col('Day before', before)}
+      ${col(windowLabel, before)}
       ${col('Day of', during)}
-      ${col('Day after', after)}
+      ${col(windowLabelAfter, after)}
     </div>
-    <div style="font-size:11px;color:var(--text3);margin-top:8px;">Association only, from ${sessionDates.length} logged session day(s) — not proof the treatment caused any difference shown here.</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px;">Association only, from ${sessionDates.length} logged session day(s) in this period — not proof the treatment caused any difference shown here.</div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="saveTreatmentSessionsQuery()" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">💾 Save this query</button>
+      <button onclick="emailTreatmentSessionsReport()" style="flex:1;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:11px;cursor:pointer;">📧 Email this</button>
+    </div>
   `;
+}
+
+// Reuses the SAME mh_saved_queries store and Saved Queries list as the
+// Query Builder above - not a separate treatment-only save system, exactly
+// what was asked for ("just a hook into the rest of the reporting"). A
+// `type` field distinguishes the two shapes (a range query has metric/op/
+// val1/val2/range; this has treatmentId/metricKey/windowDays/period) so
+// they can share one list and one Run button without either one guessing
+// at fields the other doesn't have.
+function saveTreatmentSessionsQuery() {
+  const treatmentId = document.getElementById('treatmentSessionPick')?.value;
+  const metricKey = document.getElementById('treatmentMetricPick')?.value;
+  const windowDays = document.getElementById('treatmentWindowPick')?.value;
+  const periodChoice = document.getElementById('treatmentPeriodPick')?.value;
+  const customFrom = document.getElementById('treatmentDateFrom')?.value || '';
+  const customTo = document.getElementById('treatmentDateTo')?.value || '';
+  if (!treatmentId || !metricKey) { showToast('Nothing to save yet'); return; }
+  const treatmentName = loadTreatmentDefs().find(t => t.id === treatmentId)?.name || 'treatment';
+  const metricName = getDrillConfig(metricKey)?.title || metricKey;
+  const defaultName = `${treatmentName} vs ${metricName}`;
+  const name = prompt('Name this query:', defaultName);
+  if (!name) return;
+  const saved = JSON.parse(localStorage.getItem('mh_saved_queries') || '[]');
+  saved.push({ name, type: 'treatment', treatmentId, metricKey, windowDays, periodChoice, customFrom, customTo, saved: new Date().toISOString() });
+  localStorage.setItem('mh_saved_queries', JSON.stringify(saved));
+  renderSavedQueries();
+  showToast('Query saved ✓');
+}
+
+// Two genuinely different outputs for two different needs, same reasoning
+// as Compare Metrics export earlier - the actual numbers behind the
+// current result, and a way to get them to someone else. mailto: links
+// cannot attach files (a real platform limitation, not something to code
+// around) - this pre-fills recipient/subject/body so the text report is
+// ready immediately; any image (e.g. a Compare Metrics export) has to be
+// attached manually by whoever's sending it, since it isn't reachable
+// from a mailto link at all.
+function emailTreatmentSessionsReport() {
+  const treatmentId = document.getElementById('treatmentSessionPick')?.value;
+  const metricKey = document.getElementById('treatmentMetricPick')?.value;
+  const resultEl = document.getElementById('treatmentSessionsResult');
+  if (!treatmentId || !metricKey || !resultEl) { showToast('Nothing to email yet'); return; }
+  const treatmentName = loadTreatmentDefs().find(t => t.id === treatmentId)?.name || 'Treatment';
+  const metricName = getDrillConfig(metricKey)?.title || metricKey;
+  // Pulls the plain text straight from what's already on screen rather
+  // than recomputing - guarantees the email matches what was actually
+  // being looked at, same principle as the Compare Metrics export.
+  const bodyText = resultEl.innerText || resultEl.textContent || '';
+  const subject = `MaxedHealth — ${treatmentName} vs ${metricName}`;
+  const body = `${subject}\n\n${bodyText}`;
+  const carerEmail = localStorage.getItem('mh_carer_email') || '';
+  window.location.href = `mailto:${encodeURIComponent(carerEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  showToast(carerEmail ? 'Opening your mail app…' : 'Opening your mail app — no saved recipient, add one to skip this step next time');
 }
 
 // ─── EXERCISE NAME DUPLICATE CHECK ─────────────────────────────────────────
@@ -31192,12 +31325,20 @@ function renderSavedQueries() {
   el.innerHTML = `
     <div style="font-family:'Syne',sans-serif;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;margin-top:4px;">Saved Queries</div>
     ${saved.map((q,i) => {
-      const meta = QUERY_COLS[q.metric] || {};
-      const valStr = q.op === 'between' ? `${q.val1}–${q.val2}` : q.op === 'missing' || q.op === 'has' ? '' : q.val1;
+      let metaLine;
+      if (q.type === 'treatment') {
+        const tName = loadTreatmentDefs().find(t => t.id === q.treatmentId)?.name || '(deleted treatment)';
+        const mName = getDrillConfig(q.metricKey)?.title || q.metricKey;
+        metaLine = `${tName} vs ${mName} · ±${q.windowDays || 1}d`;
+      } else {
+        const meta = QUERY_COLS[q.metric] || {};
+        const valStr = q.op === 'between' ? `${q.val1}–${q.val2}` : q.op === 'missing' || q.op === 'has' ? '' : q.val1;
+        metaLine = `${meta.label||q.metric} ${opLabels[q.op]||q.op} ${valStr}${meta.unit?' '+meta.unit:''} · ${rangeLabel(q.range)}`;
+      }
       return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
         <div style="flex:1;min-width:0;overflow:hidden;">
           <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${q.name || 'Unnamed query'}</div>
-          <div style="font-size:10px;color:var(--text3);">${meta.label||q.metric} ${opLabels[q.op]||q.op} ${valStr}${meta.unit?' '+meta.unit:''} · ${rangeLabel(q.range)}</div>
+          <div style="font-size:10px;color:var(--text3);">${metaLine}</div>
         </div>
         <button class="run-btn" style="font-size:11px;padding:6px 14px;width:auto;flex-shrink:0;" onclick="loadSavedQuery(${i})">Run</button>
         <span style="color:var(--text3);cursor:pointer;padding:4px 8px;flex-shrink:0;font-size:18px;line-height:1;" onclick="deleteSavedQuery(${i})">×</span>
@@ -31209,6 +31350,29 @@ function loadSavedQuery(i) {
   const saved = JSON.parse(localStorage.getItem('mh_saved_queries') || '[]');
   const q = saved[i];
   if (!q) return;
+
+  if (q.type === 'treatment') {
+    // Scroll to the Treatment Sessions section and apply the saved picks -
+    // the section only renders its inputs once a treatment exists, so this
+    // assumes renderTreatmentSessionsPicker() has already run (it runs on
+    // every Reports render, same as everything else on this tab).
+    document.getElementById('treatment-sessions-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      const tp = document.getElementById('treatmentSessionPick'); if (tp) tp.value = q.treatmentId;
+      const mp = document.getElementById('treatmentMetricPick'); if (mp) mp.value = q.metricKey;
+      const wp = document.getElementById('treatmentWindowPick'); if (wp) wp.value = q.windowDays || '1';
+      const pp = document.getElementById('treatmentPeriodPick'); if (pp) pp.value = q.periodChoice || '0';
+      const cd = document.getElementById('treatmentCustomDates');
+      if (cd) cd.style.display = q.periodChoice === 'custom' ? 'flex' : 'none';
+      if (q.periodChoice === 'custom') {
+        const df = document.getElementById('treatmentDateFrom'); if (df) df.value = q.customFrom || '';
+        const dt = document.getElementById('treatmentDateTo'); if (dt) dt.value = q.customTo || '';
+      }
+      renderTreatmentSessionsResult();
+    }, 300);
+    showToast('Loaded ✓');
+    return;
+  }
 
   // Apply range
   if (q.range > 0) {
