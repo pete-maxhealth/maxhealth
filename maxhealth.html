@@ -3034,7 +3034,6 @@
         <div class="trends-filter-btn active" id="trendsBtnToday" onclick="setTrendsFilter('today',this)">Today</div>
         <div class="trends-filter-btn" id="trendsBtn7" onclick="setTrendsFilter(7,this)">7 Days</div>
         <div class="trends-filter-btn" id="trendsBtn30" onclick="setTrendsFilter(30,this)">30 Days</div>
-        <div class="trends-filter-btn" id="trendsBtn90" onclick="setTrendsFilter(90,this)">90 Days</div>
         <div class="trends-filter-btn" id="trendsBtnAll" onclick="setTrendsFilter(0,this)">All</div>
         <div class="trends-filter-btn" id="trendsBtnCustom" onclick="setTrendsFilter(-1,this)">Custom</div>
       </div>
@@ -3612,7 +3611,6 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <div class="provider-btn"        id="rpt-range-7"   onclick="setReportRange(7,this)">7 days</div>
         <div class="provider-btn active" id="rpt-range-30"  onclick="setReportRange(30,this)">30 days</div>
-        <div class="provider-btn"        id="rpt-range-90"  onclick="setReportRange(90,this)">90 days</div>
         <div class="provider-btn"        id="rpt-range-all" onclick="setReportRange(0,this)">All time</div>
         <div class="provider-btn"        id="rpt-range-custom" onclick="setReportRange(-1,this)">Custom</div>
       </div>
@@ -3778,7 +3776,17 @@
             <option value="muscle_mass_kg">Muscle mass (kg)</option>
             <option value="bone_mass_kg">Bone mass (kg)</option>
           </optgroup>
+          <optgroup label="Occasion Tags">
+            <option value="tag">Has tag…</option>
+          </optgroup>
         </select>
+        <input id="rptQueryTagVal" class="modal-input" list="rptTagSuggestions" placeholder="tag name" oninput="runReportQuery()" style="font-size:13px;padding:8px 10px;flex:2;min-width:140px;display:none;">
+        <datalist id="rptTagSuggestions">
+          <option value="Treatment"><option value="Hospital day"><option value="Illness">
+          <option value="Rest day"><option value="Social event"><option value="Travel">
+          <option value="Fasting"><option value="Exercise"><option value="Resistance bands">
+          <option value="Walking"><option value="Birthday">
+        </datalist>
         <select id="rptQueryOp" class="modal-input" style="font-size:13px;padding:8px 10px;width:110px;" onchange="onQueryOpChange()">
           <option value="gt">above</option>
           <option value="lt">below</option>
@@ -4676,7 +4684,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.642</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.643</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5552,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.642'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.643'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -18914,6 +18922,11 @@ function updateDashboard(skipActivityRender) {
     const _rolloverDate = state.lastDate; // capture immediately before anything changes
     const _capturedLog = state.todayLog ? [...state.todayLog] : [];
     const _capturedNotes = localStorage.getItem('mh_today_notes') || state.notes || '';
+    // Carries today's per-tag notes into the history entry too - without
+    // this, a note added via addTodayTagNote would be silently lost the
+    // moment the day rolled over, since this whole entry is built field-
+    // by-field from captured state rather than a full state copy.
+    const _capturedTagNotes = { ...(state.tagNotes || {}) };
     const _capturedMode = state.dayMode || 'standard';
     const _capturedWeight = state.weight;
     const _capturedWater = state.waterToday || 0;
@@ -18965,6 +18978,7 @@ function updateDashboard(skipActivityRender) {
     state.lastDate = todayStr();
     state.todayLog = [];
     state.notes = '';
+    state.tagNotes = {}; // fresh day, fresh notes - yesterday's are safely captured above
     state.dayMode = 'standard';
     state.waterToday = 0;
     localStorage.removeItem('mh_steps_today');
@@ -18978,7 +18992,7 @@ function updateDashboard(skipActivityRender) {
       state.history = (state.history || []).filter(h => h.date !== _rolloverDate);
       state.history.unshift({
         date: _rolloverDate, log: _capturedLog, totals: _rt,
-        mode: _capturedMode, notes: _capturedNotes,
+        mode: _capturedMode, notes: _capturedNotes, tagNotes: _capturedTagNotes,
         weight: _capturedWeight, water_ml: _capturedWater,
         steps: _capturedSteps, exercises: _capturedExercises,
         // Freezes the ACTUAL targets in effect on this specific day, rather
@@ -21697,6 +21711,14 @@ function toggleHistTagOrNotify(dayIdx, tag) {
   toggleHistTag(dayIdx, tag);
 }
 
+// Fixed children that always imply their parent (Resistance bands/Walking
+// are specific forms of Exercise) plus a learned map for custom tags,
+// keyed by the tag's own lowercase text so the same custom tag always
+// remembers the same parent once chosen, without asking again every time.
+const HIST_TAG_PARENTS = { 'resistance bands': 'Exercise', 'walking': 'Exercise' };
+function _getCustomTagParents() { return JSON.parse(localStorage.getItem('mh_custom_tag_parents') || '{}'); }
+function _saveCustomTagParents(m) { localStorage.setItem('mh_custom_tag_parents', JSON.stringify(m)); }
+
 function toggleHistTag(dayIdx, tag) {
   const day = state.history[dayIdx];
   if (!day) return;
@@ -21704,7 +21726,17 @@ function toggleHistTag(dayIdx, tag) {
   const tags = (day.notes || '').split(',').map(t => t.trim()).filter(t => t && !_legacy.includes(t.toLowerCase()));
   const idx = tags.findIndex(t => t.toLowerCase() === tag.toLowerCase());
   if (idx >= 0) tags.splice(idx, 1);
-  else tags.push(tag);
+  else {
+    tags.push(tag);
+    // Auto-select the parent alongside a child tag - "Resistance bands"
+    // or "Walking" (fixed), or any custom tag that's previously been
+    // told which category it belongs under (learned map). Never removes
+    // a parent when the child is removed above - the parent might
+    // genuinely still apply on its own, or from another child tag.
+    const learned = _getCustomTagParents();
+    const parent = HIST_TAG_PARENTS[tag.toLowerCase()] || learned[tag.toLowerCase()];
+    if (parent && !tags.some(t => t.toLowerCase() === parent.toLowerCase())) tags.push(parent);
+  }
   day.notes = tags.join(', ');
   // Was `tags.length > 0` — any tag at all flipped the day to Occasion, including
   // pure exercise tags manually added here (e.g. tapping "Walking" when it wasn't
@@ -21746,6 +21778,21 @@ function addHistCustomTag(dayIdx) {
   // steps/exercise tags — makes it unambiguous from the start.
   if (/^\d+(\.\d+)?k?\s*(steps|step)$/i.test(val) && !/^exercise:/i.test(val)) {
     val = 'Exercise: ' + val;
+  }
+  // First time THIS custom tag text has been used - offer to remember a
+  // parent category for it (e.g. "right knee massage" under Treatment),
+  // same auto-select behavior fixed tags like Resistance bands already
+  // have. Only asked once per distinct tag text, ever - the choice is
+  // remembered in a global map, not re-prompted on every future day.
+  const learned = _getCustomTagParents();
+  const key = val.toLowerCase();
+  if (!(key in learned) && !HIST_TAG_PARENTS[key]) {
+    const parent = prompt(`Does "${val}" belong under a category? Type Treatment, Exercise, or leave blank for none:`, '');
+    const normalized = (parent || '').trim();
+    const validParents = ['Treatment', 'Exercise'];
+    const matched = validParents.find(p => p.toLowerCase() === normalized.toLowerCase());
+    learned[key] = matched || null; // null = asked once, deliberately no parent - still recorded so it never asks again
+    _saveCustomTagParents(learned);
   }
   toggleHistTag(dayIdx, val);
   input.value = '';
@@ -24816,15 +24863,36 @@ function renderOccasionTags() {
     if (tags.length > 0) {
       display.style.display = 'block';
       display.innerHTML = '<div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">ACTIVE TAGS</div>' +
-        tags.map(t => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);margin:2px;">
+        tags.map(t => { const tn = (state.tagNotes||{})[t]; return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);margin:2px;">
           ${t}
+          <span onclick="addTodayTagNote('${t.replace(/'/g,"\'")}')" title="${tn?'Edit note':'Add note'}" style="cursor:pointer;opacity:${tn?'1':'0.5'};">📝</span>
           <span onclick="toggleOccasionTag('${t.replace(/'/g,"\'")}');renderOccasionTags();" style="cursor:pointer;opacity:0.6;font-size:13px;line-height:1;" title="Remove">×</span>
-        </span>`).join('');
+        </span>`; }).join('') +
+        (Object.entries(state.tagNotes||{}).some(([k,v]) => v && tags.includes(k))
+          ? `<div style="font-size:10px;color:var(--text3);margin-top:6px;width:100%;">${Object.entries(state.tagNotes||{}).filter(([k,v]) => v && tags.includes(k)).map(([k,v]) => `<strong style="color:var(--yellow);">${k}:</strong> ${v}`).join(' \xb7 ')}</div>`
+          : '');
     } else {
       display.style.display = 'none';
       display.innerHTML = '';
     }
   }
+}
+
+// Today's equivalent of History's addHistTagNote - same dedicated,
+// separate-from-notes-text storage principle (state.tagNotes here rather
+// than day.tagNotes, since today isn't a state.history entry yet), same
+// reason: day.notes/state.notes is comma-split as discrete tags
+// elsewhere, so a free-text note there would corrupt it.
+function addTodayTagNote(tag) {
+  if (!state.tagNotes) state.tagNotes = {};
+  const existing = state.tagNotes[tag] || '';
+  const note = prompt(`Note for "${tag}" today:`, existing);
+  if (note === null) return;
+  const trimmed = note.trim();
+  if (trimmed) state.tagNotes[tag] = trimmed;
+  else delete state.tagNotes[tag];
+  saveState();
+  renderOccasionTags();
 }
 
 function toggleOccasionTag(tag) {
@@ -31528,6 +31596,7 @@ function renderCarbStrictnessBreakdown(h, n) {
 
 // Column metadata — label, unit, source (history or wearable)
 const QUERY_COLS = {
+  tag:            { label: 'Occasion Tag',     unit: '',     src: 'tag' },
   kcal:           { label: 'Calories',        unit: 'kcal', src: 'nutrition' },
   protein:        { label: 'Protein',          unit: 'g',    src: 'nutrition' },
   fat:            { label: 'Fat',              unit: 'g',    src: 'nutrition' },
@@ -31591,8 +31660,21 @@ function getMergedHistory() {
 }
 
 function onQueryMetricChange() {
-  runReportQuery();
   const metric = document.getElementById('rptQueryMetric')?.value;
+  // "Has tag..." needs a tag NAME, not a number range - swaps the whole
+  // op/value row for a tag picker instead, rather than trying to force
+  // a categorical thing (which tag) into the same gt/lt/between controls
+  // built for numeric metrics.
+  const opEl = document.getElementById('rptQueryOp');
+  const val1 = document.getElementById('rptQueryVal');
+  const val2 = document.getElementById('rptQueryVal2');
+  const tagVal = document.getElementById('rptQueryTagVal');
+  const isTag = metric === 'tag';
+  if (opEl) opEl.style.display = isTag ? 'none' : 'block';
+  if (val1) val1.style.display = isTag ? 'none' : (val1.style.display);
+  if (val2) val2.style.display = 'none';
+  if (tagVal) tagVal.style.display = isTag ? 'block' : 'none';
+  runReportQuery();
   const saveRow = document.getElementById('rpt-query-save-row');
   if (saveRow) saveRow.style.display = 'flex';
 }
@@ -31627,6 +31709,37 @@ function runReportQuery() {
 
   const meta = QUERY_COLS[metric];
   if (!meta) { resultEl.textContent = 'Unknown column.'; return; }
+
+  // Tags are categorical (which tag), not a number range - matched by
+  // real presence in that day's actual tag list (day.notes, comma-split,
+  // same source History and Today both already use), not gt/lt/between.
+  if (metric === 'tag') {
+    const tagName = (document.getElementById('rptQueryTagVal')?.value || '').trim().toLowerCase();
+    if (!tagName) { resultEl.textContent = 'Type a tag name to search for.'; if (tableEl) tableEl.style.display = 'none'; return; }
+    const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+    const matched = rows.filter(r => {
+      const tags = (r.notes || '').split(',').map(t => t.trim().toLowerCase()).filter(t => t && !legacy.includes(t));
+      return tags.includes(tagName);
+    });
+    resultEl.innerHTML = matched.length
+      ? `<strong>${matched.length}</strong> day(s) tagged "${document.getElementById('rptQueryTagVal').value}" in this period.`
+      : `No days tagged "${document.getElementById('rptQueryTagVal').value}" in this period.`;
+    if (tableEl) {
+      if (matched.length) {
+        tableEl.style.display = 'block';
+        tableEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:4px;">Date</th><th style="text-align:left;padding:4px;">Note</th></tr>
+          ${matched.map(r => {
+            const note = (r.tagNotes || {})[Object.keys(r.tagNotes || {}).find(k => k.toLowerCase() === tagName) || ''] || '';
+            return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px;">${r.date}</td><td style="padding:4px;color:var(--text3);">${note}</td></tr>`;
+          }).join('')}
+        </table>`;
+      } else {
+        tableEl.style.display = 'none';
+      }
+    }
+    return;
+  }
 
   const isTextField = meta.unit === '' && (metric === 'notes' || metric === 'mode');
 
@@ -35495,7 +35608,6 @@ function dismissInsight() {
     <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;" id="mmPeriodBtns">
       <button class="drill-period" onclick="setMMPeriod(7,this)">7D</button>
       <button class="drill-period active" onclick="setMMPeriod(30,this)">30D</button>
-      <button class="drill-period" onclick="setMMPeriod(90,this)">90D</button>
       <button class="drill-period" onclick="setMMPeriod(0,this)">All</button>
       <button class="drill-period" onclick="setMMPeriod(-1,this)">Custom</button>
     </div>
