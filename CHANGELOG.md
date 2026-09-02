@@ -1,4 +1,57 @@
-# MaxedHealth Changelog — Phase 20 (v3.10.599 – v3.10.627)
+# MaxedHealth Changelog — Phase 21 (v3.10.628 – v3.10.658)
+
+## Compare Metrics — Real Root-Cause Bugs, Not Symptoms
+
+- **The actual reason metrics randomly went missing or showed only one point**: `getTrendsData()` (shared by Trends and Compare Metrics) has a branch controlled by `trendsWindow`, a variable belonging entirely to the Trends page's own Today/multi-day toggle — defaulting to `'today'` on every fresh app load. Left there, it silently returned a single day regardless of whatever period Compare Metrics itself had selected. Explains exactly why "it works if Trends' own period was already changed first, breaks if changed only within Compare Metrics" — found via a precise repro (Body Fat % always worked because it never touches this function; everything routing through it was at the mercy of unrelated page state). Added a `forceFullHistory` bypass; Compare Metrics and the single-metric Deep Dive view now always use it, since both manage their own independent period filtering.
+- **A second real bug found alongside it**: the earlier "merge today's totals into the existing row" fix was mutating `state.history`'s actual object directly (a shallow-copied array's elements are still the same references) — silently overwriting real saved data on every single render. Now clones before mutating.
+- **Five color-collision groups** across the 16 metric pills — HRV/Sleep/Distance all shared purple, Protein/Ketosis Adherence/Muscle% all shared green, Calories/Steps shared blue, Weight/Carbs shared yellow, Hydration/Water shared light blue. All 16 now genuinely distinct.
+- Added a render-generation guard (skips a stale/redundant re-render if a newer one has started) and a try/catch around the core render logic that logs any real failure to the JS Error Log instead of a silent blank canvas — both defensive improvements found worth keeping even after the real root cause was identified.
+- `multiMetricScroll` was missing from the shared scroll-nav registry every other major view uses — Compare Metrics now has the same ▲▼ jump buttons as everywhere else.
+
+## Compare Metrics — New Capabilities
+
+- **Custom date range** added alongside 7D/30D/All (90D removed per request across all three standardized period selectors — see below). One shared date-range check per screen rather than scattering the logic across every place a period was already being filtered.
+- **Pills grouped into categories** — Treatment, Exercise, Vitals & Sleep, Nutrition, Body Composition, Symptoms — top-level pills that expand/collapse to show their members, with a count shown when a group has active selections. Was a single flat list of 16+ pills before.
+- **📦 Full Report Package** — bundles the chart image, a CSV of the underlying data, the text summary, and the most recent AI interpretation (if one's been asked for) into a single share action via the Web Share API where supported (native share sheet, pick WhatsApp/email/Drive/etc.), falling back honestly to a downloaded image + mailto with everything else inline in the body if multi-file sharing isn't supported on the device.
+
+## Treatment Tracking — Substantial Extensions
+
+- **Log a session for a PAST day** directly from History's Occasion Tags section — didn't exist before at all; sessions could only ever be logged for today.
+- **Session-level notes** (optional, prompted at logging time) and **general per-tag day-level notes** (a 📝 icon on any active Occasion Tag, History and Today both) — two deliberately separate mechanisms, since a day can have several sessions each needing their own note, while a tag like "Illness" needs one note for the whole day. Stored in dedicated fields (`day.tagNotes`/session `.note`), never inside the comma-split `day.notes` tag list, which is parsed as discrete tags in over 20 places elsewhere.
+- **Today dashboard card** — Treatment Tracking previously existed only in Settings and Reports; logging a session gave no visible confirmation anywhere you'd actually look afterward. New card matches the "How are you today?" card's style, with its own reorder/hide (▲▼, 📝) matching every other dashboard section — the same fix applied to the Symptoms card, which had the identical gap.
+- **Reports → Treatment Sessions rebuilt for multi-select**: both treatments and comparison metrics are now pill-based (were single-select dropdowns), producing a treatment × metric cross-product of before/during/after blocks. New 📄 CSV export and 🤖 Send to AI for interpretation (drops a real summary into the chat input, ready to send or edit).
+- **Custom tags now support a parent category** — "Resistance bands"/"Walking" auto-select "Exercise" (fixed mapping); a new custom tag prompts once for an optional parent and remembers the choice permanently. The parent is never auto-removed when the child tag is removed — it may still genuinely apply on its own.
+- Occasion Tags' "Treatment" chip now shows the *specific* treatment name(s) logged that day, not just a generic checkmark — someone can have more than one treatment the same day, same as multiple exercises.
+
+## Voice Input — Three Real, Separate Bugs
+
+- **"done" required a manual tap that never actually happened.** The mic flow was built for multi-item food logging; saying "done" only showed a toast with a "Log it" action — nothing was ever auto-sent. Now auto-sends immediately.
+- **A trailing "done" on a longer utterance was still missed.** The done-phrase detector required the *whole* utterance to be 5 words or fewer — fine for short ingredient names, not for full-sentence questions. If speech recognition merges a request and "done" into one long transcript (no long enough pause), it now still detects and strips a trailing done-phrase instead of failing the word-count check outright.
+- **The deeper "arrow does nothing" cause**: nothing was ever written to the *visible* input box during voice capture — spoken words sat in an invisible variable with only a passing toast as feedback, so `sendChat()` correctly refused to send an empty box. The input box now fills in live as you speak, giving a real, editable, always-available manual fallback regardless of whether spoken "done" gets detected.
+
+## Meal Logging — Real Bugs Found, Not Guessed
+
+- **Numbered-suggestion selection losing context** — replying "1" or "yes, the X one" to a numbered list was either searched as literal text or re-opened a "recipe or quick log?" clarification, losing the specific suggestion entirely. Fixed by tracking any assistant message containing a real numbered list and replaying it as context with an explicit instruction on the next reply — later strengthened to also explicitly forbid the AI from calling a library-search tool instead of just logging the selected option, after a report showed a numbered reply hijacking into an unrelated "checking your library" flow with different suggestions entirely.
+- **The actual root cause of "keto custard shows 0 uses" wasn't about recipes at all** — a deterministic keyword shortcut hijacks any short message containing "keto"/"ketosis" into a ketosis status readout instead of ever reaching food logging. A prior session had partially fixed this for one case (a photo + short product name) but left the plain-text case — an extremely common product-naming pattern (keto bread, keto custard, keto bar) — still broken. Now requires an actual status/question indicator (check, status, am i, how's, doing) alongside the word, not just the bare word under a length limit.
+- **Recipe `useCount` moved to one real choke point.** Three separately-patched logging paths (direct Log button, custom-servings prompt, suggested-combo) all had their own explicit increment, but a recipe logged by describing it in a message never touched any of them — going straight into `logFoods()`, which had no matching logic at all. Moved the increment into `logFoods()` itself, matched by name against the logged text (exact, starts-with for the "(N servings)" suffix, or a gated fuzzy contains-match for free text) — covers every path, including ones added later, without needing to find and patch each one individually. Added a real diagnostic to the existing call-trace debug tool (Settings → Manage → Log Mutation Debug) showing exactly what text a match was attempted against and what it found.
+- **The Most Used saga, resolved through three further rounds of real debug-trace data** (not guessing): (1) the name-match only ever checked whether the *logged* text contained/started with the *recipe* name — never the reverse, so a shortened version of a longer recipe name ("keto spaghetti" for a saved "Keto Spaghetti Bolognese") never matched in either direction; fixed with the missing reverse check. (2) The real, deeper cause turned out to live in `logSuggestedCombo`, which has two branches: one references a saved recipe directly (already worked), the other builds its combo from individual library items with no recipe reference anywhere in that code path at all — even when the AI's suggestion exactly matches a saved recipe's composition, there's no name to match against, just a join of separately-looked-up ingredient names. Added a genuinely different comparison as a fallback once name-matching has failed: the *set* of logged ingredient names against each saved recipe's own ingredient list, 75%+ overlap required (gated to recipes with 3+ ingredients to avoid coincidental matches). The debug trace now shows which method actually matched, name or ingredient overlap, with the real percentage.
+- Recipe cards now show the real `useCount` ("used N×") when sorted by Most Used, so the sort can be verified directly against real data rather than guessed at.
+
+## Period Selectors — Standardized
+
+- Trends, Reports, and Compare Metrics now all use the same 7 days/30 days/All time/Custom set (90 days removed from all three per request). Trends alone keeps "Today" as an addition on top, since it's a genuinely different single-day view, not just a shorter period.
+
+## Settings Reorganized
+
+- **Data & Backup moved from Manage into the Import sub-tab**, which is renamed **"Data"** — covers import/export/sync/restore/onboarding under one sensible label. A real 📦 Export All Data button was also added directly to this section (previously only referenced by a tooltip pointing elsewhere).
+- **Full site-search audit**: cross-checked every real collapsible section in the app (65 total) against the search index by script — found the *entire* Reports tab was unindexed (not just one button), plus 17 sections across Today/Library/Trends/Log. Then ran a second automated check comparing every entry's assumed scroll-target element against the real one — found and fixed 7 wrap-id mismatches, including 3 pre-existing ones unrelated to this session's work. Final state verified by script: 62 indexed sections, zero gaps, zero mismatches.
+- **Query Builder** gained "Occasion Tag" as a queryable field — categorical match against real tag presence (with autocomplete), not forced into the existing numeric gt/lt/between controls built for metrics.
+
+## PWA / Update Detection
+
+- **New "a new version is ready" banner.** There was previously no way to know a new version had deployed while the app was open, and no active check when returning to it — a real report surfaced a device stuck three versions behind, silently, with several shipped fixes invisible the whole time. Detects a waiting service-worker update and prompts to reload; also explicitly checks for updates on load and whenever the tab regains focus.
+
+
 
 ## Notification & Data-Integrity Bugs — Real Causes Found, Not Guessed
 
@@ -25,6 +78,8 @@
 
 - New 🏷️ Auto-Categorize button replaces the old copy-a-prompt-to-a-separate-Claude-session workflow. Auto-assigns only 'fat' and 'protein' directly, and only where the real macro ratio (Atwater calorie-split) genuinely supports it — everything else queues into a one-at-a-time review modal (same pattern as Find Duplicates) with a macro-based suggestion pre-selected, and picking meat/fish auto-checks protein alongside it (matching the hierarchy `DEFAULT_CATEGORY_MAP` already applies automatically to keyword matches).
 - New exercise-name duplicate finder (Settings → Treatment Tracking) for Strength Log — same fuzzy-match-and-review pattern as Library's own Find Duplicates, relative edit-distance threshold so short names aren't wrongly merged. Merging renames across both logged history and any saved routines referencing the old name.
+
+# MaxedHealth Changelog — Phase 20 (v3.10.599 – v3.10.627)
 
 ## Treatment Tracking — New System
 
