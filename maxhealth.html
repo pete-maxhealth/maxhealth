@@ -2042,6 +2042,14 @@
 
 <!-- ONBOARDING WIZARD -->
 <div id="onboardingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:500;overflow-y:auto;box-sizing:border-box;">
+  <!-- No safe way to back out of this before now - once triggered (including
+       via "Redo setup wizard"), the only escape was completing the whole
+       flow or force-closing the tab. Genuinely blocked testing the earlier
+       onboarding-flag fix without risking a real settings overwrite. This
+       only hides the overlay - nothing here writes or clears any setting,
+       so closing at step 1 (before entering anything) is always safe
+       regardless of whether real config already exists underneath. -->
+  <div onclick="closeOnboardingOverlay()" style="position:fixed;top:16px;right:16px;width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:501;">✕</div>
   <div style="max-width:480px;margin:0 auto;padding:32px 24px 48px;box-sizing:border-box;">
   <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent);margin-bottom:4px;letter-spacing:0.1em;text-shadow:0 0 20px var(--accent-glow);">MAXEDHEALTH</div>
   <div style="font-size:13px;color:var(--text2);margin-bottom:32px;">Personal Health Intelligence</div>
@@ -2308,8 +2316,8 @@
       <div style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;text-underline-offset:3px;" onclick="dismissNewUserBanner()">Got it — don't show again</div>
     </div>
 
-    <div id="symptomTrackerContent"></div>
-    <div id="treatmentTodayContent"></div>
+    <div id="dashSection-symptoms"><div id="symptomTrackerContent"></div></div>
+    <div id="dashSection-treatment"><div id="treatmentTodayContent"></div></div>
 
     <div class="weight-card" id="dashSection-weight">
       <div style="position:absolute;top:8px;right:8px;z-index:2;">
@@ -4552,7 +4560,18 @@
         </div>
       </div>
       <button class="copy-btn" onclick="clearTodayLog()" style="width:100%;margin-bottom:4px;background:rgba(235,80,80,0.08);border-color:rgba(235,80,80,0.25);color:#eb5050;">🗑 CLEAR TODAY'S LOG</button>
-      <div class="settings-hint" style="margin-bottom:0;"><span class="help-slot" data-id="cleartoday" data-text="Wipes today's food entries only — history is untouched. Use if yesterday's log rolled over incorrectly."></span></div>
+      <div class="settings-hint" style="margin-bottom:14px;"><span class="help-slot" data-id="cleartoday" data-text="Wipes today's food entries only — history is untouched. Use if yesterday's log rolled over incorrectly."></span></div>
+      <!-- The section's own tooltip above told people to go find "Export
+           All Data" on the Import tab - a real button that does exist,
+           just not anywhere actually inside a section called "Data &
+           Backup". Genuinely confusing (and the one button that WAS here
+           was a destructive one, not a backup one) - the export button
+           itself already lives correctly on Import (its natural home,
+           alongside every other import/export data operation), so this
+           just makes it reachable from here too, same function, not a
+           duplicate implementation. -->
+      <button class="copy-btn" onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';this.disabled=true;setTimeout(()=>{this.textContent='📦 EXPORT ALL DATA';this.style.opacity='1';this.disabled=false;},2500);" style="width:100%;background:rgba(45,235,143,0.08);border-color:rgba(45,235,143,0.25);color:var(--accent);">📦 EXPORT ALL DATA</button>
+      <div class="settings-hint">Also available on the Import tab. Downloads everything — history, library, recipes, settings — as a single file, immediately, no confirmation needed since this only reads your data, nothing is changed or deleted.</div>
     </div>
     </div>
     </div>
@@ -4651,7 +4670,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.633</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.637</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5527,7 +5546,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.633'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.637'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12698,8 +12717,15 @@ function toggleVoiceInput() {
 }
 
 // Shared by both the "done" phrase and a manual pause-tap, so either way of
-// stopping gets the same result: captured items dropped into chatInput and
-// a "Log it" toast offered, never a dead end that only resume+"done" escapes.
+// stopping gets the same result. Auto-sends immediately rather than
+// requiring an extra manual tap on a toast - the input box is used for
+// BOTH multi-item food logging AND general questions/suggestion requests
+// ("Log a meal or ask...", the placeholder says so), and a spoken question
+// ("something savoury to finish my macros") ending in "done" reads as a
+// complete voice interaction, not "captured, now go tap something to
+// actually send it". Previously required a manual tap on the toast's own
+// action to ever reach sendChat() at all - saying "done" alone looked
+// like it did nothing.
 function _pauseOrFinishVoiceInput() {
   const items = _voiceMultiItems.slice();
   _voiceListening = false;
@@ -12710,8 +12736,10 @@ function _pauseOrFinishVoiceInput() {
   const input = document.getElementById('chatInput');
   const combined = items.join(', ');
   if (input) { input.value = combined; autoResize(input); }
-  _setVoiceLogStatus(`🎤 ${items.length} item${items.length === 1 ? '' : 's'} captured and put in the message box below — tap 🎤 again to add more, or Log it to send.`);
-  showToast(`🎤 ${items.length} item${items.length === 1 ? '' : 's'} captured — review & tap Log it`, 'Log it', () => { _voiceMultiItems = []; _setVoiceLogStatus(null); sendChat(); }, 10000);
+  _voiceMultiItems = [];
+  _setVoiceLogStatus(null);
+  showToast(`🎤 Sending: ${combined}`);
+  sendChat();
 }
 
 function _startVoiceListening() {
@@ -14261,6 +14289,15 @@ function logSuggestedCombo(comboIndex) {
       fibre:   Math.round((ing.fibre  || 0) * factor * 10) / 10,
     }));
     logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
+    // Third, independently-written recipe-logging path found during a
+    // "Recipes/Most Used doesn't work" report - this one (via a suggested-
+    // combo, not the direct recipe-list Log button or Cook Mode) never had
+    // the useCount increment at all, so any recipe logged through this
+    // path specifically was invisible to Most Used regardless of how many
+    // times it was actually used. Same pattern as the other two.
+    const allRecipesForCombo = loadRecipes();
+    const matchForCombo = allRecipesForCombo.find(r => r.id === recipe.id);
+    if (matchForCombo) { matchForCombo.useCount = (matchForCombo.useCount || 0) + 1; saveRecipes(allRecipesForCombo); }
     showToast(`✓ ${recipe.name} logged`);
     switchTabById('chat');
     return;
@@ -18194,7 +18231,7 @@ function renderActivityCreditBalance() {
 // This gets the same real value — cards in whatever order you actually want —
 // at a fraction of the risk.
 const DASHBOARD_SECTIONS_KEY = 'mh_dashboard_order';
-const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'steps', 'activity', 'water', 'log', 'guides'];
+const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'steps', 'symptoms', 'treatment', 'activity', 'water', 'log', 'guides'];
 // Some sections are more than one DOM element (a card plus its own paired verdict
 // or tooltip) — these must move together as a unit, or you'd end up with a card
 // separated from its own conclusion. Each key can list multiple ids in order.
@@ -18207,6 +18244,8 @@ const DASHBOARD_SECTION_IDS = {
   macroratio: ['macroRatioCard', 'ketoSmartAlert'],
   goalcheck:  ['dashSection-goalcheck'],
   steps:      ['dailyStepsCard'],
+  symptoms:   ['dashSection-symptoms'],
+  treatment:  ['dashSection-treatment'],
   activity:   ['activityCard'],
   water:      ['dashSection-water'],
   log:        ['dashSection-log'],
@@ -20147,21 +20186,39 @@ function saveTreatmentLog(log) {
   localStorage.setItem('mh_treatment_log', JSON.stringify(log));
 }
 
-function logTreatmentSession(treatmentId) {
+function logTreatmentSession(treatmentId, dateOverride) {
   const defs = loadTreatmentDefs();
   const def = defs.find(d => d.id === treatmentId);
   if (!def) return;
   const log = loadTreatmentLog();
   const now = new Date();
-  log.push({ id: 'trt_' + Date.now(), treatmentId, date: todayStr(), time: now.toTimeString().slice(0,5) });
+  const date = dateOverride || todayStr();
+  // Real current clock time only makes sense for a session logged as it
+  // happens (today). Logging retroactively for a past day has no real
+  // "when today" to record, so it's left blank rather than falsely
+  // implying the session happened at whatever time it's being entered.
+  const time = dateOverride ? '' : now.toTimeString().slice(0,5);
+  log.push({ id: 'trt_' + Date.now(), treatmentId, date, time });
   saveTreatmentLog(log);
   renderTreatmentLogger();
-  // Also refreshes the Today-dashboard widget - logging from Settings
-  // should show up there immediately too, not just wherever the tap
-  // happened, so the two views can never show a session as logged in one
-  // place and not the other.
   if (typeof renderTreatmentToday === 'function') renderTreatmentToday();
-  showToast(`${def.name} session logged ✓`);
+  showToast(`${def.name} session logged${dateOverride ? ' for ' + dateOverride : ''} ✓`);
+}
+
+// Logs a session for a specific PAST day from within the History edit
+// form, then forces that form to actually refresh - editHistDayTotals has
+// an early-return-if-already-open guard (scrolls to the existing form
+// instead of rebuilding it), so simply calling it again after logging
+// would do nothing visible. Removing the open form first, then
+// re-opening it, is what actually makes the new session and its
+// checkmark show up without needing to close and reopen the whole day
+// manually.
+function logTreatmentForHistDay(treatmentId, date, dayIdx, renderIdx) {
+  logTreatmentSession(treatmentId, date);
+  const bodyEl = document.getElementById(`histBody${renderIdx}`);
+  const openForm = bodyEl?.querySelector('.hist-day-totals-edit');
+  if (openForm) openForm.remove();
+  editHistDayTotals(dayIdx, renderIdx);
 }
 
 function deleteTreatmentSession(sessionId) {
@@ -20189,10 +20246,15 @@ function renderTreatmentToday() {
 
   el.innerHTML = `
     <div class="settings-card" style="margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">Treatment sessions today</div>
-        <div style="font-size:11px;color:${todaySessions.length ? 'var(--green)' : 'var(--text3)'};">${todaySessions.length} logged</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;cursor:pointer;" onclick="toggleSection('dash-treatment','treatmentCardBody','dash-treatment-icon')">
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">Treatment sessions today <span id="dash-treatment-icon" style="font-size:10px;color:var(--text3);font-weight:400;">▾ hide</span></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:11px;color:${todaySessions.length ? 'var(--green)' : 'var(--text3)'};">${todaySessions.length} logged</span>
+          <span onclick="event.stopPropagation();moveDashboardSection('treatment','up')" style="cursor:pointer;color:var(--text3);font-size:14px;">▲</span>
+          <span onclick="event.stopPropagation();moveDashboardSection('treatment','down')" style="cursor:pointer;color:var(--text3);font-size:14px;">▼</span>
+        </div>
       </div>
+      <div id="treatmentCardBody">
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${todaySessions.length ? '10px' : '4px'};">
         ${defs.map(t => `<button class="mh-treatment-log-btn" data-treatment-id="${t.id}" style="padding:8px 14px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:20px;color:var(--accent);font-size:12px;cursor:pointer;">+ ${t.name}</button>`).join('')}
       </div>
@@ -20204,7 +20266,12 @@ function renderTreatmentToday() {
         </div>`;
       }).join('') : ''}
       <div style="font-size:10px;color:var(--text3);margin-top:4px;">Manage what's tracked in Settings → Treatment Tracking.</div>
+      </div>
     </div>`;
+  // Re-applied after every render, same reasoning as renderSymptomTracker's
+  // identical call above - this whole innerHTML rebuilds on every log/
+  // delete action, so the collapsed state has to be reasserted each time.
+  applySectionState('dash-treatment', 'treatmentCardBody', 'dash-treatment-icon', true);
 }
 // Delegated, capture-phase (see the identical chart-style-button fix
 // earlier this session for why capture specifically) - not inline onclick
@@ -20390,10 +20457,15 @@ function renderSymptomTracker() {
 
   el.innerHTML = `
     <div class="settings-card" style="margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">How are you today?</div>
-        <div style="font-size:11px;color:${loggedCount===defs.length?'var(--green)':'var(--text3)'};">${loggedCount}/${defs.length} logged</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;cursor:pointer;" onclick="toggleSection('dash-symptoms','symptomsCardBody','dash-symptoms-icon')">
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">How are you today? <span id="dash-symptoms-icon" style="font-size:10px;color:var(--text3);font-weight:400;">▾ hide</span></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:11px;color:${loggedCount===defs.length?'var(--green)':'var(--text3)'};">${loggedCount}/${defs.length} logged</span>
+          <span onclick="event.stopPropagation();moveDashboardSection('symptoms','up')" style="cursor:pointer;color:var(--text3);font-size:14px;">▲</span>
+          <span onclick="event.stopPropagation();moveDashboardSection('symptoms','down')" style="cursor:pointer;color:var(--text3);font-size:14px;">▼</span>
+        </div>
       </div>
+      <div id="symptomsCardBody">
       ${defs.map(s => {
         const score = log[s.id];
         return `
@@ -20407,7 +20479,13 @@ function renderSymptomTracker() {
         </div>`;
       }).join('')}
       <div style="font-size:10px;color:var(--text3);margin-top:4px;">1 = worst, 5 = best. Manage what's tracked in Settings → Symptom Tracking.</div>
+      </div>
     </div>`;
+  // Re-applied after every render (not just once at boot) - this whole
+  // innerHTML gets rebuilt on every score tap, so the collapsed/open state
+  // has to be reasserted each time or it would silently pop back open the
+  // instant someone logged a score.
+  applySectionState('dash-symptoms', 'symptomsCardBody', 'dash-symptoms-icon', true);
 }
 
 function toggleSupplement(id, period) {
@@ -21481,10 +21559,20 @@ function editHistDayTotals(dayIdx, renderIdx) {
         // never go stale or disagree with what's really logged.
         if (typeof loadTreatmentLog !== 'function') return '';
         const daySessions = loadTreatmentLog().filter(s => s.date === day.date);
-        if (!daySessions.length) return '';
-        const defs = loadTreatmentDefs();
-        const names = [...new Set(daySessions.map(s => defs.find(d => d.id === s.treatmentId)?.name || '(deleted)'))];
-        return `<div style="font-size:11px;color:#a855f7;margin-top:6px;">💠 Treatment session(s) logged: ${names.join(', ')}</div>`;
+        const defs = loadTreatmentDefs().filter(t => t.active !== false);
+        if (!defs.length) return '';
+        const names = daySessions.length ? [...new Set(daySessions.map(s => loadTreatmentDefs().find(d => d.id === s.treatmentId)?.name || '(deleted)'))] : [];
+        // The Today-dashboard/Settings loggers only ever write today's
+        // date - there was genuinely no way to log a session against a
+        // PAST day at all before this. Reuses logTreatmentSession's own
+        // optional date-override param (added for exactly this), passing
+        // this day's real date instead of defaulting to today.
+        return `
+          ${names.length ? `<div style="font-size:11px;color:#a855f7;margin-top:6px;">💠 Treatment session(s) logged: ${names.join(', ')}</div>` : ''}
+          <div style="font-size:10px;color:var(--text3);margin-top:8px;">Log a treatment session for THIS day (${day.date}):</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+            ${defs.map(t => `<button onclick="logTreatmentForHistDay('${t.id}','${day.date}',${dayIdx},${rIdx})" style="padding:6px 12px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.4);border-radius:16px;color:#a855f7;font-size:11px;cursor:pointer;">+ ${t.name}</button>`).join('')}
+          </div>`;
       })()}
     </div>
     <div style="display:flex;gap:8px;">
@@ -25892,12 +25980,31 @@ function getTrendsData() {
   const histData = [...state.history];
 
   if (state.todayLog.length > 0) {
-    histData.unshift({
-      date: todayStr(),
-      totals: todayTotals,
-      mode: state.dayMode,
-      weight: state.weight
-    });
+    // Was an unconditional unshift regardless of whether state.history
+    // already had a real entry for today - if a device sync had already
+    // added today as a full row (HRV, sleep, steps, distance, water etc,
+    // exactly the shape an import produces), this created a SECOND row
+    // for the same date carrying only totals/mode/weight, with every
+    // wearable field silently absent. Two rows sharing one date breaks
+    // any "one point per day" assumption downstream, Compare Metrics
+    // included - real, confirmed structural bug, independent of whether
+    // it explains any specific symptom already reported. Now merges the
+    // fresh totals into the existing today row when one exists, instead
+    // of ever creating a second one.
+    const todayDateStr = todayStr();
+    const existingToday = histData.find(d => d.date === todayDateStr);
+    if (existingToday) {
+      existingToday.totals = todayTotals;
+      existingToday.mode = state.dayMode;
+      if (state.weight) existingToday.weight = state.weight;
+    } else {
+      histData.unshift({
+        date: todayDateStr,
+        totals: todayTotals,
+        mode: state.dayMode,
+        weight: state.weight
+      });
+    }
   }
 
   // Sort ascending
@@ -27427,12 +27534,12 @@ const DRILL_CONFIG = {
   hrv:      { title: 'HRV',                unit: 'ms',    color: '#a78bfa', icon: '💜',  field: 'hrv',            ref: [20,60],  refLabel: 'Good range' },
   spo2:     { title: 'Oxygen Saturation',  unit: '%',     color: '#34d399', icon: '🫁',  field: 'spo2',           ref: [95,100], refLabel: 'Optimal' },
   steps:    { title: 'Daily Steps',        unit: 'steps', color: '#4d9fff', icon: '🚶', field: 'steps',           ref: [7500,10000], refLabel: 'Target range' },
-  sleep:    { title: 'Sleep',              unit: 'hrs',   color: '#a78bfa', icon: '🌙', field: 'sleep_duration',  ref: [7,9],    refLabel: 'Recommended' },
+  sleep:    { title: 'Sleep',              unit: 'hrs',   color: '#818cf8', icon: '🌙', field: 'sleep_duration',  ref: [7,9],    refLabel: 'Recommended' },
   weight:   { title: 'Weight',             unit: 'kg',    color: '#f5c542', icon: '⚖️', field: 'weight',          ref: null,     refLabel: '' },
-  calories: { title: 'Calories',           unit: 'kcal',  color: '#4d9fff', icon: '🔥', field: 'totals.kcal',     ref: null,     refLabel: '' },
+  calories: { title: 'Calories',           unit: 'kcal',  color: '#06b6d4', icon: '🔥', field: 'totals.kcal',     ref: null,     refLabel: '' },
   protein:  { title: 'Protein',            unit: 'g',     color: '#2deb8f', icon: '💪', field: 'totals.protein',  ref: null,     refLabel: '' },
-  carbs:    { title: 'Carbohydrates',      unit: 'g',     color: '#f5c542', icon: '🌾', field: 'totals.carbs',    ref: null,     refLabel: '' },
-  ketosis:  { title: 'Ketosis Adherence',  unit: '%',     color: '#2deb8f', icon: '🔥', field: '_ketosisAdherence', ref: [80,100], refLabel: 'Strong adherence' },
+  carbs:    { title: 'Carbohydrates',      unit: 'g',     color: '#a16207', icon: '🌾', field: 'totals.carbs',    ref: null,     refLabel: '' },
+  ketosis:  { title: 'Ketosis Adherence',  unit: '%',     color: '#84cc16', icon: '🔥', field: '_ketosisAdherence', ref: [80,100], refLabel: 'Strong adherence' },
   // These five had real, tappable trend cards in the UI but were never added
   // here — meaning both the lightbox and Deep Dive silently rendered
   // completely blank for all of them (getDrillData/renderDrill both bail out
@@ -27443,16 +27550,16 @@ const DRILL_CONFIG = {
   // specific mass-gaining ketogenic protocol. Same reasoning already applied
   // to weight/calories/protein/carbs above.
   fat_pct:    { title: 'Body Fat %',  unit: '%',  color: '#f97316', icon: '🔶', field: 'fat_pct',      ref: null, refLabel: '' },
-  muscle_pct: { title: 'Muscle %',    unit: '%',  color: '#2deb8f', icon: '💪', field: 'muscle_pct',   ref: null, refLabel: '' },
+  muscle_pct: { title: 'Muscle %',    unit: '%',  color: '#14b8a6', icon: '💪', field: 'muscle_pct',   ref: null, refLabel: '' },
   bone_mass:  { title: 'Bone Mass',   unit: 'kg', color: '#e2e8f0', icon: '🦴', field: 'bone_mass_kg', ref: null, refLabel: '' },
   hydration:  { title: 'Hydration',   unit: 'kg', color: '#38bdf8', icon: '💧', field: 'hydration_kg', ref: null, refLabel: '' },
-  distance:   { title: 'Distance',    unit: 'km', color: '#a78bfa', icon: '📍', field: 'distance_m',   ref: null, refLabel: '' },
+  distance:   { title: 'Distance',    unit: 'km', color: '#ec4899', icon: '📍', field: 'distance_m',   ref: null, refLabel: '' },
   // Added alongside the other 5 above - water had a card and a chart but,
   // like they did before this fix, no DRILL_CONFIG entry, so tapping it
   // did nothing and it never appeared as an option in Compare Metrics
   // either. No fixed ref band, since the real target (mh_target_water)
   // is user-configurable, not a universal number.
-  water:      { title: 'Water',       unit: 'ml', color: '#38bdf8', icon: '💧', field: 'water_ml',     ref: null, refLabel: '' },
+  water:      { title: 'Water',       unit: 'ml', color: '#2563eb', icon: '💧', field: 'water_ml',     ref: null, refLabel: '' },
 };
 
 // Returns a history entry's fat grams — uses the genuinely recorded value if present,
@@ -34069,6 +34176,15 @@ function getHeightInCm(val) {
   return val;
 }
 
+
+// Just hides the overlay - deliberately touches nothing else. Doesn't mark
+// .onboarded true either, so it'll still show again on next load if this
+// was a genuine first-time skip (someone not ready to set up yet) rather
+// than a "just testing this appeared, backing out immediately" check.
+function closeOnboardingOverlay() {
+  const ob = document.getElementById('onboardingOverlay');
+  if (ob) ob.style.display = 'none';
+}
 
 function resetOnboarding() {
   // Confirm before wiping onboarding state — this is the explicit user-facing
