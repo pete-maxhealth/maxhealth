@@ -2957,6 +2957,8 @@
         <select id="libraryFilter" onchange="renderLibrary()"
           style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;cursor:pointer;flex:1;">
           <option value="all">All items</option>
+          <option value="ingredients">Ingredients only</option>
+          <option value="recipes">Recipes only</option>
         </select>
         <select id="librarySort" onchange="renderLibrary()"
           style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:6px 10px;font-family:Space Mono,monospace;flex:1;">
@@ -4652,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.661</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.662</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5560,7 +5562,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.661'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.662'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7205,6 +7207,20 @@ function renderLibrary() {
   const categoryFilter = document.getElementById('libraryFilter')?.value || 'all';
   const filteredLib = searchedLib;
   const ingredients = filteredLib;
+  // categoryFilter was read here but never actually applied to anything -
+  // the dropdown itself only ever had one static "All items" option, so
+  // this silently did nothing. Recipes and ingredients are genuinely
+  // separate data sources (loadRecipes() vs loadLibrary()), already both
+  // searched by the same box - what was actually missing was a way to
+  // narrow the DISPLAYED sections down to just one type, not a text-search
+  // change. Toggles the section wrappers directly rather than filtering
+  // arrays that don't even contain recipes in the first place.
+  const recipesSectionEl = document.getElementById('dashSection-libRecipes');
+  const azSectionEl = document.getElementById('dashSection-libAZ');
+  const foodSectionEl = document.getElementById('dashSection-libFood');
+  const ingredientsSectionEl = document.getElementById('dashSection-libIngredients');
+  if (recipesSectionEl) recipesSectionEl.style.display = categoryFilter === 'ingredients' ? 'none' : '';
+  [azSectionEl, foodSectionEl, ingredientsSectionEl].forEach(el => { if (el) el.style.display = categoryFilter === 'recipes' ? 'none' : ''; });
 
   // Update the live match count next to the search box
   const countEl = document.getElementById('librarySearchCount');
@@ -8055,7 +8071,7 @@ function openCategoryPreviewModal() {
   modal.id = 'categoryPreviewModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
+    <div id="categoryPreviewScroll" style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;position:relative;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Browse by Category</div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:16px;">${categorizedCount} of ${total} ingredients categorized (${sortedCats.length} categories). Tap a category to see and log from it. ${uncategorized.length} still uncategorized.</div>
       ${sortedCats.map(cat => `
@@ -8072,6 +8088,10 @@ function openCategoryPreviewModal() {
       ` : ''}
       <button onclick="document.getElementById('categoryPreviewModal').remove();openManageCategoriesModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:12px;">🏷️ Manage Categories</button>
       <button onclick="document.getElementById('categoryPreviewModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
+      <div style="position:sticky;bottom:8px;display:flex;justify-content:flex-end;gap:6px;margin-top:8px;pointer-events:none;">
+        <button onclick="document.getElementById('categoryPreviewScroll').scrollTo({top:0,behavior:'smooth'})" style="pointer-events:auto;width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:14px;cursor:pointer;">▲</button>
+        <button onclick="const el=document.getElementById('categoryPreviewScroll');el.scrollTo({top:el.scrollHeight,behavior:'smooth'})" style="pointer-events:auto;width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:14px;cursor:pointer;">▼</button>
+      </div>
     </div>`;
   document.body.appendChild(modal);
 }
@@ -8080,28 +8100,32 @@ function openCategoryPreviewModal() {
 // reusing the exact same functions the main Ingredients list already uses,
 // not a read-only list. Marks ✋ for anything manually assigned so it's
 // clear at a glance which items are an override vs the auto-guess.
+// Search + sort added to match the main Library list's own controls -
+// previously this was a flat, unsearchable, unsortable dump, unhelpful for
+// a category with more than a handful of items. Search/sort state re-runs
+// renderCategoryItemsList() against the same stored group rather than
+// rebuilding the whole modal, so scroll position isn't lost while typing.
 function openCategoryItemsView(cat) {
-  const items = (window._categoryBrowseGroups || {})[cat] || [];
+  window._categoryItemsCurrentCat = cat;
   const existing = document.getElementById('categoryPreviewModal');
   if (existing) existing.remove();
   const modal = document.createElement('div');
   modal.id = 'categoryItemsModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   modal.innerHTML = `
-    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;">
-      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-transform:capitalize;margin-bottom:4px;">${cat} (${items.length})</div>
-      ${items.map(f => {
-        const isOverride = Array.isArray(f.categories) && f.categories.length > 0;
-        return `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="flex:1;">
-            <div style="font-size:13px;color:var(--text);">${f.name}${isOverride ? ' <span style="font-size:10px;color:var(--text3);" title="Manually assigned">✋</span>' : ''}</div>
-            <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal||0}kcal · ${f.protein||0}g P · ${f.carbs||0}g C</div>
-          </div>
-          <button onclick="document.getElementById('categoryItemsModal').remove();quickLogFromLibrary(${f._origIdx});" style="padding:7px 12px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">LOG</button>
-          <button onclick="document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
-        </div>`;
-      }).join('') || '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No items in this category.</div>'}
+    <div id="categoryItemsScroll" style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;position:relative;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--accent);text-transform:capitalize;margin-bottom:10px;" id="categoryItemsTitle">${cat} (${((window._categoryBrowseGroups || {})[cat] || []).length})</div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input id="categoryItemsSearch" class="modal-input" placeholder="🔍 Search ${cat}…" oninput="renderCategoryItemsList()" style="flex:2;font-size:13px;padding:8px 10px;">
+        <select id="categoryItemsSort" onchange="renderCategoryItemsList()" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:6px 8px;font-family:Space Mono,monospace;">
+          <option value="name">A–Z</option>
+          <option value="mostused">Most Used</option>
+          <option value="kcal">Kcal ↓</option>
+          <option value="protein">Protein ↓</option>
+          <option value="carbs">Carbs ↓</option>
+        </select>
+      </div>
+      <div id="categoryItemsListWrap"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:12px;">
         <span style="font-size:12px;color:var(--text2);">+ Add ${cat} item:</span>
         <div style="display:flex;gap:14px;">
@@ -8111,8 +8135,45 @@ function openCategoryItemsView(cat) {
       </div>
       <button onclick="document.getElementById('categoryItemsModal').remove();openCategoryPreviewModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:12px;font-size:13px;cursor:pointer;margin-top:8px;">← Back to categories</button>
       <button onclick="document.getElementById('categoryItemsModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
+      <div style="position:sticky;bottom:8px;display:flex;justify-content:flex-end;gap:6px;margin-top:8px;pointer-events:none;">
+        <button onclick="document.getElementById('categoryItemsScroll').scrollTo({top:0,behavior:'smooth'})" style="pointer-events:auto;width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:14px;cursor:pointer;">▲</button>
+        <button onclick="const el=document.getElementById('categoryItemsScroll');el.scrollTo({top:el.scrollHeight,behavior:'smooth'})" style="pointer-events:auto;width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:14px;cursor:pointer;">▼</button>
+      </div>
     </div>`;
   document.body.appendChild(modal);
+  renderCategoryItemsList();
+}
+
+function renderCategoryItemsList() {
+  const cat = window._categoryItemsCurrentCat;
+  const wrap = document.getElementById('categoryItemsListWrap');
+  if (!cat || !wrap) return;
+  const raw = (window._categoryBrowseGroups || {})[cat] || [];
+  const query = (document.getElementById('categoryItemsSearch')?.value || '').toLowerCase().trim();
+  const sortBy = document.getElementById('categoryItemsSort')?.value || 'name';
+  let items = query ? raw.filter(f => (f.name || '').toLowerCase().includes(query)) : raw.slice();
+  const sorters = {
+    name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+    mostused: (a, b) => (b.useCount || 0) - (a.useCount || 0),
+    kcal: (a, b) => (b.kcal || 0) - (a.kcal || 0),
+    protein: (a, b) => (b.protein || 0) - (a.protein || 0),
+    carbs: (a, b) => (b.carbs || 0) - (a.carbs || 0),
+  };
+  items.sort(sorters[sortBy] || sorters.name);
+  const titleEl = document.getElementById('categoryItemsTitle');
+  if (titleEl) titleEl.textContent = `${cat} (${items.length}${query || sortBy !== 'name' ? ` of ${raw.length}` : ''})`;
+  wrap.innerHTML = items.map(f => {
+    const isOverride = Array.isArray(f.categories) && f.categories.length > 0;
+    return `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;">
+        <div style="font-size:13px;color:var(--text);">${f.name}${isOverride ? ' <span style="font-size:10px;color:var(--text3);" title="Manually assigned">✋</span>' : ''}</div>
+        <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal||0}kcal · ${f.protein||0}g P · ${f.carbs||0}g C</div>
+      </div>
+      <button onclick="document.getElementById('categoryItemsModal').remove();quickLogFromLibrary(${f._origIdx});" style="padding:7px 12px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">LOG</button>
+      <button onclick="document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
+    </div>`;
+  }).join('') || `<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">${query ? 'No items match your search.' : 'No items in this category.'}</div>`;
 }
 
 // Matches copyResearchRequest()'s exact pattern - computes the real, current
