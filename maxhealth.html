@@ -4670,7 +4670,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.638</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.639</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5546,7 +5546,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.638'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.639'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -28008,6 +28008,15 @@ function renderMMChart() {
     return;
   }
 
+  // Wrapped from here on - real, repeated reports (metric-combination-
+  // specific AND period-specific: "works if the period is already set
+  // from the previous screen, not if changed here") point at an uncaught
+  // exception aborting this function silently partway through, leaving a
+  // genuinely blank canvas with no error visible anywhere a person could
+  // see it. This makes any such failure show up in the JS Error Log
+  // (already proven to work for finding real bugs earlier this session)
+  // and on the canvas itself, instead of just... nothing.
+  try {
   // Each metric's own data can live on a different subset of days (a
   // symptom only logged some days, HRV only on days a wearable synced) -
   // union of every date any selected metric has data for, so the x-axis is
@@ -28178,6 +28187,19 @@ function renderMMChart() {
   _mmLastPerMetricData = perMetricData;
   _mmLastRangeInfo = rangeInfoByKey;
   renderMMLegend(perMetricData, rangeInfoByKey);
+  } catch (err) {
+    // Logged the same way the app's own global error handler does, so it
+    // shows up in Settings → Manage → JS Error Log exactly like any other
+    // caught bug - this is the actual diagnostic this whole thing needed.
+    const msg = `🐛 renderMMChart failed: ${err.message}`;
+    console.error(msg, err);
+    if (typeof logPersistentError === 'function') logPersistentError(msg, err.stack);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#ff5e5e';
+    ctx.fillText('Chart failed to render — check JS Error Log', 10, 30);
+  }
 }
 
 let _mmLastPerMetricData = null;
