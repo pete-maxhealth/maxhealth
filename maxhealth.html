@@ -3032,9 +3032,15 @@
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
       <div class="trends-filter">
         <div class="trends-filter-btn active" id="trendsBtnToday" onclick="setTrendsFilter('today',this)">Today</div>
+        <div class="trends-filter-btn" id="trendsBtn7" onclick="setTrendsFilter(7,this)">7 Days</div>
         <div class="trends-filter-btn" id="trendsBtn30" onclick="setTrendsFilter(30,this)">30 Days</div>
-        <div class="trends-filter-btn" id="trendsBtn60" onclick="setTrendsFilter(60,this)">60 Days</div>
+        <div class="trends-filter-btn" id="trendsBtn90" onclick="setTrendsFilter(90,this)">90 Days</div>
         <div class="trends-filter-btn" id="trendsBtnAll" onclick="setTrendsFilter(0,this)">All</div>
+        <div class="trends-filter-btn" id="trendsBtnCustom" onclick="setTrendsFilter(-1,this)">Custom</div>
+      </div>
+      <div id="trendsCustomDateRow" style="display:none;gap:8px;">
+        <input type="date" id="trendsCustomFromInput" onchange="_trendsCustomFrom=this.value;renderTrends();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+        <input type="date" id="trendsCustomToInput" onchange="_trendsCustomTo=this.value;renderTrends();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
       </div>
       <!-- Daily navigation — only visible in Today mode -->
       <div id="trendsDayNav" style="display:none;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 14px;">
@@ -4670,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.641</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.642</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5546,7 +5552,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.641'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.642'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -25716,6 +25722,8 @@ function parseOutput(text) {
 
 // ─── TRENDS TAB ──────────────────────────────────────────
 let trendsWindow = 'today';
+let _trendsCustomFrom = '';
+let _trendsCustomTo = '';
 const chartInstances = {};
 
 const CHART_DEFAULTS = {
@@ -26162,6 +26170,16 @@ function getTrendsData(forceFullHistory) {
     return histData.filter(d => {
       const p = d.date.split('/');
       return p.length === 3 && new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff;
+    }).map(norm);
+  }
+  if (trendsWindow === -1) {
+    return histData.filter(d => {
+      const p = d.date.split('/');
+      if (p.length !== 3) return false;
+      const dt = new Date(`20${p[2]}-${p[1]}-${p[0]}`);
+      if (_trendsCustomFrom && dt < new Date(_trendsCustomFrom)) return false;
+      if (_trendsCustomTo) { const to = new Date(_trendsCustomTo); to.setHours(23,59,59,999); if (dt > to) return false; }
+      return true;
     }).map(norm);
   }
   return histData.map(norm);
@@ -27468,6 +27486,13 @@ function renderTrends() {
   const fullBodyCompFiltered = (trendsWindow > 0)
     ? (() => { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - trendsWindow);
         return fullBodyComp.filter(d => new Date(d.isoDate) >= cutoff); })()
+    : (trendsWindow === -1)
+    ? fullBodyComp.filter(d => {
+        const dt = new Date(d.isoDate);
+        if (_trendsCustomFrom && dt < new Date(_trendsCustomFrom)) return false;
+        if (_trendsCustomTo) { const to = new Date(_trendsCustomTo); to.setHours(23,59,59,999); if (dt > to) return false; }
+        return true;
+      })
     : fullBodyComp;
   const bodyCompLabels = fullBodyCompFiltered.map(d => d.date);
   const fatVals = fullBodyCompFiltered.map(d => d.fat_pct ? parseFloat(d.fat_pct) : null);
@@ -27883,6 +27908,31 @@ function closeMetricDrill() {
 // expanded/collapsed on the Trends page at any given moment.
 let _mmChart = null;
 let _mmPeriod = 30;
+// -1 = custom range, using these two. Matches the same -1=custom
+// convention Reports' own Query Builder already uses (_rptRange), rather
+// than inventing a different sentinel for the same concept here.
+let _mmCustomFrom = '';
+let _mmCustomTo = '';
+// Centralizes "is this date within the currently selected period" so
+// Custom only needs implementing once, correctly, rather than threading
+// a second filtering scheme through every place _mmPeriod was already
+// being checked (three separate spots, previously each with their own
+// inline cutoff-date logic). period > 0 keeps the exact original
+// behavior (rolling N-day cutoff); period === 0 is unchanged (all time,
+// always true); period === -1 is the only new case.
+function _mmDateInRange(dateStr) {
+  if (_mmPeriod === 0) return true;
+  const p = dateStr.split('/');
+  if (p.length !== 3) return false;
+  const d = new Date(`20${p[2]}-${p[1]}-${p[0]}`);
+  if (_mmPeriod === -1) {
+    if (_mmCustomFrom && d < new Date(_mmCustomFrom)) return false;
+    if (_mmCustomTo) { const to = new Date(_mmCustomTo); to.setHours(23,59,59,999); if (d > to) return false; }
+    return true;
+  }
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - _mmPeriod);
+  return d >= cutoff;
+}
 let _mmSelectedMetrics = null; // lazy-loaded from localStorage on first open
 
 function getAllOverlayableMetrics() {
@@ -27967,7 +28017,14 @@ function setMMPeriod(period, btn) {
   document.querySelectorAll('#mmPeriodBtns .drill-period').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old period's data
-  renderMMChart();
+  const customRow = document.getElementById('mmCustomDateRow');
+  if (customRow) customRow.style.display = period === -1 ? 'flex' : 'none';
+  // Custom with no dates picked yet has nothing to filter to - render once
+  // the person has actually chosen at least a "from" date (the date
+  // inputs' own onchange calls renderMMChart themselves once that
+  // happens), rather than showing a misleading empty/all-time chart
+  // labeled "Custom" in the meantime.
+  if (period !== -1) renderMMChart();
 }
 
 function toggleMMMetric(key) {
@@ -28074,10 +28131,7 @@ function renderMMChart() {
   const perMetricData = selected.map(m => {
     if (m.isSymptom) {
       const days = state.history.filter(d => d.symptoms && d.symptoms[m.symptomId] != null);
-      const filtered = _mmPeriod > 0
-        ? (() => { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - _mmPeriod);
-            return days.filter(d => { const p = d.date.split('/'); if (p.length !== 3) return false; return new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff; }); })()
-        : days;
+      const filtered = days.filter(d => _mmDateInRange(d.date));
       return { metric: m, points: filtered.map(d => ({ date: d.date, val: d.symptoms[m.symptomId] })) };
     }
     if (m.isTreatment) {
@@ -28088,19 +28142,22 @@ function renderMMChart() {
       // separate axis scale that doesn't mean anything next to HRV or
       // hydration on the same normalized chart.
       const sessionDates = new Set(loadTreatmentLog().filter(s => s.treatmentId === m.treatmentId).map(s => s.date));
-      const dayDates = state.history.map(d => d.date);
-      const filtered = _mmPeriod > 0
-        ? (() => { const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - _mmPeriod);
-            return dayDates.filter(date => { const p = date.split('/'); if (p.length !== 3) return false; return new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff; }); })()
-        : dayDates;
-      return { metric: m, points: filtered.map(date => ({ date, val: sessionDates.has(date) ? 1 : 0 })) };
+      const dayDates = state.history.map(d => d.date).filter(_mmDateInRange);
+      return { metric: m, points: dayDates.map(date => ({ date, val: sessionDates.has(date) ? 1 : 0 })) };
     }
     // Bone Mass and Hydration are the two metrics with the same kg-vs-%
     // ambiguity the Trends cards have (Withings gives no separate stored
     // % column for these two, unlike fat/muscle) - reuses the SAME
     // mh_bodycomp_unit preference as those cards, deliberately, so the two
     // screens never disagree about which unit "bone mass" means right now.
-    const rawPoints = getDrillData(m.key, _mmPeriod);
+    // getDrillData only understands "last N days" or "all time" (0) - for
+    // custom, fetch everything and filter down here with the same shared
+    // _mmDateInRange used above, rather than teaching getDrillData a
+    // second period scheme (it's also used by the separate single-metric
+    // Deep Dive view, which has its own independent period selector and
+    // shouldn't need to know Compare Metrics has a custom range concept).
+    const rawPoints = (getDrillData(m.key, _mmPeriod === -1 ? 0 : _mmPeriod))
+      .filter(d => _mmDateInRange(d.date));
     if (['bone_mass', 'hydration'].includes(m.key) && getBodyCompUnit(m.key) === 'pct') {
       const pctPoints = rawPoints
         .map(d => ({ date: d.date, val: (d.raw?.weight && d.val != null) ? Math.round(d.val / d.raw.weight * 1000) / 10 : null }))
@@ -28661,7 +28718,13 @@ function showMMDayPanel(date, realValues, perMetricData) {
 function computeMMPeriodSummary(endDateStr, perMetricData, periodDays) {
   const [ed, em, ey] = endDateStr.split('/').map(Number);
   const endDate = new Date(2000 + ey, em - 1, ed);
-  const startDate = periodDays > 0 ? (() => { const d = new Date(endDate); d.setDate(d.getDate() - (periodDays - 1)); return d; })() : null;
+  // Custom range: bound the start at the custom "from" date rather than
+  // falling through to "since the beginning of time" (which is what
+  // periodDays > 0 being false would otherwise silently do for -1, same
+  // as it already correctly does for 0/All).
+  const startDate = periodDays > 0
+    ? (() => { const d = new Date(endDate); d.setDate(d.getDate() - (periodDays - 1)); return d; })()
+    : (periodDays === -1 && _mmCustomFrom) ? new Date(_mmCustomFrom) : null;
   return perMetricData.map(pm => {
     const inRange = pm.points.filter(p => {
       const [pd, pm2, py] = p.date.split('/').map(Number);
@@ -28677,6 +28740,7 @@ function computeMMPeriodSummary(endDateStr, perMetricData, periodDays) {
 // of this view, so the drill-down button reads as "whatever you already
 // selected" rather than a new, separate choice.
 function getMMPeriodLabel() {
+  if (_mmPeriod === -1) return _mmCustomFrom || _mmCustomTo ? `${_mmCustomFrom || '…'} to ${_mmCustomTo || '…'}` : 'Custom';
   return _mmPeriod === 7 ? '7D' : _mmPeriod === 30 ? '30D' : _mmPeriod === 90 ? '90D' : 'All';
 }
 
@@ -28703,7 +28767,7 @@ function renderMMDayPanel(mode) {
 
   if (isPeriod) {
     const periodData = computeMMPeriodSummary(date, perMetricData, _mmPeriod);
-    const windowDesc = _mmPeriod > 0 ? `${_mmPeriod}-day` : 'full';
+    const windowDesc = _mmPeriod > 0 ? `${_mmPeriod}-day` : _mmPeriod === -1 ? 'custom-range' : 'full';
     rows = periodData.map(w => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
       <span style="color:var(--text2);"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${w.metric.color};margin-right:6px;"></span>${w.metric.title}</span>
       <span style="color:${w.avg != null ? 'var(--text)' : 'var(--text3)'};font-weight:700;">${w.avg != null ? `${w.avg}${w.metric.unit} avg (${w.daysLogged} day${w.daysLogged === 1 ? '' : 's'} logged)` : 'No data'}</span>
@@ -29426,6 +29490,8 @@ function setTrendsFilter(days, btn) {
   document.querySelectorAll('.trends-filter-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   const dayNav = document.getElementById('trendsDayNav');
+  const customRow = document.getElementById('trendsCustomDateRow');
+  if (customRow) customRow.style.display = days === -1 ? 'flex' : 'none';
 
   if (days === 'today') {
     trendsWindow = 'today';
@@ -29436,7 +29502,10 @@ function setTrendsFilter(days, btn) {
     trendsWindow = days;
     if (dayNav) dayNav.style.display = 'none';
   }
-  renderTrends();
+  // Same reasoning as Compare Metrics' identical guard: Custom with
+  // nothing picked yet has no range to show - the date inputs' own
+  // onchange calls renderTrends() themselves once a real date is chosen.
+  if (days !== -1) renderTrends();
 }
 
 function shiftTrendsDay(dir) {
@@ -35423,12 +35492,17 @@ function dismissInsight() {
   <div style="position:sticky;top:0;z-index:10;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;">
     <button onclick="closeMultiMetricOverlay()" style="background:var(--surface2);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;font-size:18px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;">←</button>
     <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:var(--text);">Compare Metrics</div>
-    <div style="margin-left:auto;display:flex;gap:6px;" id="mmPeriodBtns">
+    <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;" id="mmPeriodBtns">
       <button class="drill-period" onclick="setMMPeriod(7,this)">7D</button>
       <button class="drill-period active" onclick="setMMPeriod(30,this)">30D</button>
       <button class="drill-period" onclick="setMMPeriod(90,this)">90D</button>
       <button class="drill-period" onclick="setMMPeriod(0,this)">All</button>
+      <button class="drill-period" onclick="setMMPeriod(-1,this)">Custom</button>
     </div>
+  </div>
+  <div id="mmCustomDateRow" style="display:none;padding:10px 20px 0;gap:8px;">
+    <input type="date" id="mmCustomFromInput" onchange="_mmCustomFrom=this.value;renderMMChart();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+    <input type="date" id="mmCustomToInput" onchange="_mmCustomTo=this.value;renderMMChart();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
   </div>
 
   <div style="padding:14px 20px 0;font-size:11px;color:var(--text3);line-height:1.5;">Each line is scaled to its own range so shapes can be compared side by side — tap a point on the chart to see the real values for that day.</div>
