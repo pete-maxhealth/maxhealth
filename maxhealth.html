@@ -4670,7 +4670,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.637</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.638</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5546,7 +5546,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.637'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.638'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -20190,6 +20190,14 @@ function logTreatmentSession(treatmentId, dateOverride) {
   const defs = loadTreatmentDefs();
   const def = defs.find(d => d.id === treatmentId);
   if (!def) return;
+  // Optional note per SESSION, not per day - day.notes is a comma-split
+  // tag list used in 22 other places throughout the app; a genuine
+  // free-text note ("PEMF, focused on right knee") would silently corrupt
+  // every one of them the moment it contained a comma. This is a
+  // dedicated field on the session object itself instead, never parsed as
+  // tags anywhere. Optional and skippable - leaving it blank (Cancel or
+  // empty) logs the session exactly as before, no note attached.
+  const note = (prompt(`Optional note for this ${def.name} session (e.g. "right leg", "checking sleep") — leave blank to skip:`, '') || '').trim();
   const log = loadTreatmentLog();
   const now = new Date();
   const date = dateOverride || todayStr();
@@ -20198,7 +20206,7 @@ function logTreatmentSession(treatmentId, dateOverride) {
   // "when today" to record, so it's left blank rather than falsely
   // implying the session happened at whatever time it's being entered.
   const time = dateOverride ? '' : now.toTimeString().slice(0,5);
-  log.push({ id: 'trt_' + Date.now(), treatmentId, date, time });
+  log.push({ id: 'trt_' + Date.now(), treatmentId, date, time, note });
   saveTreatmentLog(log);
   renderTreatmentLogger();
   if (typeof renderTreatmentToday === 'function') renderTreatmentToday();
@@ -20261,7 +20269,7 @@ function renderTreatmentToday() {
       ${todaySessions.length ? todaySessions.map(s => {
         const def = defs.find(t => t.id === s.treatmentId) || loadTreatmentDefs().find(t => t.id === s.treatmentId);
         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:var(--radius-sm);margin-bottom:4px;">
-          <div style="flex:1;font-size:12px;color:#a855f7;">✓ ${def ? def.name : '(deleted)'} logged at ${s.time}</div>
+          <div style="flex:1;font-size:12px;color:#a855f7;">✓ ${def ? def.name : '(deleted)'} logged at ${s.time}${s.note ? ` — <span style="color:var(--text2);">${s.note}</span>` : ''}</div>
           <button class="mh-treatment-delete-btn" data-session-id="${s.id}" style="background:transparent;border:none;color:var(--text3);font-size:14px;cursor:pointer;">✕</button>
         </div>`;
       }).join('') : ''}
@@ -20374,7 +20382,7 @@ function renderTreatmentLogger() {
     ${todaySessions.map(s => {
       const def = defs.find(t => t.id === s.treatmentId) || loadTreatmentDefs().find(t => t.id === s.treatmentId);
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;">
-        <div style="flex:1;font-size:12px;color:var(--text2);">${def ? def.name : '(deleted treatment)'} — ${s.time}</div>
+        <div style="flex:1;font-size:12px;color:var(--text2);">${def ? def.name : '(deleted treatment)'} — ${s.time}${s.note ? ` — ${s.note}` : ''}</div>
         <button class="mh-treatment-delete-btn" data-session-id="${s.id}" style="background:transparent;border:none;color:var(--text3);font-size:14px;cursor:pointer;">✕</button>
       </div>`;
     }).join('')}` : ''}
@@ -21532,7 +21540,20 @@ function editHistDayTotals(dayIdx, renderIdx) {
             (typeof loadTreatmentLog === 'function') && loadTreatmentLog().some(s => s.date === day.date);
           const isActive = _manuallySet || _autoSatisfied || _treatmentSessionSatisfied;
           const _isTreatment = t === 'Treatment';
-          return `<span onclick="toggleHistTagOrNotify(${dayIdx},'${t}')" style="display:inline-flex;align-items:center;padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid ${_isTreatment?'rgba(168,85,247,0.4)':'var(--border)'};background:${isActive?(_isTreatment?'rgba(168,85,247,0.15)':'rgba(245,197,66,0.15)'):'var(--surface)'};color:${isActive?(_isTreatment?'#a855f7':'var(--yellow)'):'var(--text3)'};">${t}${(_autoSatisfied || _treatmentSessionSatisfied) ? ' ✓' : ''}</span>`;
+          const tagNote = (day.tagNotes || {})[t];
+          // Small 📝 next to each ACTIVE tag - opens a prompt to add/edit
+          // an optional note for THAT specific tag ("Illness: mild cold",
+          // "Travel: long-haul to NYC"). Stored in a dedicated day.tagNotes
+          // map, keyed by tag name - deliberately NOT inside day.notes
+          // itself, which is comma-split as discrete tags in 22 places
+          // elsewhere in the app; a free-text note containing its own
+          // comma would silently corrupt every one of them. Only shown
+          // once a tag is active - a note on a tag that isn't even
+          // applied to the day doesn't mean anything.
+          const noteIcon = isActive
+            ? `<span onclick="event.stopPropagation();addHistTagNote(${dayIdx},'${t.replace(/'/g,"\\'")}',${rIdx})" title="${tagNote ? 'Edit note' : 'Add note'}" style="margin-left:4px;opacity:${tagNote ? '1' : '0.5'};cursor:pointer;">📝</span>`
+            : '';
+          return `<span onclick="toggleHistTagOrNotify(${dayIdx},'${t}')" style="display:inline-flex;align-items:center;padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid ${_isTreatment?'rgba(168,85,247,0.4)':'var(--border)'};background:${isActive?(_isTreatment?'rgba(168,85,247,0.15)':'rgba(245,197,66,0.15)'):'var(--surface)'};color:${isActive?(_isTreatment?'#a855f7':'var(--yellow)'):'var(--text3)'};">${t}${(_autoSatisfied || _treatmentSessionSatisfied) ? ' ✓' : ''}${noteIcon}</span>`;
         }).join('')}
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -21543,9 +21564,14 @@ function editHistDayTotals(dayIdx, renderIdx) {
         (() => {
           const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
           const tags = (day.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !legacy.includes(t.toLowerCase()));
-          return tags.map(t => `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);" data-tag="${t.replace(/"/g,'&quot;')}">${t}<span onclick="removeHistTag(${dayIdx},this.parentElement.dataset.tag)" style="cursor:pointer;opacity:0.7;margin-left:2px;font-size:13px;line-height:1;">×</span></span>`).join('');
+          return tags.map(t => { const tn = (day.tagNotes||{})[t]; return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);" data-tag="${t.replace(/"/g,'&quot;')}">${t}<span onclick="addHistTagNote(${dayIdx},this.parentElement.dataset.tag,${rIdx})" title="${tn?'Edit note':'Add note'}" style="opacity:${tn?'1':'0.5'};cursor:pointer;margin-left:2px;">📝</span><span onclick="removeHistTag(${dayIdx},this.parentElement.dataset.tag)" style="cursor:pointer;opacity:0.7;margin-left:2px;font-size:13px;line-height:1;">×</span></span>`; }).join('');
         })()
       }</div>
+      ${(() => {
+        const tagNoteEntries = Object.entries(day.tagNotes || {}).filter(([,v]) => v);
+        if (!tagNoteEntries.length) return '';
+        return `<div style="font-size:10px;color:var(--text3);margin-top:6px;">${tagNoteEntries.map(([k,v]) => `<strong style="color:var(--yellow);">${k}:</strong> ${v}`).join(' · ')}</div>`;
+      })()}
       ${(() => {
         // Which SPECIFIC treatment(s) satisfied the checkmark above -
         // "Treatment ✓" alone doesn't say whether it was PEMF, massage, or
@@ -21562,6 +21588,14 @@ function editHistDayTotals(dayIdx, renderIdx) {
         const defs = loadTreatmentDefs().filter(t => t.active !== false);
         if (!defs.length) return '';
         const names = daySessions.length ? [...new Set(daySessions.map(s => loadTreatmentDefs().find(d => d.id === s.treatmentId)?.name || '(deleted)'))] : [];
+        // Notes shown alongside the name(s) - this is the actual example
+        // given for why notes matter ("PEMF or massage right leg to see
+        // if sleep is better"), so surfacing it only as a name with no
+        // context here would miss the point entirely.
+        const notesLines = daySessions.filter(s => s.note).map(s => {
+          const n = loadTreatmentDefs().find(d => d.id === s.treatmentId)?.name || '(deleted)';
+          return `${n}: ${s.note}`;
+        });
         // The Today-dashboard/Settings loggers only ever write today's
         // date - there was genuinely no way to log a session against a
         // PAST day at all before this. Reuses logTreatmentSession's own
@@ -21569,6 +21603,7 @@ function editHistDayTotals(dayIdx, renderIdx) {
         // this day's real date instead of defaulting to today.
         return `
           ${names.length ? `<div style="font-size:11px;color:#a855f7;margin-top:6px;">💠 Treatment session(s) logged: ${names.join(', ')}</div>` : ''}
+          ${notesLines.length ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">${notesLines.join(' · ')}</div>` : ''}
           <div style="font-size:10px;color:var(--text3);margin-top:8px;">Log a treatment session for THIS day (${day.date}):</div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
             ${defs.map(t => `<button onclick="logTreatmentForHistDay('${t.id}','${day.date}',${dayIdx},${rIdx})" style="padding:6px 12px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.4);border-radius:16px;color:#a855f7;font-size:11px;cursor:pointer;">+ ${t.name}</button>`).join('')}
@@ -21607,6 +21642,34 @@ function setHistDayType(dayIdx, mode) {
   // since renderIdx (position in the rendered list) can differ from dayIdx (real
   // position in state.history) once history is filtered/sorted for display.
   setTimeout(() => editHistDayTotalsByDate(dateForReopen), 50);
+}
+
+// Optional note per TAG per DAY, not per treatment session - a day-level
+// tag like "Illness" or "Travel" isn't a session, so one note per tag is
+// the right shape here (unlike Treatment Tracking's own sessions, which
+// can genuinely have several a day and each needs its own note). Stored
+// separately from Treatment's session-level notes entirely - the two
+// don't conflict, and for "Treatment" specifically both are available:
+// this for a general day-level note, the session log for a per-session one.
+function addHistTagNote(dayIdx, tag, renderIdx) {
+  const day = state.history[dayIdx];
+  if (!day) return;
+  if (!day.tagNotes) day.tagNotes = {};
+  const existing = day.tagNotes[tag] || '';
+  const note = prompt(`Note for "${tag}" on ${day.date}:`, existing);
+  if (note === null) return; // cancelled - leave whatever was there untouched
+  const trimmed = note.trim();
+  if (trimmed) day.tagNotes[tag] = trimmed;
+  else delete day.tagNotes[tag]; // blanked out - remove rather than store an empty note
+  saveState();
+  // Re-open the form fresh so both the icon state and the day's note
+  // summary update - same re-render approach as logTreatmentForHistDay,
+  // for the same reason (editHistDayTotals early-returns if already open).
+  const rIdxUsed = renderIdx !== undefined ? renderIdx : dayIdx;
+  const bodyEl = document.getElementById(`histBody${rIdxUsed}`);
+  const openForm = bodyEl?.querySelector('.hist-day-totals-edit');
+  if (openForm) openForm.remove();
+  editHistDayTotals(dayIdx, rIdxUsed);
 }
 
 function toggleHistTagOrNotify(dayIdx, tag) {
@@ -21658,7 +21721,7 @@ function toggleHistTag(dayIdx, tag) {
   const notesEl = document.getElementById('histActiveNotes-' + dayIdx);
   if (notesEl) {
     if (tags.length > 0) {
-      notesEl.innerHTML = tags.map(t => `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);" data-tag="${t.replace(/"/g,'&quot;')}">${t}<span onclick="removeHistTag(${dayIdx},this.parentElement.dataset.tag)" style="cursor:pointer;opacity:0.7;margin-left:2px;font-size:13px;line-height:1;">×</span></span>`).join('');
+      notesEl.innerHTML = tags.map(t => { const tn = (day.tagNotes||{})[t]; return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.4);border-radius:12px;font-size:11px;color:var(--yellow);" data-tag="${t.replace(/"/g,'&quot;')}">${t}<span onclick="addHistTagNote(${dayIdx},this.parentElement.dataset.tag)" title="${tn?'Edit note':'Add note'}" style="opacity:${tn?'1':'0.5'};cursor:pointer;margin-left:2px;">📝</span><span onclick="removeHistTag(${dayIdx},this.parentElement.dataset.tag)" style="cursor:pointer;opacity:0.7;margin-left:2px;font-size:13px;line-height:1;">×</span></span>`; }).join('');
     } else {
       notesEl.innerHTML = '';
     }
