@@ -2309,6 +2309,7 @@
     </div>
 
     <div id="symptomTrackerContent"></div>
+    <div id="treatmentTodayContent"></div>
 
     <div class="weight-card" id="dashSection-weight">
       <div style="position:absolute;top:8px;right:8px;z-index:2;">
@@ -4650,7 +4651,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.632</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.633</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5526,7 +5527,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.632'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.633'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -18828,6 +18829,7 @@ function updateDashboard(skipActivityRender) {
   updateCarbZonesCondition(); // swaps GBM-specific wording in the carb-zones tooltip based on mh_condition — see its own comment
   applySectionState('dash-guides', 'dash-guides-wrap', 'dash-guides-icon', true); // was never restored on load - saved fine via toggleSection, just never read back
   renderSymptomTracker();
+  renderTreatmentToday();
   // Restore today's notes from localStorage if state.notes is empty
   if (!state.notes || state.notes === 'standard') {
     const savedNotes = localStorage.getItem('mh_today_notes');
@@ -20154,6 +20156,11 @@ function logTreatmentSession(treatmentId) {
   log.push({ id: 'trt_' + Date.now(), treatmentId, date: todayStr(), time: now.toTimeString().slice(0,5) });
   saveTreatmentLog(log);
   renderTreatmentLogger();
+  // Also refreshes the Today-dashboard widget - logging from Settings
+  // should show up there immediately too, not just wherever the tap
+  // happened, so the two views can never show a session as logged in one
+  // place and not the other.
+  if (typeof renderTreatmentToday === 'function') renderTreatmentToday();
   showToast(`${def.name} session logged ✓`);
 }
 
@@ -20161,7 +20168,56 @@ function deleteTreatmentSession(sessionId) {
   const log = loadTreatmentLog().filter(s => s.id !== sessionId);
   saveTreatmentLog(log);
   renderTreatmentLogger();
+  if (typeof renderTreatmentToday === 'function') renderTreatmentToday();
 }
+
+// Same underlying data as the Settings → Treatment Tracking logger
+// (loadTreatmentDefs/loadTreatmentLog/logTreatmentSession - no separate
+// logic, just a dashboard-styled view of it), placed on Today specifically
+// because logging a session in Settings gave no visible confirmation
+// anywhere someone would actually look afterward - a toast that's already
+// gone, and a list buried in a Settings section most people won't revisit
+// same day. This is the "yes, it's really logged" someone actually wants
+// to see, right on the screen they open by default.
+function renderTreatmentToday() {
+  const el = document.getElementById('treatmentTodayContent');
+  if (!el) return;
+  const defs = loadTreatmentDefs().filter(t => t.active !== false);
+  if (!defs.length) { el.innerHTML = ''; return; } // nothing tracked - no empty card cluttering the dashboard, same rule as symptoms
+
+  const todaySessions = loadTreatmentLog().filter(s => s.date === todayStr());
+
+  el.innerHTML = `
+    <div class="settings-card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;">Treatment sessions today</div>
+        <div style="font-size:11px;color:${todaySessions.length ? 'var(--green)' : 'var(--text3)'};">${todaySessions.length} logged</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${todaySessions.length ? '10px' : '4px'};">
+        ${defs.map(t => `<button class="mh-treatment-log-btn" data-treatment-id="${t.id}" style="padding:8px 14px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:20px;color:var(--accent);font-size:12px;cursor:pointer;">+ ${t.name}</button>`).join('')}
+      </div>
+      ${todaySessions.length ? todaySessions.map(s => {
+        const def = defs.find(t => t.id === s.treatmentId) || loadTreatmentDefs().find(t => t.id === s.treatmentId);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.3);border-radius:var(--radius-sm);margin-bottom:4px;">
+          <div style="flex:1;font-size:12px;color:#a855f7;">✓ ${def ? def.name : '(deleted)'} logged at ${s.time}</div>
+          <button class="mh-treatment-delete-btn" data-session-id="${s.id}" style="background:transparent;border:none;color:var(--text3);font-size:14px;cursor:pointer;">✕</button>
+        </div>`;
+      }).join('') : ''}
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">Manage what's tracked in Settings → Treatment Tracking.</div>
+    </div>`;
+}
+// Delegated, capture-phase (see the identical chart-style-button fix
+// earlier this session for why capture specifically) - not inline onclick
+// with an embedded id. Covers both buttons this function renders; data-*
+// values can never break an attribute boundary regardless of what
+// characters end up in a treatment id, unlike a string interpolated
+// straight into an onclick.
+document.addEventListener('click', (e) => {
+  const logBtn = e.target.closest('.mh-treatment-log-btn');
+  if (logBtn) { logTreatmentSession(logBtn.dataset.treatmentId); return; }
+  const delBtn = e.target.closest('.mh-treatment-delete-btn');
+  if (delBtn) { deleteTreatmentSession(delBtn.dataset.sessionId); return; }
+}, true);
 
 function renderTreatmentSettings() {
   const el = document.getElementById('treatmentListInner');
@@ -20244,7 +20300,7 @@ function renderTreatmentLogger() {
   el.innerHTML = `
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.04em;margin:14px 0 6px;">Log a session</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
-      ${defs.map(t => `<button onclick="logTreatmentSession('${t.id}')" style="padding:8px 14px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:20px;color:var(--accent);font-size:12px;cursor:pointer;">+ ${t.name}</button>`).join('')}
+      ${defs.map(t => `<button class="mh-treatment-log-btn" data-treatment-id="${t.id}" style="padding:8px 14px;background:var(--accent-dim);border:1px solid var(--accent);border-radius:20px;color:var(--accent);font-size:12px;cursor:pointer;">+ ${t.name}</button>`).join('')}
     </div>
     ${todaySessions.length ? `
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Today's sessions</div>
@@ -20252,7 +20308,7 @@ function renderTreatmentLogger() {
       const def = defs.find(t => t.id === s.treatmentId) || loadTreatmentDefs().find(t => t.id === s.treatmentId);
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:4px;">
         <div style="flex:1;font-size:12px;color:var(--text2);">${def ? def.name : '(deleted treatment)'} — ${s.time}</div>
-        <button onclick="deleteTreatmentSession('${s.id}')" style="background:transparent;border:none;color:var(--text3);font-size:14px;cursor:pointer;">✕</button>
+        <button class="mh-treatment-delete-btn" data-session-id="${s.id}" style="background:transparent;border:none;color:var(--text3);font-size:14px;cursor:pointer;">✕</button>
       </div>`;
     }).join('')}` : ''}
   `;
