@@ -2738,7 +2738,6 @@
          from a single entry point regardless of any mode. -->
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
-      <div class="quick-btn" style="border-color:#facc15;" onclick="startMissedDayFlow()">+ Missed day</div>
       <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
@@ -4653,7 +4652,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.658</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.659</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5561,7 +5560,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.658'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.659'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -9944,8 +9943,8 @@ function initSettings() {
   const savedSex = localStorage.getItem('mh_sex');
   if (savedSex) setSex(savedSex);
   const condEl = document.getElementById('settingsCondition');
-  if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'gbm';
-  updateTherapeuticEscalationNote(localStorage.getItem('mh_condition') || 'gbm');
+  if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'general';
+  updateTherapeuticEscalationNote(localStorage.getItem('mh_condition') || 'general');
   const actEl = document.getElementById('settingsActivityLevel');
   if (actEl) actEl.value = localStorage.getItem('mh_activity_level') || 'moderate';
   const phaseEl = document.getElementById('settingsPhaseHistory');
@@ -16700,6 +16699,13 @@ function renderMealPreview() {
 
   const bubble = document.createElement('div');
   bubble.id = 'mealPreviewBubble';
+  // Real bug found: this input's list="allKnownCategories" datalist is only
+  // ever created by the Library tab's own render function - if a meal was
+  // logged straight from chat/voice without visiting Library first that
+  // session, the datalist genuinely doesn't exist yet and the input points
+  // at nothing. Guaranteeing it exists here, regardless of navigation
+  // history, rather than assuming Library was already opened.
+  refreshKnownCategoriesDatalist(loadLibrary());
   bubble.className = 'bubble system';
   bubble.innerHTML = `
     <div style="font-size:10px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Ready to log</div>
@@ -24515,32 +24521,39 @@ async function calculateMissedDayConv() {
 let _missedDayVoiceActive = false;
 let _missedDayVoiceRecognition = null;
 
-function toggleMissedDayVoiceInput() {
+// Generalized to accept target element IDs and an onDone callback, defaulting
+// to the original chat-bubble flow's own IDs/callback so the existing
+// onclick="toggleMissedDayVoiceInput()" (no args) call site keeps working
+// exactly as before. Lets the modal-based "Log Missed Day" flow reuse this
+// same, already-working voice logic against its own textarea/button/status
+// elements and its own calculateMissedDay() function, rather than a second,
+// separately-maintained copy of the same recognition logic.
+function toggleMissedDayVoiceInput(textareaId = 'missedDayConvMeals', btnId = 'missedDayVoiceBtn', statusId = 'missedDayVoiceStatus', onDoneFn = 'calculateMissedDayConv') {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showToast('Voice input not supported on this browser');
     return;
   }
   if (_missedDayVoiceActive) {
-    _stopMissedDayVoiceInput('⏸ Paused. Tap 🎤 to resume, or say "done" to calculate.', true);
+    _stopMissedDayVoiceInput('⏸ Paused. Tap 🎤 to resume, or say "done" to calculate.', true, btnId, statusId);
     return;
   }
   _missedDayVoiceActive = true;
-  _startMissedDayVoiceListening();
+  _startMissedDayVoiceListening(textareaId, btnId, statusId, onDoneFn);
 }
 
-function _stopMissedDayVoiceInput(message, paused) {
+function _stopMissedDayVoiceInput(message, paused, btnId = 'missedDayVoiceBtn', statusId = 'missedDayVoiceStatus') {
   _missedDayVoiceActive = false;
   _missedDayVoiceRecognition?.stop();
-  const btn = document.getElementById('missedDayVoiceBtn');
+  const btn = document.getElementById(btnId);
   if (btn) { btn.style.background = ''; btn.style.borderColor = ''; btn.textContent = '🎤 Voice add'; }
-  const status = document.getElementById('missedDayVoiceStatus');
+  const status = document.getElementById(statusId);
   if (status) {
     if (message) { status.style.display = 'block'; status.textContent = message; }
     else status.style.display = 'none';
   }
 }
 
-function _startMissedDayVoiceListening() {
+function _startMissedDayVoiceListening(textareaId = 'missedDayConvMeals', btnId = 'missedDayVoiceBtn', statusId = 'missedDayVoiceStatus', onDoneFn = 'calculateMissedDayConv') {
   if (!_missedDayVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _missedDayVoiceRecognition = new SpeechRecognition();
@@ -24548,8 +24561,8 @@ function _startMissedDayVoiceListening() {
   _missedDayVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across several meals
   _missedDayVoiceRecognition.interimResults = false;
 
-  const btn = document.getElementById('missedDayVoiceBtn');
-  const status = document.getElementById('missedDayVoiceStatus');
+  const btn = document.getElementById(btnId);
+  const status = document.getElementById(statusId);
 
   _missedDayVoiceRecognition.onstart = () => {
     if (btn) { btn.style.background = 'rgba(45,235,143,0.2)'; btn.style.borderColor = 'var(--green)'; btn.textContent = '🎤 Listening…'; }
@@ -24561,11 +24574,11 @@ function _startMissedDayVoiceListening() {
       if (!e.results[ri].isFinal) continue;
       const text = e.results[ri][0].transcript.trim();
       if (isRecipeVoiceDonePhrase(text)) {
-        _stopMissedDayVoiceInput(null, false);
-        calculateMissedDayConv();
+        _stopMissedDayVoiceInput(null, false, btnId, statusId);
+        (window[onDoneFn] || calculateMissedDayConv)();
         return;
       }
-      const ta = document.getElementById('missedDayConvMeals');
+      const ta = document.getElementById(textareaId);
       if (ta) {
         ta.value = ta.value.trim() ? `${ta.value.trim()}, ${text}` : text;
       }
@@ -24580,11 +24593,11 @@ function _startMissedDayVoiceListening() {
       'not-allowed': 'Microphone permission denied — enable it in your browser/app settings',
       'network': 'Voice recognition needs an internet connection',
     };
-    if (messages[e.error]) _stopMissedDayVoiceInput(messages[e.error], false);
+    if (messages[e.error]) _stopMissedDayVoiceInput(messages[e.error], false, btnId, statusId);
   };
 
   _missedDayVoiceRecognition.onend = () => {
-    if (_missedDayVoiceActive) setTimeout(() => _startMissedDayVoiceListening(), 300);
+    if (_missedDayVoiceActive) setTimeout(() => _startMissedDayVoiceListening(textareaId, btnId, statusId, onDoneFn), 300);
   };
 
   _missedDayVoiceRecognition.start();
@@ -32591,7 +32604,7 @@ function estimateIncidentalStepsKcalForDay(day) {
 function buildPatientContext(history, conditionFilter = null) {
   let t      = getTargets();
   const name   = localStorage.getItem('mh_name') || 'the patient';
-  let cond   = localStorage.getItem('mh_condition') || 'gbm';
+  let cond   = localStorage.getItem('mh_condition') || 'general';
   const goal   = localStorage.getItem('mh_goal') || 'gain';
   const wtLow  = getWeightTargetLow()  || 92;
   const wtHigh = getWeightTargetHigh() || 93;
@@ -35940,6 +35953,8 @@ function dismissInsight() {
     <div id="missedAISection">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">WHAT DID YOU EAT?</div>
       <textarea id="missedDayMeals" class="modal-input" rows="4" placeholder="e.g. Heylo bread x5 with Lurpak and PB for breakfast, chicken curry with cauliflower rice for dinner, cream shake, handful of nuts" style="width:100%;font-size:13px;padding:10px 12px;resize:none;line-height:1.6;font-family:'DM Sans',sans-serif;margin-bottom:10px;"></textarea>
+      <button id="missedDayModalVoiceBtn" onclick="toggleMissedDayVoiceInput('missedDayMeals','missedDayModalVoiceBtn','missedDayModalVoiceStatus','calculateMissedDay')" class="btn-neutral" style="border-radius:8px;padding:6px 12px;font-size:11px;font-family:'Space Mono',monospace;margin-bottom:10px;">🎤 Voice add</button>
+      <div id="missedDayModalVoiceStatus" style="display:none;font-size:11px;color:var(--text3);margin-bottom:10px;"></div>
       <button class="run-btn" id="missedDayAIBtn" onclick="calculateMissedDay()" style="width:100%;margin-bottom:10px;">Calculate with AI →</button>
       <div id="missedDayAIResult" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:12px;font-size:13px;line-height:1.7;"></div>
     </div>
