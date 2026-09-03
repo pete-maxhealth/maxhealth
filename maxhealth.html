@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.664</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.666</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4680,6 +4680,7 @@
     <div class="section-title" id="title-set-setup" style="cursor:pointer;" onclick="toggleSection('set-setup','set-setup-wrap','set-setup-icon')">Setup <span id="set-setup-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-setup-wrap">
     <div class="settings-card">
+      <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="previewOnboarding()">🔍 Preview setup wizard (safe — nothing is saved)</button>
       <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;" onclick="resetOnboarding()">↺ Redo setup wizard</button>
     </div>
     </div>
@@ -5263,20 +5264,34 @@ function onboardNext(step) {
   const el = document.getElementById(`step${step}`);
   if (el) el.style.display = 'block';
 
+  // Real gap found: previewOnboarding()'s preview mode only ever protected
+  // the FINAL "Finish" step's own save logic - it never touched this
+  // function at all, meaning every one of the writes below (name, weight,
+  // height, age, targets, condition) happened regardless, the moment you
+  // stepped past wherever each one lives, not just on completion. A person
+  // testing new onboarding questions by walking through the wizard would
+  // have their real profile silently overwritten step by step, with no way
+  // back - exactly the risk raised. Guarding every actual write here, not
+  // just skipping the finish step, so the whole wizard is genuinely safe to
+  // walk through end to end in preview mode.
+  const isPreview = document.getElementById('onboardingOverlay')?.dataset.preview === 'true';
+
   // Save name on transition from step 2
   if (step === 3) {
     const name = document.getElementById('onboardName').value.trim();
-    if (name) localStorage.setItem('mh_name', name);
+    if (name && !isPreview) localStorage.setItem('mh_name', name);
   }
 
   // Save body stats on transition from step 3, trigger TDEE calc
   if (step === 4) {
     const weight = parseFloat(document.getElementById('onboardWeight').value);
     const target = parseFloat(document.getElementById('onboardTarget').value);
-    if (!isNaN(weight)) state.weight = weight;
-    if (!isNaN(target)) {
-      localStorage.setItem('mh_weight_target_low', target);
-      localStorage.setItem('mh_weight_target_high', (target + 1).toFixed(1));
+    if (!isPreview) {
+      if (!isNaN(weight)) state.weight = weight;
+      if (!isNaN(target)) {
+        localStorage.setItem('mh_weight_target_low', target);
+        localStorage.setItem('mh_weight_target_high', (target + 1).toFixed(1));
+      }
     }
     // Height, age, and sex were being used for the live TDEE preview shown
     // right here on this same step, but were never actually saved to the
@@ -5287,10 +5302,13 @@ function onboardNext(step) {
     // user having just typed it in moments earlier.
     const heightVal = parseFloat(document.getElementById('onboardHeight').value);
     const ageVal = parseFloat(document.getElementById('onboardAge').value);
-    if (!isNaN(heightVal) && heightVal >= 100 && heightVal <= 250) localStorage.setItem('mh_height_cm', heightVal);
-    if (!isNaN(ageVal) && ageVal >= 1 && ageVal <= 120) localStorage.setItem('mh_age', ageVal);
-    localStorage.setItem('mh_sex', _obSex);
-    // Trigger TDEE if activity already selected
+    if (!isPreview) {
+      if (!isNaN(heightVal) && heightVal >= 100 && heightVal <= 250) localStorage.setItem('mh_height_cm', heightVal);
+      if (!isNaN(ageVal) && ageVal >= 1 && ageVal <= 120) localStorage.setItem('mh_age', ageVal);
+      localStorage.setItem('mh_sex', _obSex);
+    }
+    // Trigger TDEE if activity already selected — a live display calculation
+    // only, doesn't itself write anything persistent, safe either way.
     calcTDEE();
   }
 
@@ -5347,13 +5365,15 @@ function onboardNext(step) {
       }
     }
 
-    localStorage.setItem('mh_target_kcal',    kcal);
-    localStorage.setItem('mh_target_protein', protein);
-    if (carbs) localStorage.setItem('mh_target_carbs', carbs);
+    if (!isPreview) {
+      localStorage.setItem('mh_target_kcal',    kcal);
+      localStorage.setItem('mh_target_protein', protein);
+      if (carbs) localStorage.setItem('mh_target_carbs', carbs);
+    }
   }
 
   // Apply condition defaults on transition from step 5
-  if (step === 6) {
+  if (step === 6 && !isPreview) {
     localStorage.setItem('mh_condition', _obCondition);
     appendConditionHistory(_obCondition); // day-one entry, so Condition History has a real starting point rather than staying empty until the first change via Settings
     // Apply carb ceiling based on condition (if not already set in step 4) -
@@ -5562,7 +5582,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.664'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.666'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8125,14 +8145,21 @@ function openCategoryItemsView(cat) {
           <option value="carbs">Carbs ↓</option>
         </select>
       </div>
-      <div id="categoryItemsListWrap"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:12px;">
-        <span style="font-size:12px;color:var(--text2);">+ Add ${cat} item:</span>
-        <div style="display:flex;gap:14px;">
-          <span onclick="document.getElementById('categoryItemsModal').remove();openCategoryItemsSearchOnline('${cat}');" style="font-size:12px;color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online</span>
-          <span onclick="document.getElementById('categoryItemsModal').remove();openAddFoodModalForCategory('${cat}');" style="font-size:12px;color:var(--yellow);text-decoration:underline;cursor:pointer;">✏️ Enter manually</span>
+      <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface2);border-radius:12px;">
+        <!-- Genuinely separate from the search above, not a duplicate:
+             that one filters items ALREADY in this category, this one finds
+             items that AREN'T yet, to add. Real gap - if an item already
+             has "meat" and needs "protein" added too, it obviously won't
+             show up searching inside the (empty, for it) protein list. -->
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">+ Add an EXISTING ingredient to ${cat}:</div>
+        <input id="categoryItemsAddSearch" class="modal-input" placeholder="🔍 Search all ingredients…" oninput="renderCategoryAddSearchResults()" style="font-size:13px;padding:8px 10px;width:100%;box-sizing:border-box;margin-bottom:6px;">
+        <div id="categoryAddSearchResults"></div>
+        <div style="display:flex;gap:14px;margin-top:8px;">
+          <span onclick="document.getElementById('categoryItemsModal').remove();openCategoryItemsSearchOnline('${cat}');" style="font-size:12px;color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online (new item)</span>
+          <span onclick="document.getElementById('categoryItemsModal').remove();openAddFoodModalForCategory('${cat}');" style="font-size:12px;color:var(--yellow);text-decoration:underline;cursor:pointer;">✏️ Enter manually (new item)</span>
         </div>
       </div>
+      <div id="categoryItemsListWrap"></div>
       <button onclick="document.getElementById('categoryItemsModal').remove();openCategoryPreviewModal();" style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:12px;font-size:13px;cursor:pointer;margin-top:8px;">← Back to categories</button>
       <button onclick="document.getElementById('categoryItemsModal').remove()" style="width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;">Close</button>
       <div style="position:sticky;bottom:8px;display:flex;justify-content:flex-end;gap:6px;margin-top:8px;pointer-events:none;">
@@ -8141,6 +8168,52 @@ function openCategoryItemsView(cat) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  renderCategoryItemsList();
+}
+
+// Genuinely separate search from renderCategoryItemsList - that one filters
+// items already in this category, this searches the FULL library for items
+// that AREN'T yet, so an existing ingredient (already under a different
+// category) can be found and this category added to it too, rather than
+// only ever being findable by browsing to whatever category it already has.
+function renderCategoryAddSearchResults() {
+  const cat = window._categoryItemsCurrentCat;
+  const wrap = document.getElementById('categoryAddSearchResults');
+  const query = (document.getElementById('categoryItemsAddSearch')?.value || '').trim().toLowerCase();
+  if (!cat || !wrap) return;
+  if (!query) { wrap.innerHTML = ''; return; }
+  const alreadyInCat = new Set(((window._categoryBrowseGroups || {})[cat] || []).map(f => f.name));
+  const fullLib = loadLibrary();
+  const matches = fullLib
+    .map((f, origIdx) => ({ ...f, _origIdx: origIdx }))
+    .filter(f => f && f.name && !isMealEntry(f) && !alreadyInCat.has(f.name) && f.name.toLowerCase().includes(query))
+    .slice(0, 8); // Enough to find what you're after without scrolling a huge result dump
+  wrap.innerHTML = matches.map(f => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:12px;color:var(--text);">${f.name}</span>
+      <button onclick="addExistingItemToCategory(${f._origIdx},'${cat}')" style="padding:4px 10px;background:var(--accent);color:#080a0d;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">+ Add</button>
+    </div>
+  `).join('') || `<div style="font-size:12px;color:var(--text3);padding:6px 0;">No matching ingredients not already in ${cat}.</div>`;
+}
+
+function addExistingItemToCategory(origIdx, cat) {
+  const lib = loadLibrary();
+  const item = lib[origIdx];
+  if (!item) return;
+  const current = Array.isArray(item.categories) && item.categories.length ? item.categories : getItemCategories(item);
+  if (!current.includes(cat)) {
+    item.categories = [...new Set([...current, cat])];
+    saveLibrary(lib);
+  }
+  showToast(`${item.name} added to ${cat} ✓`);
+  // Refresh the underlying group data so it reflects the addition, then
+  // re-render both lists - the item should now appear in the main list and
+  // disappear from this search's own results.
+  const groups = window._categoryBrowseGroups || {};
+  groups[cat] = groups[cat] || [];
+  if (!groups[cat].some(f => f.name === item.name)) groups[cat].push({ ...item, _origIdx: origIdx });
+  const searchInput = document.getElementById('categoryItemsAddSearch');
+  if (searchInput) renderCategoryAddSearchResults();
   renderCategoryItemsList();
 }
 
@@ -35279,14 +35352,19 @@ function previewOnboarding() {
   ob.style.display = 'flex';
   ob.dataset.preview = 'true';
   document.querySelectorAll('.onboard-step').forEach(s => s.style.display = 'none');
-  const step3 = document.getElementById('step3');
-  if (step3) step3.style.display = 'block';
+  // Starts from step 1, the real beginning of the wizard, not step 3 - this
+  // needs to let someone walk the WHOLE flow to test new onboarding
+  // questions, not land partway through. Combined with onboardNext() now
+  // checking this same preview flag before every write, every step (not
+  // just the final one) is genuinely safe to click through.
+  const step1 = document.getElementById('step1');
+  if (step1) step1.style.display = 'block';
   // Add a close button at the top if not already there
   if (!document.getElementById('previewCloseBtn')) {
     const btn = document.createElement('button');
     btn.id = 'previewCloseBtn';
     btn.className = 'copy-btn';
-    btn.textContent = '← Back to Settings';
+    btn.textContent = '← Back to Settings (nothing will be saved)';
     btn.style.cssText = 'width:100%;margin-bottom:20px;font-size:13px;';
     btn.onclick = closePreviewOnboarding;
     ob.querySelector('div').insertBefore(btn, ob.querySelector('div').firstChild);
