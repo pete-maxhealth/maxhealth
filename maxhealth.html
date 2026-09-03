@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.673</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.674</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5593,7 +5593,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.673'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.674'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -21134,20 +21134,79 @@ function renderTreatmentSettings() {
   renderTreatmentLogger();
 }
 
+function deleteTreatment(id) {
+  const defs = loadTreatmentDefs();
+  const t = defs.find(d => d.id === id);
+  if (!t) return;
+  // Real gap raised directly: deleting the definition never touched
+  // logged sessions or history tags at all - the app's own confirm message
+  // already said so honestly ("stays in your history either way"), but a
+  // generic "Treatment" day-tag left behind with nothing backing it is
+  // genuinely misleading later, not just an inert leftover. The tag is
+  // generic (not per-treatment), so it can still be legitimately justified
+  // by a DIFFERENT still-existing treatment logged the same day - only
+  // clear it where nothing else justifies it, exactly the distinction
+  // raised. Deliberately a choice, not automatic: someone may want the
+  // historical record kept exactly as it was, which is why "keep
+  // everything" is the safe, default-styled option here, not a dangerMode
+  // destructive one.
+  const sessionsForThis = loadTreatmentLog().filter(s => s.treatmentId === id);
+  const affectedDates = [...new Set(sessionsForThis.map(s => s.date))];
+
+  const doJustRemoveDefinition = () => {
+    saveTreatmentDefs(loadTreatmentDefs().filter(d => d.id !== id));
+    renderTreatmentSettings();
+    showToast(`${t.name} removed`);
+  };
+
+  const doCleanupToo = () => {
+    const remainingLog = loadTreatmentLog().filter(s => s.treatmentId !== id);
+    saveTreatmentLog(remainingLog);
+    const remainingTreatmentIds = new Set(loadTreatmentDefs().filter(d => d.id !== id).map(d => d.id));
+    let tagsCleared = 0;
+    affectedDates.forEach(date => {
+      const stillJustified = remainingLog.some(s => s.date === date && remainingTreatmentIds.has(s.treatmentId));
+      if (stillJustified) return;
+      const dayIdx = state.history.findIndex(h => h.date === date);
+      if (dayIdx < 0) return;
+      const tags = (state.history[dayIdx].notes || '').split(',').map(x => x.trim());
+      if (tags.some(x => x.toLowerCase() === 'treatment')) {
+        removeHistTag(dayIdx, 'Treatment');
+        tagsCleared++;
+      }
+    });
+    saveTreatmentDefs(loadTreatmentDefs().filter(d => d.id !== id));
+    renderTreatmentSettings();
+    showToast(`${t.name} removed, ${sessionsForThis.length} session${sessionsForThis.length===1?'':'s'} and ${tagsCleared} day-tag${tagsCleared===1?'':'s'} cleaned up`);
+  };
+
+  if (!sessionsForThis.length) {
+    appConfirm(`Remove ${t.name}? It has no logged sessions, so there's nothing else to clean up.`, doJustRemoveDefinition, null, true);
+    return;
+  }
+
+  appConfirm(
+    `${t.name} has ${sessionsForThis.length} logged session${sessionsForThis.length===1?'':'s'} across ${affectedDates.length} day${affectedDates.length===1?'':'s'}. Removing the treatment on its own won't touch those — keep them as a historical record, or clean them up too (including any "Treatment" day-tag that only applied because of this one, checked against your other treatments first)?`,
+    doJustRemoveDefinition,
+    doCleanupToo,
+    false,
+    { cancel: 'Also clean up history', confirm: 'Keep everything' }
+  );
+}
+
+// Disabling deliberately does NOT trigger the same cleanup choice - it's
+// the explicitly non-destructive option (the definition still exists,
+// just hidden from the active picker), and the point of having both
+// disable AND delete is that one preserves everything, including what
+// past tags and sessions mean, while the other is the one that actually
+// removes the definition those things reference. Cleaning up on disable
+// too would leave no real reason to ever choose it over delete.
 function toggleTreatmentActive(id) {
   const defs = loadTreatmentDefs();
   const t = defs.find(d => d.id === id);
   if (t) t.active = t.active === false ? true : false;
   saveTreatmentDefs(defs);
   renderTreatmentSettings();
-}
-
-function deleteTreatment(id) {
-  appConfirm('Remove this treatment? Its logged sessions stay in your history either way, this only stops it appearing to log new sessions against.', () => {
-    const defs = loadTreatmentDefs().filter(d => d.id !== id);
-    saveTreatmentDefs(defs);
-    renderTreatmentSettings();
-  }, null, true);
 }
 
 function addTreatment() {
