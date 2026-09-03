@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.667</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.668</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5582,7 +5582,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.667'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.668'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5672,12 +5672,27 @@ function saveState() {
   (function() {
     const watchDate = localStorage.getItem('mh_debug_watch_date');
     if (!watchDate) return;
-    const day = state.history.find(h => h.date === watchDate);
-    const logLength = day ? (day.log || []).length : null;
+    // Real gap found: this only ever checked state.history, which is where
+    // COMPLETED days live - today's actual in-progress data lives separately
+    // in state.todayLog, never pushed into history until the day rolls over.
+    // Watching today's own date meant this could only ever report
+    // "Log length: 0, Totals: 0" for every single save all day long,
+    // regardless of what was genuinely being saved - not a real data wipe,
+    // just looking in the wrong place. Checks todayLog first when the
+    // watched date IS today, falling back to history for a past date.
+    let logLength, totals;
+    if (watchDate === todayStr()) {
+      logLength = (state.todayLog || []).length;
+      totals = calcTotals(state.todayLog || []);
+    } else {
+      const day = state.history.find(h => h.date === watchDate);
+      logLength = day ? (day.log || []).length : null;
+      totals = day ? { ...(day.totals||{}) } : null;
+    }
     const log = JSON.parse(localStorage.getItem('mh_savestate_watch_log') || '[]');
     log.unshift({
       timestamp: new Date().toISOString(),
-      logLength, totals: day ? { ...(day.totals||{}) } : null,
+      logLength, totals,
       stack: (new Error().stack || '').split('\n').slice(0, 6).join('\n')
     });
     if (log.length > 30) log.length = 30;
