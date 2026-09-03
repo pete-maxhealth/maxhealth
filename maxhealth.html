@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.670</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.671</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5582,7 +5582,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.670'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.671'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7646,6 +7646,20 @@ function cancelLibraryEdit(index) {
   const item = document.getElementById('lib-item-' + index);
   if (form) form.classList.remove('open');
   if (item) item.style.display = 'flex';
+  // Real gap found: editing an item from within Browse Categories always
+  // landed back on the main Library list afterward, regardless of where the
+  // edit was actually opened from - the "EDIT" button there has to switch
+  // to the Library tab first (openLibraryEdit is an inline form baked into
+  // that list's own render, not a standalone modal, so it can't work
+  // without that tab active underneath), but nothing ever returned to the
+  // category view once done, losing the very context (viewing/editing other
+  // items in that same category) the person was in the middle of.
+  if (window._libraryEditReturnCategory) {
+    const cat = window._libraryEditReturnCategory;
+    window._libraryEditReturnCategory = null;
+    rebuildCategoryBrowseGroups();
+    openCategoryItemsView(cat);
+  }
 }
 
 function saveLibraryEdit(index) {
@@ -7683,6 +7697,16 @@ function saveLibraryEdit(index) {
   saveLibrary(lib);
   renderLibrary();
   showToast(name + ' updated ✓');
+  // Same return-to-category fix as cancelLibraryEdit - saving from within
+  // Browse Categories had the identical gap, always landing back on the
+  // main Library list instead of returning to the category being worked
+  // through.
+  if (window._libraryEditReturnCategory) {
+    const cat = window._libraryEditReturnCategory;
+    window._libraryEditReturnCategory = null;
+    rebuildCategoryBrowseGroups();
+    openCategoryItemsView(cat);
+  }
 }
 
 // Save-to-library modal — triggered after AI parse
@@ -8077,12 +8101,12 @@ function skipCategoryReview() {
 // to show precisely what a "browse by category" view would group real
 // ingredients into before committing to building it. Deliberately doesn't
 // touch or save anything - purely diagnostic.
-function openCategoryPreviewModal() {
-  // origIdx must be captured BEFORE the isMealEntry filter below, not after -
-  // filtering first would make each remaining item's array position no
-  // longer match its real index in loadLibrary(), which quickLogFromLibrary/
-  // openLibraryEdit both need to find the right item. Same fix already
-  // applied in renderLibrary() itself (libWithIdx), same reasoning here.
+// Extracted from openCategoryPreviewModal so a return-to-category flow (see
+// cancelLibraryEdit/saveLibraryEdit) can rebuild fresh group data without
+// needing to open and immediately tear down that modal just for its side
+// effect. Returns the same groups/counts openCategoryPreviewModal itself
+// uses, and sets window._categoryBrowseGroups the same way.
+function rebuildCategoryBrowseGroups() {
   const fullLib = loadLibrary();
   const lib = fullLib.map((f, origIdx) => ({ ...f, _origIdx: origIdx })).filter(f => f && f.name && !isMealEntry(f));
   const groups = {};
@@ -8095,10 +8119,19 @@ function openCategoryPreviewModal() {
       uncategorized.push(f.name);
     }
   });
+  window._categoryBrowseGroups = groups;
+  return { groups, uncategorized, total: lib.length };
+}
+
+function openCategoryPreviewModal() {
+  // origIdx must be captured BEFORE the isMealEntry filter below, not after -
+  // filtering first would make each remaining item's array position no
+  // longer match its real index in loadLibrary(), which quickLogFromLibrary/
+  // openLibraryEdit both need to find the right item. Same fix already
+  // applied in renderLibrary() itself (libWithIdx), same reasoning here.
+  const { groups, uncategorized, total } = rebuildCategoryBrowseGroups();
   const sortedCats = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
-  const total = lib.length;
   const categorizedCount = total - uncategorized.length;
-  window._categoryBrowseGroups = groups; // read by openCategoryItemsView below
 
   const existing = document.getElementById('categoryPreviewModal');
   if (existing) existing.remove();
@@ -8259,7 +8292,7 @@ function renderCategoryItemsList() {
         <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">${f.kcal||0}kcal · ${f.protein||0}g P · ${f.carbs||0}g C</div>
       </div>
       <button onclick="document.getElementById('categoryItemsModal').remove();quickLogFromLibrary(${f._origIdx});" style="padding:7px 12px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">LOG</button>
-      <button onclick="document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
+      <button onclick="window._libraryEditReturnCategory='${cat}';document.getElementById('categoryItemsModal').remove();switchTabById('library');openLibraryEdit(${f._origIdx});" style="padding:7px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;">EDIT</button>
     </div>`;
   }).join('') || `<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">${query ? 'No items match your search.' : 'No items in this category.'}</div>`;
 }
