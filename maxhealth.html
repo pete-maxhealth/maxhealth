@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.666</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.667</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5582,7 +5582,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.666'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.667'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -29461,10 +29461,27 @@ function renderMMDayPanel(mode) {
 function askAboutMMSelection(question) {
   closeMultiMetricOverlay();
   switchTabById('reports');
+  // Real gap: nothing here previously verified the navigation actually
+  // landed where intended, or caught an error inside the delayed callback -
+  // askReportsAI() throwing (network issue, a missing element some other
+  // change removed, anything) would fail completely silently, with no way
+  // to tell afterward what actually happened. Logs to the same JS Error Log
+  // already used elsewhere in the app, so a real recurrence is diagnosable
+  // instead of just "it went to the wrong place" with nothing to trace.
   setTimeout(() => {
-    setAskStarter(question);
-    document.getElementById('rptAskInput')?.scrollIntoView({ behavior: 'smooth' });
-    askReportsAI(question);
+    try {
+      const onReports = document.getElementById('view-insights')?.classList.contains('active')
+        && document.getElementById('view-reports')?.classList.contains('active');
+      if (!onReports) {
+        logPersistentError(`askAboutMMSelection: navigation to Reports did not land correctly (view-insights active: ${document.getElementById('view-insights')?.classList.contains('active')}, view-reports active: ${document.getElementById('view-reports')?.classList.contains('active')})`);
+        switchTabById('reports'); // one retry, in case the first call raced with closeMultiMetricOverlay()
+      }
+      setAskStarter(question);
+      document.getElementById('rptAskInput')?.scrollIntoView({ behavior: 'smooth' });
+      askReportsAI(question);
+    } catch (e) {
+      logPersistentError(`askAboutMMSelection delayed callback failed: ${e.message}`, e.stack);
+    }
   }, 400);
 }
 
