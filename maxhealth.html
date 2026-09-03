@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.671</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.672</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4771,6 +4771,17 @@
     </div>
     <div id="treatmentLoggerContent"></div>
     <button class="copy-btn" style="width:100%;margin-top:14px;font-size:11px;padding:8px;" onclick="findExerciseNameDuplicates()">🔍 Find duplicate exercise names (Strength Log)</button>
+  </div>
+
+  <div class="section-title" id="title-set-reportprofiles" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onclick="toggleSection('set-reportprofiles','reportProfilesContent','set-reportprofiles-icon')">
+    <span>Report Profiles <span id="set-reportprofiles-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></span>
+    <button class="settings-save-btn" onclick="event.stopPropagation();openReportProfileWizard()">+ New</button>
+  </div>
+  <div id="reportProfilesContent">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Set up a reusable report for sending to a treatment provider, clinician, coach, or anyone else you're sharing regular progress with — pick the treatment it's about, which metrics matter, and an optional reminder. Nothing is sent automatically; you review and send it yourself each time.</div>
+    <div id="reportProfileListInner">
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No report profiles yet.</div>
+    </div>
   </div>
 
   </div>
@@ -5582,7 +5593,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.671'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.672'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7010,6 +7021,7 @@ const GENERIC_SECTION_IDS = {
     'set-supplements': ['title-set-supplements', 'supplementSettingsContent'],
     'set-symptoms': ['title-set-symptoms', 'symptomSettingsContent'],
     'set-treatments': ['title-set-treatments', 'treatmentSettingsContent'],
+    'set-reportprofiles': ['title-set-reportprofiles', 'reportProfilesContent'],
   },
   import: {
     'set-databackup': ['title-set-databackup', 'set-databackup-wrap'],
@@ -7025,7 +7037,7 @@ const GENERIC_SECTION_IDS = {
 const GENERIC_DEFAULT_ORDER = {
   trends: ['trends-journey', 'trends-patterns', 'trends-wellness'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
-  manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments'],
+  manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice'],
 };
 
@@ -10165,6 +10177,7 @@ function initSettings() {
   renderSupplementSettings();
   renderSymptomSettings();
   renderTreatmentSettings();
+  renderReportProfileList();
   const carerEmailInput = document.getElementById('carerEmailInput');
   if (carerEmailInput) carerEmailInput.value = localStorage.getItem('mh_carer_email') || '';
   initSupplementCheckpointInputs();
@@ -14605,6 +14618,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Idle Timeout', key: 'set-idletimeout', subtab: 'manage', keywords: 'battery sleep pause inactivity screen timeout' },
   { label: 'Symptom Tracking', key: 'set-symptoms', subtab: 'manage', wrapId: 'symptomSettingsContent', keywords: 'energy mood headache pattern correlation how are you today' },
   { label: 'Treatment Tracking', key: 'set-treatments', subtab: 'manage', wrapId: 'treatmentSettingsContent', keywords: 'pemf physio massage session therapy' },
+  { label: 'Report Profiles', key: 'set-reportprofiles', subtab: 'manage', wrapId: 'reportProfilesContent', keywords: 'pemf clinician coach share provider recurring reminder wizard' },
   { label: 'Body Comp Debug', key: 'set-bodycompdebug', subtab: 'manage', keywords: 'weight body composition fat muscle bone troubleshooting' },
   { label: 'Rollover Debug Log', key: 'set-rollover', subtab: 'manage', keywords: 'midnight rollover troubleshooting' },
   { label: 'Data Backup', key: 'set-databackup', subtab: 'import', keywords: 'export restore json csv full backup' },
@@ -20715,6 +20729,266 @@ document.addEventListener('click', (e) => {
   const delBtn = e.target.closest('.mh-treatment-delete-btn');
   if (delBtn) { deleteTreatmentSession(delBtn.dataset.sessionId); return; }
 }, true);
+
+// ============ REPORT PROFILES ============
+// A named, reusable, reminder-driven configuration for sending regular
+// progress reports to a treatment provider, clinician, coach, or anyone
+// else - built around the exact model discussed: the user stays in control
+// of their own data and sends each report themselves, nothing here ever
+// transmits anything automatically. A profile records WHO it's for (org
+// name/optional logo/colour for the report itself), WHICH treatment it's
+// about, WHICH metrics matter (standard categories pre-selected, plus
+// anything else agreed with that recipient), whether to include symptoms,
+// and an optional reminder schedule.
+function loadReportProfiles() {
+  try {
+    const stored = localStorage.getItem('mh_report_profiles');
+    if (stored) return JSON.parse(stored);
+  } catch(e) {}
+  return [];
+}
+function saveReportProfiles(profiles) {
+  localStorage.setItem('mh_report_profiles', JSON.stringify(profiles));
+}
+
+function renderReportProfileList() {
+  const el = document.getElementById('reportProfileListInner');
+  if (!el) return;
+  const profiles = loadReportProfiles();
+  if (!profiles.length) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No report profiles yet.</div>';
+    return;
+  }
+  const treatments = loadTreatmentDefs();
+  el.innerHTML = profiles.map(p => {
+    const treatment = treatments.find(t => t.id === p.treatmentId);
+    const scheduleText = p.schedule?.frequency === 'weekly'
+      ? `Reminds weekly on ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][p.schedule.dayOfWeek ?? 0]}`
+      : p.schedule?.frequency === 'fortnightly' ? 'Reminds every 2 weeks'
+      : p.schedule?.frequency === 'monthly' ? 'Reminds monthly'
+      : 'No reminder set';
+    const lastSentText = p.lastSent ? `Last sent ${new Date(p.lastSent).toLocaleDateString('en-GB')}` : 'Never sent';
+    return `
+    <div style="padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text);">${p.name}</div>
+          <div style="font-size:11px;color:var(--text3);">${p.orgName ? `For ${p.orgName} · ` : ''}${treatment ? treatment.name : 'No treatment selected'}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${scheduleText} · ${lastSentText}</div>
+      <div style="display:flex;gap:6px;">
+        <button class="copy-btn" style="flex:1;font-size:11px;padding:7px;" onclick="generateProfileReport('${p.id}')">📦 Generate now</button>
+        <button class="copy-btn" style="flex:1;font-size:11px;padding:7px;" onclick="openReportProfileWizard('${p.id}')">Edit</button>
+        <button class="copy-btn" style="font-size:11px;padding:7px 10px;color:var(--red);" onclick="deleteReportProfile('${p.id}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deleteReportProfile(id) {
+  appConfirm('Delete this report profile?', () => {
+    const profiles = loadReportProfiles().filter(p => p.id !== id);
+    saveReportProfiles(profiles);
+    renderReportProfileList();
+    showToast('Report profile deleted');
+  });
+}
+
+// ---- Report Profile Wizard ----
+// Multi-step modal, same self-contained pattern as the missed-day modal:
+// one piece of draft state, re-rendered per step rather than several
+// separate modals chained together. window._reportWizardStep/_Draft are
+// deliberately global (not function-local) since onclick handlers in the
+// rendered HTML need to reach them between renders.
+const REPORT_WIZARD_STEPS = 6;
+const REPORT_WIZARD_COLORS = ['#5B4FE9', '#2deb8f', '#f97316', '#38bdf8', '#e879f9', '#eab308'];
+
+function openReportProfileWizard(editId) {
+  const existing = editId ? loadReportProfiles().find(p => p.id === editId) : null;
+  if (existing) {
+    window._reportWizardDraft = JSON.parse(JSON.stringify(existing));
+  } else {
+    // New profile: standard categories pre-selected by default (Nutrition,
+    // Body Composition, Exercise) - matching what the pitch itself
+    // describes as the baseline any recipient would want, so a first-time
+    // user isn't starting from a blank metric list.
+    const allMetrics = getAllOverlayableMetrics();
+    const standardGroups = ['Nutrition', 'Body Composition', 'Exercise'];
+    const standardKeys = allMetrics
+      .filter(m => MM_METRIC_GROUPS.some(g => standardGroups.includes(g.label) && g.match(m)))
+      .map(m => m.key);
+    window._reportWizardDraft = {
+      id: 'rptprof_' + Date.now(),
+      name: '', orgName: '', orgColor: REPORT_WIZARD_COLORS[0],
+      treatmentId: null,
+      metrics: standardKeys,
+      includeSymptoms: false, symptomIds: [],
+      schedule: { frequency: 'none', dayOfWeek: 0 },
+      lastSent: null,
+    };
+  }
+  window._reportWizardStep = 1;
+  document.getElementById('reportWizardModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'reportWizardModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:700;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  modal.innerHTML = `<div id="reportWizardScroll" style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:88vh;overflow-y:auto;"></div>`;
+  document.body.appendChild(modal);
+  renderReportWizardStep();
+}
+
+function closeReportProfileWizard() {
+  document.getElementById('reportWizardModal')?.remove();
+  window._reportWizardDraft = null;
+}
+
+function reportWizardGoto(step) {
+  window._reportWizardStep = step;
+  renderReportWizardStep();
+}
+
+function reportWizardNext() {
+  const d = window._reportWizardDraft;
+  if (window._reportWizardStep === 1 && !d.name.trim()) {
+    showToast('Give this report profile a name first');
+    return;
+  }
+  // Skip the symptoms step entirely if nothing is actually defined to
+  // choose from - an empty step with nothing to do in it is just friction.
+  let next = window._reportWizardStep + 1;
+  if (next === 5 && !loadSymptomDefs().filter(s => s.active !== false).length) next = 6;
+  reportWizardGoto(Math.min(next, REPORT_WIZARD_STEPS));
+}
+
+function reportWizardBack() {
+  let prev = window._reportWizardStep - 1;
+  if (prev === 5 && !loadSymptomDefs().filter(s => s.active !== false).length) prev = 4;
+  reportWizardGoto(Math.max(prev, 1));
+}
+
+function reportWizardToggleMetric(key) {
+  const d = window._reportWizardDraft;
+  const i = d.metrics.indexOf(key);
+  if (i >= 0) d.metrics.splice(i, 1); else d.metrics.push(key);
+  renderReportWizardStep();
+}
+
+function reportWizardToggleSymptom(id) {
+  const d = window._reportWizardDraft;
+  const i = d.symptomIds.indexOf(id);
+  if (i >= 0) d.symptomIds.splice(i, 1); else d.symptomIds.push(id);
+  renderReportWizardStep();
+}
+
+function saveReportWizardProfile() {
+  const d = window._reportWizardDraft;
+  if (!d.name.trim()) { showToast('Give this report profile a name first'); return; }
+  const profiles = loadReportProfiles();
+  const idx = profiles.findIndex(p => p.id === d.id);
+  if (idx >= 0) profiles[idx] = d; else profiles.push(d);
+  saveReportProfiles(profiles);
+  closeReportProfileWizard();
+  renderReportProfileList();
+  showToast(`${d.name} saved ✓`);
+}
+
+function renderReportWizardStep() {
+  const wrap = document.getElementById('reportWizardScroll');
+  const d = window._reportWizardDraft;
+  if (!wrap || !d) return;
+  const step = window._reportWizardStep;
+  const stepLabels = ['', 'Name & branding', 'Treatment', 'Standard metrics', 'Extra metrics', 'Symptoms', 'Reminder'];
+
+  const header = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:var(--text);">Report Profile</div>
+      <span onclick="closeReportProfileWizard()" style="cursor:pointer;font-size:20px;color:var(--text3);line-height:1;">✕</span>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Step ${step} of ${REPORT_WIZARD_STEPS} — ${stepLabels[step]}</div>`;
+
+  let body = '';
+  if (step === 1) {
+    body = `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">PROFILE NAME</div>
+      <input id="rwName" class="modal-input" value="${d.name}" placeholder="e.g. PEMFit Weekly Report" oninput="window._reportWizardDraft.name=this.value" style="width:100%;font-size:14px;padding:10px 12px;margin-bottom:16px;box-sizing:border-box;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">WHO IT'S FOR (optional — appears on the report)</div>
+      <input id="rwOrgName" class="modal-input" value="${d.orgName}" placeholder="e.g. PEMFit" oninput="window._reportWizardDraft.orgName=this.value" style="width:100%;font-size:14px;padding:10px 12px;margin-bottom:16px;box-sizing:border-box;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">REPORT ACCENT COLOUR</div>
+      <div style="display:flex;gap:8px;">
+        ${REPORT_WIZARD_COLORS.map(c => `<div onclick="window._reportWizardDraft.orgColor='${c}';renderReportWizardStep();" style="width:34px;height:34px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${d.orgColor === c ? 'var(--text)' : 'transparent'};"></div>`).join('')}
+      </div>`;
+  } else if (step === 2) {
+    const treatments = loadTreatmentDefs().filter(t => t.active !== false);
+    body = treatments.length ? `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Which treatment is this report about?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${treatments.map(t => `<div onclick="window._reportWizardDraft.treatmentId='${t.id}';renderReportWizardStep();" style="padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;border:1px solid ${d.treatmentId === t.id ? 'var(--accent)' : 'var(--border)'};background:${d.treatmentId === t.id ? 'var(--accent-dim)' : 'var(--surface2)'};color:${d.treatmentId === t.id ? 'var(--accent)' : 'var(--text2)'};">${t.name}</div>`).join('')}
+      </div>` : `
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No treatments set up yet. Add one under Treatment Tracking in Settings first, or skip this step for now and come back to it.</div>`;
+  } else if (step === 3 || step === 4) {
+    const allMetrics = getAllOverlayableMetrics();
+    const groupLabels = step === 3 ? ['Nutrition', 'Body Composition', 'Exercise'] : ['Vitals & Sleep', 'Treatment'];
+    const intro = step === 3
+      ? "Pre-selected as the standard baseline — remove anything not relevant, or leave as-is."
+      : "Add anything specific to this person's own situation, agreed with the recipient.";
+    body = `<div style="font-size:11px;color:var(--text3);margin-bottom:12px;">${intro}</div>`;
+    groupLabels.forEach(label => {
+      const group = MM_METRIC_GROUPS.find(g => g.label === label);
+      const inGroup = allMetrics.filter(m => group.match(m));
+      if (!inGroup.length) return;
+      body += `<div style="font-size:11px;color:var(--text3);font-weight:700;margin:10px 0 6px;">${label.toUpperCase()}</div><div style="display:flex;flex-wrap:wrap;gap:6px;">`;
+      body += inGroup.map(m => {
+        const active = d.metrics.includes(m.key);
+        return `<div onclick="reportWizardToggleMetric('${m.key}')" style="padding:6px 12px;border-radius:16px;cursor:pointer;font-size:12px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'var(--accent-dim)' : 'var(--surface2)'};color:${active ? 'var(--accent)' : 'var(--text2)'};">${m.icon} ${m.title}</div>`;
+      }).join('');
+      body += `</div>`;
+    });
+  } else if (step === 5) {
+    const symptoms = loadSymptomDefs().filter(s => s.active !== false);
+    body = `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Include symptom tracking in this report? Only relevant if this person is tracking something specific to their own case.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${symptoms.map(s => {
+          const active = d.symptomIds.includes(s.id);
+          return `<div onclick="reportWizardToggleSymptom('${s.id}')" style="padding:6px 12px;border-radius:16px;cursor:pointer;font-size:12px;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'var(--accent-dim)' : 'var(--surface2)'};color:${active ? 'var(--accent)' : 'var(--text2)'};">📝 ${s.name}</div>`;
+        }).join('')}
+      </div>`;
+  } else if (step === 6) {
+    const freq = d.schedule.frequency;
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    body = `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Remind you to send this report?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        ${['none','weekly','fortnightly','monthly'].map(f => `<div onclick="window._reportWizardDraft.schedule.frequency='${f}';renderReportWizardStep();" style="padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;border:1px solid ${freq === f ? 'var(--accent)' : 'var(--border)'};background:${freq === f ? 'var(--accent-dim)' : 'var(--surface2)'};color:${freq === f ? 'var(--accent)' : 'var(--text2)'};">${f === 'none' ? 'No reminder' : f[0].toUpperCase()+f.slice(1)}</div>`).join('')}
+      </div>
+      ${freq === 'weekly' ? `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Which day?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+        ${days.map((day, i) => `<div onclick="window._reportWizardDraft.schedule.dayOfWeek=${i};renderReportWizardStep();" style="padding:6px 10px;border-radius:14px;cursor:pointer;font-size:12px;border:1px solid ${d.schedule.dayOfWeek === i ? 'var(--accent)' : 'var(--border)'};background:${d.schedule.dayOfWeek === i ? 'var(--accent-dim)' : 'var(--surface2)'};color:${d.schedule.dayOfWeek === i ? 'var(--accent)' : 'var(--text2)'};">${day.slice(0,3)}</div>`).join('')}
+      </div>` : ''}
+      <div style="font-size:11px;color:var(--text3);padding:10px;background:var(--surface2);border-radius:8px;">This only ever reminds you — nothing is sent automatically. You review and send it yourself each time.</div>`;
+  }
+
+  const isLast = step === REPORT_WIZARD_STEPS;
+  const nav = `
+    <div style="display:flex;gap:8px;margin-top:20px;">
+      ${step > 1 ? `<button class="copy-btn" style="flex:1;" onclick="reportWizardBack()">← Back</button>` : ''}
+      ${isLast
+        ? `<button class="run-btn" style="flex:2;" onclick="saveReportWizardProfile()">Save Report Profile ✓</button>`
+        : `<button class="run-btn" style="flex:2;" onclick="reportWizardNext()">Next →</button>`}
+    </div>`;
+
+  wrap.innerHTML = header + body + nav;
+}
+
+// Real report generation (bundling Treatment Sessions, standard metrics,
+// and branding into one shareable package) isn't built yet - this is an
+// honest placeholder so the button does something truthful rather than
+// throwing an undefined-function error or silently doing nothing.
+function generateProfileReport(id) {
+  showToast('Report generation is still being built — coming soon');
+}
 
 function renderTreatmentSettings() {
   const el = document.getElementById('treatmentListInner');
