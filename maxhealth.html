@@ -4664,7 +4664,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.678</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.679</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5603,7 +5603,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.678'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.679'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11647,6 +11647,7 @@ function saveRoutineSession() {
   const LBS_TO_KG = 0.453592;
   const drafts = window._routineApplyDrafts || [];
   let loggedCount = 0;
+  let totalSetsLogged = 0;
   drafts.forEach(ex => {
     const sets = ex.sets.filter(s => s.reps !== '').map(s => {
       const hasWeight = s.weight_kg !== '' && s.weight_kg != null;
@@ -11658,15 +11659,23 @@ function saveRoutineSession() {
     const entry = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date: todayStr(), exercise: ex.name, sets };
     state.strengthLog = [...(state.strengthLog || []), entry];
     loggedCount++;
+    totalSetsLogged += sets.length;
   });
   if (!loggedCount) { showToast('Enter at least one exercise with reps'); return; }
   saveState();
   tagResistanceFromSetsLogged();
 
   // Same one-entry-one-event link as manual logging — one overall duration/effort
-  // credits Resistance for the whole session, not per exercise.
-  const durationVal = document.getElementById('routineSessionDuration')?.value;
-  if (durationVal && parseFloat(durationVal) > 0) {
+  // credits Resistance for the whole session, not per exercise. A typed duration
+  // always wins when given; otherwise falls back to an estimate from the real
+  // total sets just logged across every exercise in this routine, rather than
+  // requiring one before any credit happens at all (see
+  // estimateStrengthDurationMinutes's own comment for what this estimate is
+  // and isn't).
+  const durationField = document.getElementById('routineSessionDuration')?.value;
+  const isEstimate = !(durationField && parseFloat(durationField) > 0);
+  const durationVal = isEstimate ? estimateStrengthDurationMinutes(totalSetsLogged) : durationField;
+  {
     const effortVal = document.getElementById('routineSessionEffort')?.value || 'Moderate';
     const acts = getActivities();
     const resIdx = acts.findIndex(a => a.type === 'resistance');
@@ -11675,6 +11684,7 @@ function saveRoutineSession() {
       acts[resIdx].duration = durationVal;
       acts[resIdx].effort = effortVal;
       acts[resIdx]._syncedFromStrength = true;
+      acts[resIdx]._estimatedDuration = isEstimate;
       saveActivities(acts);
       // Every manual activity path (toggleActivity, updateActivity) calls this
       // to write the "Xmin Resistance" tag into state.notes — this path set the
@@ -11688,7 +11698,7 @@ function saveRoutineSession() {
   _routineApplyId = null;
   document.getElementById('routineListContainer').innerHTML = '';
   renderStrengthCard();
-  showToast(`${loggedCount} exercise${loggedCount===1?'':'s'} logged ✓`);
+  showToast(`${loggedCount} exercise${loggedCount===1?'':'s'} logged ✓${isEstimate ? ` (~${durationVal}min estimated from ${totalSetsLogged} sets)` : ''}`);
 }
 
 function showStrengthAddForm() {
@@ -11738,6 +11748,21 @@ function updateStrengthDraftField(i, field, val) {
   if (_strengthDraftSets[i]) _strengthDraftSets[i][field] = val;
 }
 
+// Estimates a session duration from the actual sets logged, when no
+// duration was typed in manually - real gap raised directly: the workflow
+// already linked strength logging to calorie credit in one step, but still
+// required guessing and typing a number for duration every time, with the
+// detailed sets/reps data itself never actually factoring into the
+// estimate. ~2.5 minutes per set is a commonly-cited figure covering both
+// the working set and typical rest between sets for moderate-rest
+// resistance training - inherently a rough estimate, not a precise
+// measurement (weight-training calorie burn depends on rest length, form,
+// and individual factors no formula from sets/reps alone can capture) but
+// a genuine improvement over a number picked with no data behind it at all.
+function estimateStrengthDurationMinutes(totalSets) {
+  return Math.max(1, Math.round(totalSets * 2.5));
+}
+
 function saveStrengthWorkout() {
   const exercise = document.getElementById('strengthExerciseName')?.value.trim();
   if (!exercise) { showToast('Enter an exercise name'); return; }
@@ -11769,12 +11794,16 @@ function saveStrengthWorkout() {
   saveState();
   tagResistanceFromSetsLogged();
 
-  // One entry, one event — if a session duration was given, this also credits
-  // the Resistance activity (calories/protein) automatically, same as manually
-  // ticking it on the Activity card. Sets/overwrites rather than adds, since this
-  // represents today's one resistance session, not a running tally.
-  const durationVal = document.getElementById('strengthSessionDuration')?.value;
-  if (durationVal && parseFloat(durationVal) > 0) {
+  // One entry, one event — credits the Resistance activity (calories/protein)
+  // automatically, same as manually ticking it on the Activity card. Sets/
+  // overwrites rather than adds, since this represents today's one resistance
+  // session, not a running tally. A typed duration always wins when given;
+  // otherwise falls back to the sets-based estimate rather than requiring
+  // one before any credit happens at all.
+  const durationField = document.getElementById('strengthSessionDuration')?.value;
+  const isEstimate = !(durationField && parseFloat(durationField) > 0);
+  const durationVal = isEstimate ? estimateStrengthDurationMinutes(sets.length) : durationField;
+  {
     const effortVal = document.getElementById('strengthSessionEffort')?.value || 'Moderate';
     const acts = getActivities();
     const resIdx = acts.findIndex(a => a.type === 'resistance');
@@ -11783,6 +11812,7 @@ function saveStrengthWorkout() {
       acts[resIdx].duration = durationVal;
       acts[resIdx].effort = effortVal;
       acts[resIdx]._syncedFromStrength = true;
+      acts[resIdx]._estimatedDuration = isEstimate;
       saveActivities(acts);
       // Same missing call as the routine path — set the activity but never wrote
       // the tag into state.notes, so calories/protein credited silently with no
@@ -11793,7 +11823,7 @@ function saveStrengthWorkout() {
   }
   cancelStrengthAdd();
   renderStrengthCard();
-  showToast(`${exercise} logged ✓`);
+  showToast(`${exercise} logged ✓${isEstimate ? ` (~${durationVal}min estimated from ${sets.length} sets)` : ''}`);
 }
 
 function deleteStrengthSession(id) {
@@ -12216,7 +12246,7 @@ function renderActivityCard() {
           </select>
         </div>
       </div>
-      ${act.type==='resistance' && act._syncedFromStrength ? `<div style="font-size:10px;color:var(--accent);padding-left:2px;width:100%;">🔗 Synced from today's Strength Training log — edit here to override</div>` : ''}
+      ${act.type==='resistance' && act._syncedFromStrength ? `<div style="font-size:10px;color:var(--accent);padding-left:2px;width:100%;">🔗 ${act._estimatedDuration ? `Duration estimated from sets logged (~2.5min/set)` : `Synced from today's Strength Training log`} — edit here to override</div>` : ''}
       ${act.type==='resistance' && act.enabled && !act._syncedFromStrength && !(state.strengthLog||[]).some(s=>s.date===todayStr()) ? `<div style="font-size:10px;color:var(--yellow);padding-left:2px;width:100%;background:rgba(245,197,66,0.08);border-radius:6px;padding:6px 8px;margin-top:4px;">💪 Want to log the actual sets/reps for this session too? <span onclick="document.getElementById('strengthAddBtn')?.scrollIntoView({behavior:'smooth',block:'center'});showStrengthAddForm();" style="cursor:pointer;color:var(--accent);text-decoration:underline;">+ Log a workout</span></div>` : ''}
       ${act.needsDistance && suggestedEffort ? `<div style="font-size:10px;color:var(--text3);padding-left:2px;width:100%;">${act._manualEffort ? 'Manually set · ' : 'Auto-calculated from pace & distance · '}<span onclick="resetActivityEffort(${i})" style="cursor:pointer;color:var(--accent);text-decoration:underline;${act._manualEffort?'':'display:none;'}">use auto</span></div>` : ''}
       ${(() => {
