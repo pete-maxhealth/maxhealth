@@ -4654,7 +4654,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.672</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.673</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5593,7 +5593,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.672'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.673'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -20982,12 +20982,134 @@ function renderReportWizardStep() {
   wrap.innerHTML = header + body + nav;
 }
 
-// Real report generation (bundling Treatment Sessions, standard metrics,
-// and branding into one shareable package) isn't built yet - this is an
-// honest placeholder so the button does something truthful rather than
-// throwing an undefined-function error or silently doing nothing.
-function generateProfileReport(id) {
-  showToast('Report generation is still being built — coming soon');
+// Real report generation - bundles the Treatment Sessions before/during/after
+// comparison for this profile's treatment against its configured metrics,
+// branded with the org name, and shares it the same way Compare Metrics'
+// own Full Report Package does (text + CSV via the Web Share API, honest
+// mailto fallback). The user reviews and sends it themselves every time -
+// nothing here transmits anything automatically, matching the model this
+// whole feature was built around.
+function computeReportMetricStats(treatmentId, metricObj, windowDays) {
+  // Symptom metrics don't go through getDrillData at all (getDrillConfig
+  // returns undefined for a "symptom_X" key, so getDrillData bails out to
+  // an empty array immediately) - same data-sourcing Compare Metrics' own
+  // chart uses for symptom pills, reused here rather than duplicated
+  // differently and risking the two disagreeing with each other later.
+  if (metricObj.isSymptom) {
+    const sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
+    const sessionDates = [...new Set(sessions.map(s => s.date))];
+    if (sessionDates.length < 3) return { sessionDates, before: [], during: [], after: [], insufficientData: true };
+    const byDate = {};
+    (state.history || []).forEach(d => { if (d.symptoms && d.symptoms[metricObj.symptomId] != null) byDate[d.date] = d.symptoms[metricObj.symptomId]; });
+    const shiftDate = (dateStr, days) => {
+      const [d, m, y] = dateStr.split('/').map(Number);
+      const dt = new Date(2000 + y, m - 1, d + days);
+      return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getFullYear()).slice(2)}`;
+    };
+    const before = [], during = [], after = [];
+    sessionDates.forEach(date => {
+      for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, -i)]; if (v != null) before.push(v); }
+      const dVal = byDate[date]; if (dVal != null) during.push(dVal);
+      for (let i = 1; i <= windowDays; i++) { const v = byDate[shiftDate(date, i)]; if (v != null) after.push(v); }
+    });
+    return { sessionDates, before, during, after, insufficientData: false };
+  }
+  // Treatment-type metrics (comparing one treatment against another) aren't
+  // supported yet - getDrillData has the same blind spot for these as for
+  // symptoms, and replicating the "did a session happen" day-count logic
+  // correctly for a before/during/after comparison (as opposed to Compare
+  // Metrics' own simpler day-overlay) isn't scoped out yet. Skipped
+  // explicitly in the report itself rather than silently producing a wrong
+  // or empty result.
+  if (metricObj.isTreatment) return { insufficientData: true, unsupported: true };
+  return computeTreatmentSessionStats(treatmentId, metricObj.key, windowDays, '0');
+}
+
+async function generateProfileReport(id) {
+  const profile = loadReportProfiles().find(p => p.id === id);
+  if (!profile) { showToast('Report profile not found'); return; }
+  if (!profile.treatmentId) { showToast('This profile has no treatment selected — edit it first'); return; }
+  const treatment = loadTreatmentDefs().find(t => t.id === profile.treatmentId);
+  if (!treatment) { showToast('The treatment this profile refers to no longer exists'); return; }
+
+  const allMetrics = getAllOverlayableMetrics();
+  const symptomDefs = loadSymptomDefs();
+  const reportMetrics = profile.metrics
+    .map(key => allMetrics.find(m => m.key === key))
+    .filter(Boolean);
+  if (profile.includeSymptoms) {
+    profile.symptomIds.forEach(sid => {
+      const key = 'symptom_' + sid;
+      if (!reportMetrics.some(m => m.key === key)) {
+        const found = allMetrics.find(m => m.key === key);
+        if (found) reportMetrics.push(found);
+      }
+    });
+  }
+  if (!reportMetrics.length) { showToast('This profile has no metrics selected — edit it first'); return; }
+
+  const windowDays = 1;
+  const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 100) / 100 : null;
+  const lines = [];
+  const csvRows = [['Metric', 'Before (avg)', 'Day-of (avg)', 'After (avg)', 'Unit', 'Session days']];
+  let anySkippedUnsupported = false;
+
+  reportMetrics.forEach(m => {
+    const stats = computeReportMetricStats(profile.treatmentId, m, windowDays);
+    if (stats.unsupported) { anySkippedUnsupported = true; return; }
+    if (stats.insufficientData) {
+      lines.push(`${m.icon} ${m.title}: not enough session days yet for a reliable comparison (${stats.sessionDates.length} so far — needs at least 3)`);
+      return;
+    }
+    const b = avg(stats.before), d = avg(stats.during), a = avg(stats.after);
+    lines.push(`${m.icon} ${m.title}: before ${b ?? '—'}${m.unit}, day-of ${d ?? '—'}${m.unit}, after ${a ?? '—'}${m.unit} (±${windowDays}d)`);
+    csvRows.push([m.title, b ?? '', d ?? '', a ?? '', m.unit, stats.sessionDates.length]);
+  });
+
+  const dateStamp = todayStr().replace(/\//g,'-');
+  const title = profile.orgName ? `${profile.orgName} — ${profile.name}` : profile.name;
+  const headerLine = profile.orgName ? `Report for ${profile.orgName} — ${treatment.name}` : `${treatment.name} progress report`;
+  const bodyParts = [
+    headerLine,
+    `Generated ${new Date().toLocaleDateString('en-GB')} via MaxedHealth`,
+    '',
+    'Before / during / after each session:',
+    ...lines,
+  ];
+  if (anySkippedUnsupported) bodyParts.push('', '(One or more selected metrics — comparing against another treatment — isn\'t supported in this report yet and was left out.)');
+  const fullText = bodyParts.join('\n');
+  const csvText = csvRows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csvBlob = new Blob([csvText], { type: 'text/csv' });
+  const csvFile = new File([csvBlob], `${(profile.orgName||'maxedhealth').toLowerCase().replace(/\s+/g,'-')}-report-${dateStamp}.csv`, { type: 'text/csv' });
+
+  const markSent = () => {
+    const profiles = loadReportProfiles();
+    const idx = profiles.findIndex(p => p.id === id);
+    if (idx >= 0) { profiles[idx].lastSent = Date.now(); saveReportProfiles(profiles); renderReportProfileList(); }
+  };
+
+  if (navigator.canShare && navigator.canShare({ files: [csvFile] })) {
+    try {
+      await navigator.share({ files: [csvFile], title, text: fullText });
+      showToast('📦 Report shared ✓');
+      markSent();
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // cancelled share sheet, not a real failure
+    }
+  }
+  // Fallback: same pattern as Compare Metrics' own Full Report Package -
+  // download the one piece that can't become text (the CSV here), open
+  // mailto with everything else already in the body.
+  const csvLink = document.createElement('a');
+  csvLink.download = csvFile.name;
+  csvLink.href = URL.createObjectURL(csvBlob);
+  csvLink.click();
+  URL.revokeObjectURL(csvLink.href);
+  const mailBody = `${fullText}\n\n─────────────\n\nRaw data (CSV):\n${csvText}`;
+  window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(mailBody)}`;
+  showToast('CSV downloaded — attach it manually. The rest is already in the email body.');
+  markSent();
 }
 
 function renderTreatmentSettings() {
