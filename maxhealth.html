@@ -4664,7 +4664,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.680</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.682</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5603,7 +5603,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.680'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.682'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6272,7 +6272,7 @@ function useFuzzyLibraryMatch() {
   if (!pending) return;
   window._pendingFuzzyLibraryMatch = null;
   const libMatch = pending.match;
-  const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
+  const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, fibre: libMatch.fibre||0, polyols: libMatch.polyols||0, amount: libMatch.portion || '100g' };
   food._per100g = libMatch.per100g === true;
   food._portionG = _extractGramsFromAmount(libMatch.portion || '');
   window._pendingMealFoods = [food];
@@ -6311,7 +6311,7 @@ function useLibrarySubstitute(index) {
   const sub = window._pendingSubstitutes?.[index];
   if (!sub) return;
   window._pendingSubstitutes = null;
-  const food = { name: sub.name, kcal: sub.kcal, protein: sub.protein, fat: sub.fat||0, carbs: sub.carbs, amount: sub.portion || '100g' };
+  const food = { name: sub.name, kcal: sub.kcal, protein: sub.protein, fat: sub.fat||0, carbs: sub.carbs, fibre: sub.fibre||0, polyols: sub.polyols||0, amount: sub.portion || '100g' };
   food._per100g = sub.per100g === true;
   food._portionG = _extractGramsFromAmount(sub.portion || '');
   window._pendingMealFoods = [food];
@@ -6334,7 +6334,7 @@ function useLibraryChoice(index) {
   // that preview gets cancelled, the picker needs to still be fully working
   // so a different item can be picked instead, rather than looking clickable
   // but silently doing nothing.
-  const food = { name: choice.name, kcal: choice.kcal, protein: choice.protein, fat: choice.fat||0, carbs: choice.carbs, amount: choice.portion || '100g' };
+  const food = { name: choice.name, kcal: choice.kcal, protein: choice.protein, fat: choice.fat||0, carbs: choice.carbs, fibre: choice.fibre||0, polyols: choice.polyols||0, amount: choice.portion || '100g' };
   food._per100g = choice.per100g === true;
   food._portionG = _extractGramsFromAmount(choice.portion || '');
   window._pendingMealFoods = [food];
@@ -7409,6 +7409,13 @@ function quickLogDefaultPortion(index) {
     protein: f.protein,
     fat: f.fat || 0,
     carbs: f.carbs,
+    // Same real gap as logLibraryWithPortion (see its own comment) - fibre/
+    // polyols saved correctly on the item, never carried into the actual
+    // logged entry via this path either. No scaling factor needed here
+    // since this logs at the item's own stored portion exactly, unlike the
+    // portion-selector path.
+    fibre: f.fibre || 0,
+    polyols: f.polyols || 0,
     _fromLibrary: true,
   };
   // "Most Used" sort reads this - was never incremented here, only on the
@@ -7551,6 +7558,15 @@ function logLibraryWithPortion(index) {
     protein: Math.round(f.protein * factor * 10) / 10,
     fat:     Math.round((f.fat||0) * factor * 10) / 10,
     carbs:   Math.round(f.carbs * factor * 10) / 10,
+    // Real bug found directly: fibre/polyols were saved correctly on the
+    // library item itself (saveLibraryEdit already handled both), but this
+    // function — the one that actually builds the logged entry when
+    // "Log it" is tapped — never carried either through at all. A manually
+    // added polyols value would save fine on the item, then silently
+    // vanish the moment the item was actually logged via this path,
+    // looking exactly like the edit had "done nothing".
+    fibre:   f.fibre ? Math.round(f.fibre * factor * 10) / 10 : 0,
+    polyols: f.polyols ? Math.round(f.polyols * factor * 10) / 10 : 0,
     _fromLibrary: true,
     _portionPct: portionPct !== 100 ? portionPct : 0,
     _origAmount: basePortion + 'g',
@@ -7564,7 +7580,7 @@ function logLibraryWithPortion(index) {
   // Capture the impact HTML BEFORE logging — buildMealImpactHtml reads
   // state.todayLog for the "before" totals, so it has to run while today's
   // log still reflects the pre-log state, not after.
-  const impactHtml = buildMealImpactHtml({ kcal: food.kcal, protein: food.protein, fat: food.fat, carbs: food.carbs });
+  const impactHtml = buildMealImpactHtml({ kcal: food.kcal, protein: food.protein, fat: food.fat, carbs: food.carbs, fibre: food.fibre || 0, polyols: food.polyols || 0 });
   const loggedId = logFoods([food], food.name);
   // Was switchTabById('chat') — forced navigation away from Library every
   // single time, disrupting exactly the browsing flow this screen is for.
@@ -7616,6 +7632,10 @@ function selectLibraryDefault(index) {
     protein: f.protein,
     fat:     f.fat || 0,
     carbs:   f.carbs,
+    // Same gap as the other library-logging paths - fibre/polyols never
+    // carried through here either.
+    fibre:   f.fibre || 0,
+    polyols: f.polyols || 0,
   };
   document.getElementById('libraryPortionModal').remove();
   food._per100g = f.per100g === true; // flag whether values are per-100g or per-portion
@@ -7860,7 +7880,7 @@ function _applyPendingLibraryEntryToRecipe(entry) {
   ing.protein = Math.round(entry.protein * ratio * 10) / 10;
   ing.fat = Math.round((entry.fat || 0) * ratio * 10) / 10;
   ing.carbs = Math.round(entry.carbs * ratio * 10) / 10;
-  ing._base = { kcal: entry.kcal, protein: entry.protein, carbs: entry.carbs, fat: entry.fat || 0, fibre: entry.fibre || 0, baseG };
+  ing._base = { kcal: entry.kcal, protein: entry.protein, carbs: entry.carbs, fat: entry.fat || 0, fibre: entry.fibre || 0, polyols: entry.polyols || 0, baseG };
   ing.source = 'manual'; // drives the colour-coded badge in renderRecipeIngredients
   renderRecipeIngredients();
   updateRecipeTotals();
@@ -14601,6 +14621,10 @@ function logSuggestedCombo(comboIndex) {
       protein: Math.round(ing.protein * factor * 10) / 10,
       carbs:   Math.round(ing.carbs   * factor * 10) / 10,
       fibre:   Math.round((ing.fibre  || 0) * factor * 10) / 10,
+      // Same gap as fibre right above it - polyols was never carried
+      // through this path either, for the same reason (see
+      // logLibraryWithPortion's own comment for the original find).
+      polyols: Math.round((ing.polyols || 0) * factor * 10) / 10,
     }));
     logFoods(foods, `${recipe.name} (${servings} serving${servings > 1 ? 's' : ''})`);
     // useCount now handled centrally inside logFoods() itself (matched by
@@ -14618,6 +14642,9 @@ function logSuggestedCombo(comboIndex) {
   const foods = items.map(f => ({
     name: f.name, amount: `${f.amount || 100}g`, // was f.portion (the library default, ignoring any edit) - now the actual amount, portion editing wouldn't have logged correctly otherwise
     kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs,
+    // Same gap as the recipe branch above and logLibraryWithPortion -
+    // fibre/polyols never carried through this path either.
+    fibre: f.fibre || 0, polyols: f.polyols || 0,
     _fromLibrary: true,
   }));
   // Any substituted item gets its swap noted in the logged description too
@@ -15536,7 +15563,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
   const libMatch = libMatches.length === 1 ? libMatches[0] : null;
   if (libMatch) {
     // Show preview so user can adjust portion before logging
-    const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, amount: libMatch.portion || '100g' };
+    const food = { name: libMatch.name, kcal: libMatch.kcal, protein: libMatch.protein, fat: libMatch.fat||0, carbs: libMatch.carbs, fibre: libMatch.fibre||0, polyols: libMatch.polyols||0, amount: libMatch.portion || '100g' };
     food._per100g = libMatch.per100g === true;
     // Was raw parseFloat(libMatch.portion) - for a saved MEAL, portion is
     // '1 serving' (see showSaveMealDialog), and parseFloat happily extracts
@@ -15607,10 +15634,12 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
         protein: Math.round(fd.protein * 10) / 10,
         fat: Math.round((fd.fat||0) * 10) / 10,
         carbs: Math.round(fd.carbs * 10) / 10,
+        fibre: Math.round((fd.fibre||0) * 10) / 10,
+        polyols: Math.round((fd.polyols||0) * 10) / 10,
         amount: fd.per + 'g',
-        _per100gBase: { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, per: fd.per }
+        _per100gBase: { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, fibre: fd.fibre||0, polyols: fd.polyols||0, per: fd.per }
       };
-      food._base = { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, baseG: fd.per };
+      food._base = { kcal: fd.kcal, protein: fd.protein, fat: fd.fat||0, carbs: fd.carbs, fibre: fd.fibre||0, polyols: fd.polyols||0, baseG: fd.per };
       window._pendingMealFoods = [food];
       window._pendingMealText = displayName;
       window._pendingMealMessage = `Values per ${fd.per}${fd.unit ? ' ' + fd.unit : 'g'} — adjust amount below.`;
@@ -15696,7 +15725,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
         return;
       }
       const combined = { type: 'food', items: allItems, message: items2.length === 0 ? `Partial parse — second batch failed (r2: ${JSON.stringify(r2)?.slice(0,100)})` : 'Long meal — processed in two parts' };
-      const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, fat: i.fat||0 }));
+      const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, polyols: i.polyols||0, fat: i.fat||0 }));
       if (failedItems.length) {
         addBubble(`⚠ Couldn't get real values for: ${failedItems.map(i => i.name).join(', ')} — left out rather than logging as zero. Try adding ${failedItems.length > 1 ? 'these' : 'this'} separately.`, 'system', 'warn');
       }
@@ -16786,7 +16815,7 @@ function renderMealPreview() {
   // fallback below is a guess, not a known baseline — flag it so scaling this
   // item via the amount box isn't trusted blindly.
   f0._baseGramsIsGuess = !_parsedGrams && !_nameGrams;
-  if (!f0._base) f0._base = { kcal: f0.kcal, protein: f0.protein, fat: f0.fat||0, carbs: f0.carbs, baseG: baseGrams };
+  if (!f0._base) f0._base = { kcal: f0.kcal, protein: f0.protein, fat: f0.fat||0, carbs: f0.carbs, fibre: f0.fibre||0, polyols: f0.polyols||0, baseG: baseGrams };
 
   // Plausibility check — flag suspicious macros
   const warnings = [];
@@ -17117,7 +17146,7 @@ function editPreviewItem(index) {
     if (nameMatch) _baseGrams = parseFloat(nameMatch[1]);
   }
   window._editPreviewBase = _baseGrams > 0
-    ? { grams: _baseGrams, kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs }
+    ? { grams: _baseGrams, kcal: f.kcal, protein: f.protein, fat: f.fat || 0, carbs: f.carbs, fibre: f.fibre || 0, polyols: f.polyols || 0 }
     : null; // no reliable numeric baseline anywhere - scaling will be skipped, not guessed
 
   const form = document.createElement('div');
@@ -18467,8 +18496,8 @@ function createRecipeFromAISuggestion(recipeKey) {
       _recipeIngredients.push({
         name: libItem.name + (convertedAmount != null ? '' : ` (${ing.amount} ${ing.unit} — check amount)`),
         amount,
-        kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0,
-        _base: { kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, baseG },
+        kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, polyols: libItem.polyols || 0,
+        _base: { kcal: libItem.kcal, protein: libItem.protein, carbs: libItem.carbs, fat: libItem.fat || 0, fibre: libItem.fibre || 0, polyols: libItem.polyols || 0, baseG },
         // fuzzyFindInLibrary's own comment says its result is "a candidate to
         // CONFIRM, not to silently apply" - this call site wasn't honouring
         // that at all, pushing straight to a plain, unflagged row that
@@ -23303,12 +23332,13 @@ async function _addRecipeIngredientFromVoice(text) {
         fat: Math.round((item.fat || 0) * 10) / 10, // was missing entirely before - every voice-added ingredient showed 0g fat regardless of the real value, including things like pure olive oil
         carbs: Math.round((item.carbs || 0) * 10) / 10,
         fibre: Math.round((item.fibre || 0) * 10) / 10,
+        polyols: Math.round((item.polyols || 0) * 10) / 10,
         baseG
       };
       _recipeIngredients.push({
         name: item.name,
         amount: baseG,
-        kcal: base.kcal, protein: base.protein, fat: base.fat, carbs: base.carbs, fibre: base.fibre,
+        kcal: base.kcal, protein: base.protein, fat: base.fat, carbs: base.carbs, fibre: base.fibre, polyols: base.polyols,
         _base: base
       });
       renderRecipeIngredients();
@@ -23738,7 +23768,8 @@ function _libItemToScalableIngredient(f, amountOverride) {
     fat: Math.round((f.fat || 0) * factor * 10) / 10,
     carbs: Math.round(f.carbs * factor * 10) / 10,
     fibre: Math.round((f.fibre || 0) * factor * 10) / 10,
-    _base: { kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0, baseG }
+    polyols: Math.round((f.polyols || 0) * factor * 10) / 10,
+    _base: { kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat || 0, fibre: f.fibre || 0, polyols: f.polyols || 0, baseG }
   };
 }
 
@@ -24956,9 +24987,9 @@ function renderRecipeList() {
   const sortEl = document.getElementById('recipeSort');
   const sort = sortEl ? sortEl.value : 'name';
   const perServing = r => {
-    const total = (r.total && typeof r.total === 'object') ? r.total : { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+    const total = (r.total && typeof r.total === 'object') ? r.total : { kcal: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, polyols: 0 };
     const servings = r.servings || 1;
-    return { kcal: total.kcal / servings, protein: total.protein / servings, fat: (total.fat || 0) / servings, carbs: total.carbs / servings };
+    return { kcal: total.kcal / servings, protein: total.protein / servings, fat: (total.fat || 0) / servings, carbs: total.carbs / servings, fibre: (total.fibre || 0) / servings, polyols: (total.polyols || 0) / servings };
   };
   const recipesWithIdx = recipes.map((r, origIdx) => ({ ...r, _origIdx: origIdx }));
   recipesWithIdx.sort((a, b) => {
@@ -25040,7 +25071,7 @@ function reviewRecipeBeforeLogging(id, servings) {
   if (!recipe) return;
   const factor = servings / (recipe.servings || 1);
   const items = (recipe.ingredients || []).map(ing => {
-    const base = ing._base || { kcal: ing.kcal, protein: ing.protein, carbs: ing.carbs, fat: ing.fat || 0, fibre: ing.fibre || 0, baseG: ing.amount || 100 };
+    const base = ing._base || { kcal: ing.kcal, protein: ing.protein, carbs: ing.carbs, fat: ing.fat || 0, fibre: ing.fibre || 0, polyols: ing.polyols || 0, baseG: ing.amount || 100 };
     const amount = Math.round((ing.amount || base.baseG) * factor);
     const scaleFactor = amount / (base.baseG || 100);
     return {
@@ -25050,6 +25081,7 @@ function reviewRecipeBeforeLogging(id, servings) {
       fat: Math.round((base.fat||0) * scaleFactor * 10) / 10,
       carbs: Math.round(base.carbs * scaleFactor * 10) / 10,
       fibre: Math.round((base.fibre||0) * scaleFactor * 10) / 10,
+      polyols: Math.round((base.polyols||0) * scaleFactor * 10) / 10,
       _base: base,
     };
   });
