@@ -2749,7 +2749,7 @@
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
       <div class="quick-btn" style="border-color:#f97316;" onclick="startBalanceMacrosFlow()">Balance my macros</div>
-      <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
+      <div class="quick-btn" id="ketosisCheckChip" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
     <div class="quick-btns" id="quickBtnsQuery"></div>
@@ -4248,7 +4248,7 @@
         <div style="font-size:12px;color:var(--text3);line-height:1.7;">
           <strong style="color:var(--text2);">Calories set the pace, not the destination.</strong> Since protein and carbs stay fixed, moving your calorie/fat target changes how big your daily surplus is — that's what controls how <em>fast</em> you gain, not whether the weight is "good" weight. Roughly: ~250–400kcal/day surplus is a slow, controlled gain (~0.2–0.4kg/week); 500kcal+ is faster but increasingly likely to add more fat than lean tissue.
           <br><br>
-          <strong style="color:var(--text2);">Fat % here is a ketosis requirement, not a body-composition lever.</strong> <span id="macroAdviceFatContext">The high fat percentage exists to maintain therapeutic ketosis — it doesn't drive muscle growth.</span> Protein plus resistance training does that. A ketogenic macro split isn't optimised for lean-mass gain the way a moderate-carb bulk would be; without a training stimulus, surplus calories default toward fat regardless of the macro split.
+          <span id="macroAdviceFatSection"><strong style="color:var(--text2);">Fat % here is a ketosis requirement, not a body-composition lever.</strong> <span id="macroAdviceFatContext">The high fat percentage exists to maintain therapeutic ketosis — it doesn't drive muscle growth.</span> Protein plus resistance training does that. A ketogenic macro split isn't optimised for lean-mass gain the way a moderate-carb bulk would be; without a training stimulus, surplus calories default toward fat regardless of the macro split.</span>
           <br><br>
           <strong style="color:var(--text2);">If you're logging Strength Training</strong>, that consistent stimulus is what shifts a given surplus toward more muscle and less fat — the macro numbers alone can't do that on their own.
           <br><br>
@@ -4552,7 +4552,7 @@
       </div>
 
       <div style="margin-bottom:16px;">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;">Carb Ceilings &amp; Ketosis Adherence</div>
+        <div id="carbCeilingsSectionHeading" style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;">Carb Ceilings &amp; Ketosis Adherence</div>
         <div style="font-size:12px;color:var(--text2);line-height:1.7;">
           Every day is judged against <strong>its own logged mode's ceiling</strong> — Standard, Occasion, or Holiday — each independently configurable above. A holiday day within its own (wider) ceiling counts as fully compliant; it is never compared against the Standard ceiling.
         </div>
@@ -4672,7 +4672,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.710</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.721</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5611,7 +5611,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.710'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.721'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -10247,6 +10247,29 @@ function setSex(sex) {
   updateProfileCompletenessNote();
 }
 
+// Was hand-duplicated 3 times (initSettings, saveGoal, saveTargets), each
+// telling every user "for therapeutic ketosis, fat should be ≥65%"
+// unconditionally - genuinely wrong advice for a non-ketogenic condition,
+// where fat isn't a fixed therapeutic lever at all (T2D cares about the
+// carb ceiling, Recomp cares about protein, General has no fixed ratio -
+// see the condition-overlay notes elsewhere). One shared function now,
+// condition-aware: keto conditions keep the real 65% floor and its
+// pass/borderline/fail judgement; non-keto conditions get the fat% shown
+// as plain information, with no ketosis-based verdict attached to it.
+function updateFatTargetAdvice(kcal, fat) {
+  const adviceEl = document.getElementById('fatTargetAdvice');
+  if (!adviceEl || !kcal) return;
+  const fatPct = fat ? Math.round(fat * 9 / kcal * 100) : null;
+  if (isKetogenicCondition()) {
+    const ketoFatMin = Math.round(kcal * 0.65 / 9);
+    adviceEl.textContent = `For therapeutic ketosis, fat should be ≥65% of calories — at ${kcal}kcal that's at least ${ketoFatMin}g/day.${fatPct != null ? ` Your ${fat}g = ${fatPct}%${fatPct>=65?' ✓ within range':fatPct>=50?' — borderline':' — too low for therapeutic ketosis'}.` : ''}`;
+    adviceEl.style.color = fatPct == null ? 'var(--text2)' : fatPct >= 65 ? 'var(--accent)' : fatPct >= 50 ? 'var(--yellow)' : 'var(--red)';
+  } else {
+    adviceEl.textContent = fatPct != null ? `${fat}g fat = ${fatPct}% of ${kcal}kcal` : '';
+    adviceEl.style.color = 'var(--text2)';
+  }
+}
+
 function initSettings() {
   const verEl = document.getElementById('settingsVersionDisplay');
   if (verEl) verEl.textContent = 'MaxedHealth ' + APP_VERSION;
@@ -10281,24 +10304,12 @@ function initSettings() {
   const fatSettingEl = document.getElementById('settingFatTarget');
   if (fatSettingEl) {
     fatSettingEl.value = localStorage.getItem('mh_target_fat') || '247';
-    // Show keto advice
     const kcalTgt = parseInt(localStorage.getItem('mh_target_kcal')) || 3420;
     const savedFat = parseInt(localStorage.getItem('mh_target_fat')) || 0;
-    const ketoFatMin = Math.round(kcalTgt * 0.65 / 9);
-    const adviceEl = document.getElementById('fatTargetAdvice');
-    if (adviceEl) {
-      const fatPctNow = savedFat ? Math.round(savedFat * 9 / kcalTgt * 100) : null;
-      adviceEl.textContent = `For therapeutic ketosis, fat should be ≥65% of calories — at ${kcalTgt}kcal that's at least ${ketoFatMin}g/day.${fatPctNow ? ` Your current ${savedFat}g = ${fatPctNow}%${fatPctNow>=65?' ✓ within range':' — below the 65% floor'}.` : ''}`;
-    }
+    updateFatTargetAdvice(kcalTgt, savedFat);
     fatSettingEl.addEventListener('input', () => {
       const fatG = parseInt(fatSettingEl.value);
-      if (fatG && kcalTgt) {
-        const pct = Math.round(fatG * 9 / kcalTgt * 100);
-        if (adviceEl) {
-          adviceEl.textContent = `${fatG}g fat = ${pct}% of ${kcalTgt} kcal${pct >= 65 ? ' ✓ Ketogenic' : pct >= 50 ? ' — borderline, increase for ketosis' : ' — too low for therapeutic ketosis'}`;
-          adviceEl.style.color = pct >= 65 ? 'var(--accent)' : pct >= 50 ? 'var(--yellow)' : 'var(--red)';
-        }
-      }
+      if (fatG && kcalTgt) updateFatTargetAdvice(kcalTgt, fatG);
     });
   }
   const carbEl = document.getElementById('settingCarbTarget');
@@ -10427,16 +10438,10 @@ function setGoal(goal) {
   if (kcalEl) kcalEl.value = kcal;
   const fatSettingEl = document.getElementById('settingFatTarget');
   if (fatSettingEl) fatSettingEl.value = newFat;
-  // Refresh the ketosis advice text and live % feedback, since both were calculated
-  // from the old kcal/fat values and would otherwise show stale guidance until
-  // Settings happens to be reloaded
-  const ketoFatMin = Math.round(kcal * 0.65 / 9);
-  const adviceEl = document.getElementById('fatTargetAdvice');
-  const fatPct = Math.round(newFat * 9 / kcal * 100);
-  if (adviceEl) {
-    adviceEl.textContent = `For therapeutic ketosis, fat should be ≥65% of calories — at ${kcal}kcal that's at least ${ketoFatMin}g/day. This goal's ${newFat}g = ${fatPct}% of calories${fatPct >= 65 ? ' ✓ within range' : fatPct >= 50 ? ' — borderline' : ' — too low for therapeutic ketosis'}.`;
-    adviceEl.style.color = fatPct >= 65 ? 'var(--accent)' : fatPct >= 50 ? 'var(--yellow)' : 'var(--red)';
-  }
+  // Refresh the fat-target advice with the values just saved, since it was
+  // calculated from the old kcal/fat values and would otherwise show stale
+  // guidance until Settings happens to be reloaded
+  updateFatTargetAdvice(kcal, newFat);
   updateDashboard();
   showToast(`Goal updated: ${goal} (${kcal} kcal, ${newFat}g fat)`);
   // Same gap as the earlier condition-change bug: this updates the active
@@ -10698,17 +10703,11 @@ function saveMacroTargets() {
   const deltaEl = document.getElementById('kcalDeltaIndicator');
   if (deltaEl) deltaEl.textContent = '';
 
-  // Refresh the keto-ratio advice text with the values just saved — without this
+  // Refresh the fat-target advice with the values just saved — without this
   // it keeps showing whatever was calculated at Settings page-load, which looked
   // like a contradiction (advice referencing an old kcal figure right next to the
   // newly-saved one).
-  const adviceEl = document.getElementById('fatTargetAdvice');
-  if (adviceEl && kcal && fat) {
-    const fatPct = Math.round(fat * 9 / kcal * 100);
-    const ketoFatMin = Math.round(kcal * 0.65 / 9);
-    adviceEl.textContent = `For therapeutic ketosis, fat should be ≥65% of calories — at ${kcal}kcal that's at least ${ketoFatMin}g/day. Your ${fat}g = ${fatPct}% of calories${fatPct >= 65 ? ' ✓ within range' : fatPct >= 50 ? ' — borderline' : ' — too low for therapeutic ketosis'}.`;
-    adviceEl.style.color = fatPct >= 65 ? 'var(--accent)' : fatPct >= 50 ? 'var(--yellow)' : 'var(--red)';
-  }
+  updateFatTargetAdvice(kcal, fat);
 
   if (warnings.length) {
     showToast('Targets saved — see warning below');
@@ -11336,7 +11335,7 @@ Always show the Step 2 gram-weight estimates in the message field so the user ca
 If the user signals they are done for the day (e.g. "that's me done", "done for today", "finished", "that's it for today", "all done", "wrapping up"), respond ONLY with:
 {
   "type": "eod",
-  "message": "brief end of day summary — calories, protein, carbs vs targets, ketosis status",
+  "message": "brief end of day summary — calories, protein, carbs vs targets, ${isKetogenicCondition() ? 'ketosis status' : 'progress toward carb target'}",
   "csv": "${csvRow}"
 }
 
@@ -15733,7 +15732,20 @@ function handleRemainingQuery(lower, totals, targets) {
 
 function handleWhatCanIAskQuery(lower) {
   if (!((lower.includes('what can i ask') || lower.includes('what sort of questions') || lower.includes('what can you do')) && lower.split(' ').length < 10)) return false;
-  addBubble(`I can help with:\n\n📊 Nutrition — "What do I still need today?", "Am I in ketosis?", "How much protein have I had?"\n\n🥗 Meal ideas — "What can I eat for dinner?", "High protein low carb snack ideas"\n\n📈 Analysis — "Weekly summary", "How am I tracking this week?"\n\n💊 Supplements — "What supplements should I take with food?"\n\n🧠 GBM protocol — "How is my ketogenic ratio today?", "What is my fat percentage?"\n\nJust type naturally — I understand context from your day's logs.`, 'system');
+  // Same bug class as the ketosis badge/Trends fixes tonight, found in the
+  // one place a person new to the app is most likely to read carefully -
+  // was telling literally everyone they could ask about "ketosis" and
+  // "GBM protocol" regardless of their actual selected condition.
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const isGBM = cond === 'gbm';
+  const isKeto = isKetogenicCondition();
+  const nutritionExample = isKeto ? '"Am I in ketosis?"' : '"Am I on target today?"';
+  const protocolLine = isGBM
+    ? `\n\n🧠 GBM protocol — "How is my ketogenic ratio today?", "What is my fat percentage?"`
+    : isKeto
+    ? `\n\n🧠 Protocol — "How is my ketogenic ratio today?", "What is my fat percentage?"`
+    : `\n\n🧠 Protocol — "How am I tracking against my targets?", "What is my fat percentage?"`;
+  addBubble(`I can help with:\n\n📊 Nutrition — "What do I still need today?", ${nutritionExample}, "How much protein have I had?"\n\n🥗 Meal ideas — "What can I eat for dinner?", "High protein low carb snack ideas"\n\n📈 Analysis — "Weekly summary", "How am I tracking this week?"\n\n💊 Supplements — "What supplements should I take with food?"${protocolLine}\n\nJust type naturally — I understand context from your day's logs.`, 'system');
   return true;
 }
 
@@ -19018,6 +19030,14 @@ function getKetosisStatus(carbs, ceiling) {
   const totals = calcTotals(state.todayLog);
   const cond = localStorage.getItem('mh_condition') || 'general';
   const isGBMorEpilepsy = ['gbm','epilepsy','migraine','cluster_headache'].includes(cond);
+  // Real gap found: only this one specific warning line checked condition
+  // at all - every other message in this function talked about "ketosis"
+  // unconditionally, even for T1/T2 Diabetes, Body Recomposition, or
+  // General Health, none of which are ketogenic. This is the actual
+  // response text behind the "Ketosis check" chip on the Log tab, so it's
+  // genuinely one of the more-seen instances of this bug class, not a
+  // buried edge case.
+  const isKeto = isKetogenicCondition();
   const fatTotal    = totals.fat || 0;
   const fatCalories = fatTotal * 9;
   const protCalories = (totals.protein || 0) * 4;
@@ -19029,7 +19049,12 @@ function getKetosisStatus(carbs, ceiling) {
 
   let ketoRatioMsg = '';
   let ketoRatioWarning = '';
-  if (totalCals > 200) {
+  // The whole fat% ratio check is itself a ketogenic-specific lever - not
+  // meaningful for a non-keto condition (T2D cares about carbs directly,
+  // Recomp cares about protein, General has no fixed ratio target at all),
+  // so it's skipped entirely rather than shown with reframed wording that
+  // would still be pushing an irrelevant target.
+  if (isKeto && totalCals > 200) {
     if (fatPct >= 65) {
       ketoRatioMsg = `\n\n✓ Macro ratio is ketogenic: Fat ${fatPct}% · Protein ${protPct}% · Carbs ${carbPct}%`;
     } else if (fatPct >= 50) {
@@ -19040,6 +19065,13 @@ function getKetosisStatus(carbs, ceiling) {
   }
 
   const fatSummary = fatTotal > 0 ? ` Fat logged: ${fatTotal}g (${fatPct}% of calories).` : ' No fat logged yet.';
+
+  if (!isKeto) {
+    if (carbs < ceiling * 0.6) return { type: 'success', message: `Well under target — ${carbs}g / ${ceiling}g carb target.${fatSummary}` };
+    if (carbs < ceiling) return { type: 'success', message: `On target — ${carbs}g / ${ceiling}g carb target. You're good.${fatSummary}` };
+    if (carbs < ceiling * 1.5) return { type: 'warn', message: `Borderline — ${carbs}g carbs. A bit over your ${ceiling}g target. Limit carbs for rest of day.${fatSummary}` };
+    return { type: 'error', message: `Over target — ${carbs}g / ${ceiling}g carb target. Log it and move on.${fatSummary}` };
+  }
 
   if (carbs < 30) return { type: 'success', message: `Deep ketosis range — ${carbs}g carbs. Well within therapeutic zone.${isGBMorEpilepsy ? ' Therapeutic-level ketosis likely maintained.' : ''}${fatSummary}${ketoRatioMsg}${ketoRatioWarning}` };
   if (carbs < ceiling) return { type: 'success', message: `Ketosis maintained — ${carbs}g / ${ceiling}g ceiling. You're good.${fatSummary}${ketoRatioMsg}${ketoRatioWarning}` };
@@ -19700,6 +19732,11 @@ function renderMacroRatioBar(totals, fatCalories) {
 // on (totals, fatTotal, fatPct) as explicit parameters.
 function renderKetosisSmartAlert(totals, fatTotal, fatPct) {
   const alertEl = document.getElementById('ketoSmartAlert');
+  // This entire alert is a fat-ratio-toward-65%-therapeutic-floor monitor -
+  // not just wording that needs swapping, the underlying concept genuinely
+  // doesn't apply outside a ketogenic protocol (T2D/Recomp/General have no
+  // such floor), same reasoning as hiding the GKI note entirely earlier.
+  if (alertEl && !isKetogenicCondition()) { alertEl.style.display = 'none'; return; }
   if (alertEl && totals.kcal > 100) {
     const carbs = totals.carbs;
     const ceiling = TARGETS[state.dayMode]?.carbs || 50;
@@ -20416,7 +20453,13 @@ function updateDashboard(skipActivityRender) {
 // genuine markers of sustained metabolic pressure, not generic gamification —
 // fires once per threshold ever, using a persisted list rather than a date
 // check, since updateDashboard() runs far too often to gate on "today".
-const STREAK_MILESTONES = {
+// Same bug class as the badge/Trends/getKetosisStatus fixes tonight -
+// every milestone message claimed a "ketosis"/"metabolic state" specifically,
+// regardless of whether the actual selected condition is ketogenic at all.
+// Two parallel sets rather than string-patching one set at lookup time,
+// since the non-keto versions need genuinely different wording throughout,
+// not just a word swapped mid-sentence.
+const STREAK_MILESTONES_KETO = {
   7:   { emoji: '🔥', text: 'One full week in ketosis — a real first foothold.' },
   14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real metabolic state, not a good day here and there.' },
   30:  { emoji: '🔥', text: 'A full month in deep ketosis. That\'s sustained metabolic pressure on this thing for 30 days straight.' },
@@ -20425,6 +20468,16 @@ const STREAK_MILESTONES = {
   200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
   365: { emoji: '🏆', text: 'A full year in ketosis. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
 };
+const STREAK_MILESTONES_GENERAL = {
+  7:   { emoji: '🔥', text: 'One full week under your carb target — a real first foothold.' },
+  14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real habit, not a good day here and there.' },
+  30:  { emoji: '🔥', text: 'A full month under target. That\'s sustained consistency for 30 days straight.' },
+  50:  { emoji: '🔥', text: '50 days. Genuinely serious consistency.' },
+  100: { emoji: '🏆', text: '100 days under target. A hundred days of doing the hard, unglamorous work, every single day.' },
+  200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
+  365: { emoji: '🏆', text: 'A full year under target. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
+};
+const STREAK_MILESTONES = new Proxy({}, { get(_, key) { return (isKetogenicCondition() ? STREAK_MILESTONES_KETO : STREAK_MILESTONES_GENERAL)[key]; } });
 function checkStreakMilestone(streak) {
   if (!STREAK_MILESTONES[streak]) return;
   let celebrated = [];
@@ -20443,21 +20496,29 @@ function checkStreakMilestone(streak) {
   // so the badge could disagree with the progress bar and number directly
   // above it on the very same screen, depending on the Net Carbs setting.
   const badge = document.getElementById('ketosisBadge');
+  // Same real gap as Trends: "KETOSIS ZONE"/"DEEP KETOSIS" is a specific
+  // physiological claim, accurate for GBM/Epilepsy/Strict Keto/Migraine/
+  // Cluster Headache but not for Diabetes/Recomp/General - and this badge
+  // is the single most-visible instance of the whole bug class, sitting at
+  // the top of the Today tab on every single load.
+  const _isKeto = isKetogenicCondition();
+  const zoneWord = _isKeto ? 'KETOSIS ZONE' : 'ON TARGET';
+  const deepWord = _isKeto ? 'DEEP KETOSIS' : 'WELL UNDER TARGET';
   if (effCarbs === 0) {
     badge.className = 'ketosis-badge green';
-    badge.textContent = '⚡ KETOSIS ZONE — no carbs yet today';
+    badge.textContent = `⚡ ${zoneWord} — no carbs yet today`;
   } else if (effCarbs < 30) {
     const remaining = targets.carbs - effCarbs;
     badge.className = 'ketosis-badge green';
     const _deepStreak = calcKetosisStreak();
     checkStreakMilestone(_deepStreak);
-    badge.textContent = `⚡ DEEP KETOSIS — ${Math.round(effCarbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining${_deepStreak > 1 ? ' · 🔥 ' + _deepStreak + ' day streak' : ''}`;
+    badge.textContent = `⚡ ${deepWord} — ${Math.round(effCarbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining${_deepStreak > 1 ? ' · 🔥 ' + _deepStreak + ' day streak' : ''}`;
   } else if (effCarbs < targets.carbs) {
     const remaining = targets.carbs - effCarbs;
     badge.className = 'ketosis-badge green';
     const _streak = calcKetosisStreak();
     checkStreakMilestone(_streak);
-    badge.textContent = `✓ KETOSIS ZONE — ${Math.round(effCarbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining${_streak > 1 ? ' · 🔥 ' + _streak + ' day streak' : ''}`;
+    badge.textContent = `✓ ${zoneWord} — ${Math.round(effCarbs * 100) / 100}g used · ${Math.round(remaining * 10) / 10}g remaining${_streak > 1 ? ' · 🔥 ' + _streak + ' day streak' : ''}`;
   } else if (effCarbs < 75) {
     badge.className = 'ketosis-badge yellow';
     badge.textContent = `⚠ BORDERLINE — ${effCarbs}g carbs`;
@@ -22346,17 +22407,31 @@ function _currentSupplementPeriod() {
 // never invents or guesses a supplement that isn't already in their library.
 function _fuzzyMatchSupplement(transcript, defs) {
   const t = transcript.toLowerCase().replace(/['\u2019]/g, '');
-  let best = null, bestScore = 0;
+  // Real bug found: bestScore previously mixed two incompatible units -
+  // a name's character length for an exact substring match, vs a small
+  // word-hit count (rarely more than 3-4) for a fuzzy match - compared
+  // directly against each other. Since a hit-count can almost never
+  // exceed a name's raw character length, one early exact match could
+  // permanently lock out any later fuzzy match, even a perfect one.
+  // Tracked separately now: an exact substring match always wins over any
+  // fuzzy match (a stronger signal regardless of length), tie-broken by
+  // the longest/most-specific name among exact matches; fuzzy matches are
+  // compared against each other using the same unit (score ratio) throughout.
+  let bestExact = null, bestExactLen = 0;
+  let bestFuzzy = null, bestFuzzyScore = 0;
   defs.forEach(s => {
     const name = s.name.toLowerCase().replace(/['\u2019]/g, '');
-    if (t.includes(name)) { if (name.length > bestScore) { bestScore = name.length; best = s; } return; }
+    if (t.includes(name)) {
+      if (name.length > bestExactLen) { bestExactLen = name.length; bestExact = s; }
+      return;
+    }
     const words = name.split(/\s+/).filter(w => w.length > 2);
     if (!words.length) return;
     const hits = words.filter(w => t.includes(w)).length;
     const score = hits / words.length;
-    if (score >= 0.6 && hits > bestScore) { bestScore = hits; best = s; }
+    if (score >= 0.6 && score > bestFuzzyScore) { bestFuzzyScore = score; bestFuzzy = s; }
   });
-  return best;
+  return bestExact || bestFuzzy;
 }
 
 function toggleSupplementVoiceInput() {
@@ -22492,6 +22567,10 @@ function toggleSupplementActive(id) {
   if (s) { s.active = s.active === false ? true : false; }
   saveSupplementDefs(defs);
   renderSupplementSettings();
+  // Today's checklist filters by active !== false - without this, turning
+  // a supplement off in Settings left it still showing on Today until
+  // something else happened to trigger a refresh (tab switch, etc).
+  renderSupplements();
 }
 
 function deleteSupplement(id) {
@@ -22597,6 +22676,9 @@ function saveSupplementEdit() {
   saveSupplementDefs(defs);
   document.getElementById('suppEditModal')?.remove();
   renderSupplementSettings();
+  // Same gap as toggleSupplementActive - Today's checklist reads name/
+  // dose/periods from these same defs and wasn't being told to refresh.
+  renderSupplements();
   showToast((_editSupplementId ? 'Updated' : 'Added') + ' ✓');
 }
 
@@ -28321,9 +28403,10 @@ function renderJourneyCard() {
 
   const legendEl = document.getElementById('journeyLegend');
   if (legendEl) {
+    const inTargetWord = isKetogenicCondition() ? 'in ketosis' : 'under carb target';
     legendEl.innerHTML = offsetEnabled
-      ? 'Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> in ketosis &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day'
-      : 'Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> in ketosis &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day';
+      ? `Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day`
+      : `Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day`;
   }
 
   const labels = weighed.map(d => d.date);
@@ -28401,7 +28484,7 @@ function renderJourneyCard() {
   if (statsEl) statsEl.innerHTML =
     stat('Days tracked', weighed.length) +
     stat('Weight range', `${Math.min(...weightVals)}–${Math.max(...weightVals)}kg`) +
-    stat('Ketosis adherence', `${adherencePct}% (${ketosisDays}/${loggedDays.length})`) +
+    stat(isKetogenicCondition() ? 'Ketosis adherence' : 'Carb target adherence', `${adherencePct}% (${ketosisDays}/${loggedDays.length})`) +
     stat('Current streak', `${streak} day${streak===1?'':'s'}`) +
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
 }
@@ -28413,7 +28496,7 @@ function showJourneyDayPanel(index, weighed, pointColors) {
   if (!panel) return;
   const d = weighed[index];
   const color = pointColors[index];
-  const statusText = color === '#2deb8f' ? 'In ketosis' : color === '#4d9fff' ? 'Over ceiling, addressed' : color === '#f5c542' ? 'Over ceiling' : 'No nutrition logged';
+  const statusText = color === '#2deb8f' ? (isKetogenicCondition() ? 'In ketosis' : 'Under carb target') : color === '#4d9fff' ? 'Over ceiling, addressed' : color === '#f5c542' ? 'Over ceiling' : 'No nutrition logged';
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
@@ -29747,7 +29830,11 @@ let _drillChart  = null;
 // instead; every other metric's ref stays exactly as defined below.
 function getDrillConfig(metric) {
   const cfg = DRILL_CONFIG[metric];
-  if (!cfg || metric !== 'steps') return cfg;
+  if (!cfg) return cfg;
+  if (metric === 'ketosis' && !isKetogenicCondition()) {
+    return Object.assign({}, cfg, { title: 'Carb Target Adherence' });
+  }
+  if (metric !== 'steps') return cfg;
   const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
   return Object.assign({}, cfg, { ref: [baseline, baseline + 2500] }); // same +2500 spread as the original hardcoded 7500-10000
 }
@@ -31534,9 +31621,10 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
     const ceiling = targets.carbs || 50;
     const daysUnder = vals.filter(v => v <= ceiling).length;
     const pctAdh = Math.round(daysUnder / vals.length * 100);
+    const _isKetoDrill = isKetogenicCondition();
     el.innerHTML += `
       <div class="drill-section">
-        <div class="drill-section-title">Ketosis adherence</div>
+        <div class="drill-section-title">${_isKetoDrill ? 'Ketosis adherence' : 'Carb target adherence'}</div>
         ${[
           ['Carb ceiling', ceiling + 'g'],
           ['Days within ceiling', daysUnder + '/' + vals.length],
@@ -31544,8 +31632,10 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
           ['Avg carbs', avg ? avg + 'g' : '—'],
           ['Highest day', max ? max + 'g' : '—'],
         ].map(([l,v]) => `<div class="drill-row"><span class="drill-row-label">${l}</span><span class="drill-row-val">${v}</span></div>`).join('')}
-        ${pctAdh >= 85 ? `<div class="drill-insight">✓ Strong ketosis adherence at ${pctAdh}%. Consistent sub-${ceiling}g carb intake maintains the metabolic environment${isGBMorEpilepsy ? ' that the GBM protocol relies on' : ' that sustains nutritional ketosis'}. [Proven]</div>` : ''}
-        ${pctAdh < 70 ? `<div class="drill-insight" style="border-color:rgba(255,94,94,0.3);background:rgba(255,94,94,0.06);">⚠ Carb adherence at ${pctAdh}% — below recommended threshold. For therapeutic ketosis to be effective, consistent adherence is important. Consider reviewing which days are causing overages.</div>` : ''}
+        ${pctAdh >= 85 ? (_isKetoDrill
+          ? `<div class="drill-insight">✓ Strong ketosis adherence at ${pctAdh}%. Consistent sub-${ceiling}g carb intake maintains the metabolic environment${isGBMorEpilepsy ? ' that the GBM protocol relies on' : ' that sustains nutritional ketosis'}. [Proven]</div>`
+          : `<div class="drill-insight">✓ Strong adherence at ${pctAdh}%. Consistently staying under your ${ceiling}g carb target.</div>`) : ''}
+        ${pctAdh < 70 ? `<div class="drill-insight" style="border-color:rgba(255,94,94,0.3);background:rgba(255,94,94,0.06);">⚠ Carb adherence at ${pctAdh}% — below recommended threshold. ${_isKetoDrill ? 'For therapeutic ketosis to be effective, consistent adherence is important.' : 'Consistent adherence to your carb target matters for the results you\'re after.'} Consider reviewing which days are causing overages.</div>` : ''}
       </div>`;
   }
 
@@ -31940,6 +32030,13 @@ function processCombinedText(text, silent, outEl) {
       I.calories_in = Math.max(idx('calories_in'), idx('kcal'));
       I.protein = Math.max(idx('protein_g'), idx('protein'));
       I.carbs = Math.max(idx('carbs_g'), idx('carbs'));
+      // Real gap found: fat was never mapped here at all, despite the export
+      // schema this same app builds elsewhere (askReportsAI's CSV) explicitly
+      // including "fat_g" as a real column. kcal/protein/carbs all got their
+      // own idx() lookup, fat simply never did - so any wearable/nutrition
+      // app's export that included dietary fat was silently dropped on import,
+      // every single time, not just for one file.
+      I.fat = Math.max(idx('fat_g'), idx('fat'));
 
       const getF = (cols, i) => (i >= 0 && cols[i] !== undefined) ? cols[i].trim() : '';
       const toInt = v => { const n = parseInt(v); return isNaN(n) ? 0 : n; };
@@ -31973,6 +32070,7 @@ function processCombinedText(text, silent, outEl) {
         const hr=toInt(getF(cols,I.heart_rate)), fatPct=toFloat(getF(cols,I.fat_pct));
         const weightKg=toFloat(getF(cols,I.weight_kg)), calIn=toInt(getF(cols,I.calories_in));
         const protein=toFloat(getF(cols,I.protein)), carbs=toFloat(getF(cols,I.carbs));
+        const fat=toFloat(getF(cols,I.fat));
         const deepMin=toInt(getF(cols,I.deep_min)), remMin=toInt(getF(cols,I.rem_min));
         const lightMin=toInt(getF(cols,I.light_min));
         const fatMassKg=toFloat(getF(cols,I.fat_mass_kg));
@@ -32020,9 +32118,10 @@ function processCombinedText(text, silent, outEl) {
             description: desc,
             kcal:        calIn,
             protein:     protein,
+            fat:         fat,
             carbs:       carbs
           }],
-          totals:  { kcal: calIn, protein: protein, carbs: carbs },
+          totals:  { kcal: calIn, protein: protein, fat: fat, carbs: carbs },
           mode:    'standard',
           notes:   desc,
           weight: weightKg||null,
@@ -32535,22 +32634,78 @@ function updateGBMSectionVisibility() {
 // card outright — the carb-zone numbers/bands themselves are still useful
 // reference regardless of condition, only the GBM-specific framing isn't.
 function updateCarbZonesCondition() {
-  const isGBM = (localStorage.getItem('mh_condition') || 'general') === 'gbm';
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const isGBM = cond === 'gbm';
+  // Widened from isGBM-only to the full isKetogenicCondition() check - the
+  // existing fix correctly stopped GBM-specific wording leaking to other
+  // users, but only checked GBM specifically, so Epilepsy/Strict Keto/
+  // Migraine/Cluster Headache correctly fell into the generic-keto bucket
+  // by accident (still genuinely ketogenic, so harmless), while a truly
+  // non-ketogenic condition (Diabetes/Recomp/General) still got "ketogenic
+  // protocol" and GKI framing - not GBM-specific wording, but still
+  // entirely irrelevant content for someone whose real carb target (100-
+  // 150g) sits nowhere near any zone this whole panel defines.
+  const isKeto = isKetogenicCondition();
   const heading = document.getElementById('carbZonesHeading');
-  if (heading) heading.textContent = isGBM ? 'Daily Carb Zones — GBM Protocol' : 'Daily Carb Zones';
+  if (heading) heading.textContent = isGBM ? 'Daily Carb Zones — GBM Protocol' : isKeto ? 'Daily Carb Zones' : 'Daily Carb Reference';
   const holidayNote = document.getElementById('carbZonesHolidayNote');
   if (holidayNote) holidayNote.textContent = isGBM
     ? 'Up to 12 weeks/year — assumes exercise, metformin and MCT oil maintained'
-    : 'Up to 12 weeks/year — assumes exercise and other ketosis-supporting habits maintained';
+    : isKeto
+    ? 'Up to 12 weeks/year — assumes exercise and other ketosis-supporting habits maintained'
+    : 'Occasional higher-carb days — worth planning around exercise and activity rather than a strict cap';
   const standardNote = document.getElementById('carbZonesStandardNote');
   if (standardNote) standardNote.textContent = isGBM
     ? 'Fully glucose-dependent — counterproductive for GBM protocol'
-    : 'Fully glucose-dependent — counterproductive for a ketogenic protocol';
+    : isKeto
+    ? 'Fully glucose-dependent — counterproductive for a ketogenic protocol'
+    : 'Typical unrestricted intake — well above this protocol\'s target range';
   const gkiNote = document.getElementById('carbZonesGkiNote');
   if (gkiNote) {
-    gkiNote.innerHTML = isGBM
-      ? '<strong style="color:var(--text2);">GKI target: &lt; 2.0</strong> (blood glucose mmol/L ÷ blood ketones mmol/L). Exercise, MCT oil, metformin and fasting all lower GKI independently. <a href="gbm_patient_guide.html" onclick="window.open(this.href,\'_blank\');return false;" style="color:var(--accent);margin-left:6px;cursor:pointer;">Full protocol →</a>'
-      : '<strong style="color:var(--text2);">GKI target: &lt; 2.0</strong> (blood glucose mmol/L ÷ blood ketones mmol/L). Exercise, MCT oil, and fasting all lower GKI independently.';
+    if (isGBM) {
+      gkiNote.innerHTML = '<strong style="color:var(--text2);">GKI target: &lt; 2.0</strong> (blood glucose mmol/L ÷ blood ketones mmol/L). Exercise, MCT oil, metformin and fasting all lower GKI independently. <a href="gbm_patient_guide.html" onclick="window.open(this.href,\'_blank\');return false;" style="color:var(--accent);margin-left:6px;cursor:pointer;">Full protocol →</a>';
+      gkiNote.style.display = '';
+    } else if (isKeto) {
+      gkiNote.innerHTML = '<strong style="color:var(--text2);">GKI target: &lt; 2.0</strong> (blood glucose mmol/L ÷ blood ketones mmol/L). Exercise, MCT oil, and fasting all lower GKI independently.';
+      gkiNote.style.display = '';
+    } else {
+      // GKI is a ketosis-specific biomarker with no meaning outside a
+      // ketogenic protocol - hidden entirely rather than shown with
+      // generic wording that would still be irrelevant to this person.
+      gkiNote.style.display = 'none';
+    }
+  }
+  // Log-tab quick-prompt chip - displayed text only, the onclick still
+  // sends the literal phrase "ketosis check" unconditionally regardless of
+  // condition, since getKetosisStatus() detects intent by looking for that
+  // word in the message - changing what gets SENT would break its own
+  // detection. Only what's shown on the button needs to reflect condition.
+  const ketosisChip = document.getElementById('ketosisCheckChip');
+  if (ketosisChip) ketosisChip.textContent = isKeto ? 'Ketosis check' : 'Target check';
+  // Settings > macro advice panel - the id hint (macroAdviceFatContext) was
+  // already there suggesting this was meant to be dynamic, but nothing
+  // ever actually wired it up - "Fat % here is a ketosis requirement" is a
+  // factual claim that's simply wrong outside a ketogenic protocol, not
+  // just wording that reads oddly.
+  const fatAdviceSection = document.getElementById('macroAdviceFatSection');
+  if (fatAdviceSection) {
+    fatAdviceSection.innerHTML = isKeto
+      ? '<strong style="color:var(--text2);">Fat % here is a ketosis requirement, not a body-composition lever.</strong> The high fat percentage exists to maintain therapeutic ketosis — it doesn\'t drive muscle growth. Protein plus resistance training does that. A ketogenic macro split isn\'t optimised for lean-mass gain the way a moderate-carb bulk would be; without a training stimulus, surplus calories default toward fat regardless of the macro split.'
+      : '<strong style="color:var(--text2);">Fat here fills whatever calories protein and carbs don\'t use, not a fixed ratio requirement.</strong> Protein plus resistance training is what drives muscle growth, not the fat percentage itself; without a training stimulus, surplus calories default toward fat regardless of how you split the macros.';
+  }
+  const carbCeilingsHeading = document.getElementById('carbCeilingsSectionHeading');
+  if (carbCeilingsHeading) carbCeilingsHeading.innerHTML = isKeto ? 'Carb Ceilings &amp; Ketosis Adherence' : 'Carb Ceilings &amp; Target Adherence';
+  // "Ready to log" help-slot example question - same targeted-element
+  // pattern as the ketosis chip above. Targets #help-readytolog directly,
+  // NOT the original .help-slot[data-id] placeholder - initHelpSlots()
+  // converts that placeholder via outerHTML on first render, so the
+  // original element stops existing in the DOM after that one conversion;
+  // anything touching it after page load would silently do nothing.
+  const readyToLogHelp = document.getElementById('help-readytolog');
+  if (readyToLogHelp) {
+    readyToLogHelp.textContent = isKeto
+      ? 'Type a meal, snap a photo, search the database, or scan a barcode. Ask anything — "What do I still need today?" or "Am I in ketosis?" works too.'
+      : 'Type a meal, snap a photo, search the database, or scan a barcode. Ask anything — "What do I still need today?" or "Am I on target today?" works too.';
   }
 }
 
@@ -32768,7 +32923,13 @@ function generateWeeklySummary() {
       </div>`;
   }).join('');
 
-  const name = localStorage.getItem('mh_name') || 'Pete';
+  // Same hardcoded-name gap as the earlier AI-prompt fix tonight - this app
+  // genuinely has multiple real users (per the shared-AI-account comment
+  // elsewhere), so a name fallback needs to be generic, not one person's.
+  // 'Patient', not 'Your' - this feeds into "${name}'s Weekly Summary"
+  // below, and the sibling report function a few hundred lines down
+  // already uses this exact same generic fallback correctly.
+  const name = localStorage.getItem('mh_name') || 'Patient';
   const html = `
     <div style="background:var(--surface2);border-radius:10px;padding:14px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
@@ -32778,7 +32939,7 @@ function generateWeeklySummary() {
         </div>
         <div style="text-align:right;font-size:10px;color:var(--text3);font-family:Space Mono,monospace;">
           ${allDays.length}/7 days logged<br>
-          ${ketoDays.length} ketosis days<br>
+          ${ketoDays.length} ${isKetogenicCondition() ? 'ketosis' : 'on-target'} days<br>
           ${chemoDays.length > 0 ? '<span style="color:#a855f7;">'+chemoDays.length+' treatment day'+(chemoDays.length>1?'s':'')+'</span>' : ''}
         </div>
       </div>
@@ -32800,7 +32961,7 @@ function generateWeeklySummary() {
 
   // Store plain text version for copy
   window._weeklySummaryText = `${name}'s Weekly Summary — ${fmtFull(startOfThisWeek)} to ${fmtFull(endOfWeek)}\n\n` +
-    `Days logged: ${allDays.length}/7 | Ketosis days: ${ketoDays.length}${chemoDays.length > 0 ? ' | Treatment days: '+chemoDays.length : ''}\n\n` +
+    `Days logged: ${allDays.length}/7 | ${isKetogenicCondition() ? 'Ketosis' : 'On-target'} days: ${ketoDays.length}${chemoDays.length > 0 ? ' | Treatment days: '+chemoDays.length : ''}\n\n` +
     `Averages: ${avgKcal}kcal | ${avgProt}g protein | ${avgFat}g fat | ${avgCarbs}g carbs\n\n` +
     allDays.map(d => {
       const tags = (d.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !['standard','occasion','holiday','missed day entry','missed day'].includes(t.toLowerCase()));
@@ -33052,7 +33213,7 @@ function generateOncologyView() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
         <div style="border:1px solid #e0e0e0;border-radius:6px;padding:10px;">
-          <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:4px;">KETOSIS ADHERENCE</div>
+          <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:4px;">${isKetogenicCondition() ? 'KETOSIS ADHERENCE' : 'CARB TARGET ADHERENCE'}</div>
           <div style="font-size:24px;font-weight:800;color:${ketoAdh>=80?'#16a34a':ketoAdh>=50?'#d97706':'#dc2626'};">${ketoAdh}%</div>
           <div style="font-size:11px;color:#666;">${ketoDays}/${h.length} days within ${t.carbs}g ceiling</div>
         </div>
@@ -33086,7 +33247,7 @@ function generateOncologyView() {
   window._oncologyHTML = html;
   window._oncologyText = `${name} — Nutrition Report (Last ${days} days)\n` +
     `Generated: ${new Date().toLocaleDateString('en-GB')}\n\n` +
-    `Days logged: ${h.length} | Ketosis adherence: ${ketoAdh}%\n` +
+    `Days logged: ${h.length} | ${isKetogenicCondition() ? 'Ketosis' : 'Carb target'} adherence: ${ketoAdh}%\n` +
     `Avg: ${avgKcal}kcal | ${avgProt}g P | ${avgFat}g F | ${avgCarbs}g C\n` +
     `Weight: ${currentWeight ? currentWeight+'kg' : 'N/A'}${weightChange ? ' ('+( weightChange > 0 ? '+' : '')+weightChange+'kg)' : ''}\n` +
     (refRows.length > 0 ? `\nSince last logged event:\n` + refRows.map(r=>`  ${r.label} (${r.mostRecentDate}, ${r.daysSince}d ago): weight ${fmtDelta(r.weightDelta,'kg')}, muscle ${fmtDelta(r.muscleDelta,'kg')}, fat ${fmtDelta(r.fatDelta,'kg')}`).join('\n') : '') +
@@ -33257,6 +33418,8 @@ function renderSleepKetosisCorrelation() {
   const avgSleepPoor = poorSleep.length ? Math.round(poorSleep.reduce((a,d)=>a+(d.totals?.carbs||0),0)/poorSleep.length*10)/10 : 0;
   const avgHRVGood = goodSleep.filter(d=>d.hrv>0).length ? Math.round(goodSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/goodSleep.filter(d=>d.hrv>0).length) : null;
   const avgHRVPoor = poorSleep.filter(d=>d.hrv>0).length ? Math.round(poorSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/poorSleep.filter(d=>d.hrv>0).length) : null;
+  const _isKetoSleep = isKetogenicCondition();
+  const adherenceWord = _isKetoSleep ? 'ketosis adherence' : 'on-target adherence';
 
   el.innerHTML = `
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">${daysWithBoth.length} days with both sleep and nutrition data · threshold: 7h sleep</div>
@@ -33264,20 +33427,20 @@ function renderSleepKetosisCorrelation() {
       <div style="background:var(--surface2);border-radius:8px;padding:10px;">
         <div style="font-size:9px;color:var(--accent);font-family:'Space Mono',monospace;margin-bottom:6px;">😴 GOOD SLEEP (≥7h)</div>
         <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:var(--accent);">${goodAdh}%</div>
-        <div style="font-size:10px;color:var(--text3);">ketosis adherence</div>
+        <div style="font-size:10px;color:var(--text3);">${adherenceWord}</div>
         <div style="font-size:12px;color:var(--text2);margin-top:4px;">${avgSleepKeto}g avg carbs</div>
         ${avgHRVGood ? `<div style="font-size:12px;color:var(--text2);">${avgHRVGood}ms avg HRV</div>` : ''}
       </div>
       <div style="background:var(--surface2);border-radius:8px;padding:10px;">
         <div style="font-size:9px;color:var(--yellow);font-family:'Space Mono',monospace;margin-bottom:6px;">⚠️ POOR SLEEP (<7h)</div>
         <div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:var(--yellow);">${poorAdh}%</div>
-        <div style="font-size:10px;color:var(--text3);">ketosis adherence</div>
+        <div style="font-size:10px;color:var(--text3);">${adherenceWord}</div>
         <div style="font-size:12px;color:var(--text2);margin-top:4px;">${avgSleepPoor}g avg carbs</div>
         ${avgHRVPoor ? `<div style="font-size:12px;color:var(--text2);">${avgHRVPoor}ms avg HRV</div>` : ''}
       </div>
     </div>
     <div style="font-size:11px;color:var(--text3);">
-      ${goodAdh > poorAdh ? `Sleep quality correlates with ketosis — ${goodAdh-poorAdh}% better adherence on good sleep days.` : poorAdh > goodAdh ? `Adherence is maintained even on poor sleep days — strong protocol discipline.` : `No significant correlation between sleep quality and ketosis adherence.`}
+      ${goodAdh > poorAdh ? `Sleep quality correlates with ${_isKetoSleep ? 'ketosis' : 'staying on target'} — ${goodAdh-poorAdh}% better adherence on good sleep days.` : poorAdh > goodAdh ? `Adherence is maintained even on poor sleep days — strong protocol discipline.` : `No significant correlation between sleep quality and ${adherenceWord}.`}
     </div>`;
 }
 
@@ -33881,10 +34044,10 @@ function renderTreatmentAnalysis() {
 
   const comparison = document.getElementById('treatment-comparison');
   if (comparison) {
-    let html = '<div style="font-size:10px;color:#a855f7;margin-bottom:8px;">KETOSIS &amp; WEIGHT CORRELATION</div>';
+    let html = `<div style="font-size:10px;color:#a855f7;margin-bottom:8px;">${isKetogenicCondition() ? 'KETOSIS' : 'CARB TARGET'} &amp; WEIGHT CORRELATION</div>`;
     html += '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;">';
     if (tAdherence !== null && sAdherence !== null) {
-      html += card('Ketosis adherence', tAdherence, sAdherence, '%', 'var(--accent)');
+      html += card(isKetogenicCondition() ? 'Ketosis adherence' : 'Carb target adherence', tAdherence, sAdherence, '%', 'var(--accent)');
     }
     if (tWeight !== null && sWeight !== null) {
       html += card('Avg weight', tWeight, sWeight, 'kg', 'var(--yellow)');
@@ -34760,6 +34923,21 @@ function buildPatientContext(history, conditionFilter = null) {
 }
 
 // Condition metadata — framing, protocol label, evidence note, carb concern threshold
+// Real gap found and fixed on request: "ketosis"/"in ketosis" language was
+// shown unconditionally throughout Trends regardless of the actual
+// selected condition - accurate for GBM/Epilepsy/Strict Keto/Migraine/
+// Cluster Headache (all genuinely ketogenic protocols), but "in ketosis"
+// is a specific physiological claim, not just a synonym for "under your
+// carb target" - meaningless or actively misleading for someone on T1/T2
+// Diabetes, Body Recomposition, or General Health, none of which are
+// ketogenic. Reuses CONDITION_META's own protocol text rather than a
+// second hardcoded list that could drift out of sync with it.
+function isKetogenicCondition() {
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const meta = CONDITION_META[cond] || CONDITION_META.general;
+  return meta.protocol.toLowerCase().includes('ketogenic');
+}
+
 const CONDITION_META = {
   gbm: {
     label:        'GBM (methylated, operable, currently in remission)',
@@ -37573,7 +37751,7 @@ function triggerDailyInsight() {
   var typeColors = {pattern:'#2deb8f',nudge:'#38bdf8',milestone:'#f5c542'};
   var typeIcons = {pattern:'⚡',nudge:'🎯',milestone:'🏆'};
 
-  var prompt = 'You are a witty warm health analyst for MaxedHealth. Generate a single short insight (max 50 words) for ' + name + '. Today: ' + new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) + '. ' + (isChemoDay ? 'Today is a treatment day. ' : '') + 'Last 30 days: ' + avgKcal + 'kcal avg, ' + avgCarbs + 'g avg carbs, ' + avgProt + 'g avg protein, ' + ketoAdh + '% ketosis adherence. ' + (chemoCount > 0 ? chemoCount + ' treatment days logged. ' : '') + 'Today so far: ' + Math.round(todayTotals.kcal) + 'kcal, ' + Math.round(todayTotals.protein) + 'g protein, ' + Math.round(todayTotals.carbs) + 'g carbs. Insight type: ' + insightType + ' (pattern=data correlation, nudge=one action today, milestone=celebrate progress). Be direct specific occasionally witty. Use actual numbers. No bullet points.';
+  var prompt = 'You are a witty warm health analyst for MaxedHealth. Generate a single short insight (max 50 words) for ' + name + '. Today: ' + new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}) + '. ' + (isChemoDay ? 'Today is a treatment day. ' : '') + 'Last 30 days: ' + avgKcal + 'kcal avg, ' + avgCarbs + 'g avg carbs, ' + avgProt + 'g avg protein, ' + ketoAdh + '% ' + (isKetogenicCondition() ? 'ketosis' : 'carb target') + ' adherence. ' + (chemoCount > 0 ? chemoCount + ' treatment days logged. ' : '') + 'Today so far: ' + Math.round(todayTotals.kcal) + 'kcal, ' + Math.round(todayTotals.protein) + 'g protein, ' + Math.round(todayTotals.carbs) + 'g carbs. Insight type: ' + insightType + ' (pattern=data correlation, nudge=one action today, milestone=celebrate progress). Be direct specific occasionally witty. Use actual numbers. No bullet points.';
 
   fetch('https://maxhealth-ai.bogginsuk.workers.dev', {
     method: 'POST',
