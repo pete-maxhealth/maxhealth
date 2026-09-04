@@ -4666,7 +4666,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.691</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.692</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5605,7 +5605,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.691'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.692'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7531,7 +7531,7 @@ function showLibraryPortionSelector(f, index) {
           ${f.polyols ? `<span style="color:var(--text3);" id="libPolyols">🍬 ${f.polyols}g polyols</span>` : '<span id="libPolyols" style="display:none;"></span>'}
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;" id="libRemainingToday">${_remainingTodayLine(f.kcal, f.carbs, f.polyols)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;" id="libRemainingToday">${_remainingTodayLine(f.kcal, f.protein, f.fat, f.carbs, f.polyols)}</div>
 
       <button onclick="logLibraryWithPortion(${index})"
         style="width:100%;padding:14px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">
@@ -7569,7 +7569,7 @@ function scaleLibraryPortion(index, gramsStr) {
   if (el('libCarb')) el('libCarb').textContent = carb + 'g C';
   if (el('libFibre'))   { el('libFibre').style.display   = fibre   ? '' : 'none'; el('libFibre').textContent   = fibre + 'g fibre'; }
   if (el('libPolyols')) { el('libPolyols').style.display = polyols ? '' : 'none'; el('libPolyols').textContent = '🍬 ' + polyols + 'g polyols'; }
-  if (el('libRemainingToday')) el('libRemainingToday').innerHTML = _remainingTodayLine(kcal, carb, polyols);
+  if (el('libRemainingToday')) el('libRemainingToday').innerHTML = _remainingTodayLine(kcal, prot, fat, carb, polyols);
 }
 
 function logLibraryWithPortion(index) {
@@ -10408,15 +10408,26 @@ function getEffectiveCarbs(totals) {
 // entry - callers scale to whatever amount/servings the person currently
 // has selected before calling this, so the line stays accurate as they
 // adjust portions.
-function _remainingTodayLine(addKcal, addCarbs, addPolyols) {
+// Fat has no TARGETS entry at all (unlike kcal/protein/carbs) - it's a
+// separate mh_target_fat localStorage value, same as the day-cumulative
+// macros bar reads it - so it's fetched the same way here, not from targets.fat.
+function _remainingTodayLine(addKcal, addProtein, addFat, addCarbs, addPolyols) {
   const todayTotals = calcTotals(state.todayLog);
   const targets = TARGETS[state.dayMode];
+  const fatTarget = parseInt(localStorage.getItem('mh_target_fat')) || 247;
   const afterKcal = todayTotals.kcal + (addKcal || 0);
+  const afterProtein = (todayTotals.protein || 0) + (addProtein || 0);
+  const afterFat = (todayTotals.fat || 0) + (addFat || 0);
   const afterCarbsEff = getEffectiveCarbs({ carbs: (todayTotals.carbs || 0) + (addCarbs || 0), polyols: (todayTotals.polyols || 0) + (addPolyols || 0) });
   const kcalRemain = Math.max(0, Math.round(targets.kcal - afterKcal));
+  const proteinRemain = Math.max(0, Math.round((targets.protein - afterProtein) * 10) / 10);
+  const fatRemain = Math.max(0, Math.round((fatTarget - afterFat) * 10) / 10);
   const carbsRemain = Math.max(0, Math.round((targets.carbs - afterCarbsEff) * 10) / 10);
   const over = afterCarbsEff > targets.carbs;
-  return `If logged now: <strong style="color:var(--text2);">${Math.round(afterKcal)}/${targets.kcal}kcal</strong> · ${over ? `<span style="color:var(--red);">${Math.round(afterCarbsEff - targets.carbs)}g over your ${targets.carbs}g ceiling</span>` : `<strong style="color:var(--text2);">${carbsRemain}g</strong> carbs would remain (${targets.carbs}g ceiling)`} · <strong style="color:var(--text2);">${kcalRemain}kcal</strong> left today`;
+  const carbsPart = over
+    ? `<span style="color:var(--red);">${Math.round(afterCarbsEff - targets.carbs)}g over your ${targets.carbs}g ceiling</span>`
+    : `<strong style="color:var(--text2);">${carbsRemain}g</strong> carbs`;
+  return `If logged now, remaining today: <strong style="color:var(--text2);">${kcalRemain}kcal</strong> · <strong style="color:var(--text2);">${proteinRemain}g</strong> protein · <strong style="color:var(--text2);">${fatRemain}g</strong> fat · ${carbsPart}`;
 }
 
 function saveCarbCeilings() {
@@ -14637,7 +14648,7 @@ function _buildComboItemsCardHTML(comboIndex) {
     <div onclick="openLibraryPickerForCombo(${comboIndex})" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin:6px 0;">+ add ingredient</div>
     ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
     <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;" id="combo-totals-${comboIndex}">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;" id="combo-remaining-${comboIndex}">${_remainingTodayLine(totals.kcal, totals.carbs, totals.polyols)}</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;" id="combo-remaining-${comboIndex}">${_remainingTodayLine(totals.kcal, totals.protein, totals.fat, totals.carbs, totals.polyols)}</div>
     ${combo.anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
     <button onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
   </div>`;
@@ -14664,7 +14675,7 @@ function scaleComboItem(comboIndex, itemIndex, gramsStr) {
     const totals = _comboItemsTotals(combo.items);
     totalsEl.textContent = `${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F`;
     const remainingEl = document.getElementById(`combo-remaining-${comboIndex}`);
-    if (remainingEl) remainingEl.innerHTML = _remainingTodayLine(totals.kcal, totals.carbs, totals.polyols);
+    if (remainingEl) remainingEl.innerHTML = _remainingTodayLine(totals.kcal, totals.protein, totals.fat, totals.carbs, totals.polyols);
   }
 }
 
@@ -25121,7 +25132,7 @@ function updateRecipeTotals() {
   perServingText.textContent = `Per serving (÷${servings}): ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C${per.fibre ? ' · ' + per.fibre + 'g fibre' : ''}`;
   // 1 serving, not the whole-recipe total - this is what a single log
   // action would actually add to today, matching how the recipe gets eaten.
-  if (remainingTodayText) remainingTodayText.innerHTML = _remainingTodayLine(per.kcal, per.carbs, per.polyols);
+  if (remainingTodayText) remainingTodayText.innerHTML = _remainingTodayLine(per.kcal, per.protein, per.fat, per.carbs, per.polyols);
 }
 
 // A Meal only ever stored {name, amount} per component - never each one's
