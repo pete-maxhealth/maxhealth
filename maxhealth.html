@@ -4366,10 +4366,12 @@
       </div>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderLogMutationDebug()">🔍 View mutation log</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderPolyolsPipelineTrace()">🍬 View polyols pipeline trace</button>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAIAssistTrace()">🔍 View AI-assist apply trace</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearPolyolsPipelineTrace()">Clear polyols trace</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAIAssistTrace()">Clear AI-assist trace</button>
     </div>
     </div>
 
@@ -4667,7 +4669,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.697</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.700</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5606,7 +5608,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.697'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.700'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7366,6 +7368,29 @@ function renderLibrary() {
           <input class="library-edit-input" id="lib-edit-polyols-${origIdx}" type="number" step="0.1" value="${f.polyols||0}" style="width:100%;">
         </div>
       </div>
+      <button class="copy-btn" style="width:100%;margin-bottom:6px;padding:7px;font-size:11px;" onclick="runLibraryEditTripleAI(${origIdx})">🔍 Verify across 3 AIs</button>
+      <div id="lib-edit-aicheck-${origIdx}" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;"></div>
+      <div style="margin-bottom:6px;">
+        <span onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'grid':'none';" style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;">ⓘ More info (sat fat, sugars, salt, iron)</span>
+        <div style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SAT FAT g</div>
+            <input class="library-edit-input" id="lib-edit-satfat-${origIdx}" type="number" step="0.1" value="${f.satFat||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SUGARS g</div>
+            <input class="library-edit-input" id="lib-edit-sugars-${origIdx}" type="number" step="0.1" value="${f.sugars||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SALT g</div>
+            <input class="library-edit-input" id="lib-edit-salt-${origIdx}" type="number" step="0.01" value="${f.salt||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">IRON mg</div>
+            <input class="library-edit-input" id="lib-edit-iron-${origIdx}" type="number" step="0.1" value="${f.iron||0}" style="width:100%;">
+          </div>
+        </div>
+      </div>
       <div class="library-edit-actions">
         ${deleteBtn}
         <button class="library-edit-cancel" onclick="cancelLibraryEdit(${origIdx})">Cancel</button>
@@ -7557,12 +7582,7 @@ function scaleLibraryPortion(index, gramsStr) {
   const _pg3 = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps3);
   const basePortion = _pg3 ? (parseFloat(f.portion) || 100) : 100;
   const factor = grams / basePortion;
-  const kcal = Math.round(f.kcal * factor);
-  const prot = Math.round(f.protein * factor * 10) / 10;
-  const fat  = Math.round((f.fat||0) * factor * 10) / 10;
-  const carb = Math.round(f.carbs * factor * 10) / 10;
-  const fibre = Math.round((f.fibre||0) * factor * 10) / 10;
-  const polyols = Math.round((f.polyols||0) * factor * 10) / 10;
+  const { kcal, protein: prot, fat, carbs: carb, fibre, polyols } = scaleMacros(f, factor);
   const el = id => document.getElementById(id);
   if (el('libKcal')) el('libKcal').textContent = kcal + 'kcal';
   if (el('libProt')) el('libProt').textContent = prot + 'g P';
@@ -7737,6 +7757,61 @@ function cancelLibraryEdit(index) {
   }
 }
 
+// Shared by all three new "Verify across 3 AIs" call sites below - logs
+// what the form showed BEFORE applying the AI average and what it became
+// AFTER, to the same kind of always-on trace already used for the polyols
+// pipeline. Raised directly: any new write path risks the same silent
+// data loss tonight kept finding elsewhere, so this one ships instrumented
+// from the start rather than only after something goes missing.
+function _traceFormAIApply(source, before, after) {
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_ai_assist_trace') || '[]');
+    log.unshift({ timestamp: new Date().toISOString(), source, before, after });
+    if (log.length > 40) log.length = 40;
+    localStorage.setItem('mh_ai_assist_trace', JSON.stringify(log));
+  } catch(e) {}
+}
+
+async function runLibraryEditTripleAI(index) {
+  const lib = loadLibrary();
+  const f = lib[index];
+  if (!f) return;
+  const nameEl = document.getElementById('lib-edit-name-' + index);
+  const portionEl = document.getElementById('lib-edit-portion-' + index);
+  const desc = `${nameEl?.value || f.name}${portionEl?.value ? ' (' + portionEl.value + ')' : ''}`;
+  const container = document.getElementById('lib-edit-aicheck-' + index);
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `<div style="font-size:11px;color:var(--text3);">🔍 Asking Claude, Gemini, and ChatGPT independently…</div>`;
+  try {
+    const { providers, agreementNote, avg } = await estimateNutritionViaTripleAI(desc);
+    renderTripleAICompare(container, desc, providers, agreementNote);
+    if (avg) {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.style.cssText = 'width:100%;margin-top:8px;padding:7px;font-size:11px;';
+      btn.textContent = '📋 Use this average';
+      btn.onclick = () => {
+        const before = {
+          kcal: document.getElementById('lib-edit-kcal-' + index)?.value,
+          protein: document.getElementById('lib-edit-prot-' + index)?.value,
+          fat: document.getElementById('lib-edit-fat-' + index)?.value,
+          carbs: document.getElementById('lib-edit-carb-' + index)?.value,
+        };
+        document.getElementById('lib-edit-kcal-' + index).value = Math.round(avg.kcal);
+        document.getElementById('lib-edit-prot-' + index).value = Math.round(avg.protein * 10) / 10;
+        document.getElementById('lib-edit-fat-' + index).value = Math.round(avg.fat * 10) / 10;
+        document.getElementById('lib-edit-carb-' + index).value = Math.round(avg.carbs * 10) / 10;
+        _traceFormAIApply('library-edit', before, avg);
+        showToast('Applied — tap Save to keep it');
+      };
+      container.appendChild(btn);
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:11px;color:var(--yellow);">Couldn't reach the comparison — try again in a moment.</div>`;
+  }
+}
+
 function saveLibraryEdit(index) {
   const lib = loadLibrary();
   if (!lib[index]) return;
@@ -7756,6 +7831,13 @@ function saveLibraryEdit(index) {
   // editable here now, same as every other macro already was.
   const fibre   = parseFloat(document.getElementById('lib-edit-fibre-' + index)?.value || 0);
   const polyols = parseFloat(document.getElementById('lib-edit-polyols-' + index)?.value || 0);
+  // Same "for now, until we work out how best to use it" scope as the
+  // rest of this More-info reveal - just captured and saved so nothing
+  // typed in gets lost, not yet wired into scaling/AI-check/anything else.
+  const satFat  = parseFloat(document.getElementById('lib-edit-satfat-' + index)?.value || 0);
+  const sugars  = parseFloat(document.getElementById('lib-edit-sugars-' + index)?.value || 0);
+  const salt    = parseFloat(document.getElementById('lib-edit-salt-' + index)?.value || 0);
+  const iron    = parseFloat(document.getElementById('lib-edit-iron-' + index)?.value || 0);
   const portionEl = document.getElementById('lib-edit-portion-' + index);
   const portion = portionEl ? portionEl.value.trim() : lib[index].portion;
   if (!name || isNaN(kcal) || isNaN(prot) || isNaN(carbs)) {
@@ -7768,6 +7850,10 @@ function saveLibraryEdit(index) {
   lib[index].carbs   = Math.round(carbs * 10) / 10;
   lib[index].fibre   = fibre || null;
   lib[index].polyols = polyols || null;
+  lib[index].satFat  = satFat || null;
+  lib[index].sugars  = sugars || null;
+  lib[index].salt    = salt || null;
+  lib[index].iron    = iron || null;
   lib[index].portion = portion || null;
   saveLibrary(lib);
   renderLibrary();
@@ -10400,6 +10486,39 @@ function getEffectiveCarbs(totals) {
     return Math.max(0, Math.round(((totals.carbs || 0) - (totals.polyols || 0)) * 10) / 10);
   }
   return totals.carbs || 0;
+}
+
+// The one place every "scale these macros by a factor" operation should go
+// through - was duplicated by hand across 10 different call sites tonight
+// (library portion selector, combo items, chat meal preview + its edit
+// form, recipe ingredients, both multi-item log editors + their scale-all
+// buttons, the simple Today/History edit forms), each writing out the same
+// six-line kcal/protein/fat/carbs/fibre/polyols multiply separately. Most
+// were fine, but several drifted - one forgot polyols, one forgot fibre AND
+// polyols entirely - purely because there was no single place enforcing
+// that a "scale" operation touches every macro. Centralising here doesn't
+// just fix today's bugs, it makes the whole bug class structurally
+// impossible going forward: add a 7th macro someday, it only needs adding
+// in ONE place, not audited across 10 by hand again.
+// base: any object with kcal/protein/fat/carbs/fibre/polyols (a food, a
+// library item, an ing._base snapshot). factor: multiplier, e.g. 0.5 for
+// half, 2 for double, newGrams/baseGrams for an amount change.
+// base: any object with kcal/protein/fat/carbs/fibre/polyols (a food, a
+// library item, an ing._base snapshot). factor: multiplier, e.g. 0.5 for
+// half, 2 for double, newGrams/baseGrams for an amount change. decimals
+// defaults to 1 (matches every call site except one - the chat meal
+// preview's direct numeric-edit fields, which deliberately keep 2 decimal
+// places since they're editable inputs, not display readouts).
+function scaleMacros(base, factor, decimals = 1) {
+  const m = Math.pow(10, decimals);
+  return {
+    kcal:    Math.round((base.kcal    || 0) * factor),
+    protein: Math.round((base.protein || 0) * factor * m) / m,
+    fat:     Math.round((base.fat     || 0) * factor * m) / m,
+    carbs:   Math.round((base.carbs   || 0) * factor * m) / m,
+    fibre:   Math.round((base.fibre   || 0) * factor * m) / m,
+    polyols: Math.round((base.polyols || 0) * factor * m) / m,
+  };
 }
 
 // Shared by any screen previewing food not yet logged (recipe builder,
@@ -17301,12 +17420,7 @@ function scalePreviewPortion(gramsStr) {
   window._pendingMealFoods[0] = {
     ...f,
     _base:   base,
-    kcal:    Math.round(base.kcal    * factor),
-    protein: Math.round(base.protein * factor * 10) / 10,
-    fat:     Math.round((base.fat||0) * factor * 10) / 10,
-    carbs:   Math.round(base.carbs   * factor * 10) / 10,
-    fibre:   Math.round((base.fibre||0) * factor * 10) / 10,
-    polyols: Math.round((base.polyols||0) * factor * 10) / 10,
+    ...scaleMacros(base, factor),
     amount:  grams + 'g',
   };
   const scaled = window._pendingMealFoods[0];
@@ -17446,14 +17560,15 @@ function scaleEditPreviewAmount() {
     return;
   }
   const factor = newNum / base.grams;
-  document.getElementById('editKcal').value = Math.round(base.kcal * factor);
-  document.getElementById('editProtein').value = Math.round(base.protein * factor * 100) / 100;
-  document.getElementById('editFat').value = Math.round(base.fat * factor * 100) / 100;
-  document.getElementById('editCarbs').value = Math.round(base.carbs * factor * 100) / 100;
+  const scaled = scaleMacros(base, factor, 2);
+  document.getElementById('editKcal').value = scaled.kcal;
+  document.getElementById('editProtein').value = scaled.protein;
+  document.getElementById('editFat').value = scaled.fat;
+  document.getElementById('editCarbs').value = scaled.carbs;
   const editFibreEl = document.getElementById('editFibre');
   const editPolyolsEl = document.getElementById('editPolyols');
-  if (editFibreEl) editFibreEl.value = Math.round((base.fibre||0) * factor * 100) / 100;
-  if (editPolyolsEl) editPolyolsEl.value = Math.round((base.polyols||0) * factor * 100) / 100;
+  if (editFibreEl) editFibreEl.value = scaled.fibre;
+  if (editPolyolsEl) editPolyolsEl.value = scaled.polyols;
   if (note) note.textContent = `Scaled from ${base.grams} to ${newNum} (${Math.round(factor*100)}%)`;
 }
 
@@ -17759,6 +17874,103 @@ function cancelMealPreview() {
 // item needs a real label or measurement, not another AI's guess. Best used
 // on genuinely uncertain items (restaurant plates, home cooking) rather than
 // anything already locked from a label, which doesn't need a second opinion.
+// The reusable core of "Verify across 3 AIs" - runMultiAICheck() below is
+// now conceptually parallel to this for the chat meal-preview specifically
+// (kept as its own richer implementation with per-provider checkboxes and
+// undo, since that UI is genuinely more involved than the simpler forms
+// below need). Pulled out here so three OTHER forms (Library edit,
+// Today/History edit, Recipe manual add) can get the same feature without
+// a 4th/5th/6th hand-copied implementation - exactly the kind of
+// duplication that caused tonight's scaling bugs, avoided here from the
+// start instead of fixed after the fact.
+// Returns { providers, agreementNote, avg } - avg is the plain average of
+// whichever providers returned parseable, internally-consistent numbers -
+// null avg if nothing parsed at all.
+async function estimateNutritionViaTripleAI(desc) {
+  const prompt = `Estimate the nutrition for exactly this food and amount, as eaten: ${desc}
+
+Respond in ONLY this exact format, nothing else, no other text:
+KCAL: [number]
+PROTEIN: [number]g
+FAT: [number]g
+CARBS: [number]g
+
+If genuinely uncertain of the amount or preparation, still give your best single estimate in this format - do not ask a clarifying question, do not add caveats outside the format.`;
+
+  const endpoint = 'https://maxhealth-ai.bogginsuk.workers.dev';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ multiCheck: true, prompt })
+  });
+  const data = await res.json();
+
+  const parseNums = (text) => {
+    if (!text) return null;
+    const kcal = text.match(/KCAL:\s*([\d.]+)/i);
+    const protein = text.match(/PROTEIN:\s*([\d.]+)/i);
+    const fat = text.match(/FAT:\s*([\d.]+)/i);
+    const carbs = text.match(/CARBS:\s*([\d.]+)/i);
+    if (!kcal || !protein || !fat || !carbs) return null;
+    return { kcal: parseFloat(kcal[1]), protein: parseFloat(protein[1]), fat: parseFloat(fat[1]), carbs: parseFloat(carbs[1]) };
+  };
+
+  const checkConsistency = (parsed) => {
+    const expectedKcal = parsed.protein * 4 + parsed.fat * 9 + parsed.carbs * 4;
+    const pctDiff = parsed.kcal > 0 ? Math.abs(expectedKcal - parsed.kcal) / parsed.kcal : 0;
+    return { expectedKcal: Math.round(expectedKcal), consistent: pctDiff <= 0.15 };
+  };
+
+  const providers = [
+    { key: 'claude', name: 'Claude', result: data.claude },
+    { key: 'gemini', name: 'Gemini', result: data.gemini },
+    { key: 'openai', name: 'ChatGPT', result: data.openai }
+  ];
+  providers.forEach(p => {
+    if (p.result?.ok) {
+      p.parsed = parseNums(p.result.text);
+      if (p.parsed) p.consistency = checkConsistency(p.parsed);
+    }
+  });
+
+  const validKcals = providers.filter(p => p.parsed).map(p => p.parsed.kcal);
+  let agreementNote = null;
+  if (validKcals.length >= 2) {
+    const maxK = Math.max(...validKcals), minK = Math.min(...validKcals);
+    const spread = maxK > 0 ? (maxK - minK) / maxK : 0;
+    agreementNote = { agrees: spread <= 0.25, minK, maxK };
+  }
+
+  const included = providers.filter(p => p.parsed);
+  const avg = included.length ? {
+    kcal:    included.reduce((a, p) => a + p.parsed.kcal, 0) / included.length,
+    protein: included.reduce((a, p) => a + p.parsed.protein, 0) / included.length,
+    fat:     included.reduce((a, p) => a + p.parsed.fat, 0) / included.length,
+    carbs:   included.reduce((a, p) => a + p.parsed.carbs, 0) / included.length,
+  } : null;
+
+  return { providers, agreementNote, avg };
+}
+
+// Renders a triple-AI result into ANY container (not just a chat bubble) -
+// the second half of making this reusable. Each of the three call sites
+// below supplies its own apply button handler separately (rather than an
+// inline-serialised function, which breaks on values needing escaping) -
+// this just renders the comparison and leaves applying to the caller.
+function renderTripleAICompare(container, desc, providers, agreementNote) {
+  const rows = providers.map(p => {
+    if (!p.parsed) return `<div style="padding:4px 0;color:var(--text3);font-size:11px;">${p.name}: <span style="color:var(--yellow);">${p.result?.ok ? 'unparseable response' : (p.result?.error || 'unavailable')}</span></div>`;
+    const flag = p.consistency && !p.consistency.consistent
+      ? `<div style="font-size:10px;color:var(--yellow);">⚠ inconsistent with its own macros (~${p.consistency.expectedKcal}kcal expected)</div>` : '';
+    return `<div style="padding:4px 0;font-size:11px;"><strong>${p.name}:</strong> ${p.parsed.kcal}kcal · ${p.parsed.protein}g P · ${p.parsed.fat}g F · ${p.parsed.carbs}g C${flag}</div>`;
+  }).join('');
+  const noteHtml = agreementNote
+    ? `<div style="margin-top:6px;padding:6px 8px;border-radius:6px;font-size:11px;${agreementNote.agrees ? 'background:var(--accent-dim);color:var(--accent);' : 'background:rgba(245,197,66,0.08);color:var(--yellow);'}">${agreementNote.agrees ? '✓' : '⚠'} ${agreementNote.agrees ? 'Reasonably consistent' : 'Disagree by 25%+'} (${agreementNote.minK}-${agreementNote.maxK}kcal)</div>`
+    : '';
+  container.innerHTML = `<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">3 independent estimates for: ${desc}</div>${rows}${noteHtml}`;
+  container.style.display = 'block';
+}
+
 async function runMultiAICheck(targetIndex) {
   const allFoods = window._pendingMealFoods;
   if (!allFoods || !allFoods.length) {
@@ -20167,10 +20379,15 @@ function scaleLogEdit(id, pct) {
   if (!entry) return;
   const p = parseFloat(pct) / 100;
   if (isNaN(p) || p <= 0) return;
-  document.getElementById('edit-kcal-' + id).value = Math.round(entry.kcal * p);
-  document.getElementById('edit-prot-' + id).value = Math.round(entry.protein * p * 10) / 10;
-  document.getElementById('edit-fat-'  + id).value = Math.round((entry.fat || 0) * p * 10) / 10;
-  document.getElementById('edit-carb-' + id).value = Math.round(entry.carbs * p * 10) / 10;
+  const scaled = scaleMacros(entry, p);
+  document.getElementById('edit-kcal-' + id).value = scaled.kcal;
+  document.getElementById('edit-prot-' + id).value = scaled.protein;
+  document.getElementById('edit-fat-'  + id).value = scaled.fat;
+  document.getElementById('edit-carb-' + id).value = scaled.carbs;
+  const fibreEl = document.getElementById('edit-fibre-' + id);
+  const polyolsEl = document.getElementById('edit-polyols-' + id);
+  if (fibreEl) fibreEl.value = scaled.fibre;
+  if (polyolsEl) polyolsEl.value = scaled.polyols;
 }
 
 function editLogEntry(id) {
@@ -20258,12 +20475,63 @@ function editLogEntry(id) {
         <input id="edit-carb-${id}" class="modal-input" type="number" value="${entry.carbs}" step="0.1" style="font-size:14px;padding:7px 10px;">
       </div>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">FIBRE g</div>
+        <input id="edit-fibre-${id}" class="modal-input" type="number" value="${entry.fibre||0}" step="0.1" style="font-size:14px;padding:7px 10px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">POLYOLS g</div>
+        <input id="edit-polyols-${id}" class="modal-input" type="number" value="${entry.polyols||0}" step="0.1" style="font-size:14px;padding:7px 10px;">
+      </div>
+    </div>
+    <button class="copy-btn" style="width:100%;margin-top:8px;padding:7px;font-size:11px;" onclick="runLogEditTripleAI(${id})">🔍 Verify across 3 AIs</button>
+    <div id="log-edit-aicheck-${id}" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:6px;"></div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
       <button class="modal-btn" style="flex:1;font-size:12px;padding:8px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteLogEntry(${id})">Delete</button>
       <button class="modal-btn cancel" style="flex:1;font-size:12px;padding:8px;" onclick="cancelLogEdit(${id})">Cancel</button>
       <button class="modal-btn confirm-new" style="flex:2;font-size:12px;padding:8px;" onclick="saveLogEdit(${id})">Save changes</button>
     </div>`;
   entryEl.appendChild(form);
+}
+
+async function runLogEditTripleAI(id) {
+  const entry = state.todayLog.find(e => e.id === id);
+  if (!entry) return;
+  const descEl = document.getElementById('edit-desc-' + id);
+  const amtPart = entry._origAmount || entry.amount || '';
+  const desc = `${descEl?.value || entry.description}${amtPart ? ' (' + amtPart + ')' : ''}`;
+  const container = document.getElementById('log-edit-aicheck-' + id);
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `<div style="font-size:11px;color:var(--text3);">🔍 Asking Claude, Gemini, and ChatGPT independently…</div>`;
+  try {
+    const { providers, agreementNote, avg } = await estimateNutritionViaTripleAI(desc);
+    renderTripleAICompare(container, desc, providers, agreementNote);
+    if (avg) {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.style.cssText = 'width:100%;margin-top:8px;padding:7px;font-size:11px;';
+      btn.textContent = '📋 Use this average';
+      btn.onclick = () => {
+        const before = {
+          kcal: document.getElementById('edit-kcal-' + id)?.value,
+          protein: document.getElementById('edit-prot-' + id)?.value,
+          fat: document.getElementById('edit-fat-' + id)?.value,
+          carbs: document.getElementById('edit-carb-' + id)?.value,
+        };
+        document.getElementById('edit-kcal-' + id).value = Math.round(avg.kcal);
+        document.getElementById('edit-prot-' + id).value = Math.round(avg.protein * 10) / 10;
+        document.getElementById('edit-fat-' + id).value = Math.round(avg.fat * 10) / 10;
+        document.getElementById('edit-carb-' + id).value = Math.round(avg.carbs * 10) / 10;
+        _traceFormAIApply('today-edit', before, avg);
+        showToast('Applied — tap Save changes to keep it');
+      };
+      container.appendChild(btn);
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:11px;color:var(--yellow);">Couldn't reach the comparison — try again in a moment.</div>`;
+  }
 }
 
 function cancelLogEdit(id) {
@@ -20384,12 +20652,7 @@ function updateLogEditItem(id, idx, field, value) {
     // as how an established item's baseline never moves again.
     if (newGrams !== it._base.grams) it._baseConfirmed = true;
     const factor = newGrams / it._base.grams;
-    it.kcal    = Math.round(it._base.kcal    * factor);
-    it.protein = Math.round(it._base.protein * factor * 10) / 10;
-    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
-    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
-    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
-    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    Object.assign(it, scaleMacros(it._base, factor));
     const kcalEl = document.getElementById(`log-edit-kcal-${id}-${idx}`);
     const protEl = document.getElementById(`log-edit-prot-${id}-${idx}`);
     const fatEl  = document.getElementById(`log-edit-fat-${id}-${idx}`);
@@ -20481,12 +20744,7 @@ function scaleAllLogEditItems(id) {
     if (!it._base) {
       it._base = { grams: null, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 };
     }
-    it.kcal    = Math.round(it._base.kcal    * factor);
-    it.protein = Math.round(it._base.protein * factor * 10) / 10;
-    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
-    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
-    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
-    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    Object.assign(it, scaleMacros(it._base, factor));
     if (it._base.grams != null) it.amount = Math.round(it._base.grams * factor) + 'g';
   });
   renderLogEditItemsList(id);
@@ -20663,6 +20921,8 @@ function saveLogEdit(id) {
   const prot = parseFloat(document.getElementById('edit-prot-' + id)?.value);
   const fat  = parseFloat(document.getElementById('edit-fat-' + id)?.value) || 0;
   const carb = parseFloat(document.getElementById('edit-carb-' + id)?.value);
+  const fibre = parseFloat(document.getElementById('edit-fibre-' + id)?.value) || 0;
+  const polyols = parseFloat(document.getElementById('edit-polyols-' + id)?.value) || 0;
   if (isNaN(kcal) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
   // Store original kcal for badge calculation
   const origKcal = entry.kcal;
@@ -20687,6 +20947,8 @@ function saveLogEdit(id) {
   entry.kcal = Math.round(sanitised.kcal);
   entry.protein = Math.round(sanitised.protein * 10) / 10;
   entry.carbs = Math.round(sanitised.carbs * 10) / 10;
+  entry.fibre = Math.round(fibre * 10) / 10;
+  entry.polyols = Math.round(polyols * 10) / 10;
 
   // Badge: ratio of new to original kcal
   const badgePct = origKcal > 0 ? Math.round(entry.kcal / origKcal * 100) : 100;
@@ -20702,6 +20964,8 @@ function saveLogEdit(id) {
     entry.items[0].protein = entry.protein;
     entry.items[0].fat = entry.fat;
     entry.items[0].carbs = entry.carbs;
+    entry.items[0].fibre = entry.fibre;
+    entry.items[0].polyols = entry.polyols;
   }
   // Close the edit form
   const editForm = document.querySelector('#log-entry-' + id + ' .log-edit-form');
@@ -22334,12 +22598,63 @@ function editHistEntry(dayIdx, entryIdx) {
         <input id="hedit-carb-${dayIdx}-${entryIdx}" class="modal-input" type="number" value="${entry.carbs}" step="0.1" style="font-size:13px;padding:6px 8px;">
       </div>
     </div>
-    <div style="display:flex;gap:6px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">FIBRE g</div>
+        <input id="hedit-fibre-${dayIdx}-${entryIdx}" class="modal-input" type="number" value="${entry.fibre||0}" step="0.1" style="font-size:13px;padding:6px 8px;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">POLYOLS g</div>
+        <input id="hedit-polyols-${dayIdx}-${entryIdx}" class="modal-input" type="number" value="${entry.polyols||0}" step="0.1" style="font-size:13px;padding:6px 8px;">
+      </div>
+    </div>
+    <button class="copy-btn" style="width:100%;margin-top:6px;padding:6px;font-size:11px;" onclick="runHistEditTripleAI(${dayIdx},${entryIdx})">🔍 Verify across 3 AIs</button>
+    <div id="hedit-aicheck-${dayIdx}-${entryIdx}" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:6px;"></div>
+    <div style="display:flex;gap:6px;margin-top:6px;">
       <button class="modal-btn" style="flex:1;font-size:11px;padding:6px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteHistEntry(${dayIdx},${entryIdx})">Delete</button>
       <button class="modal-btn cancel" style="flex:1;font-size:11px;padding:6px;" onclick="cancelHistEdit('${dayIdx}-${entryIdx}')">Cancel</button>
       <button class="modal-btn confirm-new" style="flex:2;font-size:11px;padding:6px;" onclick="saveHistEntry(${dayIdx},${entryIdx})">Save</button>
     </div>`;
   el.appendChild(form);
+}
+
+async function runHistEditTripleAI(dayIdx, entryIdx) {
+  const day = state.history[dayIdx];
+  const entry = day?.log?.[entryIdx];
+  if (!entry) return;
+  const descEl = document.getElementById(`hedit-desc-${dayIdx}-${entryIdx}`);
+  const desc = descEl?.value || entry.description;
+  const container = document.getElementById(`hedit-aicheck-${dayIdx}-${entryIdx}`);
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `<div style="font-size:11px;color:var(--text3);">🔍 Asking Claude, Gemini, and ChatGPT independently…</div>`;
+  try {
+    const { providers, agreementNote, avg } = await estimateNutritionViaTripleAI(desc);
+    renderTripleAICompare(container, desc, providers, agreementNote);
+    if (avg) {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.style.cssText = 'width:100%;margin-top:8px;padding:7px;font-size:11px;';
+      btn.textContent = '📋 Use this average';
+      btn.onclick = () => {
+        const before = {
+          kcal: document.getElementById(`hedit-kcal-${dayIdx}-${entryIdx}`)?.value,
+          protein: document.getElementById(`hedit-prot-${dayIdx}-${entryIdx}`)?.value,
+          fat: document.getElementById(`hedit-fat-${dayIdx}-${entryIdx}`)?.value,
+          carbs: document.getElementById(`hedit-carb-${dayIdx}-${entryIdx}`)?.value,
+        };
+        document.getElementById(`hedit-kcal-${dayIdx}-${entryIdx}`).value = Math.round(avg.kcal);
+        document.getElementById(`hedit-prot-${dayIdx}-${entryIdx}`).value = Math.round(avg.protein * 10) / 10;
+        document.getElementById(`hedit-fat-${dayIdx}-${entryIdx}`).value = Math.round(avg.fat * 10) / 10;
+        document.getElementById(`hedit-carb-${dayIdx}-${entryIdx}`).value = Math.round(avg.carbs * 10) / 10;
+        _traceFormAIApply('history-edit', before, avg);
+        showToast('Applied — tap Save to keep it');
+      };
+      container.appendChild(btn);
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:11px;color:var(--yellow);">Couldn't reach the comparison — try again in a moment.</div>`;
+  }
 }
 
 function cancelHistEdit(key) {
@@ -22444,12 +22759,7 @@ function updateHistEditItem(key, idx, field, value) {
     }
     if (newGrams !== it._base.grams) it._baseConfirmed = true;
     const factor = newGrams / it._base.grams;
-    it.kcal    = Math.round(it._base.kcal    * factor);
-    it.protein = Math.round(it._base.protein * factor * 10) / 10;
-    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
-    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
-    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
-    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    Object.assign(it, scaleMacros(it._base, factor));
     const kcalEl = document.getElementById(`hist-edit-kcal-${key}-${idx}`);
     const protEl = document.getElementById(`hist-edit-prot-${key}-${idx}`);
     const fatEl  = document.getElementById(`hist-edit-fat-${key}-${idx}`);
@@ -22514,12 +22824,7 @@ function scaleAllHistEditItems(key) {
     if (!it._base) {
       it._base = { grams: null, kcal: it.kcal||0, protein: it.protein||0, fat: it.fat||0, carbs: it.carbs||0, fibre: it.fibre||0, polyols: it.polyols||0 };
     }
-    it.kcal    = Math.round(it._base.kcal    * factor);
-    it.protein = Math.round(it._base.protein * factor * 10) / 10;
-    it.fat     = Math.round(it._base.fat     * factor * 10) / 10;
-    it.carbs   = Math.round(it._base.carbs   * factor * 10) / 10;
-    it.fibre   = Math.round((it._base.fibre   || 0) * factor * 10) / 10;
-    it.polyols = Math.round((it._base.polyols || 0) * factor * 10) / 10;
+    Object.assign(it, scaleMacros(it._base, factor));
     if (it._base.grams != null) it.amount = Math.round(it._base.grams * factor) + 'g';
   });
   renderHistEditItemsList(key);
@@ -22620,6 +22925,8 @@ function saveHistEntry(dayIdx, entryIdx) {
   const prot = parseFloat(document.getElementById(`hedit-prot-${dayIdx}-${entryIdx}`)?.value);
   const fat  = parseFloat(document.getElementById(`hedit-fat-${dayIdx}-${entryIdx}`)?.value) || 0;
   const carb = parseFloat(document.getElementById(`hedit-carb-${dayIdx}-${entryIdx}`)?.value);
+  const fibre = parseFloat(document.getElementById(`hedit-fibre-${dayIdx}-${entryIdx}`)?.value) || 0;
+  const polyols = parseFloat(document.getElementById(`hedit-polyols-${dayIdx}-${entryIdx}`)?.value) || 0;
   if (isNaN(kcal) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
   // Guard against duplicates — remove any other entry with same description before saving
   entry.description = desc || entry.description;
@@ -22627,6 +22934,8 @@ function saveHistEntry(dayIdx, entryIdx) {
   entry.protein = Math.round(prot * 10) / 10;
   entry.fat     = fat;
   entry.carbs   = Math.round(carb * 10) / 10;
+  entry.fibre   = Math.round(fibre * 10) / 10;
+  entry.polyols = Math.round(polyols * 10) / 10;
   // Recalculate day totals from log
   day.totals = day.log.reduce((acc, e) => ({
     kcal:    acc.kcal    + (e.kcal    || 0),
@@ -23255,6 +23564,37 @@ function clearPolyolsPipelineTrace() {
   showToast('Polyols pipeline trace cleared');
 }
 
+// Sibling to the polyols trace, for the new "Verify across 3 AIs → Use
+// average" write path added to the Library edit, Today/History edit, and
+// Recipe manual-add forms - any of these applying wrong/lost data should
+// show up here the same way a logging mismatch would show up in the
+// polyols trace, rather than only being discoverable by noticing the
+// symptom days later.
+function renderAIAssistTrace() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const trace = JSON.parse(localStorage.getItem('mh_ai_assist_trace') || '[]');
+  let text = 'AI-ASSIST APPLY TRACE (most recent first — what each form showed before vs after tapping "Use this average"):\n\n';
+  if (trace.length === 0) {
+    text += 'Nothing recorded yet — use "Verify across 3 AIs" on the Library edit, Today/History edit, or Recipe manual-add form, then check here.';
+  } else {
+    text += trace.map((e, i) =>
+      `━━━ #${i+1} — ${e.source} (${e.timestamp}) ━━━\n` +
+      `  BEFORE: kcal=${e.before?.kcal} protein=${e.before?.protein} fat=${e.before?.fat} carbs=${e.before?.carbs}\n` +
+      `  AFTER:  kcal=${e.after?.kcal} protein=${e.after?.protein} fat=${e.after?.fat} carbs=${e.after?.carbs}`
+    ).join('\n\n');
+  }
+  out.textContent = text;
+  out.style.display = 'block';
+}
+
+function clearAIAssistTrace() {
+  localStorage.removeItem('mh_ai_assist_trace');
+  const out = document.getElementById('logMutationDebugOutput');
+  if (out) out.style.display = 'none';
+  showToast('AI-assist trace cleared');
+}
+
 function clearLogMutationDebug() {
   appConfirm('Clear the log mutation debug data?', () => {
     localStorage.removeItem('mh_log_mutation_debug');
@@ -23514,6 +23854,7 @@ function recipeAddManual() {
     document.getElementById('recipeIngFat').value = '';
     document.getElementById('recipeIngCarb').value = '';
     document.getElementById('recipeIngFibre').value = '';
+    document.getElementById('recipeIngPolyols').value = '';
     document.getElementById('recipeIngName').focus();
   }
 }
@@ -23906,6 +24247,43 @@ function renderLibraryVoiceList() {
   `).join('');
 }
 
+async function runRecipeAddTripleAI() {
+  const nameEl = document.getElementById('recipeIngName');
+  const desc = nameEl?.value.trim();
+  if (!desc) { showToast('Enter an ingredient name first'); return; }
+  const container = document.getElementById('recipeAddAicheck');
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `<div style="font-size:11px;color:var(--text3);">🔍 Asking Claude, Gemini, and ChatGPT independently…</div>`;
+  try {
+    const { providers, agreementNote, avg } = await estimateNutritionViaTripleAI(desc);
+    renderTripleAICompare(container, desc, providers, agreementNote);
+    if (avg) {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.style.cssText = 'width:100%;margin-top:8px;padding:7px;font-size:11px;';
+      btn.textContent = '📋 Use this average';
+      btn.onclick = () => {
+        const before = {
+          kcal: document.getElementById('recipeIngKcal')?.value,
+          protein: document.getElementById('recipeIngProt')?.value,
+          fat: document.getElementById('recipeIngFat')?.value,
+          carbs: document.getElementById('recipeIngCarb')?.value,
+        };
+        document.getElementById('recipeIngKcal').value = Math.round(avg.kcal);
+        document.getElementById('recipeIngProt').value = Math.round(avg.protein * 10) / 10;
+        document.getElementById('recipeIngFat').value = Math.round(avg.fat * 10) / 10;
+        document.getElementById('recipeIngCarb').value = Math.round(avg.carbs * 10) / 10;
+        _traceFormAIApply('recipe-add', before, avg);
+        showToast('Applied — tap Add to Recipe to keep it');
+      };
+      container.appendChild(btn);
+    }
+  } catch (e) {
+    container.innerHTML = `<div style="font-size:11px;color:var(--yellow);">Couldn't reach the comparison — try again in a moment.</div>`;
+  }
+}
+
 function addRecipeIngredient() {
   const name  = document.getElementById('recipeIngName').value.trim();
   const kcal  = parseFloat(document.getElementById('recipeIngKcal').value) || 0;
@@ -23913,9 +24291,13 @@ function addRecipeIngredient() {
   const fat   = parseFloat(document.getElementById('recipeIngFat').value) || 0;
   const carb  = parseFloat(document.getElementById('recipeIngCarb').value) || 0;
   const fibre = parseFloat(document.getElementById('recipeIngFibre').value) || 0;
+  // Polyols field was missing entirely from this form before - same gap
+  // as fibre was in other manual-entry forms tonight, just never caught
+  // here since this one's used less often.
+  const polyols = parseFloat(document.getElementById('recipeIngPolyols')?.value) || 0;
   const note  = document.getElementById('recipeIngNote')?.value.trim() || '';
   if (!name) { showToast('Enter ingredient name'); return; }
-  _recipeIngredients.push({ name, kcal, protein: prot, fat, carbs: carb, fibre, note });
+  _recipeIngredients.push({ name, kcal, protein: prot, fat, carbs: carb, fibre, polyols, note });
   document.getElementById('recipeAddForm').style.display = 'none';
   renderRecipeIngredients();
   updateRecipeTotals();
@@ -24216,18 +24598,7 @@ async function handleRecipeBarcode(input) {
 function getScaledIngredient(ing) {
   if (!ing._base) return { kcal: ing.kcal||0, protein: ing.protein||0, fat: ing.fat||0, carbs: ing.carbs||0, fibre: ing.fibre||0, polyols: ing.polyols||0 };
   const factor = (ing.amount || ing._base.baseG) / ing._base.baseG;
-  return {
-    kcal:    Math.round(ing._base.kcal    * factor),
-    protein: Math.round(ing._base.protein * factor * 10) / 10,
-    fat:     Math.round((ing._base.fat||0)* factor * 10) / 10,
-    carbs:   Math.round(ing._base.carbs   * factor * 10) / 10,
-    fibre:   Math.round((ing._base.fibre||0) * factor * 10) / 10,
-    // Was missing entirely - ing._base already has polyols (added earlier
-    // today for the substitution-swap flow), this scaling function just
-    // never read or returned it, meaning it silently vanished every time a
-    // recipe ingredient's amount changed, regardless of that earlier fix.
-    polyols: Math.round((ing._base.polyols||0) * factor * 10) / 10,
-  };
+  return scaleMacros(ing._base, factor);
 }
 
 function scaleRecipeIngredient(idx, gramsStr) {
@@ -24237,7 +24608,7 @@ function scaleRecipeIngredient(idx, gramsStr) {
   if (grams <= 0) return;
   ing.amount = grams;
   const scaled = getScaledIngredient(ing);
-  ing.kcal = scaled.kcal; ing.protein = scaled.protein; ing.fat = scaled.fat; ing.carbs = scaled.carbs; ing.fibre = scaled.fibre;
+  ing.kcal = scaled.kcal; ing.protein = scaled.protein; ing.fat = scaled.fat; ing.carbs = scaled.carbs; ing.fibre = scaled.fibre; ing.polyols = scaled.polyols;
   // Update macros display inline without full re-render
   const macrosEl = document.getElementById('recipe-ing-macros-' + idx);
   if (macrosEl) macrosEl.textContent = `${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C`;
@@ -36993,7 +37364,7 @@ function dismissInsight() {
       <input type="file" id="recipeBarcodeInput" accept="image/*" capture="environment" style="display:none" onchange="handleRecipeBarcode(this)">
       <div id="recipeAddForm" style="display:none;flex-direction:column;gap:6px;">
         <input id="recipeIngName" class="modal-input" placeholder="Ingredient name" style="font-size:13px;padding:8px 10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
           <div>
             <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">KCAL</div>
             <input id="recipeIngKcal" class="modal-input" type="number" placeholder="0" style="font-size:13px;padding:7px 8px;">
@@ -37014,7 +37385,13 @@ function dismissInsight() {
             <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">FIBRE g</div>
             <input id="recipeIngFibre" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:13px;padding:7px 8px;">
           </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">POLYOLS g</div>
+            <input id="recipeIngPolyols" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:13px;padding:7px 8px;">
+          </div>
         </div>
+        <button class="copy-btn" style="width:100%;padding:6px;font-size:11px;" onclick="runRecipeAddTripleAI()">🔍 Verify across 3 AIs</button>
+        <div id="recipeAddAicheck" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;"></div>
         <textarea id="recipeIngNote" class="modal-input" placeholder="Optional note (e.g. substitution, tip, prep instruction)" rows="2" style="font-size:12px;padding:7px 8px;resize:none;"></textarea>
         <button class="run-btn" style="width:100%;font-size:12px;padding:8px;" onclick="addRecipeIngredient()">Add to Recipe</button>
       </div>
