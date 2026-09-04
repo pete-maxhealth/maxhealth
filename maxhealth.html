@@ -4364,9 +4364,11 @@
         <button class="copy-btn" style="width:auto;font-size:12px;padding:8px 12px;flex-shrink:0;" onclick="const v=document.getElementById('debugWatchDateInput').value; if(!v){showToast('Pick a date first');}else{const [y,m,d]=v.split('-'); localStorage.setItem('mh_debug_watch_date', d+'/'+m+'/'+y.slice(2)); showToast('Now watching that date on every save');}">Set</button>
       </div>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderLogMutationDebug()">🔍 View mutation log</button>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderPolyolsPipelineTrace()">🍬 View polyols pipeline trace</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearPolyolsPipelineTrace()">Clear polyols trace</button>
     </div>
     </div>
 
@@ -4664,7 +4666,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.684</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.685</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5603,7 +5605,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.684'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.685'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17471,6 +17473,7 @@ function _advanceIngredientSaveQueueIfActive(lastResult) {
 
 function confirmMealLog() {
   if (!window._pendingMealFoods) return;
+  _tracePolyolsPipeline('1_preview_before_sanitise', window._pendingMealFoods);
 
   // Run the same sanity checks used everywhere else, but here — before actually
   // committing the log — so an implausible amount or a mass that can't physically
@@ -17479,6 +17482,7 @@ function confirmMealLog() {
   // meant for several days), so the answer to an unusual amount should be a
   // confirmation, not a rejection — but it shouldn't sail through unnoticed either.
   const checked = sanitiseFatValues(window._pendingMealFoods);
+  _tracePolyolsPipeline('2_after_confirmMealLog_sanitise', checked);
   const flagged = checked.filter(f => f._implausibleAmountWarning || f._impossibleMacroMassWarning);
 
   if (flagged.length) {
@@ -17884,6 +17888,7 @@ function confirmFuzzyLibSaveAsNew(idx) {
 }
 
 function logFoods(foods, originalText, aiMessage = null) {
+  _tracePolyolsPipeline('3_logFoods_param_received', foods);
   // Applied here, not at each individual entry point, because this is the one
   // choke point every logging path funnels through — library quick-add, database
   // search, AI meal parsing, AI portion-estimate, recipes. Individually patching
@@ -17891,6 +17896,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   // including any added later. Idempotent — already-corrected items pass through
   // unchanged, safe even if a path also calls this upstream.
   foods = sanitiseFatValues(foods);
+  _tracePolyolsPipeline('4_logFoods_after_own_sanitise', foods);
 
   // Recipe useCount, matched by NAME against originalText - moved here from
   // three separate explicit increments (logRecipe/_doLogRecipe/
@@ -18089,6 +18095,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   const mealTotals = foods.reduce((a, f) => ({
     kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0), fibre: (a.fibre||0) + (f.fibre||0), polyols: (a.polyols||0) + (f.polyols||0)
   }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+  _tracePolyolsPipeline('5_mealTotals_computed', { name: '(aggregate)', amount: null, carbs: mealTotals.carbs, fibre: mealTotals.fibre, polyols: mealTotals.polyols });
 
   const entry = {
     id: Date.now(), time: nowTime(),
@@ -18113,10 +18120,15 @@ function logFoods(foods, originalText, aiMessage = null) {
     fibre: Math.round((mealTotals.fibre || 0) * 10) / 10,
     polyols: Math.round((mealTotals.polyols || 0) * 10) / 10
   };
+  _tracePolyolsPipeline('6_entry_constructed', { name: entry.description, amount: entry.amount, carbs: entry.carbs, fibre: entry.fibre, polyols: entry.polyols });
   // Guard against duplicate entries from double-tap
   if (!state.todayLog.some(e => e.id === entry.id)) {
     state.todayLog.push(entry);
   }
+  _tracePolyolsPipeline('7_readback_from_todayLog', (() => {
+    const found = state.todayLog.find(e => e.id === entry.id);
+    return found ? { name: found.description, amount: found.amount, carbs: found.carbs, fibre: found.fibre, polyols: found.polyols } : { name: '(NOT FOUND IN todayLog)', amount: null, carbs: null, fibre: null, polyols: null };
+  })());
 
   // Auto-add water for low/zero calorie drinks
   const waterKeywords = /\b(water|squash|herbal tea|green tea|black tea|black coffee|sparkling water|mineral water|cordial|diluted|sugar free|zero cal|diet |tea|coffee)\b/i;
@@ -22939,6 +22951,61 @@ function renderLogMutationDebug() {
   }
   out.textContent = text;
   out.style.display = 'block';
+}
+
+// Traces fibre/polyols through the exact write path, stage by stage, rather
+// than guessing where they might be getting lost — records what the food(s)
+// actually carry at each real checkpoint between the preview and the final
+// entry that lands in state.todayLog. Always-on, same pattern as the
+// existing logFoods call trace, capped at 40 entries.
+function _tracePolyolsPipeline(stage, foods) {
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_polyols_pipeline_trace') || '[]');
+    const items = (Array.isArray(foods) ? foods : [foods]).map(f => ({
+      name: f?.name || '?', amount: f?.amount ?? null,
+      carbs: f?.carbs ?? null, fibre: f?.fibre ?? null, polyols: f?.polyols ?? null
+    }));
+    log.unshift({ timestamp: new Date().toISOString(), stage, items });
+    if (log.length > 40) log.length = 40;
+    localStorage.setItem('mh_polyols_pipeline_trace', JSON.stringify(log));
+  } catch(e) {}
+}
+
+function renderPolyolsPipelineTrace() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const trace = JSON.parse(localStorage.getItem('mh_polyols_pipeline_trace') || '[]');
+  // Group consecutive stages back into one write event where possible, so
+  // one logging action reads as one block (1_ through 7_) rather than an
+  // interleaved list of every stage from every action ever taken.
+  let text = 'POLYOLS/FIBRE PIPELINE TRACE (most recent write first — same food tracked stage by stage from preview through to what actually landed in todayLog):\n\n';
+  if (trace.length === 0) {
+    text += 'Nothing recorded yet — log an item via the chat/preview flow, then check here.';
+  } else {
+    const events = [];
+    let current = null;
+    trace.slice().reverse().forEach(e => {
+      const stageNum = parseInt(e.stage);
+      if (stageNum === 1 || !current) { current = []; events.push(current); }
+      current.push(e);
+    });
+    text += events.reverse().map((ev, i) => {
+      const header = `━━━ WRITE EVENT #${i+1} (around ${ev[0]?.timestamp}) ━━━`;
+      const body = ev.map(e =>
+        `  [${e.stage}]\n` + e.items.map(it => `    ${it.name}${it.amount ? ' (' + it.amount + ')' : ''}: carbs=${it.carbs} fibre=${it.fibre} polyols=${it.polyols}`).join('\n')
+      ).join('\n');
+      return header + '\n' + body;
+    }).join('\n\n');
+  }
+  out.textContent = text;
+  out.style.display = 'block';
+}
+
+function clearPolyolsPipelineTrace() {
+  localStorage.removeItem('mh_polyols_pipeline_trace');
+  const out = document.getElementById('logMutationDebugOutput');
+  if (out) out.style.display = 'none';
+  showToast('Polyols pipeline trace cleared');
 }
 
 function clearLogMutationDebug() {
