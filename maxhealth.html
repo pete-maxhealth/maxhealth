@@ -4666,7 +4666,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.687</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.688</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5605,7 +5605,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.687'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.688'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8912,8 +8912,19 @@ function confirmOverwriteExistingLibraryItem(existingId) {
   if (idx > -1) {
     const old = lib[idx];
     diffText = `${old.name}: ${old.kcal}→${entry.kcal}kcal, ${old.protein}→${entry.protein}g P, ${old.fat||0}→${entry.fat||0}g F, ${old.carbs}→${entry.carbs}g C`;
-    // Keep the existing item's id (history/logs may reference it), overwrite everything else
-    lib[idx] = { ...entry, id: existingId };
+    // Keep the existing item's id (history/logs may reference it), overwrite everything else —
+    // EXCEPT fibre/polyols specifically get a protective fallback: this is
+    // the shared overwrite point every "save/update this library item"
+    // path funnels through (Add Food form, chat "Save to library", batch
+    // ingredient save), so it's the one place that can guarantee a
+    // data-less resave (an AI estimate, a quick ingredient save with no
+    // label data) can never again silently zero out real, previously-
+    // entered nutrition-label fibre/polyols. A genuinely present, nonzero
+    // new value is still used and does update the stored figure.
+    const mergedEntry = { ...entry, id: existingId };
+    if (!mergedEntry.fibre)   mergedEntry.fibre   = old.fibre   || 0;
+    if (!mergedEntry.polyols) mergedEntry.polyols = old.polyols || 0;
+    lib[idx] = mergedEntry;
   } else {
     lib.push(entry);
   }
@@ -17440,6 +17451,14 @@ function confirmSaveIngredients(btn) {
       protein: Math.round(f.protein * 100) / 100,
       fat: Math.round((f.fat || 0) * 100) / 100,
       carbs: Math.round(f.carbs * 100) / 100,
+      // Same real bug as saveLibraryOnlyFromPreview: this entry never
+      // carried fibre/polyols, so any ingredient saved from here started
+      // life with them silently missing — and if it later overwrote an
+      // existing item, the merge fallback in confirmOverwriteExistingLibraryItem
+      // is what actually protects the existing data, but the new save
+      // itself should still carry real values through when it has them.
+      fibre: Math.round((f.fibre || 0) * 100) / 100,
+      polyols: Math.round((f.polyols || 0) * 100) / 100,
       portion: f.amount || '',
       per100g: false,
       locked: false,
@@ -17782,6 +17801,12 @@ function saveLibraryOnlyFromPreview() {
     : null;
 
   foods.forEach(f => {
+    // Computed before building entry so a data-less overwrite (e.g. an
+    // AI free-text estimate, which structurally never carries fibre/
+    // polyols) can fall back to whatever the existing library item
+    // already had, instead of wiping it. See fibre/polyols below.
+    const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
+    const existingForMerge = existingIdx > -1 ? lib[existingIdx] : null;
     const entry = {
       id: 'ai_' + Date.now() + '_' + Math.round(Math.random()*1000),
       name: f.name,
@@ -17791,13 +17816,22 @@ function saveLibraryOnlyFromPreview() {
       protein: Math.round((f.protein||0) * 10) / 10,
       fat: Math.round((f.fat||0) * 10) / 10,
       carbs: Math.round((f.carbs||0) * 10) / 10,
+      // Real, serious bug found: this entry never carried fibre/polyols at
+      // all, and when overwriting an EXISTING library item (below), the
+      // whole object gets replaced wholesale — silently destroying real,
+      // manually-verified label data the moment "Save to library" is
+      // pressed again for any reason, even from an AI estimate that never
+      // had that data to begin with. A genuinely present, nonzero value on
+      // this save is used; otherwise the existing item's own value is kept
+      // rather than zeroed — a data-less resave must never erase real data.
+      fibre:   (f.fibre)   ? Math.round(f.fibre   * 100) / 100 : (existingForMerge?.fibre   || 0),
+      polyols: (f.polyols) ? Math.round(f.polyols * 100) / 100 : (existingForMerge?.polyols || 0),
       locked: true,
       source: 'ai_confirmed'
     };
     if (sharedCats && sharedCats.length) entry.categories = sharedCats;
     console.log(`[saveLibraryOnlyFromPreview] Processing "${f.name}":`, entry);
     dbg(`Processing "${f.name}" - ${entry.kcal}kcal, ${entry.protein}g P, ${entry.fat}g F, ${entry.carbs}g C, portion: ${entry.portion || '(none)'}`);
-    const existingIdx = lib.findIndex(l => l.name.toLowerCase() === f.name.toLowerCase());
     if (existingIdx > -1) {
       console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - exact name match found, overwriting existing entry.`);
       dbg(`"${f.name}" - exact match with existing library entry, will overwrite`);
