@@ -4672,7 +4672,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.704</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.705</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5611,7 +5611,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.704'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.705'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7550,9 +7550,8 @@ function showLibraryPortionSelector(f, index) {
   const existing = document.getElementById('libraryPortionModal');
   if (existing) existing.remove();
 
-  const _portStr = (f.portion || '').toLowerCase();
-  const _portIsGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_portStr);
-  const basePortion = _portIsGrams ? (parseFloat(f.portion) || 100) : 100;
+  const baseGrams1 = _parsePortionGrams(f.portion);
+  const basePortion = baseGrams1 || 100;
   const baseLabel   = f.portion || '100g';
   const baseKcal    = f.kcal;
 
@@ -7602,9 +7601,7 @@ function scaleLibraryPortion(index, gramsStr) {
   if (!f) return;
   const grams = parseFloat(gramsStr) || 0;
   if (grams <= 0) return;
-  const _ps3 = (f.portion || '').toLowerCase();
-  const _pg3 = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps3);
-  const basePortion = _pg3 ? (parseFloat(f.portion) || 100) : 100;
+  const basePortion = _parsePortionGrams(f.portion) || 100;
   const factor = grams / basePortion;
   const { kcal, protein: prot, fat, carbs: carb, fibre, polyols } = scaleMacros(f, factor);
   const el = id => document.getElementById(id);
@@ -7623,9 +7620,7 @@ function logLibraryWithPortion(index) {
   if (!f) return;
   const input = document.getElementById('libPortionInput');
   const grams = input ? parseFloat(input.value) || 0 : 0;
-  const _ps = (f.portion || '').toLowerCase();
-  const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-  const basePortion = _pg ? (parseFloat(f.portion) || 100) : 100;
+  const basePortion = _parsePortionGrams(f.portion) || 100;
   const factor = grams > 0 ? grams / basePortion : 1;
   const portionPct = Math.round(factor * 100);
   const food = {
@@ -17209,8 +17204,17 @@ function renderMealPreview() {
   // Base gram calculation — moved ahead of the warnings loop below, since that
   // loop now needs to check _baseGramsIsGuess on the first item.
   const f0 = foods[0];
-  const _amtStr = (f0.amount || '').toLowerCase();
-  const _parsedGrams = _extractGramsFromAmount(_amtStr);
+  const _amtStr = (f0.amount || '').toLowerCase().trim();
+  // A bare number here ("15", no unit) unambiguously means grams for a
+  // library-item portion - same convention already applied everywhere else
+  // an amount gets parsed (updateLogEditItem, scaleEditPreviewAmount), just
+  // never applied at THIS specific call site. Without it, a library item
+  // whose Portion was saved as a bare "15" (no "g") silently failed this
+  // regex entirely, fell through to the 100g guess below, and then never
+  // actually scaled - the stored 15-reference values got shown regardless
+  // of what number was typed into Amount, since no real baseline was found
+  // to scale from.
+  const _parsedGrams = /^\d+(\.\d+)?$/.test(_amtStr) ? parseFloat(_amtStr) : _extractGramsFromAmount(_amtStr);
   // Fallback: if the amount string didn't carry a parseable mass (e.g. "1 can"),
   // check whether the food's own NAME embeds one (e.g. "Hard Seltzer 440ml can") —
   // AI responses for packaged/unit items often put the real size there instead of
@@ -17478,6 +17482,30 @@ function removePreviewItem(idx) {
 // AI-generated amount phrasing this app produces most often. Returns 0
 // (not found) rather than null/undefined, matching the existing convention
 // at every call site.
+// Parses a dedicated portion/amount field (expected to BE a number, not
+// buried in a longer sentence) into grams. Accepts an explicit unit ("15g",
+// "100ml") OR a bare number ("15") - a bare number in a portion-size field
+// unambiguously means grams, the same convention already applied at every
+// individual amount-parsing site in the app before this. This exact
+// strict-unit-only pattern (no bare-number fallback) was independently
+// duplicated across 8 different call sites, 6 of which had the same real
+// gap: a library item's portion saved as bare "15" silently failed to
+// parse at every one of them, falling back to a 100g guess and never
+// actually scaling. One shared function now, so this bug class can't
+// reappear by being hand-copied a 9th time.
+// Distinct from _extractGramsFromAmount() below, which searches for a
+// unit-suffixed number ANYWHERE in a longer free-text string (e.g. "1 can,
+// 440ml") - that one deliberately has no bare-number fallback, since a
+// bare number floating in a longer sentence isn't unambiguous the way one
+// is when it's the entire contents of a dedicated portion field.
+function _parsePortionGrams(str) {
+  const s = (str || '').toString().toLowerCase().trim();
+  if (!s) return 0;
+  if (/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  const m = s.match(/^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i);
+  return m ? parseFloat(m[0]) : 0;
+}
+
 function _extractGramsFromAmount(str) {
   const m = (str || '').match(/(\d+(?:\.\d+)?)\s*(g|ml|kg|l)\b/i);
   return m ? parseFloat(m[1]) : 0;
@@ -19052,9 +19080,7 @@ function createRecipeFromAISuggestion(recipeKey) {
     const convertedAmount = cleanConvert ? Math.round(ing.amount * massUnits[unitKey] * 10) / 10 : null;
     if (libItem) {
       matched++;
-      const _ps = (libItem.portion || '').toLowerCase();
-      const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-      const baseG = _pg ? (parseFloat(libItem.portion) || 100) : 100;
+      const baseG = _parsePortionGrams(libItem.portion) || 100;
       const amount = convertedAmount != null ? convertedAmount : baseG;
       _recipeIngredients.push({
         name: libItem.name + (convertedAmount != null ? '' : ` (${ing.amount} ${ing.unit} — check amount)`),
@@ -24105,8 +24131,9 @@ async function _addRecipeIngredientFromVoice(text) {
       // ingredient becomes properly scalable from the amount actually
       // spoken, not silently reset to a fixed default.
       const amountStr = (item.amount || '').toString().toLowerCase();
-      const hasCleanGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(amountStr);
-      const baseG = hasCleanGrams ? parseFloat(amountStr) : 100;
+      const parsedPortionGrams5 = _parsePortionGrams(amountStr);
+      const hasCleanGrams = parsedPortionGrams5 > 0;
+      const baseG = hasCleanGrams ? parsedPortionGrams5 : 100;
 
       // Logs the full pipeline (raw speech transcript -> AI's amount field ->
       // parsed result) so a wrong weight can be traced to its actual cause -
@@ -24279,8 +24306,9 @@ async function _addLibraryItemFromVoice(text) {
       return;
     }
     const amountStr = (item.amount || '').toString().toLowerCase();
-    const hasCleanGrams = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(amountStr);
-    const baseG = hasCleanGrams ? parseFloat(amountStr) : 100;
+    const parsedPortionGrams6 = _parsePortionGrams(amountStr);
+    const hasCleanGrams = parsedPortionGrams6 > 0;
+    const baseG = hasCleanGrams ? parsedPortionGrams6 : 100;
 
     console.log('[library voice]', { heardAsTranscript: text, aiReturnedName: item.name, aiReturnedAmount: item.amount, parsedAsCleanGrams: hasCleanGrams, finalBaseG: baseG });
 
@@ -24586,9 +24614,7 @@ function filterRecipeLibPicker(q) {
 // One place for the baseG extraction and the mislabeled-portion sanity
 // check (the "per 1g" with 1000+ kcal bug from the recipe-totals fix).
 function _libItemToScalableIngredient(f, amountOverride) {
-  const _ps = (f.portion || '').toLowerCase();
-  const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-  let baseG = _pg ? (parseFloat(f.portion) || 100) : 100;
+  let baseG = _parsePortionGrams(f.portion) || 100;
   if (baseG > 0 && baseG < 10 && (f.kcal / baseG) > 50) {
     showToast(`⚠️ "${f.name}" portion (${f.portion}) looks wrong for its kcal - check its library entry. Using 100g for now.`);
     baseG = 100;
@@ -25653,9 +25679,7 @@ function refreshRecipeFromLibrary() {
     const match = lib.find(f => f.name === ing.name);
     if (!match) return;
     checked++;
-    const _ps = (match.portion || '').toLowerCase();
-    const _pg = /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(_ps);
-    const baseG = _pg ? (parseFloat(match.portion) || 100) : 100;
+    const baseG = _parsePortionGrams(match.portion) || 100;
     const newBase = { kcal: match.kcal, protein: match.protein, carbs: match.carbs, fat: match.fat || 0, fibre: match.fibre || 0, polyols: match.polyols || 0, baseG };
     const changed = ['kcal','protein','carbs','fat'].some(k => Math.abs((ing._base[k]||0) - (newBase[k]||0)) > 0.01);
     if (!changed) return;
