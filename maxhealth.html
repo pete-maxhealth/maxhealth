@@ -4672,7 +4672,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.709</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.710</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5611,7 +5611,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.709'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.710'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -15435,6 +15435,35 @@ function setSavedPromptSort(mode) {
 
 let _savedPromptShowAllScopes = false;
 
+// One-tap batch pass over existing unclassified prompts, using the exact
+// same keyword logic _suggestSavedPromptScope() uses live - closes the gap
+// left for anyone who already had prompts saved before this feature
+// existed, without making them open and re-save each one by hand. Only
+// ever touches prompts with no scope at all; anything already classified
+// (including a prior run of this same batch) is left alone.
+function batchClassifySavedPrompts() {
+  const prompts = loadSavedPrompts();
+  const unclassified = prompts.filter(p => !p.scope);
+  if (!unclassified.length) { showToast('Everything is already classified'); return; }
+  let changed = 0;
+  unclassified.forEach(p => {
+    const text = p.text || '';
+    const hitsToday = _SAVED_PROMPT_TODAY_WORDS.test(text);
+    const hitsHistory = _SAVED_PROMPT_HISTORY_WORDS.test(text);
+    if (hitsToday && hitsHistory) { p.scope = 'both'; changed++; }
+    else if (hitsToday) { p.scope = 'today'; changed++; }
+    else if (hitsHistory) { p.scope = 'history'; changed++; }
+    // Genuinely ambiguous ones (neither word set matched) are left
+    // unscoped rather than guessed at blindly - they'll keep showing in
+    // both lists, same safe fallback as always, until classified by hand.
+  });
+  saveSavedPrompts(prompts);
+  const stillUnclassified = unclassified.length - changed;
+  showToast(`Classified ${changed} prompt${changed===1?'':'s'}${stillUnclassified ? ` — ${stillUnclassified} too ambiguous to guess, still shown in both` : ''} ✓`);
+  renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch')?.value || '');
+  refreshAllSavedPromptPillRows();
+}
+
 function renderSavedPromptsManagerList(filterText) {
   const el = document.getElementById('savedPromptsManagerList');
   const prompts = loadSavedPrompts();
@@ -15458,13 +15487,17 @@ function renderSavedPromptsManagerList(filterText) {
   const toggleHtml = hiddenCount > 0 || _savedPromptShowAllScopes
     ? `<div onclick="_savedPromptShowAllScopes=!_savedPromptShowAllScopes;renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;padding:4px 0 10px;">${_savedPromptShowAllScopes ? 'Show only prompts that fit here' : `Show all prompts (${hiddenCount} hidden — from the other tab)`}</div>`
     : '';
+  const unclassifiedCount = prompts.filter(p => !p.scope).length;
+  const classifyHtml = unclassifiedCount > 0
+    ? `<div onclick="batchClassifySavedPrompts()" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;padding:4px 0 10px;">🪄 Auto-classify ${unclassifiedCount} unclassified prompt${unclassifiedCount===1?'':'s'} from their text</div>`
+    : '';
 
   if (!filtered.length) {
-    el.innerHTML = toggleHtml + `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts here yet — add one below, or tap above to see prompts from the other tab.'}</div>`;
+    el.innerHTML = toggleHtml + classifyHtml + `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts here yet — add one below, or tap above to see prompts from the other tab.'}</div>`;
     return;
   }
 
-  el.innerHTML = toggleHtml + filtered.map(p => {
+  el.innerHTML = toggleHtml + classifyHtml + filtered.map(p => {
     const uses = p.useCount || 0;
     // Only shown at all when Show All is on (otherwise every visible prompt
     // already matches the current tab, so the badge would be pure noise) -
