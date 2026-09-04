@@ -5622,7 +5622,7 @@ let state = loadState();
 if (state.history && state.history.length > 1) {
   state.history.sort((a, b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
 }
-backfillHistoricalFibre(); // one-time-per-load recovery of fibre data where still possible (last 30 days)
+try { backfillHistoricalFibre(); } catch(e) { console.error('backfillHistoricalFibre failed at boot — continuing without it', e); } // one-time-per-load recovery of fibre data where still possible (last 30 days)
 // Weight-phase auto-switch previously only ran via updateDashboard(), which
 // is only guaranteed to fire once the Today tab has actually rendered - if
 // the app opens straight to a different tab and Today is never visited that
@@ -25821,31 +25821,42 @@ function _setOccasionTags(tags) {
 function backfillHistoricalFibre() {
   let updated = 0;
   (state.history || []).forEach(day => {
-    if (!day.log || !Array.isArray(day.log) || day.log.length === 0) return; // log stripped, can't recover
-    const entryFibre = e => Array.isArray(e.items) && e.items.length
-      ? e.items.reduce((s, it) => s + (it.fibre || 0), 0)
-      : (e.fibre || 0);
-    const entryPolyols = e => Array.isArray(e.items) && e.items.length
-      ? e.items.reduce((s, it) => s + (it.polyols || 0), 0)
-      : (e.polyols || 0);
-    let dayUpdated = false;
-    if (!(day.totals && day.totals.fibre)) {
-      const fibreSum = day.log.reduce((sum, e) => sum + entryFibre(e), 0);
-      if (fibreSum > 0) {
-        if (!day.totals) day.totals = {};
-        day.totals.fibre = Math.round(fibreSum * 10) / 10;
-        dayUpdated = true;
+    // Belt-and-suspenders: this runs on every boot, before the app's own
+    // error catcher is registered, so ANY uncaught throw here silently
+    // kills the entire startup — exactly what happened when the new
+    // polyols pass below hit real legacy data for the first time across
+    // all ~784 history days (the old fibre-only version rarely got this
+    // far, since day.totals.fibre was usually already set). One malformed
+    // day must never be able to take the whole app down with it again.
+    try {
+      if (!day || !day.log || !Array.isArray(day.log) || day.log.length === 0) return; // log stripped, can't recover
+      const entryFibre = e => e && Array.isArray(e.items) && e.items.length
+        ? e.items.reduce((s, it) => s + ((it && it.fibre) || 0), 0)
+        : ((e && e.fibre) || 0);
+      const entryPolyols = e => e && Array.isArray(e.items) && e.items.length
+        ? e.items.reduce((s, it) => s + ((it && it.polyols) || 0), 0)
+        : ((e && e.polyols) || 0);
+      let dayUpdated = false;
+      if (!(day.totals && day.totals.fibre)) {
+        const fibreSum = day.log.reduce((sum, e) => sum + entryFibre(e), 0);
+        if (fibreSum > 0) {
+          if (!day.totals) day.totals = {};
+          day.totals.fibre = Math.round(fibreSum * 10) / 10;
+          dayUpdated = true;
+        }
       }
-    }
-    if (!(day.totals && day.totals.polyols)) {
-      const polyolsSum = day.log.reduce((sum, e) => sum + entryPolyols(e), 0);
-      if (polyolsSum > 0) {
-        if (!day.totals) day.totals = {};
-        day.totals.polyols = Math.round(polyolsSum * 10) / 10;
-        dayUpdated = true;
+      if (!(day.totals && day.totals.polyols)) {
+        const polyolsSum = day.log.reduce((sum, e) => sum + entryPolyols(e), 0);
+        if (polyolsSum > 0) {
+          if (!day.totals) day.totals = {};
+          day.totals.polyols = Math.round(polyolsSum * 10) / 10;
+          dayUpdated = true;
+        }
       }
+      if (dayUpdated) updated++;
+    } catch (err) {
+      console.error('backfillHistoricalFibre: skipped a malformed day rather than crash startup', day && day.date, err);
     }
-    if (dayUpdated) updated++;
   });
   if (updated > 0) saveState();
   return updated;
