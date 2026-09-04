@@ -2748,6 +2748,7 @@
          from a single entry point regardless of any mode. -->
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
+      <div class="quick-btn" style="border-color:#f97316;" onclick="startBalanceMacrosFlow()">Balance my macros</div>
       <div class="quick-btn" style="border-color:var(--green);" onclick="quickPrompt('ketosis check')">Ketosis check</div>
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
@@ -4666,7 +4667,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.694</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.697</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5605,7 +5606,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.694'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.697'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13247,7 +13248,7 @@ function _startVoiceListening() {
   _voiceRecognition.onend = () => {
     // Auto-restart if still active — the mechanism that keeps it listening
     // across multiple items without re-tapping the mic each time.
-    if (_voiceListening) setTimeout(() => _startVoiceListening(), 300);
+    if (_voiceListening) setTimeout(() => _startVoiceListening(), 150);
   };
 
   _voiceRecognition.start();
@@ -13981,6 +13982,55 @@ function getLibraryCategoriesInUse() {
   // addItemCategory - it would duplicate the pinned Snack option below.
   found.delete('snack'); found.delete('snacks');
   return [...found].sort();
+}
+
+// "Balance my macros" — the deliberate opposite of "Next meal idea": that one
+// starts from what you fancy (category picker), this starts from what today
+// actually still needs, using the exact same remaining-budget/time-of-day/
+// ratio-drift engine suggestMealFromLibrary() already builds for every meal
+// suggestion - no separate macro logic duplicated here.
+// Genuinely too little budget left, or too late in the day, for a proper
+// "meal" suggestion to make sense - rather than silently downgrading to
+// snack-sized combos the way suggestMealFromLibrary's own shouldFavorSnackSize
+// already does elsewhere, this asks first, honestly, before showing anything -
+// Pete's exact spec: tell them straight, then offer the smaller-idea list.
+async function startBalanceMacrosFlow() {
+  addBubble('Balance my macros', 'user');
+  const mode = state.dayMode || 'standard';
+  const t = getTargets()[mode] || getTargets().standard;
+  const fatTarget = parseInt(localStorage.getItem('mh_target_fat')) || 247;
+  const totals = calcTotals(state.todayLog);
+  const activityKcal = (getActivities() || []).filter(a => a.enabled).reduce((s, a) => s + calcActivityKcal(a), 0);
+  const dayKcalTarget = t.kcal + activityKcal;
+  const remainingKcal = Math.round(dayKcalTarget - (totals.kcal || 0));
+  const _hour = new Date().getHours();
+  const veryLate = _hour >= 21;
+  // Threshold and hour are a first-pass guess, not measured against real
+  // use yet - easy to tune once this has actually been tried for a while.
+  const tooLittleForAMeal = dayKcalTarget > 0 && (remainingKcal / dayKcalTarget) < 0.15;
+
+  if (remainingKcal <= 50) {
+    addBubble(`You're basically done for today — only ${remainingKcal}kcal left, not enough left to meaningfully suggest anything.`, 'system');
+    return;
+  }
+
+  if (tooLittleForAMeal || veryLate) {
+    addBubble(
+      `Only ${remainingKcal}kcal left today${veryLate ? ' and it\'s getting late' : ''} — not really enough left for a proper meal. Want a few small, library-based ideas that would round things out nicely instead?`,
+      'system'
+    );
+    const bubble = addBubble(
+      `<div style="display:flex;gap:8px;">` +
+      `<button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);suggestMealFromLibrary('snack');" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Yes, show me</button>` +
+      `<button onclick="this.closest('.chat-bubble').querySelectorAll('button').forEach(b=>b.disabled=true);" style="flex:1;padding:8px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;cursor:pointer;">No thanks</button>` +
+      `</div>`,
+      'system'
+    );
+    return;
+  }
+
+  addBubble('Let\'s see what would balance today out…', 'system');
+  await suggestMealFromLibrary('both');
 }
 
 function startNextMealFlow() {
@@ -16415,6 +16465,22 @@ function buildBulkDataActionsCard() {
 async function loadAvailableBackups() {
   const el = document.getElementById('restoreBackupList');
   if (!el) return;
+  // Real inconsistency found: Wearable Sync and App Health Check both
+  // proactively check _serverOnline and give a clear "not available in
+  // Local mode" message before ever attempting a fetch. This one didn't -
+  // it just let the fetch fail and showed a generic "couldn't reach the
+  // server," identical to what a genuine temporary Local-server hiccup
+  // would look like. A Cloud-mode user has no way to tell those two
+  // situations apart from that message alone, and this feature never
+  // works on Cloud regardless of connection - it needs Local mode's own
+  // server. Checking upfront, same pattern as the other two, means Cloud
+  // users get told the real reason immediately instead of a misleading
+  // "try again" implication, and skips a network request that can never
+  // succeed there anyway.
+  if (!_serverOnline) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--yellow);">Server backups aren\'t available in Cloud mode — this needs the Local (Termux) version of the app, where a daily backup is saved automatically.</div>';
+    return;
+  }
   el.innerHTML = '<div style="font-size:12px;color:var(--text3);">Checking…</div>';
   try {
     const res = await fetch(`${MH_SERVER}/list-backups`, { signal: AbortSignal.timeout(5000) });
@@ -16431,7 +16497,10 @@ async function loadAvailableBackups() {
       </div>`;
     }).join('');
   } catch (e) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--yellow);">Couldn\'t reach the server to check backups.</div>';
+    // Reaching here now means Local mode genuinely couldn't be reached -
+    // a real, temporary problem, not the permanent Cloud-mode case above -
+    // so the original wording is accurate again for what's left.
+    el.innerHTML = '<div style="font-size:12px;color:var(--yellow);">Couldn\'t reach the local server to check backups — make sure it\'s running and try again.</div>';
   }
 }
 
@@ -21898,7 +21967,7 @@ function _startSupplementVoiceListening() {
   };
 
   _supplementVoiceRecognition.onend = () => {
-    if (_supplementVoiceActive) setTimeout(() => _startSupplementVoiceListening(), 300);
+    if (_supplementVoiceActive) setTimeout(() => _startSupplementVoiceListening(), 150);
   };
 
   _supplementVoiceRecognition.start();
@@ -23569,7 +23638,7 @@ function _startRecipeVoiceListening() {
     // "stay in recipe creation mode" rather than needing the mic tapped
     // again before every single ingredient.
     if (_recipeVoiceActive) {
-      setTimeout(() => _startRecipeVoiceListening(), 300);
+      setTimeout(() => _startRecipeVoiceListening(), 150);
     }
   };
 
@@ -23740,7 +23809,7 @@ function _startLibraryVoiceListening() {
   };
 
   _libraryVoiceRecognition.onend = () => {
-    if (_libraryVoiceActive) setTimeout(() => _startLibraryVoiceListening(), 300);
+    if (_libraryVoiceActive) setTimeout(() => _startLibraryVoiceListening(), 150);
   };
 
   _libraryVoiceRecognition.start();
@@ -24433,7 +24502,7 @@ function _startRecipeStepVoiceListening() {
     // genuinely ends (browser timeout, error, or explicit stop) rather than
     // after every phrase - restarting here is now a rare fallback, not the
     // normal per-utterance cycle it was before.
-    if (_recipeStepVoiceActive) setTimeout(() => _startRecipeStepVoiceListening(), 300);
+    if (_recipeStepVoiceActive) setTimeout(() => _startRecipeStepVoiceListening(), 150);
   };
 
   _recipeStepVoiceRecognition.start();
@@ -24943,7 +25012,7 @@ function _startCookVoiceListening() {
     // With continuous:true this should rarely fire except on a genuine
     // error or an OS-level session limit - restart as a safety net either way.
     if (_cookModeOpen) {
-      setTimeout(() => { if (_cookModeOpen) _startCookVoiceListening(); }, 300);
+      setTimeout(() => { if (_cookModeOpen) _startCookVoiceListening(); }, 150);
     }
   };
 
@@ -25505,8 +25574,12 @@ async function calculateMissedDayConv() {
   try {
     // Same polyols gap as the modal version's calculateMissedDay() - fixed
     // the same way, for the same reason (see that function's own comment),
-    // including the follow-up gross-vs-net ambiguity fix.
-    const prompt = `You are a nutrition calculator. The user ate the following on a missed day:\n\n"${meals}"\n\nCalculate the total nutrition for the entire day. Use evidence-based values.\nIMPORTANT: "carbs" must always be the GROSS/TOTAL carbohydrate figure - the number as printed on a nutrition label, BEFORE subtracting any polyols. Never report a net-carbs figure in "carbs".\nIf any item is a known low-carb/keto/reduced-sugar product (common with sweeteners like erythritol, xylitol, allulose, maltitol), separately estimate its polyols (sugar alcohols) content in grams for the day as best you reasonably can from what's typical for that kind of product, and report the gross carbs figure alongside it - leave polyols as 0 for ordinary food where this doesn't apply, rather than guessing without basis.\nRespond ONLY with a JSON object (no markdown):\n{"kcal":2847,"protein":168.0,"carbs":30.0,"fat":220.0,"polyols":0,"breakdown":"brief one-line summary of items and portions assumed"}`;
+    // including the follow-up gross-vs-net ambiguity fix. Fibre was a
+    // separate, still-open gap found later - every other logging path in
+    // this app (photo/label read, text/AI parse, library items) asks for
+    // and stores fibre; a missed-day retroactive entry never did, silently
+    // leaving that one day's fibre at 0 in an otherwise fibre-tracked history.
+    const prompt = `You are a nutrition calculator. The user ate the following on a missed day:\n\n"${meals}"\n\nCalculate the total nutrition for the entire day. Use evidence-based values.\nIMPORTANT: "carbs" must always be the GROSS/TOTAL carbohydrate figure - the number as printed on a nutrition label, BEFORE subtracting any polyols or fibre. Never report a net-carbs figure in "carbs".\nAlso estimate total dietary fibre for the day in grams, evidence-based from what's typical for the foods described.\nIf any item is a known low-carb/keto/reduced-sugar product (common with sweeteners like erythritol, xylitol, allulose, maltitol), separately estimate its polyols (sugar alcohols) content in grams for the day as best you reasonably can from what's typical for that kind of product, and report the gross carbs figure alongside it - leave polyols as 0 for ordinary food where this doesn't apply, rather than guessing without basis.\nRespond ONLY with a JSON object (no markdown):\n{"kcal":2847,"protein":168.0,"carbs":30.0,"fat":220.0,"fibre":18.0,"polyols":0,"breakdown":"brief one-line summary of items and portions assumed"}`;
 
     const result = await callHealthAI(prompt, { maxTokens: 300 });
     if (!result.ok) throw new Error(result.error);
@@ -25523,7 +25596,8 @@ async function calculateMissedDayConv() {
       fat: parsed.fat != null
         ? Math.round(parsed.fat*100)/100
         : Math.round(Math.max(0, (parsed.kcal - parsed.protein*4 - parsed.carbs*4) / 9) * 100) / 100,
-      polyols: Math.round((parsed.polyols||0)*100)/100
+      polyols: Math.round((parsed.polyols||0)*100)/100,
+      fibre: Math.round((parsed.fibre||0)*100)/100
     };
 
     // Remove meals prompt bubble
@@ -25537,14 +25611,14 @@ async function calculateMissedDayConv() {
     resultBubble.innerHTML = `
       <div style="font-size:11px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Result — ${_missedDayConvDate}</div>
       <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;">${totals.kcal} kcal</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">${totals.protein}g protein · ${totals.fat}g fat · ${totals.carbs}g carbs${totals.polyols ? ` (${totals.polyols}g polyols)` : ''}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;">${totals.protein}g protein · ${totals.fat}g fat · ${totals.carbs}g carbs${totals.fibre ? ` · ${totals.fibre}g fibre` : ''}${totals.polyols ? ` (${totals.polyols}g polyols)` : ''}</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5;">${parsed.breakdown}</div>
       <div style="margin-bottom:8px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">NOTES (optional)</div>
         <input id="missedDayConvNotes" class="modal-input" placeholder="e.g. normal day, holiday, eating out" style="font-size:13px;padding:8px 10px;width:100%;box-sizing:border-box;">
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="run-btn" style="flex:2;" onclick="saveMissedDayConv(${totals.kcal},${totals.protein},${totals.carbs},${totals.fat},${totals.polyols})">Save to History ✓</button>
+        <button class="run-btn" style="flex:2;" onclick="saveMissedDayConv(${totals.kcal},${totals.protein},${totals.carbs},${totals.fat},${totals.polyols},${totals.fibre})">Save to History ✓</button>
         <button class="copy-btn" style="flex:1;font-size:12px;" onclick="cancelMissedDayFlow()">Cancel</button>
       </div>
     `;
@@ -25645,26 +25719,26 @@ function _startMissedDayVoiceListening(textareaId = 'missedDayConvMeals', btnId 
   };
 
   _missedDayVoiceRecognition.onend = () => {
-    if (_missedDayVoiceActive) setTimeout(() => _startMissedDayVoiceListening(textareaId, btnId, statusId, onDoneFn), 300);
+    if (_missedDayVoiceActive) setTimeout(() => _startMissedDayVoiceListening(textareaId, btnId, statusId, onDoneFn), 150);
   };
 
   _missedDayVoiceRecognition.start();
 }
 
-function saveMissedDayConv(kcal, protein, carbs, fat, polyols) {
+function saveMissedDayConv(kcal, protein, carbs, fat, polyols, fibre) {
   const dateVal = _missedDayConvDate;
   const notes = document.getElementById('missedDayConvNotes')?.value.trim() || 'missed day entry';
 
   const existing = state.history.find(h => h.date === dateVal);
   if (existing) {
-    existing.totals = { kcal, protein, carbs, fat, polyols: polyols || 0 };
+    existing.totals = { kcal, protein, carbs, fat, polyols: polyols || 0, fibre: fibre || 0 };
     existing.notes = notes;
     showToast(`${dateVal} updated ✓`);
   } else {
     state.history.push({
       date: dateVal,
-      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs, fat, polyols: polyols || 0 }],
-      totals: { kcal, protein, carbs, fat, polyols: polyols || 0 },
+      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs, fat, polyols: polyols || 0, fibre: fibre || 0 }],
+      totals: { kcal, protein, carbs, fat, polyols: polyols || 0, fibre: fibre || 0 },
       mode: 'standard',
       notes,
       weight: null,
@@ -25900,18 +25974,26 @@ async function calculateMissedDay() {
     // number that was already net despite being labeled total. "carbs" must
     // always be the gross/total figure, matching this app's own definition
     // used everywhere else (see the Total/Net toggle's own help text).
+    //
+    // Second real gap found: fibre was never requested here at all, unlike
+    // every other logging path in the app (photo/label read, text/AI meal
+    // parse, library items all carry it) - a missed day silently had 0
+    // fibre in an otherwise fibre-tracked history, with no way to add it.
     const prompt = `You are a nutrition calculator. The user ate the following on a missed day:
 
 "${meals}"
 
 Calculate the total nutrition for the entire day. Use evidence-based values.
-IMPORTANT: "carbs" must always be the GROSS/TOTAL carbohydrate figure - the number as printed on a nutrition label, BEFORE subtracting any polyols. Never report a net-carbs figure in "carbs".
+IMPORTANT: "carbs" must always be the GROSS/TOTAL carbohydrate figure - the number as printed on a nutrition label, BEFORE subtracting any polyols or fibre. Never report a net-carbs figure in "carbs".
+Also estimate total dietary fibre for the day in grams, evidence-based from what's typical for the foods described.
 If any item is a known low-carb/keto/reduced-sugar product (common with sweeteners like erythritol, xylitol, allulose, maltitol), separately estimate its polyols (sugar alcohols) content in grams for the day as best you reasonably can from what's typical for that kind of product, and report the gross carbs figure alongside it - leave polyols as 0 for ordinary food where this doesn't apply, rather than guessing without basis.
 Respond ONLY with a JSON object (no markdown):
 {
   "kcal": 2847,
   "protein": 168.0,
   "carbs": 30.0,
+  "fat": 220.0,
+  "fibre": 18.0,
   "polyols": 0,
   "breakdown": "brief one-line summary of the main items and portions assumed"
 }`;
@@ -25921,8 +26003,8 @@ Respond ONLY with a JSON object (no markdown):
     const raw = result.text.trim();
     const cleaned = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*100)/100, fat: Math.round((parsed.fat||0)*100)/100, carbs: Math.round(parsed.carbs*100)/100, polyols: Math.round((parsed.polyols||0)*100)/100 };
-    resultEl.innerHTML = `<strong style="color:var(--text);">${_missedAITotals.kcal} kcal · ${_missedAITotals.protein}g P · ${_missedAITotals.fat||0}g F · ${_missedAITotals.carbs}g C${_missedAITotals.polyols ? ` (${_missedAITotals.polyols}g polyols)` : ''}</strong><br><span style="color:var(--text3);font-size:12px;">${parsed.breakdown}</span><br><span style="font-size:11px;color:var(--text3);">Happy with this? Tap Save to History — or adjust the description and recalculate.</span>`;
+    _missedAITotals = { kcal: Math.round(parsed.kcal), protein: Math.round(parsed.protein*100)/100, fat: Math.round((parsed.fat||0)*100)/100, carbs: Math.round(parsed.carbs*100)/100, polyols: Math.round((parsed.polyols||0)*100)/100, fibre: Math.round((parsed.fibre||0)*100)/100 };
+    resultEl.innerHTML = `<strong style="color:var(--text);">${_missedAITotals.kcal} kcal · ${_missedAITotals.protein}g P · ${_missedAITotals.fat||0}g F · ${_missedAITotals.carbs}g C${_missedAITotals.fibre ? ` · ${_missedAITotals.fibre}g fibre` : ''}${_missedAITotals.polyols ? ` (${_missedAITotals.polyols}g polyols)` : ''}</strong><br><span style="color:var(--text3);font-size:12px;">${parsed.breakdown}</span><br><span style="font-size:11px;color:var(--text3);">Happy with this? Tap Save to History — or adjust the description and recalculate.</span>`;
     resultEl.style.display = 'block';
   } catch(e) {
     resultEl.innerHTML = `<span style="color:var(--red);">Could not calculate: ${(e.message||'check connection and try again').replace(/</g,'&lt;')}</span>`;
@@ -25939,31 +26021,41 @@ function saveMissedDay() {
   }
   const notes = document.getElementById('missedNotes').value.trim() || 'missed day entry';
 
-  let kcal, protein, carbs, polyols;
+  let kcal, protein, carbs, fat, polyols, fibre;
   if (_missedMode === 'ai') {
     if (!_missedAITotals) { showToast('Calculate with AI first, or switch to manual entry'); return; }
-    ({ kcal, protein, carbs, polyols } = _missedAITotals);
+    ({ kcal, protein, carbs, fat, polyols, fibre } = _missedAITotals);
   } else {
     kcal    = parseFloat(document.getElementById('missedKcal').value);
     protein = parseFloat(document.getElementById('missedProtein').value);
     carbs   = parseFloat(document.getElementById('missedCarbs').value);
     if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) { showToast('Enter all three values'); return; }
     kcal = Math.round(kcal); protein = Math.round(protein*100)/100; carbs = Math.round(carbs*100)/100;
+    // Manual entry form only ever had Kcal/Protein/Carbs fields - no Fat,
+    // Fibre or Polyols input exists to read here. Real bug found alongside
+    // the fibre gap: the save call below referenced a bare `fat` that was
+    // never declared in EITHER branch - a genuine ReferenceError that threw
+    // on every save, after state.history.push()/saveState() had already
+    // run. That meant the entry silently DID save, but the crash right
+    // after killed closeMissedDayModal() and renderHistory() before they
+    // could run - so the modal never closed and History never refreshed,
+    // making a successful save look exactly like nothing had happened.
+    fat = 0; fibre = 0;
   }
 
   // Check if date already exists
   const existing = state.history.find(h => h.date === dateVal);
   if (existing) {
     // Update totals
-    existing.totals = { kcal, protein, carbs, polyols: polyols || 0 };
+    existing.totals = { kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 };
     existing.notes = notes;
     showToast(`${dateVal} updated ✓`);
   } else {
     // Add new entry
     state.history.push({
       date: dateVal,
-      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs, polyols: polyols || 0 }],
-      totals: { kcal, protein, carbs, polyols: polyols || 0 },
+      log: [{ id: Date.now(), time: '23:59', description: notes, kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 }],
+      totals: { kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 },
       mode: 'standard',
       notes,
       weight: null,
@@ -33676,9 +33768,18 @@ async function generateAIBrief() {
   const kcals=h.map(e=>e.totals?.kcal||0);
   const prots=h.map(e=>e.totals?.protein||0);
   const carbs=h.map(e=>e.totals?.carbs||0);
-  const on   =h.filter(e=>(e.totals?.carbs||0)<=carbCeilFor(e)).length;
+  // Was raw e.totals.carbs against the ceiling, completely bypassing
+  // getEffectiveCarbs() - meaning a day the ketosis badge showed green
+  // (Net Carbs mode, polyols-heavy food) could get counted as non-adherent
+  // here, an inconsistency between this brief and every other adherence
+  // indicator in the app that already uses the same helper.
+  const on   =h.filter(e=>getEffectiveCarbs(e.totals||{})<=carbCeilFor(e)).length;
   const isGBM=cond==='gbm';
-  const prompt=`Write a concise health brief for ${name} (${n} days, ${isGBM?'GBM therapeutic ketosis protocol':cond}).
+  // Was the raw internal value (e.g. "t2_diabetes") rather than a readable
+  // label - CONDITION_META already exists and is used for exactly this
+  // elsewhere (patientContextBlock, runFullSummary's protocol verdict).
+  const condLabel = (CONDITION_META[cond] || CONDITION_META.general).label;
+  const prompt=`Write a concise health brief for ${name} (${n} days, ${isGBM?'GBM therapeutic ketosis protocol':condLabel}).
 Avg: ${av(kcals)} kcal (target ${t.kcal}), ${av(prots)}g protein (target ${t.protein}g), ${av(carbs)}g carbs (ceiling ${t.carbs}g).
 Carb adherence: ${on}/${n} days (${Math.round(on/n*100)}%).
 ${isGBM?'Emphasise metabolic adherence, protein sufficiency for lean mass, and forward-looking recommendations. Be honest but not catastrophising.':'Highlight adherence, strengths, and one or two specific improvements.'}
@@ -34105,7 +34206,7 @@ CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
-TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? "Pete's own confirmed, weight-trend-validated figure (use this as the authoritative number)" : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against Pete's actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
+TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? `${ctx.name}'s own confirmed, weight-trend-validated figure (use this as the authoritative number)` : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against ${ctx.name}'s actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
 When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
 
 EVIDENCE FRAMEWORK: ${meta.evidenceNote}
@@ -34119,17 +34220,26 @@ function copyReportAskAnswer() {
 async function runFullSummary() {
   const btn = document.getElementById('rptFullSummaryBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  // Item 9 was hardcoded to "GBM therapeutic protocol" regardless of the
+  // actual condition selected - patientContextBlock() already tells the AI
+  // the real condition/protocol correctly, but this explicit instruction
+  // text contradicted it for every non-GBM user (diabetes, general health,
+  // recomp, etc.), which matters given this app has genuinely multiple
+  // real users on different protocols, not just one. Same fix already
+  // applied to generateAIBrief's prompt - made condition-aware here too.
+  const _cond = localStorage.getItem('mh_condition') || 'general';
+  const _protocolLabel = (CONDITION_META[_cond] || CONDITION_META.general).label;
   const fullSummaryPrompt = `Give me a comprehensive plain-English health summary covering ALL of the following areas. Be direct, specific and actionable. Use the weight phase history to correctly interpret weight trends — do not treat intentional loss as a concern.
 
 1. NUTRITION OVERVIEW — calorie adequacy vs target, protein consistency, fat ratio (flag if below 65% of calories for ketogenic protocol), carb adherence by day type
 2. WEIGHT & BODY COMPOSITION — trend interpretation against the correct phase (loss/maintain/gain), current status vs target range, rate of change
-3. KETOSIS QUALITY — how many days at therapeutic vs standard keto ratio, best and worst stretches
+3. KETOSIS QUALITY — how many days at therapeutic vs standard keto ratio, best and worst stretches (skip this section entirely if the protocol isn't ketogenic)
 4. SLEEP — average duration, deep/REM quality, any concerning patterns
 5. HRV & RECOVERY — trend, low days, any correlations with nutrition or sleep
 6. ACTIVITY — steps consistency, active calories, any notable changes
 7. BEST PERFORMING PERIOD — which stretch of days had the best overall adherence across all metrics
 8. AREAS NEEDING ATTENTION — top 2-3 specific actionable improvements, ranked by impact
-9. PROTOCOL VERDICT — honest one-paragraph assessment of how well the overall GBM therapeutic protocol is being followed
+9. PROTOCOL VERDICT — honest one-paragraph assessment of how well the overall ${_protocolLabel} protocol is being followed
 
 Keep each section to 3-4 sentences. Prose only. Clinical and direct.`;
 
@@ -34825,7 +34935,7 @@ function initNotifUI() {
     const p=getNotifPrefs();
     ['eod','carb','weekly','supplement'].forEach(k=>{ const el=document.getElementById(`notif-${k}`); if(el) el.checked=p[k]||false; });
   } else if (perm==='denied') {
-    if (statusEl) statusEl.textContent='Notifications blocked — enable them in Chrome settings, then reload.';
+    if (statusEl) statusEl.textContent='Notifications blocked — enable them in your browser or device settings for this app, then reload.';
     if (btn) btn.style.display='none';
     if (settingsEl) settingsEl.style.display='none';
   } else {
@@ -34849,7 +34959,7 @@ async function requestNotifPermission() {
   if (!('Notification' in window)) { showToast('Notifications not supported'); return; }
   const perm=await Notification.requestPermission();
   if (perm==='granted') { initNotifUI(); showToast('Notifications enabled ✓'); }
-  else showToast('Permission denied — enable in Chrome settings');
+  else showToast('Permission denied — enable it in your browser or device settings');
 }
 
 function checkNotifications() {
