@@ -4669,7 +4669,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.700</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.701</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5608,7 +5608,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.700'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.701'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -14648,7 +14648,21 @@ ${[['fat', remaining.fat], ['protein', remaining.protein], ['carbs', remaining.c
 
 CURRENT TIME OF DAY: ${timeOfDay}
 Where reasonable, prefer combos/recipes that suit this time of day (e.g. breakfast-style items — cereal, toast, eggs, bagels, jam, marmite, cheese, yoghurt — in the morning; lighter snack-style options in the late evening). This is a preference, not a rule — if the best-fitting items for the remaining macro budget genuinely aren't a natural fit for the time of day, still suggest them rather than forcing a worse macro match just to suit the clock.
-${shouldFavorSnackSize ? `Right now, ${snackSizeReason} - at least a couple of the suggestions should genuinely be snack-sized. A real snack is a single, self-contained snack-type food eaten on its own - crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts - not a curated combination of two or more separate savoury ingredients (that's tapas, a different thing entirely, even at a small portion). A full meal is still fine to include if the remaining budget is large enough that a snack alone wouldn't sensibly cover it.` : ''}
+${shouldFavorSnackSize ? (explicitComposition
+  // Real conflict found: this block's example list ("crisps, chocolate,
+  // sweets") was firing unconditionally whenever it was late/close to
+  // target, with no awareness that an EXACT COMPOSITION REQUEST further
+  // down might have already specified something completely different
+  // (e.g. meat + vegetable + herbs). The AI followed this vivid example
+  // list over the category instruction, producing a chocolate wafer for
+  // a meat/veg/herbs request. A deliberate category picker choice is a
+  // more specific, more recent signal than a generic time-of-day nudge -
+  // it must never get silently overridden by it. Scoped to portion size
+  // only when categories were explicitly chosen, with zero suggestion of
+  // switching to a different food type.
+  ? `Right now, ${snackSizeReason} - keep the requested composition below to a genuinely snack-appropriate SIZE (smaller portions/servings than a full meal), but the food categories requested below still apply exactly as specified. Do not substitute a different type of food (e.g. a sweet/dessert item) just because it's snack time - that would ignore what was actually asked for.`
+  : `Right now, ${snackSizeReason} - at least a couple of the suggestions should genuinely be snack-sized. A real snack is a single, self-contained snack-type food eaten on its own - crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts - not a curated combination of two or more separate savoury ingredients (that's tapas, a different thing entirely, even at a small portion). A full meal is still fine to include if the remaining budget is large enough that a snack alone wouldn't sensibly cover it.`
+) : ''}
 
 ${recentText ? `RECENTLY SUGGESTED (avoid repeating these unless nothing else genuinely fits): ${recentText}\n` : ''}
 WHAT'S ACTUALLY BEEN EATEN TODAY:
@@ -14820,6 +14834,16 @@ function _buildComboItemsCardHTML(comboIndex) {
     </div>`;
   }
   const totals = _comboItemsTotals(combo.items);
+  // Real safety-relevant inconsistency found: a combo that would push carbs
+  // OVER the day's ceiling got exactly the same plain, affirming "✓ Log
+  // this meal" button as one safely within budget - the only signal it was
+  // over was the small text of the remaining-today line itself. For a
+  // strict carb ceiling this needs to look different, not just read
+  // different in small print below a green button.
+  const todayTotalsForCeiling = calcTotals(state.todayLog);
+  const targetsForCeiling = TARGETS[state.dayMode];
+  const afterCarbsEff = getEffectiveCarbs({ carbs: (todayTotalsForCeiling.carbs||0) + totals.carbs, polyols: (todayTotalsForCeiling.polyols||0) + (totals.polyols||0) });
+  const overCeiling = afterCarbsEff > targetsForCeiling.carbs;
   const itemRows = combo.items.map((f, j) => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;gap:8px;">
       <div style="flex:1;min-width:0;">
@@ -14844,7 +14868,8 @@ function _buildComboItemsCardHTML(comboIndex) {
     <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;" id="combo-totals-${comboIndex}">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:8px;" id="combo-remaining-${comboIndex}">${_remainingTodayLine(totals.kcal, totals.protein, totals.fat, totals.carbs, totals.polyols)}</div>
     ${combo.anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
-    <button onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
+    <div id="combo-ceiling-warn-${comboIndex}" style="font-size:11px;color:var(--red);margin-bottom:6px;${overCeiling ? '' : 'display:none;'}">⚠ This would put you over your carb ceiling for today.</div>
+    <button id="combo-log-btn-${comboIndex}" onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;${overCeiling ? 'background:transparent;border:1px solid var(--red);color:var(--red);' : 'background:var(--accent);color:var(--bg);border:none;'}border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">${overCeiling ? '⚠ Log anyway (over ceiling)' : '✓ Log this meal'}</button>
   </div>`;
 }
 
@@ -14870,6 +14895,20 @@ function scaleComboItem(comboIndex, itemIndex, gramsStr) {
     totalsEl.textContent = `${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F`;
     const remainingEl = document.getElementById(`combo-remaining-${comboIndex}`);
     if (remainingEl) remainingEl.innerHTML = _remainingTodayLine(totals.kcal, totals.protein, totals.fat, totals.carbs, totals.polyols);
+    // Keep the ceiling warning/button live too - the whole point of it is
+    // to reflect the CURRENT amounts, not just whatever the AI originally
+    // suggested before any adjustment.
+    const todayTotalsForCeiling = calcTotals(state.todayLog);
+    const targetsForCeiling = TARGETS[state.dayMode];
+    const afterCarbsEff = getEffectiveCarbs({ carbs: (todayTotalsForCeiling.carbs||0) + totals.carbs, polyols: (todayTotalsForCeiling.polyols||0) + (totals.polyols||0) });
+    const overCeiling = afterCarbsEff > targetsForCeiling.carbs;
+    const warnEl = document.getElementById(`combo-ceiling-warn-${comboIndex}`);
+    const btnEl = document.getElementById(`combo-log-btn-${comboIndex}`);
+    if (warnEl) warnEl.style.display = overCeiling ? '' : 'none';
+    if (btnEl) {
+      btnEl.textContent = overCeiling ? '⚠ Log anyway (over ceiling)' : '✓ Log this meal';
+      btnEl.style.cssText = `width:100%;padding:8px;${overCeiling ? 'background:transparent;border:1px solid var(--red);color:var(--red);' : 'background:var(--accent);color:var(--bg);border:none;'}border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;`;
+    }
   }
 }
 
