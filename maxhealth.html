@@ -4666,7 +4666,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.689</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.691</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5605,7 +5605,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.689'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.691'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7522,13 +7522,16 @@ function showLibraryPortionSelector(f, index) {
             oninput="scaleLibraryPortion(${index}, this.value)">
           <div style="font-size:13px;color:var(--text3);">g / ml</div>
         </div>
-        <div style="display:flex;gap:10px;margin-top:10px;font-size:12px;font-family:Space Mono,monospace;" id="libPortionMacros">
+        <div style="display:flex;gap:10px;margin-top:10px;font-size:12px;font-family:Space Mono,monospace;flex-wrap:wrap;" id="libPortionMacros">
           <span style="color:var(--blue);" id="libKcal">${f.kcal}kcal</span>
           <span style="color:var(--green);" id="libProt">${f.protein}g P</span>
           <span style="color:#a78bfa;" id="libFat">${f.fat||0}g F</span>
           <span style="color:var(--yellow);" id="libCarb">${f.carbs}g C</span>
+          ${f.fibre ? `<span style="color:var(--green);" id="libFibre">${f.fibre}g fibre</span>` : '<span id="libFibre" style="display:none;"></span>'}
+          ${f.polyols ? `<span style="color:var(--text3);" id="libPolyols">🍬 ${f.polyols}g polyols</span>` : '<span id="libPolyols" style="display:none;"></span>'}
         </div>
       </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:14px;" id="libRemainingToday">${_remainingTodayLine(f.kcal, f.carbs, f.polyols)}</div>
 
       <button onclick="logLibraryWithPortion(${index})"
         style="width:100%;padding:14px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:10px;">
@@ -7557,11 +7560,16 @@ function scaleLibraryPortion(index, gramsStr) {
   const prot = Math.round(f.protein * factor * 10) / 10;
   const fat  = Math.round((f.fat||0) * factor * 10) / 10;
   const carb = Math.round(f.carbs * factor * 10) / 10;
+  const fibre = Math.round((f.fibre||0) * factor * 10) / 10;
+  const polyols = Math.round((f.polyols||0) * factor * 10) / 10;
   const el = id => document.getElementById(id);
   if (el('libKcal')) el('libKcal').textContent = kcal + 'kcal';
   if (el('libProt')) el('libProt').textContent = prot + 'g P';
   if (el('libFat'))  el('libFat').textContent  = fat  + 'g F';
   if (el('libCarb')) el('libCarb').textContent = carb + 'g C';
+  if (el('libFibre'))   { el('libFibre').style.display   = fibre   ? '' : 'none'; el('libFibre').textContent   = fibre + 'g fibre'; }
+  if (el('libPolyols')) { el('libPolyols').style.display = polyols ? '' : 'none'; el('libPolyols').textContent = '🍬 ' + polyols + 'g polyols'; }
+  if (el('libRemainingToday')) el('libRemainingToday').innerHTML = _remainingTodayLine(kcal, carb, polyols);
 }
 
 function logLibraryWithPortion(index) {
@@ -10393,6 +10401,24 @@ function getEffectiveCarbs(totals) {
   return totals.carbs || 0;
 }
 
+// Shared by any screen previewing food not yet logged (recipe builder,
+// recipe/combo pre-log review, etc.) - shows what today would look like if
+// this got logged now, so that decision doesn't need a separate trip to the
+// Today tab to check. Takes the macros that WOULD be added, not a full
+// entry - callers scale to whatever amount/servings the person currently
+// has selected before calling this, so the line stays accurate as they
+// adjust portions.
+function _remainingTodayLine(addKcal, addCarbs, addPolyols) {
+  const todayTotals = calcTotals(state.todayLog);
+  const targets = TARGETS[state.dayMode];
+  const afterKcal = todayTotals.kcal + (addKcal || 0);
+  const afterCarbsEff = getEffectiveCarbs({ carbs: (todayTotals.carbs || 0) + (addCarbs || 0), polyols: (todayTotals.polyols || 0) + (addPolyols || 0) });
+  const kcalRemain = Math.max(0, Math.round(targets.kcal - afterKcal));
+  const carbsRemain = Math.max(0, Math.round((targets.carbs - afterCarbsEff) * 10) / 10);
+  const over = afterCarbsEff > targets.carbs;
+  return `If logged now: <strong style="color:var(--text2);">${Math.round(afterKcal)}/${targets.kcal}kcal</strong> · ${over ? `<span style="color:var(--red);">${Math.round(afterCarbsEff - targets.carbs)}g over your ${targets.carbs}g ceiling</span>` : `<strong style="color:var(--text2);">${carbsRemain}g</strong> carbs would remain (${targets.carbs}g ceiling)`} · <strong style="color:var(--text2);">${kcalRemain}kcal</strong> left today`;
+}
+
 function saveCarbCeilings() {
   const std = parseInt(document.getElementById('ceilStandard')?.value);
   const occ = parseInt(document.getElementById('ceilOccasion')?.value);
@@ -11508,6 +11534,7 @@ function _saveRoutinesCSV(routines) {
 }
 
 function showRoutineList() {
+  _routineEditingId = null; // neutral state - editRoutine()/duplicateRoutine() set this themselves when actually entering that mode
   const routines = loadRoutines();
   const container = document.getElementById('routineListContainer');
   if (!container) return;
@@ -11523,12 +11550,29 @@ function showRoutineList() {
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
       <span style="flex:1;font-size:13px;color:var(--text2);">${r.name} <span style="color:var(--text3);font-size:11px;">(${r.exercises.length} exercises)</span></span>
       <span onclick="applyRoutine('${r.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Apply</span>
+      <span onclick="editRoutine('${r.id}')" title="Edit this routine's exercise list in place" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">✏️ Edit</span>
       <span onclick="duplicateRoutine('${r.id}')" title="Duplicate as a starting point for a new routine" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">📋 Copy</span>
       <span onclick="deleteRoutine('${r.id}')" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 4px;">×</span>
     </div>`).join('') + `
     <button onclick="showCreateRoutineForm()" class="btn-neutral" style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;">+ Create another routine</button>
     <button onclick="document.getElementById('routineListContainer').innerHTML=''" style="width:100%;padding:6px;margin-top:6px;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;">Close</button>
   `;
+}
+
+// Genuine gap raised directly: no way to edit a saved routine in place -
+// only Apply, Copy (duplicate-then-edit-then-delete-the-original as a
+// workaround), or Delete. Reuses the exact same create-routine form
+// (same +/× exercise rows, same name field) rather than building a
+// separate editor, distinguished only by _routineEditingId being set -
+// saveNewRoutine() below branches on that to update in place instead of
+// pushing a new entry, preserving the routine's id and any other fields.
+function editRoutine(id) {
+  const source = loadRoutines().find(r => r.id === id);
+  if (!source) return;
+  _routineDraftExercises = [...source.exercises];
+  _routineEditingId = id;
+  const container = document.getElementById('routineListContainer');
+  renderCreateRoutineForm(container, source.name);
 }
 
 // Real gap raised directly: creating a routine that's mostly the same as
@@ -11544,6 +11588,7 @@ function duplicateRoutine(id) {
   const source = loadRoutines().find(r => r.id === id);
   if (!source) return;
   _routineDraftExercises = [...source.exercises];
+  _routineEditingId = null; // a copy is a new routine, never edits the source
   const container = document.getElementById('routineListContainer');
   renderCreateRoutineForm(container, `${source.name} (copy)`);
 }
@@ -11560,20 +11605,24 @@ function deleteRoutine(id) {
 
 // ── Create a new routine (name + list of exercise names, no numbers) ──
 let _routineDraftExercises = [];
+let _routineEditingId = null; // set by editRoutine() below; null means this form is creating a new routine
 function showCreateRoutineForm() {
   _routineDraftExercises = [''];
+  _routineEditingId = null;
   const container = document.getElementById('routineListContainer');
   renderCreateRoutineForm(container);
 }
 function renderCreateRoutineForm(container, prefillName = '') {
   if (!container) return;
+  const editing = !!_routineEditingId;
   container.innerHTML = `
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
+      <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">${editing ? 'Edit Routine' : 'Create Routine'}</div>
       <input type="text" id="newRoutineName" value="${prefillName.replace(/"/g,'&quot;')}" placeholder="Routine name (e.g. Upper Body)" class="modal-input" style="width:100%;font-size:13px;padding:8px 10px;margin-bottom:8px;box-sizing:border-box;">
       <div id="routineExerciseRows"></div>
       <button onclick="addRoutineExerciseRow()" style="width:100%;padding:5px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <button onclick="saveNewRoutine()" style="flex:1;padding:7px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Save routine</button>
+        <button onclick="saveNewRoutine()" style="flex:1;padding:7px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">${editing ? 'Save changes' : 'Save routine'}</button>
         <button onclick="showRoutineList()" class="btn-neutral" style="flex:1;padding:7px;border-radius:6px;font-size:12px;">Cancel</button>
       </div>
     </div>`;
@@ -11598,6 +11647,18 @@ function saveNewRoutine() {
   const exercises = _routineDraftExercises.map(e => e.trim()).filter(Boolean);
   if (!exercises.length) { showToast('Add at least one exercise'); return; }
   const routines = loadRoutines();
+  if (_routineEditingId) {
+    const idx = routines.findIndex(r => r.id === _routineEditingId);
+    if (idx === -1) { showToast('That routine no longer exists'); _routineEditingId = null; showRoutineList(); return; }
+    // Same id, same object identity otherwise - only name/exercises change,
+    // so anything else ever added to a routine (useCount, etc.) survives an edit.
+    routines[idx] = { ...routines[idx], name, exercises };
+    saveRoutines(routines);
+    showToast(`"${name}" updated ✓`);
+    _routineEditingId = null;
+    showRoutineList();
+    return;
+  }
   routines.push({ id: 'rt' + Date.now(), name, exercises });
   saveRoutines(routines);
   showToast(`"${name}" routine saved ✓`);
@@ -14539,8 +14600,9 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
 function _comboItemsTotals(items) {
   return items.reduce((a, f) => ({
     kcal: a.kcal + (f.kcal||0), protein: a.protein + (f.protein||0),
-    carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0)
-  }), { kcal:0, protein:0, carbs:0, fat:0 });
+    carbs: a.carbs + (f.carbs||0), fat: a.fat + (f.fat||0),
+    fibre: (a.fibre||0) + (f.fibre||0), polyols: (a.polyols||0) + (f.polyols||0)
+  }), { kcal:0, protein:0, carbs:0, fat:0, fibre:0, polyols:0 });
 }
 
 function _buildComboItemsCardHTML(comboIndex) {
@@ -14575,6 +14637,7 @@ function _buildComboItemsCardHTML(comboIndex) {
     <div onclick="openLibraryPickerForCombo(${comboIndex})" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin:6px 0;">+ add ingredient</div>
     ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
     <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;" id="combo-totals-${comboIndex}">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;" id="combo-remaining-${comboIndex}">${_remainingTodayLine(totals.kcal, totals.carbs, totals.polyols)}</div>
     ${combo.anyMissing ? `<div style="font-size:10px;color:var(--yellow);margin-bottom:6px;">⚠ One suggested item couldn't be matched exactly — totals reflect only what's shown above.</div>` : ''}
     <button onclick="logSuggestedCombo(${comboIndex})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
   </div>`;
@@ -14593,13 +14656,15 @@ function scaleComboItem(comboIndex, itemIndex, gramsStr) {
   if (grams <= 0) return;
   item.amount = grams;
   const scaled = getScaledIngredient(item);
-  item.kcal = scaled.kcal; item.protein = scaled.protein; item.fat = scaled.fat; item.carbs = scaled.carbs; item.fibre = scaled.fibre;
+  item.kcal = scaled.kcal; item.protein = scaled.protein; item.fat = scaled.fat; item.carbs = scaled.carbs; item.fibre = scaled.fibre; item.polyols = scaled.polyols;
   const macrosEl = document.getElementById(`combo-item-macros-${comboIndex}-${itemIndex}`);
   if (macrosEl) macrosEl.textContent = `${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.fat}g F · ${scaled.carbs}g C`;
   const totalsEl = document.getElementById(`combo-totals-${comboIndex}`);
   if (totalsEl) {
     const totals = _comboItemsTotals(combo.items);
     totalsEl.textContent = `${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*10)/10}g P · ${Math.round(totals.carbs*10)/10}g C · ${Math.round(totals.fat*10)/10}g F`;
+    const remainingEl = document.getElementById(`combo-remaining-${comboIndex}`);
+    if (remainingEl) remainingEl.innerHTML = _remainingTodayLine(totals.kcal, totals.carbs, totals.polyols);
   }
 }
 
@@ -25026,6 +25091,7 @@ function updateRecipeTotals() {
   const totalsBar = document.getElementById('recipeTotalsBar');
   const totalsText = document.getElementById('recipeTotalsText');
   const perServingText = document.getElementById('recipePerServingText');
+  const remainingTodayText = document.getElementById('recipeRemainingTodayText');
   if (!_recipeIngredients.length) { totalsBar.style.display = 'none'; return; }
 
   const servings = parseInt(document.getElementById('recipeServings').value) || 1;
@@ -25047,11 +25113,15 @@ function updateRecipeTotals() {
     fat:     Math.round(total.fat     / servings * 10) / 10,
     carbs:   Math.round(total.carbs   / servings * 10) / 10,
     fibre:   Math.round(total.fibre   / servings * 10) / 10,
+    polyols: Math.round((total.polyols||0) / servings * 10) / 10,
   };
 
   totalsBar.style.display = 'block';
   totalsText.textContent = `${Math.round(total.kcal)}kcal · ${Math.round(total.protein*100)/100}g P · ${Math.round((total.fat||0)*100)/100}g F · ${Math.round(total.carbs*100)/100}g C`;
   perServingText.textContent = `Per serving (÷${servings}): ${per.kcal}kcal · ${per.protein}g P · ${per.fat||0}g F · ${per.carbs}g C${per.fibre ? ' · ' + per.fibre + 'g fibre' : ''}`;
+  // 1 serving, not the whole-recipe total - this is what a single log
+  // action would actually add to today, matching how the recipe gets eaten.
+  if (remainingTodayText) remainingTodayText.innerHTML = _remainingTodayLine(per.kcal, per.carbs, per.polyols);
 }
 
 // A Meal only ever stored {name, amount} per component - never each one's
@@ -36833,6 +36903,7 @@ function dismissInsight() {
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">TOTAL (whole recipe)</div>
       <div id="recipeTotalsText" style="font-size:14px;color:var(--text);font-family:Space Mono,monospace;"></div>
       <div style="font-size:10px;color:var(--text3);margin-top:6px;" id="recipePerServingText"></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;" id="recipeRemainingTodayText"></div>
     </div>
 
     <!-- Recipe ingredients store a frozen snapshot of each item's macros at
