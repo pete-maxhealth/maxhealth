@@ -4672,7 +4672,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.705</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.706</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5611,7 +5611,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.705'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.706'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -15289,20 +15289,25 @@ function loadSavedPrompts() {
       // without cluttering the row. Mix of simple quick-fire questions and
       // a couple of the complex cross-metric ones, rather than defaulting
       // to all the more involved Reports-style questions as quick pills.
-      { id: 1, name: "What's remaining?", text: 'What do I still need today?' },
-      { id: 2, name: 'Ketosis check', text: 'Did I likely break ketosis on any recent days where I went over my carb ceiling? Weigh each overage against my TDEE, what I ate, and any exercise that day rather than just the raw carb number.', pinned: false },
-      { id: 3, name: 'What can I ask?', text: 'What can I ask?' },
-      { id: 4, name: 'Weekly summary', text: 'Show my weekly summary' },
-      { id: 5, name: 'Weight trend', text: 'How has my weight changed over time and what might be driving it?', pinned: false },
-      { id: 6, name: 'HRV correlations', text: 'Were my low HRV days linked to poor sleep or high carbs?', pinned: false },
-      { id: 7, name: 'Target days', text: 'Which days did I hit all three targets — calories, protein and carbs?', pinned: false },
-      { id: 8, name: 'Sleep analysis', text: 'Analyse my sleep patterns and any correlations with next-day activity or HRV.', pinned: false },
-      { id: 9, name: 'Muscle gain plan', text: 'I want to build muscle and tone up. Based on my actual eating and activity history, what would I need to change — protein, calories, training?', pinned: false },
+      // scope: 'today' only ever has access to today's live totals via the
+      // Log tab's chat pipeline; 'history' needs the full-history Reports
+      // pipeline - a prompt in the wrong list either can't answer at all
+      // (today, asked something historical) or just wastes the deeper
+      // pipeline on something trivial (history, asked something today-only).
+      { id: 1, name: "What's remaining?", text: 'What do I still need today?', scope: 'today' },
+      { id: 2, name: 'Ketosis check', text: 'Did I likely break ketosis on any recent days where I went over my carb ceiling? Weigh each overage against my TDEE, what I ate, and any exercise that day rather than just the raw carb number.', pinned: false, scope: 'history' },
+      { id: 3, name: 'What can I ask?', text: 'What can I ask?', scope: 'today' },
+      { id: 4, name: 'Weekly summary', text: 'Show my weekly summary', scope: 'history' },
+      { id: 5, name: 'Weight trend', text: 'How has my weight changed over time and what might be driving it?', pinned: false, scope: 'history' },
+      { id: 6, name: 'HRV correlations', text: 'Were my low HRV days linked to poor sleep or high carbs?', pinned: false, scope: 'history' },
+      { id: 7, name: 'Target days', text: 'Which days did I hit all three targets — calories, protein and carbs?', pinned: false, scope: 'history' },
+      { id: 8, name: 'Sleep analysis', text: 'Analyse my sleep patterns and any correlations with next-day activity or HRV.', pinned: false, scope: 'history' },
+      { id: 9, name: 'Muscle gain plan', text: 'I want to build muscle and tone up. Based on my actual eating and activity history, what would I need to change — protein, calories, training?', pinned: false, scope: 'history' },
       // New — single-metric, no combined data needed
-      { id: 10, name: 'HRV this month', text: 'How has my HRV changed over the last 30 days?' },
+      { id: 10, name: 'HRV this month', text: 'How has my HRV changed over the last 30 days?', scope: 'history' },
       // New — cross-metric examples, combining nutrition with wearable data
-      { id: 11, name: 'Carbs on active vs rest days', text: 'Compare my average carb intake on days I did over 8000 steps versus days I did under 5000 steps' },
-      { id: 12, name: 'Compliant + well-rested days', text: 'How many days this month was I both under my carb ceiling and got at least 7 hours of sleep?' },
+      { id: 11, name: 'Carbs on active vs rest days', text: 'Compare my average carb intake on days I did over 8000 steps versus days I did under 5000 steps', scope: 'history' },
+      { id: 12, name: 'Compliant + well-rested days', text: 'How many days this month was I both under my carb ceiling and got at least 7 hours of sleep?', scope: 'history' },
     ];
     localStorage.setItem('mh_saved_prompts', JSON.stringify(seed));
     return seed;
@@ -15340,6 +15345,23 @@ function renderSavedPromptPills(containerId, runFnName) {
 let _editingSavedPromptId = null;
 let _savedPromptsManagerRunFn = 'quickPrompt';
 let _savedPromptSortMode = 'mostused';
+// Tracks the scope currently selected in the create/edit form itself -
+// separate from _savedPromptsManagerRunFn, which tracks which TAB the
+// manager was opened from (used to filter the list and to pick a sensible
+// default scope for a brand new prompt, not to force it).
+let _savedPromptFormScope = 'today';
+
+function setSavedPromptScope(scope) {
+  _savedPromptFormScope = scope;
+  ['today', 'history'].forEach(s => {
+    const el = document.getElementById(`savedPromptScope-${s}`);
+    if (el) {
+      el.style.background = s === scope ? 'var(--accent)' : 'transparent';
+      el.style.color = s === scope ? 'var(--bg)' : 'var(--text2)';
+      el.style.borderColor = s === scope ? 'var(--accent)' : 'var(--border)';
+    }
+  });
+}
 
 function openSavedPromptsManager(runFnName) {
   _savedPromptsManagerRunFn = runFnName || 'quickPrompt';
@@ -15349,6 +15371,10 @@ function openSavedPromptsManager(runFnName) {
   document.getElementById('savedPromptText').value = '';
   document.getElementById('savedPromptFormTitle').textContent = 'Add a new prompt';
   document.getElementById('savedPromptSaveBtn').textContent = '💾 Save';
+  // Default a brand new prompt's scope to match whichever tab it's being
+  // added from - a sensible starting point, not a lock: the toggle above
+  // is still right there to correct it before saving.
+  setSavedPromptScope(_savedPromptsManagerRunFn === 'setAskStarter' ? 'history' : 'today');
   setSavedPromptSort('mostused');
   document.getElementById('savedPromptsManagerModal').style.display = 'flex';
 }
@@ -15376,29 +15402,49 @@ function setSavedPromptSort(mode) {
   renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch')?.value || '');
 }
 
+let _savedPromptShowAllScopes = false;
+
 function renderSavedPromptsManagerList(filterText) {
   const el = document.getElementById('savedPromptsManagerList');
   const prompts = loadSavedPrompts();
   const q = (filterText || '').toLowerCase().trim();
-  let filtered = q
-    ? prompts.filter(p => (p.name || '').toLowerCase().includes(q) || (p.text || '').toLowerCase().includes(q))
-    : prompts.slice();
+  // Scope match: an unclassified prompt (no .scope field at all - every
+  // prompt saved before this feature existed) shows in both lists rather
+  // than silently vanishing from wherever it used to appear. Once
+  // classified, it only shows where it actually fits - the whole point of
+  // this feature is stopping a history-needing prompt from being run via
+  // the today-only Log tab pipeline the way it was before.
+  const contextScope = _savedPromptsManagerRunFn === 'setAskStarter' ? 'history' : 'today';
+  const scopeMatch = p => _savedPromptShowAllScopes || !p.scope || p.scope === contextScope;
+  let filtered = prompts.filter(scopeMatch);
+  if (q) filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(q) || (p.text || '').toLowerCase().includes(q));
 
   if (_savedPromptSortMode === 'mostused') filtered.sort((a, b) => (b.useCount || 0) - (a.useCount || 0));
   else if (_savedPromptSortMode === 'name') filtered.sort((a, b) => (a.name || a.text || '').localeCompare(b.name || b.text || ''));
   else if (_savedPromptSortMode === 'recent') filtered.sort((a, b) => b.id - a.id); // ids are assigned sequentially, so higher id = more recently added
 
+  const hiddenCount = prompts.length - prompts.filter(scopeMatch).length;
+  const toggleHtml = hiddenCount > 0 || _savedPromptShowAllScopes
+    ? `<div onclick="_savedPromptShowAllScopes=!_savedPromptShowAllScopes;renderSavedPromptsManagerList(document.getElementById('savedPromptsSearch').value);" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;padding:4px 0 10px;">${_savedPromptShowAllScopes ? 'Show only prompts that fit here' : `Show all prompts (${hiddenCount} hidden — from the other tab)`}</div>`
+    : '';
+
   if (!filtered.length) {
-    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts yet — add one below.'}</div>`;
+    el.innerHTML = toggleHtml + `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">${q ? `No saved prompts match "${filterText}"` : 'No saved prompts here yet — add one below, or tap above to see prompts from the other tab.'}</div>`;
     return;
   }
 
-  el.innerHTML = filtered.map(p => {
+  el.innerHTML = toggleHtml + filtered.map(p => {
     const uses = p.useCount || 0;
+    // Only shown at all when Show All is on (otherwise every visible prompt
+    // already matches the current tab, so the badge would be pure noise) -
+    // and only for the ones that DON'T match, so it's clear at a glance
+    // which ones came from the other tab.
+    const scopeBadge = (_savedPromptShowAllScopes && p.scope && p.scope !== contextScope)
+      ? `<span style="color:var(--text3);font-weight:400;font-size:10px;font-family:Space Mono,monospace;"> · ${p.scope === 'history' ? '📊 Reports' : '📋 Today'}</span>` : '';
     return `
     <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
       <div style="flex:1;min-width:0;overflow:hidden;">
-        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}${uses > 0 ? ` <span style="color:var(--text3);font-weight:400;font-size:10px;font-family:Space Mono,monospace;">· used ${uses}×</span>` : ''}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:2px;">${(p.name || 'Unnamed prompt').replace(/</g,'&lt;')}${uses > 0 ? ` <span style="color:var(--text3);font-weight:400;font-size:10px;font-family:Space Mono,monospace;">· used ${uses}×</span>` : ''}${scopeBadge}</div>
         <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(p.text||'').replace(/</g,'&lt;')}</div>
       </div>
       <span style="color:var(--text3);cursor:pointer;padding:4px 6px;flex-shrink:0;font-size:14px;" onclick="editSavedPromptStart(${p.id})" title="Edit">✏️</span>
@@ -15428,6 +15474,7 @@ function editSavedPromptStart(id) {
   document.getElementById('savedPromptText').value = p.text || '';
   document.getElementById('savedPromptFormTitle').textContent = `Editing "${p.name || 'Unnamed prompt'}"`;
   document.getElementById('savedPromptSaveBtn').textContent = '💾 Update';
+  setSavedPromptScope(p.scope || (_savedPromptsManagerRunFn === 'setAskStarter' ? 'history' : 'today'));
 }
 
 function refreshAllSavedPromptPillRows() {
@@ -15481,11 +15528,11 @@ function saveSavedPromptFromForm() {
   const prompts = loadSavedPrompts();
   if (_editingSavedPromptId !== null) {
     const idx = prompts.findIndex(x => x.id === _editingSavedPromptId);
-    if (idx > -1) prompts[idx] = { ...prompts[idx], name, text };
+    if (idx > -1) prompts[idx] = { ...prompts[idx], name, text, scope: _savedPromptFormScope };
     showToast('Prompt updated ✓');
   } else {
     const nextId = prompts.length ? Math.max(...prompts.map(p => p.id)) + 1 : 1;
-    prompts.push({ id: nextId, name, text });
+    prompts.push({ id: nextId, name, text, scope: _savedPromptFormScope });
     showToast('Prompt saved ✓');
   }
   saveSavedPrompts(prompts);
@@ -32987,11 +33034,7 @@ async function generateOncologyAINarrative() {
   if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
 
   const { cond, refEvents, cycleData } = window._oncologyCtx;
-  const allHistory = (state.history || []).map(entry => {
-    const parts = entry.date.split('/');
-    const isoDate = parts.length === 3 ? `20${parts[2]}-${parts[1]}-${parts[0]}` : entry.date;
-    return { ...entry, isoDate };
-  }).sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+  const allHistory = _historyIncludingToday();
 
   const ctx = buildPatientContext(allHistory);
   const refRows = Object.values(refEvents).filter(Boolean);
@@ -34416,6 +34459,38 @@ function estimateIncidentalStepsKcalForDay(day) {
 // it was: today's condition and ceiling applied uniformly throughout,
 // which is the right choice when someone wants one report across
 // everything rather than a period-specific breakdown.
+// Real gap found and fixed on request: state.history only ever contains
+// COMPLETED days - today gets added to it at midnight rollover, not before.
+// Every Reports/Ask-AI call site was building its history array straight
+// from state.history, meaning Reports genuinely had no access to today at
+// all, mid-day - a question spanning "recent days including today" could
+// not be fully answered by either Reports (full history, no today) or the
+// Log tab (today, no history). This is what makes the new saved-prompt
+// "history" scope a true superset of "today": it merges today's real, live
+// totals in as a synthetic entry so anything tagged "needs history" now
+// actually has everything, not just completed days. One shared place for
+// this rather than duplicating the merge at all 3 Reports call sites.
+function _historyIncludingToday() {
+  const base = (state.history || []).map(entry => {
+    const parts = entry.date.split('/');
+    const isoDate = parts.length === 3 ? `20${parts[2]}-${parts[1]}-${parts[0]}` : entry.date;
+    return { ...entry, isoDate };
+  });
+  const todayTotals = calcTotals(state.todayLog);
+  if (todayTotals.kcal > 0) {
+    const d = new Date();
+    const isoToday = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    // Wearable fields (steps/sleep/HRV/etc.) are genuinely unknown for a day
+    // still in progress - left out entirely rather than guessed at, same as
+    // how a day with no wearable sync already renders elsewhere.
+    base.push({
+      date: todayStr(), isoDate: isoToday, log: state.todayLog, totals: todayTotals,
+      mode: state.dayMode || 'standard', notes: (state.notes || '') + ' (today, in progress)', weight: state.weight ?? null,
+    });
+  }
+  return base.sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+}
+
 function buildPatientContext(history, conditionFilter = null) {
   let t      = getTargets();
   const name   = localStorage.getItem('mh_name') || 'the patient';
@@ -34843,12 +34918,9 @@ async function askReportsAI(overrideQuestion, isFullSummary) {
   const question = overrideQuestion || document.getElementById('rptAskInput')?.value.trim();
   if (!question) { showToast('Enter a question first'); return; }
 
-  // Use all available history for AI queries, not just selected range
-  const allHistory = (state.history || []).map(entry => {
-    const parts = entry.date.split('/');
-    const isoDate = parts.length === 3 ? `20${parts[2]}-${parts[1]}-${parts[0]}` : entry.date;
-    return { ...entry, isoDate };
-  }).sort((a, b) => b.isoDate.localeCompare(a.isoDate));
+  // Use all available history for AI queries, not just selected range -
+  // now genuinely all available, including today's live totals.
+  const allHistory = _historyIncludingToday();
   const h = allHistory;
   if (h.length < 2) { showToast('Need at least 2 days of data'); return; }
 
@@ -35276,7 +35348,25 @@ function saveEditedResearchDigest(id) {
 }
 
 async function generateGBMSummary() {
-  const h = getReportHistory();
+  // getReportHistory() respects whatever date range is picked on screen -
+  // deliberately NOT swapped for _historyIncludingToday() here, since that
+  // always returns the full unfiltered range and would silently ignore a
+  // "last 7 days" selection. Today gets appended on top of the filtered
+  // range instead, but only when today genuinely falls inside it - a
+  // custom past date range that doesn't reach today shouldn't suddenly
+  // gain an out-of-range entry just because this fix exists.
+  let h = getReportHistory();
+  const todayTotals = calcTotals(state.todayLog);
+  if (todayTotals.kcal > 0) {
+    const todayInRange = _rptRange === 0 || _rptRange > 0 ||
+      (_rptRange === -1 && (() => {
+        const to = parseDateStr(document.getElementById('rptDateTo')?.value);
+        return !to || to >= new Date(new Date().toDateString());
+      })());
+    if (todayInRange) {
+      h = [...h, { date: todayStr(), log: state.todayLog, totals: todayTotals, mode: state.dayMode || 'standard', notes: (state.notes || '') + ' (today, in progress)', weight: state.weight ?? null }];
+    }
+  }
   if (h.length < 3) { showToast('Need at least 3 days of data'); return; }
   const btn = document.getElementById('gbmSummaryBtn');
   const out = document.getElementById('gbm-summary-output');
@@ -37640,6 +37730,13 @@ function dismissInsight() {
       <div style="position:relative;margin-bottom:8px;">
         <textarea id="savedPromptText" class="modal-input" placeholder="The actual question to ask…" rows="2" style="width:100%;font-size:13px;box-sizing:border-box;resize:vertical;padding-right:38px;"></textarea>
         <span id="savedPromptVoiceBtn" onclick="toggleSavedPromptVoiceInput()" style="position:absolute;right:8px;top:8px;font-size:16px;cursor:pointer;padding:4px;border-radius:6px;" title="Dictate the question">🎙</span>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">WHERE SHOULD THIS APPEAR?</div>
+        <div style="display:flex;gap:6px;">
+          <div id="savedPromptScope-today" onclick="setSavedPromptScope('today')" style="flex:1;text-align:center;padding:7px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);">📋 Today only (Log tab)</div>
+          <div id="savedPromptScope-history" onclick="setSavedPromptScope('history')" style="flex:1;text-align:center;padding:7px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);">📊 Needs history (Reports)</div>
+        </div>
       </div>
       <button id="savedPromptSaveBtn" class="run-btn" style="width:100%;" onclick="saveSavedPromptFromForm()">💾 Save</button>
     </div>
