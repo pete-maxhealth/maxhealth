@@ -4367,11 +4367,13 @@
       <button class="copy-btn" style="width:100%;margin-bottom:10px;" onclick="renderLogMutationDebug()">🔍 View mutation log</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderPolyolsPipelineTrace()">🍬 View polyols pipeline trace</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAIAssistTrace()">🔍 View AI-assist apply trace</button>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderImpactBoxTrace()">📊 View impact box trace</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearPolyolsPipelineTrace()">Clear polyols trace</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAIAssistTrace()">Clear AI-assist trace</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearImpactBoxTrace()">Clear impact box trace</button>
     </div>
     </div>
 
@@ -4669,7 +4671,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.702</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.703</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5608,7 +5610,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.702'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.703'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17094,6 +17096,21 @@ function buildMealImpactHtml(mealTotals) {
   const remainingBefore = Math.max(0, ceiling - effectiveBefore);
   const remainingAfter = ceiling - projectedCarbs;
   const projectedKcal = todayTotalsBefore.kcal + mealTotals.kcal;
+  // Debug trace added on request - captures every value this function
+  // computes, not just the final numbers, so a "still wrong" report can be
+  // checked against the actual inputs rather than guessed at again.
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_impact_box_trace') || '[]');
+    log.unshift({
+      timestamp: new Date().toISOString(),
+      mealTotals: { kcal: mealTotals.kcal, carbs: mealTotals.carbs, fibre: mealTotals.fibre, polyols: mealTotals.polyols },
+      todayTotalsBefore: { kcal: todayTotalsBefore.kcal, carbs: todayTotalsBefore.carbs, fibre: todayTotalsBefore.fibre, polyols: todayTotalsBefore.polyols },
+      effectiveBefore, projectedTotals, effectiveAfter, ceiling,
+      carbMethod: localStorage.getItem('mh_carb_method') || 'gross(default)',
+    });
+    if (log.length > 20) log.length = 20;
+    localStorage.setItem('mh_impact_box_trace', JSON.stringify(log));
+  } catch(e) {}
   const currentStreak = wasInKetosis ? calcKetosisStreak() : 0;
 
   let ketosisImpactHtml;
@@ -23632,6 +23649,35 @@ function clearAIAssistTrace() {
   const out = document.getElementById('logMutationDebugOutput');
   if (out) out.style.display = 'none';
   showToast('AI-assist trace cleared');
+}
+
+function renderImpactBoxTrace() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const trace = JSON.parse(localStorage.getItem('mh_impact_box_trace') || '[]');
+  let text = 'IMPACT BOX TRACE (most recent first — every value buildMealImpactHtml computed for that specific "before → after" box):\n\n';
+  if (trace.length === 0) {
+    text += 'Nothing recorded yet — trigger the before/after impact box (log something from chat or the Library portion selector), then check here.';
+  } else {
+    text += trace.map((e, i) =>
+      `━━━ #${i+1} — ${e.timestamp} (carb method: ${e.carbMethod}) ━━━\n` +
+      `  mealTotals (the item just added): carbs=${e.mealTotals?.carbs} fibre=${e.mealTotals?.fibre} polyols=${e.mealTotals?.polyols} kcal=${e.mealTotals?.kcal}\n` +
+      `  todayTotalsBefore (today's log, before this): carbs=${e.todayTotalsBefore?.carbs} fibre=${e.todayTotalsBefore?.fibre} polyols=${e.todayTotalsBefore?.polyols}\n` +
+      `  effectiveBefore (net carbs shown as "before"): ${e.effectiveBefore}\n` +
+      `  projectedTotals (before + this item, pre-net-adjust): carbs=${e.projectedTotals?.carbs} fibre=${e.projectedTotals?.fibre} polyols=${e.projectedTotals?.polyols}\n` +
+      `  effectiveAfter (net carbs shown as "after"): ${e.effectiveAfter}\n` +
+      `  ceiling: ${e.ceiling}`
+    ).join('\n\n');
+  }
+  out.textContent = text;
+  out.style.display = 'block';
+}
+
+function clearImpactBoxTrace() {
+  localStorage.removeItem('mh_impact_box_trace');
+  const out = document.getElementById('logMutationDebugOutput');
+  if (out) out.style.display = 'none';
+  showToast('Impact box trace cleared');
 }
 
 function clearLogMutationDebug() {
