@@ -4676,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.735</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.736</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5615,7 +5615,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.735'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.736'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17870,6 +17870,10 @@ function editPreviewItem(index) {
         <input id="editPolyols" type="number" step="0.1" value="${Math.round((f.polyols||0)*100)/100}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
       </div>
     </div>
+    <div style="margin-bottom:8px;">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">CATEGORIES <span style="text-transform:none;">(optional, comma-separated — added on Save only, alongside anything typed in the shared field below)</span></div>
+      <input id="editCategories" list="allKnownCategories" type="text" value="${(f._categoriesOverride||[]).join(', ')}" placeholder="e.g. dairy, snacks" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 8px;color:var(--text);font-size:13px;box-sizing:border-box;">
+    </div>
     <div style="display:flex;gap:8px;">
       <button class="settings-save-btn" style="flex:1;" onclick="applyPreviewEdit(${index})">Apply</button>
       <button class="copy-btn" style="flex:1;font-size:12px;" onclick="document.getElementById('previewEditForm').remove()">Cancel</button>
@@ -17927,12 +17931,20 @@ function applyPreviewEdit(index) {
   const fat     = parseFloat(document.getElementById('editFat').value)     || 0;
   const carbs   = parseFloat(document.getElementById('editCarbs').value)   || 0;
   const amount  = document.getElementById('editAmount').value.trim();
+  const catsRaw = (document.getElementById('editCategories')?.value || '').trim();
   if (name) window._pendingMealFoods[index].name = name;
   window._pendingMealFoods[index].kcal    = kcal;
   window._pendingMealFoods[index].protein = protein;
   window._pendingMealFoods[index].fat     = fat;
   window._pendingMealFoods[index].carbs   = carbs;
   if (amount) window._pendingMealFoods[index].amount = amount;
+  // Stored on the food itself (not applied to the library yet) so it
+  // survives the bubble re-render below and gets picked up later by
+  // saveLibraryOnlyFromPreview, merged alongside whatever's typed into the
+  // shared "Categories for Save only" field.
+  window._pendingMealFoods[index]._categoriesOverride = catsRaw
+    ? catsRaw.split(/[,，、;]/).map(c => c.trim().toLowerCase()).filter(Boolean)
+    : [];
   // A real, deliberate 0 typed here is not the same thing as "AI never
   // filled this in" - sanitiseFatValues (run again at confirmMealLog)
   // can't otherwise tell those apart, since it only ever sees the final
@@ -18612,6 +18624,12 @@ function _saveLibraryOnlyFromPreviewImpl() {
     };
     console.log(`[saveLibraryOnlyFromPreview] Processing "${f.name}":`, entry);
     dbg(`Processing "${f.name}" - ${entry.kcal}kcal, ${entry.protein}g P, ${entry.fat}g F, ${entry.carbs}g C, portion: ${entry.portion || '(none)'}`);
+    // Per-item categories (typed into the ✏️ edit form's own CATEGORIES
+    // field) combine with the shared bubble-level field rather than either
+    // one overriding the other — a multi-food save can reasonably want one
+    // category applied to everything (shared field) plus something specific
+    // to just one item (per-item field).
+    const itemCats = [...new Set([...(sharedCats || []), ...(f._categoriesOverride || [])])];
     if (existingIdx > -1) {
       console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - exact name match found, updating existing entry.`);
       dbg(`"${f.name}" - exact match with existing library entry, will update in place`);
@@ -18637,12 +18655,18 @@ function _saveLibraryOnlyFromPreviewImpl() {
       target.polyols  = entry.polyols;
       target.locked   = entry.locked;
       target.source   = entry.source;
-      if (sharedCats && sharedCats.length) mergeCategoriesIntoLibraryItem(target, sharedCats);
+      if (itemCats.length) mergeCategoriesIntoLibraryItem(target, itemCats);
       overwritten.push(f.name);
       _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'exact-update-in-place', categoriesOnEntry: target.categories || null });
       return;
     }
-    if (sharedCats && sharedCats.length) entry.categories = sharedCats;
+    // Brand-new item, nothing typed either way: was previously left with no
+    // explicit .categories at all — auto-detection covered what got shown
+    // on screen, but nothing was actually stored on the item itself. Seeding
+    // explicitly here means a fresh library item always has real, persisted
+    // categories from the moment it's created, same as anything added via
+    // the Library tab directly.
+    entry.categories = itemCats.length ? itemCats : getItemCategories(entry);
     // No exact match — but a fuzzy match (e.g. typing "Elmlea" against a saved
     // "Elmlea Whipping Cream (buttermilk blend)") shouldn't just create a second
     // entry either. This needs confirmation rather than auto-overwriting, since
