@@ -4370,6 +4370,7 @@
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAIAssistTrace()">🔍 View AI-assist apply trace</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderImpactBoxTrace()">📊 View impact box trace</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAddCategoryTrace()">🏷️ View add-category trace</button>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderSaveOnlyCatTrace()">💾 View Save-only categories trace</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
@@ -4377,6 +4378,7 @@
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAIAssistTrace()">Clear AI-assist trace</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearImpactBoxTrace()">Clear impact box trace</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAddCategoryTrace()">Clear add-category trace</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearSaveOnlyCatTrace()">Clear Save-only categories trace</button>
     </div>
     </div>
 
@@ -4674,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.730</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.731</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5613,7 +5615,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.730'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.731'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -18486,6 +18488,12 @@ function saveLibraryOnlyFromPreview() {
   const sharedCats = sharedCatsInput
     ? sharedCatsInput.split(/[,，、;]/).map(c => c.trim().toLowerCase()).filter(Boolean)
     : null;
+  // Debug trace added on request - "Save only" categories reported as not
+  // saving, and every path traced through the code looks correct (this
+  // field's comma-splitting was already fixed for smart-punctuation
+  // variants in a past session), so capturing the real input/branch/
+  // outcome rather than guessing a further explanation.
+  const _saveOnlyCatTrace = { timestamp: new Date().toISOString(), rawInputValue: sharedCatsInput, splitResult: sharedCats, perFood: [] };
 
   foods.forEach(f => {
     // Computed before building entry so a data-less overwrite (e.g. an
@@ -18524,6 +18532,7 @@ function saveLibraryOnlyFromPreview() {
       dbg(`"${f.name}" - exact match with existing library entry, will overwrite`);
       lib[existingIdx] = entry;
       overwritten.push(f.name);
+      _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'exact-overwrite', categoriesOnEntry: entry.categories || null });
       return;
     }
     // No exact match — but a fuzzy match (e.g. typing "Elmlea" against a saved
@@ -18535,13 +18544,22 @@ function saveLibraryOnlyFromPreview() {
       console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - fuzzy match found against "${fuzzy.name}", needs manual confirmation before saving.`);
       dbg(`"${f.name}" - fuzzy-matched against existing "${fuzzy.name}" - will need manual confirm, NOT saved yet`);
       needsConfirm.push({ newEntry: entry, existing: fuzzy });
+      _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'fuzzy-needs-confirm', categoriesOnEntry: entry.categories || null, fuzzyMatchedAgainst: fuzzy.name });
       return;
     }
     console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - no match, saving as new entry.`);
     dbg(`"${f.name}" - no match found, saving as brand new library entry`);
     lib.push(entry);
     saved.push(f.name);
+    _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'new-entry', categoriesOnEntry: entry.categories || null });
   });
+
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_saveonly_cat_trace') || '[]');
+    log.unshift(_saveOnlyCatTrace);
+    if (log.length > 20) log.length = 20;
+    localStorage.setItem('mh_saveonly_cat_trace', JSON.stringify(log));
+  } catch(e) {}
 
   const saveResult = saveLibrary(lib);
   console.log('[saveLibraryOnlyFromPreview] saveLibrary() result:', saveResult, '- library now has', lib.length, 'items');
@@ -18597,6 +18615,14 @@ function confirmFuzzyLibOverwrite(idx) {
   const lib = loadLibrary();
   const existingIdx = lib.findIndex(l => l.name.toLowerCase() === pair.existing.name.toLowerCase());
   if (existingIdx > -1) lib[existingIdx] = pair.newEntry; else lib.push(pair.newEntry);
+  // Closes the loop on the same trace: confirms whether categories set at
+  // the original preview screen survive through to this separate, later
+  // confirmation tap, or get lost somewhere in between.
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_saveonly_cat_trace') || '[]');
+    if (log[0]) { log[0].fuzzyConfirmOverwrite = { name: pair.newEntry.name, categoriesOnFinalSave: pair.newEntry.categories || null }; }
+    localStorage.setItem('mh_saveonly_cat_trace', JSON.stringify(log));
+  } catch(e) {}
   saveLibrary(lib);
   renderLibrary();
   const row = document.querySelector(`[data-fuzzy-idx="${idx}"]`);
@@ -24001,6 +24027,36 @@ function clearAddCategoryTrace() {
   const out = document.getElementById('logMutationDebugOutput');
   if (out) out.style.display = 'none';
   showToast('Add-category trace cleared');
+}
+
+function renderSaveOnlyCatTrace() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const trace = JSON.parse(localStorage.getItem('mh_saveonly_cat_trace') || '[]');
+  let text = 'SAVE-ONLY CATEGORIES TRACE (most recent first — every tap of "📚 Save only" on a meal preview):\n\n';
+  if (trace.length === 0) {
+    text += 'Nothing recorded yet — type something into "Categories for Save only" on a meal preview, tap Save only, then check here.';
+  } else {
+    text += trace.map((e, i) =>
+      `━━━ #${i+1} — ${e.timestamp} ━━━\n` +
+      `  Raw input value: "${e.rawInputValue}"\n` +
+      `  Split into: [${(e.splitResult||[]).map(c=>`"${c}"`).join(', ')}]\n` +
+      `  Per food:\n` + (e.perFood||[]).map(pf =>
+        `    "${pf.name}" → ${pf.branch}, categories on entry: [${(pf.categoriesOnEntry||[]).map(c=>`"${c}"`).join(', ')}]` +
+        (pf.branch === 'fuzzy-needs-confirm' ? ` (fuzzy-matched against "${pf.fuzzyMatchedAgainst}" — NOT saved yet, needs a tap on the confirm bubble)` : '')
+      ).join('\n') +
+      (e.fuzzyConfirmOverwrite ? `\n  Later confirmed overwrite for "${e.fuzzyConfirmOverwrite.name}" — categories at that final save: [${(e.fuzzyConfirmOverwrite.categoriesOnFinalSave||[]).map(c=>`"${c}"`).join(', ')}]` : '')
+    ).join('\n\n');
+  }
+  out.textContent = text;
+  out.style.display = 'block';
+}
+
+function clearSaveOnlyCatTrace() {
+  localStorage.removeItem('mh_saveonly_cat_trace');
+  const out = document.getElementById('logMutationDebugOutput');
+  if (out) out.style.display = 'none';
+  showToast('Save-only categories trace cleared');
 }
 
 function clearLogMutationDebug() {
