@@ -4676,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.731</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.732</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5615,7 +5615,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.731'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.732'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -18447,6 +18447,29 @@ function revertPreviewItemEstimate(idx) {
 }
 
 function saveLibraryOnlyFromPreview() {
+  // Wrapper only: catches any exception thrown anywhere in the real function
+  // below and surfaces it instead of letting it die silently. Reported
+  // symptom was "categories don't save" with the debug trace toggle on
+  // producing NO output at all - not even the trace bubble - which means
+  // something was throwing before execution ever reached that point. This
+  // makes that visible (both as a chat bubble and recorded into the same
+  // persisted trace log) regardless of whether the debug toggle is on,
+  // since a crash needs to be seen either way.
+  try {
+    _saveLibraryOnlyFromPreviewImpl();
+  } catch (err) {
+    console.error('[saveLibraryOnlyFromPreview] THREW:', err);
+    try {
+      const log = JSON.parse(localStorage.getItem('mh_saveonly_cat_trace') || '[]');
+      log.unshift({ timestamp: new Date().toISOString(), crashed: true, error: err.message, stack: err.stack });
+      if (log.length > 20) log.length = 20;
+      localStorage.setItem('mh_saveonly_cat_trace', JSON.stringify(log));
+    } catch(e2) {}
+    addBubble(`⚠️ Save to library crashed before finishing: <strong>${err.message}</strong><br><small style="color:var(--text3);">${(err.stack||'').split('\n').slice(0,3).join('<br>')}</small>`, 'system', 'warn');
+  }
+}
+
+function _saveLibraryOnlyFromPreviewImpl() {
   // Saves the previewed food(s) to the library WITHOUT logging them as eaten —
   // previously the only route to "Save to library" required logging first, since
   // that prompt only ever appeared after a real log action completed. This gives
