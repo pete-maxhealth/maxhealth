@@ -4369,12 +4369,14 @@
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderPolyolsPipelineTrace()">🍬 View polyols pipeline trace</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAIAssistTrace()">🔍 View AI-assist apply trace</button>
       <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderImpactBoxTrace()">📊 View impact box trace</button>
+      <button class="copy-btn" style="width:100%;margin-bottom:10px;background:var(--surface2);color:var(--text2);" onclick="renderAddCategoryTrace()">🏷️ View add-category trace</button>
       <div id="logMutationDebugOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></div>
       <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('logMutationDebugOutput', 'Log mutation debug')">📋 Copy all text</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLogMutationDebug()">Clear log</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearPolyolsPipelineTrace()">Clear polyols trace</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAIAssistTrace()">Clear AI-assist trace</button>
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearImpactBoxTrace()">Clear impact box trace</button>
+      <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearAddCategoryTrace()">Clear add-category trace</button>
     </div>
     </div>
 
@@ -4672,7 +4674,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.721</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.730</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5611,7 +5613,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.721'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.730'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8616,10 +8618,16 @@ function toggleManageCategoriesBackToTop() {
 // get told about the change.
 function addCategoryToWord(word, inputId) {
   const input = document.getElementById(inputId);
-  const cat = (input?.value || '').trim().toLowerCase();
-  if (!cat) return;
+  const raw = (input?.value || '').trim();
+  if (!raw) return;
+  // Same comma-split gap as addItemCategory (the per-item tagging version)
+  // - genuinely reported and fixed there first, checked here for the same
+  // pattern given it's the exact same "free-text category input, no split"
+  // shape, just for the categorization dictionary instead of a single item.
+  const cats = raw.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+  if (!cats.length) return;
   const updated = CATEGORY_MAP[word].slice();
-  if (!updated.includes(cat)) updated.push(cat);
+  cats.forEach(cat => { if (!updated.includes(cat)) updated.push(cat); });
   CATEGORY_MAP[word] = updated;
   _categoryCustom[word] = updated;
   refreshCategoryWords();
@@ -8733,17 +8741,26 @@ function _levenshtein(a, b) {
 
 function addItemCategory(origIdx) {
   const input = document.getElementById('lib-edit-newcat-' + origIdx);
-  const cat = (input?.value || '').trim().toLowerCase();
-  if (!cat) return;
-  // Was blocked here entirely on the reasoning that "Snack" is a meal-SIZE
-  // concept with its own pinned handling in the meal-suggestion picker -
-  // true, but that redundancy only exists IN that picker specifically
-  // (getLibraryCategoriesInUse excludes it there, correctly). It doesn't
-  // exist here at all - per-item tagging and the general browse view have
-  // no pinned "Snacks" entry to collide with, so genuinely wanting to
-  // browse/tag snack-type items this way (a Caramac bar, say) is a
-  // perfectly reasonable, different use of the same word. Reversed after
-  // Pete hit this block directly and it turned out to be the wrong call.
+  const raw = (input?.value || '').trim();
+  if (!raw) return;
+  // Real bug found: this never actually split on commas at all, despite
+  // "add a category, e.g. dairy" implying single-entry but comma-separated
+  // multi-entry already being a real convention elsewhere in the app (the
+  // chat meal-preview's "Categories for Save only" field). Typing "Baking,
+  // Sweet" here produced ONE category literally containing a comma, not
+  // two separate ones - confirmed directly from a real edit screen.
+  const cats = raw.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+  if (!cats.length) return;
+  // Debug trace added on request - "still no change" after the comma-split
+  // fix, with no obvious cause found by re-reading the code, so capturing
+  // the actual raw input and split result rather than guessing further.
+  try {
+    const log = JSON.parse(localStorage.getItem('mh_addcat_trace') || '[]');
+    log.unshift({ timestamp: new Date().toISOString(), origIdx, rawInputValue: raw, splitResult: cats });
+    if (log.length > 20) log.length = 20;
+    localStorage.setItem('mh_addcat_trace', JSON.stringify(log));
+  } catch(e) {}
+
   const lib = loadLibrary();
   if (!lib[origIdx]) return;
   // Was `if (!Array.isArray(...)) lib[origIdx].categories = []` - started
@@ -8757,23 +8774,53 @@ function addItemCategory(origIdx) {
   if (!Array.isArray(lib[origIdx].categories) || !lib[origIdx].categories.length) {
     lib[origIdx].categories = getItemCategories(lib[origIdx]).slice();
   }
-  if (lib[origIdx].categories.includes(cat)) { showToast('Already assigned'); return; }
+
   // Catches exactly the "diary" vs "dairy" case before it happens again -
   // a near-identical existing category name is almost always a typo, not
-  // a genuinely new category. Confirmed once via the input's own dataset,
-  // so tapping Add a second time with the same text proceeds anyway.
+  // a genuinely new category. Confirmed per-category via a comma-joined
+  // dataset (generalized from a single string to a set, now that more
+  // than one category can be submitted in the same batch) - tapping Add
+  // again with the same flagged word(s) still present proceeds anyway.
   const known = [...getAllKnownCategoryNames()];
-  const closeMatch = known.find(k => k !== cat && _levenshtein(k, cat) <= 1);
-  if (closeMatch && input.dataset.confirmedTypo !== cat) {
-    input.dataset.confirmedTypo = cat;
-    showToast(`Did you mean "${closeMatch}"? Tap Add again to use "${cat}" anyway`);
+  const confirmedSet = (input.dataset.confirmedTypo || '').split(',').filter(Boolean);
+  const added = [];
+  const flagged = [];
+  cats.forEach(cat => {
+    if (lib[origIdx].categories.includes(cat)) return; // already assigned - silently skip rather than blocking the rest of the batch
+    const closeMatch = known.find(k => k !== cat && _levenshtein(k, cat) <= 1);
+    if (closeMatch && !confirmedSet.includes(cat)) { flagged.push({ cat, closeMatch }); return; }
+    lib[origIdx].categories.push(cat);
+    added.push(cat);
+  });
+
+  if (flagged.length) {
+    input.dataset.confirmedTypo = [...confirmedSet, ...flagged.map(f => f.cat)].join(',');
+    showToast(`Did you mean "${flagged[0].closeMatch}" instead of "${flagged[0].cat}"? Tap Add again to use it anyway${flagged.length > 1 ? ` (+${flagged.length - 1} more flagged)` : ''}`);
+  } else {
+    delete input.dataset.confirmedTypo;
+  }
+
+  // Second trace checkpoint - captures the actual outcome per category
+  // (added / flagged-as-typo / already-assigned), not just the input
+  // parsing from the first checkpoint above, so a silent-no-op case is
+  // distinguishable from the split itself failing.
+  try {
+    const log2 = JSON.parse(localStorage.getItem('mh_addcat_trace') || '[]');
+    if (log2[0]) { log2[0].added = added; log2[0].flagged = flagged; log2[0].currentCategoriesAfter = lib[origIdx].categories.slice(); }
+    localStorage.setItem('mh_addcat_trace', JSON.stringify(log2));
+  } catch(e) {}
+
+  if (!added.length) {
+    // Was a silent no-op when every category in the batch was already
+    // assigned (no typos flagged either, so neither toast above fired) -
+    // looked exactly like "nothing happened", indistinguishable from the
+    // fix itself not working at all.
+    if (!flagged.length) showToast(cats.length === 1 ? 'Already assigned' : 'All of those are already assigned');
     return;
   }
-  delete input.dataset.confirmedTypo;
-  lib[origIdx].categories.push(cat);
   saveLibrary(lib);
   renderLibrary();
-  showToast(`Added "${cat}" ✓`);
+  showToast(added.length === 1 ? `Added "${added[0]}" ✓` : `Added ${added.length} categories ✓`);
 }
 
 function removeItemCategory(origIdx, cat) {
@@ -10621,7 +10668,7 @@ function initExerciseOffsetSettings() {
 function getCarbOverageAddressedStatus(day, targetsAll) {
   if (localStorage.getItem('mh_exercise_offset_enabled') !== '1') return null;
   const ceiling = targetsAll[day.mode || 'standard']?.carbs ?? targetsAll.standard.carbs;
-  const actualCarbs = day.totals?.carbs || 0;
+  const actualCarbs = day.totals?.carbs != null ? getEffectiveCarbsForDay(day) : 0;
   if (actualCarbs <= ceiling) return null; // not over ceiling — nothing to address
   const overageKcal = (actualCarbs - ceiling) * 4; // carbs are 4 kcal/g
   const exerciseKcal = (day.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0);
@@ -23928,6 +23975,34 @@ function clearImpactBoxTrace() {
   showToast('Impact box trace cleared');
 }
 
+function renderAddCategoryTrace() {
+  const out = document.getElementById('logMutationDebugOutput');
+  if (!out) return;
+  const trace = JSON.parse(localStorage.getItem('mh_addcat_trace') || '[]');
+  let text = 'ADD-CATEGORY TRACE (most recent first — every tap of + Add on a library item):\n\n';
+  if (trace.length === 0) {
+    text += 'Nothing recorded yet — tap + Add on any library item\'s category field, then check here.';
+  } else {
+    text += trace.map((e, i) =>
+      `━━━ #${i+1} — ${e.timestamp} (item index ${e.origIdx}) ━━━\n` +
+      `  Raw input value: "${e.rawInputValue}"\n` +
+      `  Split into: [${(e.splitResult||[]).map(c=>`"${c}"`).join(', ')}]\n` +
+      `  Actually added: [${(e.added||[]).map(c=>`"${c}"`).join(', ')}]\n` +
+      `  Flagged as possible typo: [${(e.flagged||[]).map(f=>`"${f.cat}" (did you mean "${f.closeMatch}"?)`).join(', ')}]\n` +
+      `  Item's categories AFTER this action: [${(e.currentCategoriesAfter||[]).map(c=>`"${c}"`).join(', ')}]`
+    ).join('\n\n');
+  }
+  out.textContent = text;
+  out.style.display = 'block';
+}
+
+function clearAddCategoryTrace() {
+  localStorage.removeItem('mh_addcat_trace');
+  const out = document.getElementById('logMutationDebugOutput');
+  if (out) out.style.display = 'none';
+  showToast('Add-category trace cleared');
+}
+
 function clearLogMutationDebug() {
   appConfirm('Clear the log mutation debug data?', () => {
     localStorage.removeItem('mh_log_mutation_debug');
@@ -29303,18 +29378,27 @@ function renderTrends() {
   if (stepsClean.length > 0) {
     showCard('mcSteps');
     const avgSteps = Math.round(avg(stepsClean));
+    // Real inconsistency found: the gauge below already used the
+    // personalized Activity Level baseline (Settings > Profile) via
+    // getDrillConfig('steps'), but the status text, its color, the "days
+    // over" count, and the bar chart's own color-coding all still used a
+    // hardcoded 10000 regardless - someone with a genuinely different
+    // personal baseline would see their gauge agree with their real
+    // target while every other element on the same card disagreed with it.
+    const stepsBaseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+    const stepsGoal = stepsBaseline + 2500; // same +2500 spread getDrillConfig already uses
     document.getElementById('mcStepsVal').textContent = avgSteps.toLocaleString();
     document.getElementById('statStepsAvg').textContent = avgSteps.toLocaleString();
-    document.getElementById('statStepsOver').textContent = stepsClean.filter(v=>v>=10000).length;
+    document.getElementById('statStepsOver').textContent = stepsClean.filter(v=>v>=stepsGoal).length;
     document.getElementById('statStepsMax').textContent = Math.max(...stepsClean).toLocaleString();
     const statusEl = document.getElementById('mcStepsStatus');
-    statusEl.textContent = avgSteps >= 10000 ? `${avgSteps.toLocaleString()} avg · Active` : avgSteps >= 7000 ? `${avgSteps.toLocaleString()} avg · Moderate` : `${avgSteps.toLocaleString()} avg · Low activity`;
-    statusEl.className = `metric-status ${avgSteps >= 10000 ? 'good' : avgSteps >= 7000 ? 'warn' : 'neutral'}`;
+    statusEl.textContent = avgSteps >= stepsGoal ? `${avgSteps.toLocaleString()} avg · Active` : avgSteps >= stepsBaseline ? `${avgSteps.toLocaleString()} avg · Moderate` : `${avgSteps.toLocaleString()} avg · Low activity`;
+    statusEl.className = `metric-status ${avgSteps >= stepsGoal ? 'good' : avgSteps >= stepsBaseline ? 'warn' : 'neutral'}`;
     drawSparkline('sparkSteps', stepsVals, '#4d9fff');
     if (document.getElementById('chartSteps')) {
     destroyChart('chartSteps');
     const stepsStyle = getChartStyle(CHART_STYLE_KEY, 'steps', 'bar');
-    const stepsColors = stepsVals.map(v=>v>=10000?'rgba(45,235,143,0.6)':'rgba(77,159,255,0.5)');
+    const stepsColors = stepsVals.map(v=>v>=stepsGoal?'rgba(45,235,143,0.6)':'rgba(77,159,255,0.5)');
     chartInstances['chartSteps'] = new Chart(document.getElementById('chartSteps'), {
       type:'bar', data:{ labels, datasets:[applyChartStyle({ label:'Steps', data:stepsVals, backgroundColor:stepsColors, borderColor:'#4d9fff', borderRadius:3, pointBackgroundColor:stepsColors }, stepsStyle)]},
       options:{ ...CHART_DEFAULTS }
@@ -29475,7 +29559,11 @@ function renderTrends() {
   }
 
   // ── Carbs ──
-  const carbVals = data.map(d => d.totals?.carbs || null);
+  // Real gap found: was reading raw gross totals.carbs, bypassing Net
+  // Carbs mode - affects both the average shown on this card and the
+  // on-target count right below, same class of fix applied several times
+  // elsewhere tonight (dashboard, Reports summary, Weekly Summary).
+  const carbVals = data.map(d => d.totals?.carbs != null ? getEffectiveCarbsForDay(d) : null);
   const carbClean = clean(carbVals);
   if (carbClean.length > 0) {
     showCard('mcCarb');
@@ -29513,9 +29601,8 @@ function renderTrends() {
       return t[d.mode || 'standard']?.carbs ?? t.standard.carbs;
     };
     const ketosisVals = data.map(d => {
-      const carbs = d.totals?.carbs;
-      if (carbs == null) return null;
-      return carbs <= carbCeilForTrend(d) ? 1 : 0;
+      if (d.totals?.carbs == null) return null;
+      return getEffectiveCarbsForDay(d) <= carbCeilForTrend(d) ? 1 : 0;
     });
     if (document.getElementById('chartKetosis')) {
     destroyChart('chartKetosis');
@@ -30075,6 +30162,28 @@ function getDrillData(metric, period) {
     return filtered
       .filter(d => d.totals?.carbs != null)
       .map(d => ({ date: d.date, val: getEffectiveCarbsForDay(d) <= ceilFor(d) ? 100 : 0, raw: d }));
+  }
+
+  // Same real gap as the 'ketosis' branch above already accounts for, just
+  // never applied to the plain "Carbs" overlay itself - a commonly-used
+  // default overlay metric (see getAllOverlayableMetrics' own comment) that
+  // fell through to the generic field-read path below, showing raw/gross
+  // totals.carbs regardless of the person's Net Carbs display preference.
+  // Every other carbs display in the app (dashboard, ketosis badge,
+  // History) already respects that setting - this overlay silently didn't.
+  if (metric === 'carbs') {
+    const filteredCarbs = period > 0
+      ? allData.filter(d => {
+          const p = d.date.split('/');
+          if (p.length !== 3) return false;
+          const date = new Date(`20${p[2]}-${p[1]}-${p[0]}`);
+          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - period);
+          return date >= cutoff;
+        })
+      : allData;
+    return filteredCarbs
+      .filter(d => d.totals?.carbs != null)
+      .map(d => ({ date: d.date, val: getEffectiveCarbsForDay(d), raw: d }));
   }
 
   const filtered = period > 0
@@ -31880,7 +31989,7 @@ function renderDailyView(data) {
   // Nutrition
   const kcal = d.totals && d.totals.kcal ? d.totals.kcal : 0;
   const prot = d.totals && d.totals.protein ? d.totals.protein : 0;
-  const carbs = d.totals && d.totals.carbs ? d.totals.carbs : 0;
+  const carbs = d.totals && d.totals.carbs != null ? getEffectiveCarbsForDay(d) : 0;
   const fat = d.totals && d.totals.fat ? d.totals.fat : 0;
   const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
   el.appendChild(makeSection('Nutrition', [
@@ -32895,7 +33004,12 @@ function generateWeeklySummary() {
 
   const treatmentKeywords = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital','infusion'];
   const chemoDays = allDays.filter(d => treatmentKeywords.some(k => (d.notes||'').toLowerCase().includes(k)));
-  const ketoDays = allDays.filter(d => (d.totals?.carbs||0) <= carbCeil(d));
+  // Real gap found: the label was already fixed earlier tonight ("ketosis
+  // days" -> "on-target days" for non-keto conditions), but the actual
+  // COUNT itself was still comparing raw gross carbs against the ceiling,
+  // bypassing Net Carbs mode entirely - relabeling a wrong number doesn't
+  // fix the number itself.
+  const ketoDays = allDays.filter(d => getEffectiveCarbsForDay(d) <= carbCeil(d));
 
   const barColor = (val, target, isCarbs=false) => {
     if (isCarbs) return val <= target ? '#2deb8f' : '#ff5e5e';
@@ -32908,7 +33022,8 @@ function generateWeeklySummary() {
     const kcalW = Math.min(Math.round((d.totals?.kcal||0) / (t.kcal||3300) * 100), 100);
     const protW = Math.min(Math.round((d.totals?.protein||0) / (t.protein||165) * 100), 100);
     const dayCeil = carbCeil(d);
-    const carbW = Math.min(Math.round((d.totals?.carbs||0) / (dayCeil||50) * 150), 100);
+    const dayCarbs = d.totals?.carbs != null ? getEffectiveCarbsForDay(d) : 0;
+    const carbW = Math.min(Math.round(dayCarbs / (dayCeil||50) * 150), 100);
     return `
       <div style="padding:8px 0;border-bottom:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -32918,7 +33033,7 @@ function generateWeeklySummary() {
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:10px;font-family:Space Mono,monospace;">
           <div><span style="color:var(--green);">${Math.round(d.totals?.protein||0)}g P</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${protW}%;background:${barColor(d.totals?.protein||0,t.protein)};border-radius:2px;"></div></div></div>
           <div><span style="color:#a78bfa;">${Math.round(d.totals?.fat||0)}g F</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${kcalW}%;background:var(--blue);border-radius:2px;"></div></div></div>
-          <div><span style="color:var(--yellow);">${Math.round(d.totals?.carbs||0)}g C</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${carbW}%;background:${barColor(d.totals?.carbs||0,dayCeil,true)};border-radius:2px;"></div></div></div>
+          <div><span style="color:var(--yellow);">${Math.round(dayCarbs)}g C</span><div style="height:3px;background:var(--surface2);border-radius:2px;margin-top:2px;"><div style="height:3px;width:${carbW}%;background:${barColor(dayCarbs,dayCeil,true)};border-radius:2px;"></div></div></div>
         </div>
       </div>`;
   }).join('');
@@ -33130,7 +33245,10 @@ function generateOncologyView() {
   const cond = localStorage.getItem('mh_condition') || 'general';
   const avg = key => Math.round(h.reduce((a,d)=>a+(d.totals?.[key]||0),0)/h.length);
   const avgKcal = avg('kcal'), avgProt = avg('protein'), avgFat = avg('fat'), avgCarbs = avg('carbs');
-  const ketoDays = h.filter(d => (d.totals?.carbs||0) <= carbCeil(d)).length;
+  // Same real gap as Weekly Summary: label already fixed earlier tonight,
+  // but this count itself was still comparing raw gross carbs, bypassing
+  // Net Carbs mode.
+  const ketoDays = h.filter(d => getEffectiveCarbsForDay(d) <= carbCeil(d)).length;
   const ketoAdh = Math.round(ketoDays/h.length*100);
   const treatKw = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital','infusion'];
   const treatDays = h.filter(d => treatKw.some(k => (d.notes||'').toLowerCase().includes(k)));
@@ -33410,12 +33528,14 @@ function renderSleepKetosisCorrelation() {
 
   const goodSleep = daysWithBoth.filter(d => sleepHoursOf(d) >= 7);
   const poorSleep = daysWithBoth.filter(d => sleepHoursOf(d) < 7);
-  const ketoDaysGood = goodSleep.filter(d => (d.totals?.carbs||0) <= carbCeilFor(d));
-  const ketoDaysPoor = poorSleep.filter(d => (d.totals?.carbs||0) <= carbCeilFor(d));
+  // Same real gap as elsewhere tonight: label already fixed earlier, this
+  // underlying count itself was still comparing raw gross carbs.
+  const ketoDaysGood = goodSleep.filter(d => getEffectiveCarbsForDay(d) <= carbCeilFor(d));
+  const ketoDaysPoor = poorSleep.filter(d => getEffectiveCarbsForDay(d) <= carbCeilFor(d));
   const goodAdh = goodSleep.length ? Math.round(ketoDaysGood.length/goodSleep.length*100) : 0;
   const poorAdh = poorSleep.length ? Math.round(ketoDaysPoor.length/poorSleep.length*100) : 0;
-  const avgSleepKeto = goodSleep.length ? Math.round(goodSleep.reduce((a,d)=>a+(d.totals?.carbs||0),0)/goodSleep.length*10)/10 : 0;
-  const avgSleepPoor = poorSleep.length ? Math.round(poorSleep.reduce((a,d)=>a+(d.totals?.carbs||0),0)/poorSleep.length*10)/10 : 0;
+  const avgSleepKeto = goodSleep.length ? Math.round(goodSleep.reduce((a,d)=>a+getEffectiveCarbsForDay(d),0)/goodSleep.length*10)/10 : 0;
+  const avgSleepPoor = poorSleep.length ? Math.round(poorSleep.reduce((a,d)=>a+getEffectiveCarbsForDay(d),0)/poorSleep.length*10)/10 : 0;
   const avgHRVGood = goodSleep.filter(d=>d.hrv>0).length ? Math.round(goodSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/goodSleep.filter(d=>d.hrv>0).length) : null;
   const avgHRVPoor = poorSleep.filter(d=>d.hrv>0).length ? Math.round(poorSleep.filter(d=>d.hrv>0).reduce((a,d)=>a+d.hrv,0)/poorSleep.filter(d=>d.hrv>0).length) : null;
   const _isKetoSleep = isKetogenicCondition();
@@ -34090,8 +34210,14 @@ function renderReportSummary() {
   const av = arr => Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
   const kcals = h.map(e=>e.totals?.kcal||0);
   const prots = h.map(e=>e.totals?.protein||0);
-  const carbs = h.map(e=>e.totals?.carbs||0);
-  const on    = h.filter(e => (e.totals?.carbs||0) <= carbCeil(e)).length;
+  const carbs = h.map(e=>getEffectiveCarbsForDay(e));
+  // Real gap found: was comparing raw gross totals.carbs against the
+  // ceiling, bypassing Net Carbs mode entirely - same class of bug found
+  // repeatedly tonight. This is the Reports tab's own headline adherence
+  // %, shown every time that tab opens, so a meaningful one to get right.
+  // carbs array above also feeds "Avg carbs"/"Best carbs" cards below,
+  // fixed at the source rather than patching each display separately.
+  const on    = h.filter(e => getEffectiveCarbs(e.totals||{}) <= carbCeil(e)).length;
   const adh   = Math.round(on/n*100);
   let streak = calcKetosisStreak();
   const card=(label,val,sub,col)=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 12px;">
@@ -34149,7 +34275,7 @@ function renderCarbStrictnessBreakdown(h, n) {
   const counts = [0, 0, 0, 0];
   h.forEach(e => {
     if ((e.totals?.kcal || 0) <= 100) return; // skip nil/negligible days
-    const c = e.totals?.carbs || 0;
+    const c = e.totals?.carbs != null ? getEffectiveCarbsForDay(e) : 0;
     if (c <= 20) counts[0]++;
     else if (c <= 50) counts[1]++;
     else if (c <= 100) counts[2]++;
@@ -34169,7 +34295,7 @@ function renderCarbStrictnessBreakdown(h, n) {
   // their own chosen protocol gets the same warmth regardless of which tier
   // that protocol actually is.
   const ownCeiling = getTargets().standard.carbs;
-  const withinOwn = h.filter(e => (e.totals?.kcal || 0) > 100 && (e.totals?.carbs || 0) <= ownCeiling).length;
+  const withinOwn = h.filter(e => (e.totals?.kcal || 0) > 100 && getEffectiveCarbsForDay(e) <= ownCeiling).length;
   const ownAdherencePct = total > 0 ? Math.round(withinOwn / total * 100) : 0;
   let note;
   if (ownAdherencePct >= 85) note = `Strong, consistent pattern within your own ${ownCeiling}g target this period.`;
@@ -34546,7 +34672,7 @@ async function generateAIBrief() {
   const av  = arr=>Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
   const kcals=h.map(e=>e.totals?.kcal||0);
   const prots=h.map(e=>e.totals?.protein||0);
-  const carbs=h.map(e=>e.totals?.carbs||0);
+  const carbs=h.map(e=>e.totals?.carbs!=null?getEffectiveCarbsForDay(e):0);
   // Was raw e.totals.carbs against the ceiling, completely bypassing
   // getEffectiveCarbs() - meaning a day the ketosis badge showed green
   // (Net Carbs mode, polyols-heavy food) could get counted as non-adherent
@@ -34759,7 +34885,7 @@ function buildPatientContext(history, conditionFilter = null) {
   const dayBreakdown = trackedDays.map(e => {
     const mode = e.mode || 'standard';
     const ceil = t[mode]?.carbs ?? t.standard.carbs;
-    const carbs = e.totals?.carbs || 0;
+    const carbs = e.totals?.carbs != null ? getEffectiveCarbsForDay(e) : 0;
     const within = carbs <= ceil;
     // Exercise-offset feature exists to answer exactly this: did logged exercise
     // that day burn enough to plausibly offset the carb overage's glycogen impact?
@@ -35327,7 +35453,7 @@ function runSeasonalCompare() {
     {label:"Avg steps",a:av(pA.map(function(h){return h.steps;})),b:av(pB.map(function(h){return h.steps;})),unit:""},
     {label:"Avg calories",a:av(pA.map(function(h){return h.totals&&h.totals.kcal;})),b:av(pB.map(function(h){return h.totals&&h.totals.kcal;})),unit:"kcal"},
     {label:"Avg protein",a:av(pA.map(function(h){return h.totals&&h.totals.protein;})),b:av(pB.map(function(h){return h.totals&&h.totals.protein;})),unit:"g"},
-    {label:"Avg carbs",a:av(pA.map(function(h){return h.totals&&h.totals.carbs;})),b:av(pB.map(function(h){return h.totals&&h.totals.carbs;})),unit:"g"},
+    {label:"Avg carbs",a:av(pA.map(function(h){return h.totals&&h.totals.carbs!=null?getEffectiveCarbsForDay(h):null;})),b:av(pB.map(function(h){return h.totals&&h.totals.carbs!=null?getEffectiveCarbsForDay(h):null;})),unit:"g"},
   ];
   var rows=metrics.filter(function(m){return m.a!==null||m.nc;}).map(function(m) {
     var aV=m.a!==null?m.a+(m.unit?" "+m.unit:""):"\u2014", bV=m.b!==null?m.b+(m.unit?" "+m.unit:""):"\u2014";
@@ -35421,8 +35547,8 @@ function updateGBMStats() {
   const n = h.length;
   const prots = h.map(e => e.totals?.protein || 0);
   const kcals = h.map(e => e.totals?.kcal || 0);
-  const on = h.filter(e => (e.totals?.carbs || 0) <= carbCeilFor(e)).length;
-  const avgCarb = Math.round(h.reduce((a,e)=>a+(e.totals?.carbs||0),0)/n);
+  const on = h.filter(e => getEffectiveCarbsForDay(e) <= carbCeilFor(e)).length;
+  const avgCarb = Math.round(h.reduce((a,e)=>a+getEffectiveCarbsForDay(e),0)/n);
   const avgProt = Math.round(prots.reduce((a,b)=>a+b,0)/n);
   // Back-calculate fat for entries without recorded fat
   const fatsCalc = h.map(e => getEntryFat(e));
@@ -35827,7 +35953,7 @@ function checkNotifications() {
       const week=(state.history||[]).slice(0,7);
       if (week.length>0) {
         const t=getTargets();
-        const avgC=Math.round(week.reduce((a,e)=>a+(e.totals?.carbs||0),0)/week.length);
+        const avgC=Math.round(week.reduce((a,e)=>a+getEffectiveCarbsForDay(e),0)/week.length);
         const msg=avgC<=t.carbs?`7-day avg carbs: ${avgC}g — within your ${t.carbs}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${t.carbs}g ceiling. Check Reports.`;
         sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports').then(sent => {
           if (sent) localStorage.setItem(weekKey,'1');
@@ -36188,7 +36314,7 @@ function generateCarerLink() {
   const last30 = h.slice(0, 30);
   const historyOldestFirst = last30.slice().reverse().map(d => ({
     date: d.date,
-    totals: { kcal: Math.round(d.totals?.kcal||0), protein: Math.round(d.totals?.protein||0), fat: Math.round(d.totals?.fat||0), carbs: Math.round(d.totals?.carbs||0) },
+    totals: { kcal: Math.round(d.totals?.kcal||0), protein: Math.round(d.totals?.protein||0), fat: Math.round(d.totals?.fat||0), carbs: Math.round(d.totals?.carbs!=null?getEffectiveCarbsForDay(d):0) },
     mode: d.mode || 'standard',
     weight: d.weight || 0
   }));
@@ -36659,16 +36785,28 @@ async function advRun(device, dryRun) {
   try {
     await fetch(url);
     const poll = setInterval(async () => {
-      const res  = await fetch(`${MH_SERVER}/status`);
-      const data = await res.json();
-      log.textContent = data.log || '';
-      log.scrollTop = log.scrollHeight;
-      if (!data.running) {
-        clearInterval(poll);
-        if (data.result === 'ok' && !dryRun) {
-          await autoLoadCombined();
-          showToast('Pipeline complete — data loaded ✓');
+      // Same defensive error handling doSync's poll already has - this one
+      // never had it, meaning a dropped connection mid-poll (server
+      // restart, network hiccup) would throw uncaught inside the interval
+      // callback, silently skip that tick, and never call clearInterval -
+      // potentially leaving this stuck polling indefinitely with the log
+      // frozen on "Starting..." and no visible error or way to recover
+      // short of a full page reload.
+      try {
+        const res  = await fetch(`${MH_SERVER}/status`);
+        const data = await res.json();
+        log.textContent = data.log || '';
+        log.scrollTop = log.scrollHeight;
+        if (!data.running) {
+          clearInterval(poll);
+          if (data.result === 'ok' && !dryRun) {
+            await autoLoadCombined();
+            showToast('Pipeline complete — data loaded ✓');
+          }
         }
+      } catch(e) {
+        clearInterval(poll);
+        log.textContent += `\nLost connection to server: ${e.message}`;
       }
     }, 1000);
   } catch(e) {
@@ -37733,13 +37871,20 @@ function triggerDailyInsight() {
 
   // Fetch insight
   var h = state.history || [];
-  var t = getTargets().standard;
+  var targets = getTargets();
+  var t = targets.standard;
+  var carbCeilInsight = function(d) { return (targets[d.mode || 'standard'] && targets[d.mode || 'standard'].carbs) || t.carbs; };
   var name = localStorage.getItem('mh_name') || 'you';
   var recentH = h.slice(0, 30);
   var avgKcal = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.kcal||0);},0)/recentH.length) : 0;
-  var avgCarbs = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.carbs||0);},0)/recentH.length) : 0;
+  var avgCarbs = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+getEffectiveCarbsForDay(d);},0)/recentH.length) : 0;
   var avgProt = recentH.length ? Math.round(recentH.reduce(function(a,d){return a+(d.totals&&d.totals.protein||0);},0)/recentH.length) : 0;
-  var ketoAdh = recentH.length ? Math.round(recentH.filter(function(d){return (d.totals&&d.totals.carbs||0)<=t.carbs;}).length/recentH.length*100) : 0;
+  // Real gap found: was comparing raw gross carbs against a flat, always-
+  // standard ceiling - ignoring both Net Carbs mode and Occasion/Holiday
+  // days' own higher ceilings, same as several other adherence calcs
+  // found and fixed tonight. Only feeds a brief AI-generated insight card,
+  // but no reason for it to be the one place still wrong.
+  var ketoAdh = recentH.length ? Math.round(recentH.filter(function(d){return getEffectiveCarbsForDay(d)<=carbCeilInsight(d);}).length/recentH.length*100) : 0;
   var treatKw = ['chemotherapy','chemo','treatment'];
   var chemoCount = recentH.filter(function(d){return treatKw.some(function(k){return (d.notes||'').toLowerCase().indexOf(k)>=0;});}).length;
   var todayNotes = localStorage.getItem('mh_today_notes') || state.notes || '';
