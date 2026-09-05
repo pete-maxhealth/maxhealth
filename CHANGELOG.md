@@ -1,4 +1,4 @@
-# MaxedHealth Changelog — Phase 22 (v3.10.658 – v3.10.735)
+# MaxedHealth Changelog — Phase 22 (v3.10.658 – v3.10.736)
 
 ## Category Data Loss on "Save Only" — Found and Fixed
 
@@ -7,6 +7,7 @@
 - **Fixed and centralized on request**: both the "Save only" and fuzzy-confirm paths now update fields on the existing library entry in place and merge any newly-typed categories in via a new shared `mergeCategoriesIntoLibraryItem()` — the same seed-from-auto-detected-if-empty, append-don't-replace logic the Library edit form's `addItemCategory()` already used correctly. `addItemCategory()` itself was refactored to call the same shared helper rather than keeping its own separate copy.
 - The chat meal-preview screen now shows a read-only "Already saved as: …" line above the categories input whenever the food matches an existing library entry, so the two screens show consistent state — previously the field was always blank regardless of what the item already had, which read as "the fix didn't work" even after the underlying data bug above was actually resolved.
 - **Second, related bug found while testing the first fix**: adding or removing a category chip in the Library edit form called a full `renderLibrary()` — rebuilding the entire library list from scratch on every single tap, which wiped the CSS class keeping that item's edit form expanded. Removing several categories in a row silently bounced back to the collapsed card list after each one, with no way to see the running result without reopening the form each time. Fixed by patching just that item's chip container in place (new shared `renderCategoryChipsHtml()`) instead of a full rebuild — the form now stays open through multiple edits.
+- **Two remaining gaps closed**: the ✏️ per-item edit form on the chat meal-preview screen (opened via the pencil icon on an individual item, distinct from the shared "Categories for Save only" field) had no categories field at all — added one, merged in at save time alongside the shared field rather than replacing it. Separately, a brand-new item (no existing library match) saved with no explicit `.categories` at all when both fields were left blank — auto-detection covered what was *displayed*, but nothing was actually stored on the item. New items now always get real, persisted categories from the moment they're created, seeded from auto-detection when nothing was typed, matching how the Library tab itself behaves.
 
 ## Gross-vs-Net Carbs — Widespread, Not Cosmetic
 
