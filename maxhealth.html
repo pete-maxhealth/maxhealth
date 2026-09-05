@@ -4676,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.734</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.735</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5615,7 +5615,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.734'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.735'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7364,7 +7364,7 @@ function renderLibrary() {
       </div>
       <div style="margin-bottom:6px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
-        <div id="lib-edit-cats-${origIdx}" style="margin-bottom:6px;">${getItemCategories(f).map(c => `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 4px 3px 9px;font-size:12px;color:var(--text2);margin:2px 4px 2px 0;text-transform:capitalize;">${c}<span onclick="removeItemCategory(${origIdx},'${c}')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">×</span></span>`).join('') || '<span style="font-size:11px;color:var(--text3);font-style:italic;">none yet</span>'}</div>
+        <div id="lib-edit-cats-${origIdx}" style="margin-bottom:6px;">${renderCategoryChipsHtml(origIdx, getItemCategories(f))}</div>
         <div style="display:flex;gap:6px;">
           <input id="lib-edit-newcat-${origIdx}" list="allKnownCategories" type="text" placeholder="add a category, e.g. dairy" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;">
           <button onclick="addItemCategory(${origIdx})" style="padding:6px 10px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:8px;font-size:12px;cursor:pointer;">+ Add</button>
@@ -8764,6 +8764,21 @@ function mergeCategoriesIntoLibraryItem(libItem, cats) {
   return added;
 }
 
+// Shared chip-rendering for a library item's categories - used both by
+// renderLibrary's initial render and by addItemCategory/removeItemCategory
+// below, which patch just this one small piece of the DOM in place instead
+// of calling the full renderLibrary() - that used to rebuild the ENTIRE
+// library list from scratch on every single chip add/remove, wiping the
+// `.open` CSS class that keeps an edit form expanded (see .library-edit-form
+// in the stylesheet) - so editing several categories in a row silently
+// closed the form back to the collapsed card after every single tap,
+// dumping you back out to the list with no way to see the running result
+// without reopening it each time.
+function renderCategoryChipsHtml(origIdx, categories) {
+  const cats = categories || [];
+  return cats.map(c => `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 4px 3px 9px;font-size:12px;color:var(--text2);margin:2px 4px 2px 0;text-transform:capitalize;">${c}<span onclick="removeItemCategory(${origIdx},'${c}')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">×</span></span>`).join('') || '<span style="font-size:11px;color:var(--text3);font-style:italic;">none yet</span>';
+}
+
 function addItemCategory(origIdx) {
   const input = document.getElementById('lib-edit-newcat-' + origIdx);
   const raw = (input?.value || '').trim();
@@ -8837,7 +8852,16 @@ function addItemCategory(origIdx) {
     return;
   }
   saveLibrary(lib);
-  renderLibrary();
+  // Was renderLibrary() - a full rebuild of the entire library list, which
+  // wipes the .open class keeping THIS edit form expanded (see comment on
+  // renderCategoryChipsHtml above). Patching just the chip container and
+  // clearing the now-added text keeps the form open so multiple edits in a
+  // row are each visible immediately, without being bounced back to the
+  // collapsed card after every tap.
+  refreshKnownCategoriesDatalist(lib);
+  const catsContainer = document.getElementById('lib-edit-cats-' + origIdx);
+  if (catsContainer) catsContainer.innerHTML = renderCategoryChipsHtml(origIdx, lib[origIdx].categories);
+  if (input) input.value = '';
   showToast(added.length === 1 ? `Added "${added[0]}" ✓` : `Added ${added.length} categories ✓`);
 }
 
@@ -8856,7 +8880,11 @@ function removeItemCategory(origIdx, cat) {
   }
   lib[origIdx].categories = lib[origIdx].categories.filter(c => c !== cat);
   saveLibrary(lib);
-  renderLibrary();
+  // Same fix as addItemCategory above - was renderLibrary(), which rebuilt
+  // the whole list and closed this edit form after every single removal.
+  refreshKnownCategoriesDatalist(lib);
+  const catsContainer = document.getElementById('lib-edit-cats-' + origIdx);
+  if (catsContainer) catsContainer.innerHTML = renderCategoryChipsHtml(origIdx, lib[origIdx].categories);
 }
 
 // One shared <datalist>, built fresh each render from every category name
