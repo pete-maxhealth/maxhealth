@@ -4676,7 +4676,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.732</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.733</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5615,7 +5615,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.732'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.733'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -8741,6 +8741,29 @@ function _levenshtein(a, b) {
   return dp[m][n];
 }
 
+// Shared by every place that adds categories to a library item — the
+// Library edit form (addItemCategory below) and the chat "Save only" /
+// fuzzy-overwrite paths (saveLibraryOnlyFromPreview / confirmFuzzyLibOverwrite).
+// Those used to each carry their own separate copy-pasted version of this;
+// the chat-side copies did a full wholesale `lib[idx] = newEntry` replace
+// instead of seeding-and-appending, which is what was actually silently
+// deleting existing categories every time "Save only" was used on an item
+// that already had some — this centralizes on the one proven to work
+// (seed from auto-detected if empty, then only ever push, never replace).
+function mergeCategoriesIntoLibraryItem(libItem, cats) {
+  if (!libItem || !cats || !cats.length) return [];
+  if (!Array.isArray(libItem.categories) || !libItem.categories.length) {
+    libItem.categories = getItemCategories(libItem).slice();
+  }
+  const added = [];
+  cats.forEach(cat => {
+    if (libItem.categories.includes(cat)) return; // already assigned
+    libItem.categories.push(cat);
+    added.push(cat);
+  });
+  return added;
+}
+
 function addItemCategory(origIdx) {
   const input = document.getElementById('lib-edit-newcat-' + origIdx);
   const raw = (input?.value || '').trim();
@@ -8765,17 +8788,6 @@ function addItemCategory(origIdx) {
 
   const lib = loadLibrary();
   if (!lib[origIdx]) return;
-  // Was `if (!Array.isArray(...)) lib[origIdx].categories = []` - started
-  // from EMPTY, silently discarding whatever auto-detected categories were
-  // already showing as chips on screen the moment any manual category got
-  // added (manual overrides fully replace the auto-guess by design - see
-  // getItemCategories - but the chip UI shows both identically, so this
-  // looked exactly like "the category I could already see just vanished").
-  // Seeding with what's currently displayed instead means adding a new one
-  // never causes something visibly on screen to disappear.
-  if (!Array.isArray(lib[origIdx].categories) || !lib[origIdx].categories.length) {
-    lib[origIdx].categories = getItemCategories(lib[origIdx]).slice();
-  }
 
   // Catches exactly the "diary" vs "dairy" case before it happens again -
   // a near-identical existing category name is almost always a typo, not
@@ -8783,17 +8795,21 @@ function addItemCategory(origIdx) {
   // dataset (generalized from a single string to a set, now that more
   // than one category can be submitted in the same batch) - tapping Add
   // again with the same flagged word(s) still present proceeds anyway.
+  // Checked against the item's CURRENT categories (seeded below via the
+  // shared helper if empty) rather than pre-seeding here directly - the
+  // helper does the seed-if-empty step once, centrally, for every caller.
   const known = [...getAllKnownCategoryNames()];
   const confirmedSet = (input.dataset.confirmedTypo || '').split(',').filter(Boolean);
-  const added = [];
+  const toAdd = [];
   const flagged = [];
+  const existingSeeded = getItemCategories(lib[origIdx]);
   cats.forEach(cat => {
-    if (lib[origIdx].categories.includes(cat)) return; // already assigned - silently skip rather than blocking the rest of the batch
+    if (existingSeeded.includes(cat)) return; // already assigned - silently skip rather than blocking the rest of the batch
     const closeMatch = known.find(k => k !== cat && _levenshtein(k, cat) <= 1);
     if (closeMatch && !confirmedSet.includes(cat)) { flagged.push({ cat, closeMatch }); return; }
-    lib[origIdx].categories.push(cat);
-    added.push(cat);
+    toAdd.push(cat);
   });
+  const added = mergeCategoriesIntoLibraryItem(lib[origIdx], toAdd);
 
   if (flagged.length) {
     input.dataset.confirmedTypo = [...confirmedSet, ...flagged.map(f => f.cat)].join(',');
@@ -18547,17 +18563,39 @@ function _saveLibraryOnlyFromPreviewImpl() {
       locked: true,
       source: 'ai_confirmed'
     };
-    if (sharedCats && sharedCats.length) entry.categories = sharedCats;
     console.log(`[saveLibraryOnlyFromPreview] Processing "${f.name}":`, entry);
     dbg(`Processing "${f.name}" - ${entry.kcal}kcal, ${entry.protein}g P, ${entry.fat}g F, ${entry.carbs}g C, portion: ${entry.portion || '(none)'}`);
     if (existingIdx > -1) {
-      console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - exact name match found, overwriting existing entry.`);
-      dbg(`"${f.name}" - exact match with existing library entry, will overwrite`);
-      lib[existingIdx] = entry;
+      console.log(`[saveLibraryOnlyFromPreview] "${f.name}" - exact name match found, updating existing entry.`);
+      dbg(`"${f.name}" - exact match with existing library entry, will update in place`);
+      // Real, serious data-loss bug found: this used to be `lib[existingIdx]
+      // = entry` - a full wholesale replace. Since `entry` only ever carried
+      // .categories when something was typed into "Categories for Save
+      // only" THIS time, leaving that field blank (the normal case when
+      // you're just re-saving updated macros) silently wiped out whatever
+      // categories the item already had. Updating fields in place instead,
+      // and routing any newly-typed categories through the same
+      // seed-then-append helper the Library edit form uses (rather than a
+      // second, separately-maintained copy of that logic) means existing
+      // categories are never lost, and adding some here behaves exactly
+      // like adding them via Library edit.
+      const target = lib[existingIdx];
+      target.portion  = entry.portion;
+      target.per100g  = entry.per100g;
+      target.kcal     = entry.kcal;
+      target.protein  = entry.protein;
+      target.fat      = entry.fat;
+      target.carbs    = entry.carbs;
+      target.fibre    = entry.fibre;
+      target.polyols  = entry.polyols;
+      target.locked   = entry.locked;
+      target.source   = entry.source;
+      if (sharedCats && sharedCats.length) mergeCategoriesIntoLibraryItem(target, sharedCats);
       overwritten.push(f.name);
-      _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'exact-overwrite', categoriesOnEntry: entry.categories || null });
+      _saveOnlyCatTrace.perFood.push({ name: f.name, branch: 'exact-update-in-place', categoriesOnEntry: target.categories || null });
       return;
     }
+    if (sharedCats && sharedCats.length) entry.categories = sharedCats;
     // No exact match — but a fuzzy match (e.g. typing "Elmlea" against a saved
     // "Elmlea Whipping Cream (buttermilk blend)") shouldn't just create a second
     // entry either. This needs confirmation rather than auto-overwriting, since
@@ -18637,13 +18675,34 @@ function confirmFuzzyLibOverwrite(idx) {
   if (!pair) return;
   const lib = loadLibrary();
   const existingIdx = lib.findIndex(l => l.name.toLowerCase() === pair.existing.name.toLowerCase());
-  if (existingIdx > -1) lib[existingIdx] = pair.newEntry; else lib.push(pair.newEntry);
+  // Same wholesale-replace category-wiping bug as the exact-match branch
+  // above, reached via this separate fuzzy-confirm tap instead — fixed the
+  // same way: update fields in place and merge categories rather than
+  // replace the whole object.
+  if (existingIdx > -1) {
+    const target = lib[existingIdx];
+    const e = pair.newEntry;
+    target.portion  = e.portion;
+    target.per100g  = e.per100g;
+    target.kcal     = e.kcal;
+    target.protein  = e.protein;
+    target.fat      = e.fat;
+    target.carbs    = e.carbs;
+    target.fibre    = e.fibre;
+    target.polyols  = e.polyols;
+    target.locked   = e.locked;
+    target.source   = e.source;
+    if (e.categories && e.categories.length) mergeCategoriesIntoLibraryItem(target, e.categories);
+  } else {
+    lib.push(pair.newEntry);
+  }
   // Closes the loop on the same trace: confirms whether categories set at
   // the original preview screen survive through to this separate, later
   // confirmation tap, or get lost somewhere in between.
   try {
     const log = JSON.parse(localStorage.getItem('mh_saveonly_cat_trace') || '[]');
-    if (log[0]) { log[0].fuzzyConfirmOverwrite = { name: pair.newEntry.name, categoriesOnFinalSave: pair.newEntry.categories || null }; }
+    const finalItem = existingIdx > -1 ? lib[existingIdx] : pair.newEntry;
+    if (log[0]) { log[0].fuzzyConfirmOverwrite = { name: pair.newEntry.name, categoriesOnFinalSave: finalItem.categories || null }; }
     localStorage.setItem('mh_saveonly_cat_trace', JSON.stringify(log));
   } catch(e) {}
   saveLibrary(lib);
