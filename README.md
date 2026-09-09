@@ -117,21 +117,40 @@ zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/m
 ## File structure
 
 ```
-maxhealth/
-├── maxhealth.html      # Complete PWA (~1.3MB)
-├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
-├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
-├── why-free.html       # Why MaxedHealth is free
-├── user-guide.html     # User guide
-├── server.py           # Local HTTP server (Termux)
-├── update_health.py    # Wearable data pipeline
-├── setup.sh            # First-time install
-├── TECHNICAL.md        # Technical reference
-├── CHANGELOG.md        # Version history
-└── data/tables/
-    ├── master.csv      # Daily nutrition + tags (pipe-delimited)
-    ├── combined.csv    # Wearable data
-    └── library.csv     # Food library backup
+/storage/emulated/0/maxhealth/          ← root, in shared storage (visible to Termux via ~/storage/shared/)
+├── app/
+│   └── maxhealth/
+│       ├── maxhealth.html      # Complete PWA (~1.3MB)
+│       ├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
+│       ├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
+│       ├── why-free.html       # Why MaxedHealth is free
+│       ├── user-guide.html     # User guide
+│       ├── server.py           # Local HTTP server (Termux)
+│       ├── update_health.py    # Wearable data pipeline
+│       ├── setup.sh            # First-time install
+│       ├── bump_and_deploy.sh  # Version bump + commit + push
+│       ├── TECHNICAL.md        # Technical reference
+│       ├── CHANGELOG.md        # Version history
+│       ├── changelog.html
+│       └── README.md
+└── data/
+    └── tables/
+        ├── master.csv      # Daily nutrition + tags (pipe-delimited)
+        ├── combined.csv    # Wearable data
+        └── library.csv     # Food library backup
+```
+
+The `app/maxhealth/` nesting (not just `maxhealth/`) is real and load-bearing — `update_health.py`'s extractor path and every deploy command depend on it. `data/` is a sibling of `app/`, not nested inside it.
+
+**Outside this tree entirely**, anchored to Termux's own home directory rather than shared storage:
+
+```
+$PREFIX/bin/mhstart              # installed by setup.sh, works from any directory
+~/mh_autoupdate.sh
+~/mh_watchdog.sh
+~/.termux/boot/start-crond.sh
+~/.termux/boot/start-watchdog.sh
+~/.termux/boot/maxhealth.sh
 ```
 
 ---
