@@ -70,19 +70,21 @@ mhstart
 # Open http://localhost:5757
 ```
 
+**Note:** `setup.sh` only creates the folder structure (see File structure below) — `mhstart` isn't installed by it, so this Quick Start currently assumes `mhstart` already exists on the device from some other step. Needs clarifying: is that a manual one-off, or is there a second script this README is missing?
+
 ## Auto-start on boot — self-healing, fully automatic
 
-`setup.sh` sets all of this up for you — nothing below needs doing by hand. Once installed, Termux never needs to be opened manually again:
+**Everything in this section describes the intended, target behavior — it is not what `setup.sh` actually does today.** `setup.sh`'s real content is five `mkdir -p` lines and nothing else (confirmed directly from the file). The watchdog, auto-update, boot scripts, and `mhstart` installation described below are either done manually on each device, live in a script not yet captured in this repo, or genuinely don't exist yet — needs establishing which, then either fixing `setup.sh` to actually do this or correcting this section to describe what really happens.
 
 - **Watchdog** (`~/mh_watchdog.sh`, via cron every minute) — checks the server is alive, restarts it if not, kills duplicate instances if more than one is somehow running
 - **Auto-update** (`~/mh_autoupdate.sh`, via cron every 30 minutes and once on every boot) — checks GitHub for anything new and pulls it automatically, so a device never needs a manual `git pull` to stay current
 - **Boot scripts** in `~/.termux/boot/` start crond, hold a wake-lock (stops Android's battery-saving Doze mode suspending the checks between cron ticks), and start the server itself
 
-After a reboot, give it a minute, then confirm the server's running on its own (`curl http://localhost:5757/ping`) — no manual Termux interaction needed. From this point on, Termux can stay closed; the server is self-healing and self-updating.
+After a reboot, give it a minute, then confirm the server's running on its own (`curl http://localhost:5757/ping`) — no manual Termux interaction needed, assuming the above is actually in place on that device.
 
-Requires **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux) — `setup.sh` prompts for these automatically if they're missing.
+Requires **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux). Whether `setup.sh` actually prompts for these is unconfirmed — the version reviewed doesn't reference them at all.
 
-Note for cloud/GitHub Pages users: none of this is required — it only applies to local Termux setups. If you switch to local mode later, this is already set up for you the moment you run `setup.sh`.
+Note for cloud/GitHub Pages users: none of this is required — it only applies to local Termux setups.
 
 ## Local server access — pin the shortcut directly
 
@@ -119,28 +121,33 @@ zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/m
 ```
 /storage/emulated/0/maxhealth/          ← root, in shared storage (visible to Termux via ~/storage/shared/)
 ├── app/
-│   └── maxhealth/
-│       ├── maxhealth.html      # Complete PWA (~1.3MB)
-│       ├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
-│       ├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
-│       ├── why-free.html       # Why MaxedHealth is free
-│       ├── user-guide.html     # User guide
-│       ├── server.py           # Local HTTP server (Termux)
-│       ├── update_health.py    # Wearable data pipeline
-│       ├── setup.sh            # First-time install
-│       ├── bump_and_deploy.sh  # Version bump + commit + push
-│       ├── TECHNICAL.md        # Technical reference
-│       ├── CHANGELOG.md        # Version history
-│       ├── changelog.html
-│       └── README.md
+│   ├── maxhealth/
+│   │   ├── maxhealth.html      # Complete PWA (~1.3MB)
+│   │   ├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
+│   │   ├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
+│   │   ├── why-free.html       # Why MaxedHealth is free
+│   │   ├── user-guide.html     # User guide
+│   │   ├── server.py           # Local HTTP server (Termux)
+│   │   ├── update_health.py    # Wearable data pipeline
+│   │   ├── setup.sh            # First-time install (creates this whole tree — that's all it does)
+│   │   ├── bump_and_deploy.sh  # Version bump + commit + push
+│   │   ├── TECHNICAL.md        # Technical reference
+│   │   ├── CHANGELOG.md        # Version history
+│   │   ├── changelog.html
+│   │   └── README.md
+│   └── extractors/             # Wearable data extractors (Withings, RingConn, Amazfit, Health Connect)
 └── data/
-    └── tables/
-        ├── master.csv      # Daily nutrition + tags (pipe-delimited)
-        ├── combined.csv    # Wearable data
-        └── library.csv     # Food library backup
+    ├── tables/
+    │   ├── master.csv      # Daily nutrition + tags (pipe-delimited)
+    │   ├── combined.csv    # Wearable data
+    │   └── library.csv     # Food library backup
+    ├── inbox/               # Incoming wearable export files land here before processing
+    └── archive/             # Processed exports get moved here
 ```
 
 The `app/maxhealth/` nesting (not just `maxhealth/`) is real and load-bearing — `update_health.py`'s extractor path and every deploy command depend on it. `data/` is a sibling of `app/`, not nested inside it.
+
+**Important:** `setup.sh` only creates the five folders above (`mkdir -p`, nothing else) — it does not install packages, clone the repo, write the boot scripts, set up crontab, or install `mhstart`. Everything else described in this README as automatic currently has to happen some other way — worth documenting properly rather than leaving as tribal knowledge, since it's the most likely source of an install going wrong on a new device.
 
 **Outside this tree entirely**, anchored to Termux's own home directory rather than shared storage:
 
