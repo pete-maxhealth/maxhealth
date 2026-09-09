@@ -15,7 +15,7 @@ Endpoints:
   GET  /pattern-signals   — Day 2 signals for wearables (meal windows, sleep, activity, HRV)
 
 Usage:
-  cd /storage/emulated/0/maxhealth/app
+  cd /storage/emulated/0/maxhealth/app/maxhealth
   python server.py
 """
 
