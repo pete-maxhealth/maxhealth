@@ -4683,7 +4683,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.743</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.744</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5622,7 +5622,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.743'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.744'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -20244,6 +20244,17 @@ function checkWeightPhaseAutoSwitch() {
   // lasting most of a week; someone with a faster metabolism may
   // deliberately want a shorter window than that default.
   const autoSwitchDays = parseInt(localStorage.getItem('mh_autoswitch_days')) || 14;
+  // Real bug found and fixed: this used to check state.history[].weight only
+  // (manually-typed entries), completely missing smart-scale/combined.csv
+  // weight - the opposite of the established fallback pattern used
+  // elsewhere in the app (Weight Protocol section: third-party data first,
+  // manual entry only as a fallback for days it doesn't cover). Anyone
+  // weighing in via a synced scale rather than typing it in by hand would
+  // see this report a "gap" on every single day regardless of how
+  // consistently they'd actually weighed in. Both date formats already
+  // match (DD/MM/YY), so no conversion needed to look them up together.
+  const thirdPartyByDate = {};
+  getFullBodyCompositionHistory().forEach(d => { if (d.weight != null) thirdPartyByDate[d.date] = d.weight; });
   const days = [];
   let gapDate = null;
   for (let i = 0; i < autoSwitchDays; i++) {
@@ -20252,9 +20263,13 @@ function checkWeightPhaseAutoSwitch() {
     const mm = String(d.getMonth()+1).padStart(2,'0');
     const yy = String(d.getFullYear()).slice(2);
     const dateStr = `${dd}/${mm}/${yy}`;
-    const entry = state.history.find(h => h.date === dateStr && h.weight);
-    if (!entry) { gapDate = dateStr; break; } // gap - can't confirm N consecutive days
-    days.push(entry.weight);
+    let weight = thirdPartyByDate[dateStr];
+    if (weight == null) {
+      const entry = state.history.find(h => h.date === dateStr && h.weight);
+      weight = entry?.weight;
+    }
+    if (weight == null) { gapDate = dateStr; break; } // gap - can't confirm N consecutive days
+    days.push(weight);
   }
   if (gapDate) {
     // Previously silent - a missing weigh-in on even one day within the
