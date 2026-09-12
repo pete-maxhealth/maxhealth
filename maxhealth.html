@@ -4683,7 +4683,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.744</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.746</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5622,7 +5622,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.744'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.746'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -10386,15 +10386,17 @@ function initSettings() {
   const activeGoalBtn = document.getElementById('goalBtn' + currentGoal.charAt(0).toUpperCase() + currentGoal.slice(1));
   if (activeGoalBtn) { activeGoalBtn.style.background = 'var(--accent-dim)'; activeGoalBtn.style.color = 'var(--accent)'; activeGoalBtn.style.borderColor = 'var(--accent)'; }
   const tdee = parseInt(localStorage.getItem('mh_tdee') || '3420');
-  // Mirrors the real figures setGoal() uses — Pete's own confirmed, weight-trend-
-  // validated numbers, not a generic TDEE±offset formula. initSettings() previously
-  // had its own separate, never-updated copy of this map, so opening Settings would
-  // silently overwrite goalDesc with stale wording even after setGoal() itself was
-  // fixed — this was the actual source of the "+250 kcal surplus" text Pete saw.
+  // Real bug found: mh_target_kcal_maintain/mh_target_kcal_gain are never
+  // written anywhere in the app - reading them always fell through to a
+  // hardcoded default (3200/3670), which setGoal() below then WROTE over
+  // your real, actually-set mh_target_kcal every time Maintain or Gain was
+  // (re)selected - silently discarding whatever you'd actually confirmed.
+  // Falling back to the real active target instead of a hardcoded number
+  // means switching goals no longer erases what you'd set.
   const kcalMap = {
     lose:     tdee - 500,
-    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
-    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
+    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
   };
   const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
   const descEl = document.getElementById('goalDesc');
@@ -10506,10 +10508,16 @@ function setGoal(goal) {
   // figures rather than a generic TDEE±offset formula, since those didn't agree
   // with his real numbers (gain target is 3670, not tdee+250 against the 3420 fallback).
   const tdee = parseInt(localStorage.getItem('mh_tdee') || '3420');
+  // mh_target_kcal_maintain/mh_target_kcal_gain now get written by
+  // saveMacroTargets() whenever the calorie target is edited while that
+  // phase is active - so switching back to a phase restores the figure
+  // last confirmed for it specifically. Still falls back to the current
+  // active target, then a hardcoded default, for a phase that's never
+  // actually been confirmed yet.
   const kcalMap = {
     lose:     tdee - 500,
-    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
-    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+    maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
+    gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
   };
   const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
   const kcal = kcalMap[goal] || tdee;
@@ -10796,7 +10804,19 @@ function saveMacroTargets() {
     if (perKg > 2.5) warnings.push(`⚠ ${prot}g protein is ${perKg.toFixed(1)}g/kg — unusually high, worth confirming intentional.`);
   }
 
-  if (kcal && kcal >= 500 && kcal <= 10000) localStorage.setItem('mh_target_kcal', kcal);
+  if (kcal && kcal >= 500 && kcal <= 10000) {
+    localStorage.setItem('mh_target_kcal', kcal);
+    // The actual "remember per phase" feature - previously kcal was written
+    // to one shared slot no matter which phase was active, so a manually-
+    // confirmed Maintain figure and a manually-confirmed Gain figure could
+    // never both exist at once; whichever was entered most recently just
+    // silently overwrote the other's memory too. Lose deliberately excluded -
+    // it's meant to always be freshly derived from TDEE-500 (see the label
+    // next to the TDEE field), not a separately remembered manual figure.
+    const activeGoal = localStorage.getItem('mh_goal') || 'gain';
+    if (activeGoal === 'maintain') localStorage.setItem('mh_target_kcal_maintain', kcal);
+    if (activeGoal === 'gain')     localStorage.setItem('mh_target_kcal_gain', kcal);
+  }
   if (prot && prot >= 10 && prot <= 500)    localStorage.setItem('mh_target_protein', prot);
   if (fat  && fat  >= 10 && fat  <= 600)    localStorage.setItem('mh_target_fat', fat);
   updateDashboard();
@@ -11053,8 +11073,8 @@ function saveTdee() {
     const currentGoal = localStorage.getItem('mh_goal') || 'gain';
     const kcalMap = {
       lose:     val - 500,
-      maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || 3200,
-      gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || 3670,
+      maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
+      gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
     };
     const descMap = { lose: '-500 kcal deficit', maintain: 'Maintenance calories', gain: 'Gaining surplus' };
     const descEl = document.getElementById('goalDesc');
