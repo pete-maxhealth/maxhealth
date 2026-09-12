@@ -1,4 +1,24 @@
-# MaxedHealth Changelog — Phase 22 (v3.10.658 – v3.10.736)
+# MaxedHealth Changelog — Phase 22 (v3.10.658 – v3.10.743)
+
+## Supplements — Tablet Counts and Per-Period Reordering
+
+- Supplement entries now have an optional **Tablets** field, separate from the pharmacological dose (e.g. dose "2400mg", tablets "2 capsules") — shown alongside the dose everywhere a supplement appears (Today's checklist, Manage Supplements).
+- The Manage Supplements settings list is now grouped by time-of-day period (matching Today's tab) instead of one flat list, with ▲▼ buttons to reorder within each group. Ordering is stored **per-period**, not as one global position — a supplement in both the morning and evening lists can sit in a different relative position in each, since there's no reason those need to match.
+
+## GBM Monthly Summary — Stuck Read-Aloud Button
+
+- The read-aloud button on the GBM Research Digest/Monthly Summary read `document.getElementById('gbm-summary-text').innerText` at click time. `.innerText` is layout-aware and can silently return an empty string for a hidden or not-yet-laid-out element, unlike `.textContent` — speaking an empty utterance could leave the button stuck showing "stop" without anything actually playing. Fixed with the same `innerText`-with-`textContent`-fallback pattern already used elsewhere (`copyElementText`), plus a general empty-text guard added to `toggleSpeakText()` itself so any future read-aloud button hits the same safety net automatically rather than needing the fix repeated per-caller.
+
+## Gross vs Net Carbs — One More Spot Found
+
+- The Deep Ketosis smart-alert banner ("✓ Deep ketosis ratio — Xg carbs, Y% fat calories") was reading raw `totals.carbs` directly, missed by the earlier systemic gross-vs-net sweep — both the displayed carbs figure and the ceiling comparisons behind it (`carbs < ceiling`, `carbs < 30`) were using gross carbs instead of `getEffectiveCarbs()`. Genuinely misleading on any day with polyol-heavy items logged, since gross and net carbs diverge. Fixed to match the rest of the dashboard.
+- Separately, per-item and per-meal "was X, Y after polyols" figures were added in four places that previously showed only the raw carbs number with no indication polyols hadn't been subtracted yet: Today's Log list, the Edit Entry form (live-updating as either carbs or polyols is adjusted), and both the per-item line and the Total line of the chat "LOGGED ✓" confirmation bubble.
+
+## Debug Tools — Retired Two, Added Copy Diagnostics for Claude
+
+- Retired two stale debug traces whose underlying bugs have been fixed and stable for a long time: the polyols pipeline trace (bug fixed in v3.10.684) and the impact box trace (superseded by the broader gross-vs-net carbs sweep). The polyols tracer had 9 call sites threaded through the core logging pipeline — rather than touch each one for no functional gain, the tracer function itself was made a no-op; the impact box trace was a single self-contained block, removed entirely along with both Settings buttons.
+- Added a new **📋 Copy Diagnostics for Claude** section at the top of Settings → Manage: lists every remaining diagnostic source (Log Mutation Debug, AI-Assist Apply Trace, Add-Category Trace, Save-Only Categories Trace, Body Comp Debug, Rollover Debug Log) with a live entry count, pre-ticks whichever ones currently have something to contribute, and bundles the selected sources into one combined block — app version, timestamp, then each source's full text — ready to paste into a chat. Each source's text-generation logic was extracted into its own function so the individual "View X trace" buttons keep working exactly as before, with nothing duplicated between the two.
+- All debug/troubleshooting sections under Settings → Manage now have a consistent icon in their title and sit together as one group (⚖️ Body Comp Debug → 🌙 Rollover Debug Log → 🔍 Log Mutation Debug → 💾 Save Debug Trace → 📋 Copy Diagnostics for Claude → 🩺 App Health Check → 📝 Settings Change Log → 🐛 JS Error Log → 🏷 Label Read Log).
 
 ## Category Data Loss on "Save Only" — Found and Fixed
 

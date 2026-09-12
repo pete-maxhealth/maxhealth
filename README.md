@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.736
+**Version:** v3.10.743
 
 ---
 
@@ -30,7 +30,7 @@
 - **Recipes** — proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly), with a real review step (add/remove/swap any ingredient) before it hits your log, and a "Refresh from Library" action if an ingredient's values have since been corrected. Meals as a separate concept has been retired — saving a logged combo now creates a genuine recipe directly, with real per-item ingredients.
 - **Real food categories, fully in-app editable** — every library item auto-categorizes into genuine food groups (meat, fish, dairy, vegetable, fruit, fat, protein, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad) rather than the ingredient's own name being treated as its category. Add, edit, or remove any category mapping directly in Manage Categories, including a rename tool for fixing existing data in bulk and typo protection. Browse by Category to see and log from a group directly. Category edits stay live in place — the edit form no longer closes itself after each chip added or removed. Categories are protected on the chat "Save only" path: saving an existing library item there used to silently wipe its categories if none were freshly typed; it now merges instead, and shows what's already saved so the two screens agree. The individual per-item edit form (✏️ on a meal-preview item) also has its own categories field now, and a brand-new item always gets real categories stored at creation rather than relying on display-time auto-detection alone.
 - **Structured meal requests** — a multi-select category picker (tap to select, set a count per category, Send) builds requests like "meat + 3 veg" or "protein + grain + salad" directly, or type it in chat ("protein and pasta"). Honest partial-match handling when the library can't fully cover what was asked.
-- **Fibre and polyols, fully editable** — can be added or corrected directly on any library item, not just when the AI happens to read them correctly at add-time.
+- **Fibre and polyols, fully editable** — can be added or corrected directly on any library item, not just when the AI happens to read them correctly at add-time. Anywhere carbs are shown for an item with polyols, a "was X, Yg after polyols" line makes clear whether the net figure has already accounted for them — Today's Log, the Edit Entry form (live-updating), and the chat "LOGGED ✓" confirmation.
 - **Read-aloud** — AI chat responses, the GBM Monthly Summary, and Research Digest entries can be read aloud via a speaker icon, using the browser's built-in text-to-speech, fully offline.
 - **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
 - **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
@@ -48,7 +48,8 @@
 - **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
 - **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
 - **Boot survival & auto-update** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots, zero user interaction required. A separate 30-minute check also pulls any update from GitHub automatically, so a device never falls behind without someone manually running `git pull` on it.
-- **Remote diagnostics** — Settings → Manage → Advanced Troubleshooting Tools → App Health Check shows the real auto-update log, crontab, and whether crond/the server are actually running, alongside the existing version-sync and div-balance checks. One tap, then copy the output — lets a stuck device get debugged by someone else entirely, without needing Termux access on the affected phone.
+- **Remote diagnostics** — Settings → Manage → Advanced Troubleshooting Tools → App Health Check shows the real auto-update log, crontab, and whether crond/the server are actually running, alongside the existing version-sync and div-balance checks. One tap, then copy the output — lets a stuck device get debugged by someone else entirely, without needing Termux access on the affected phone. **📋 Copy Diagnostics for Claude** bundles every diagnostic source (Log Mutation Debug, AI-Assist trace, category traces, Body Comp Debug, Rollover log) into one paste-ready block, showing a live entry count per source so it's clear up front which ones actually have anything to contribute.
+- **Supplements** — Tablet counts (e.g. "2 capsules") shown separately from the mg dose, and time-of-day lists are reorderable per period via ▲▼ buttons — a supplement in both the morning and evening lists isn't forced to the same relative position in both.
 - **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
