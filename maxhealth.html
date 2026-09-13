@@ -4684,7 +4684,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.748</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.749</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5623,7 +5623,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.748'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.749'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -10053,6 +10053,18 @@ function renderSuggestedTargets() {
   const activeProt = parseInt(localStorage.getItem('mh_target_protein')) || null;
   const activeFat  = parseInt(localStorage.getItem('mh_target_fat')) || null;
 
+  // The actual fix for tonight's repeated confusion: "currently active"
+  // alone doesn't say whether that number was ever genuinely confirmed
+  // FOR THIS PHASE, or is just leftover residue from whichever phase was
+  // active last time the calorie target got edited. Maintain and Gain each
+  // have their own remembered figure (mh_target_kcal_maintain/_gain) since
+  // the per-phase memory fix - if that key doesn't match what's active,
+  // the active number isn't really "this phase's target," it's a hand-me-
+  // down, and deserves a different, more direct flag than "slightly stale."
+  const phaseKey = goal !== 'lose' ? 'mh_target_kcal_' + goal : null;
+  const phaseConfirmedKcal = phaseKey ? parseInt(localStorage.getItem(phaseKey)) || null : null;
+  const activeIsLeftover = activeKcal && activeKcal !== calTarget && phaseKey && phaseConfirmedKcal !== activeKcal;
+
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       ${manualTdee ? `
@@ -10066,11 +10078,12 @@ function renderSuggestedTargets() {
         <div style="font-size:18px;font-weight:700;color:var(--text);">${tdee} <span style="font-size:11px;font-weight:400;">kcal</span></div>
         <div style="font-size:10px;color:var(--text3);">${Math.round(avgSteps).toLocaleString()} avg steps/day — a rough guess, not a target</div>
       </div>`}
-      <div style="background:var(--surface);border-radius:8px;padding:10px;">
+      <div style="background:var(--surface);border-radius:8px;padding:10px;${activeIsLeftover ? 'border:1px solid var(--red);' : ''}">
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">TARGET (${goal.toUpperCase()}${isOffTargetMaintain ? ' — CORRECTING' : ''})</div>
         <div style="font-size:18px;font-weight:700;color:var(--blue);">${calTarget} <span style="font-size:11px;font-weight:400;">kcal</span></div>
         <div style="font-size:10px;color:var(--text3);">${goal === 'lose' ? 'TDEE −500' : goal === 'gain' ? 'TDEE +400' : isOffTargetMaintain ? `TDEE ${weight > wtHigh ? '−' : '+'}${CORRECTION_KCAL}` : 'TDEE'}</div>
-        ${activeKcal && activeKcal !== calTarget ? `<div style="font-size:10px;color:var(--yellow);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">Currently active: ${activeKcal}<span onclick="applySuggestedSingle('kcal')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>` : ''}
+        ${activeIsLeftover ? `<div style="font-size:10px;color:var(--red);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">⚠ ${activeKcal} active isn't actually confirmed for ${goal} — it's carried over from a different phase.<span onclick="applySuggestedSingle('kcal')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>`
+          : activeKcal && activeKcal !== calTarget ? `<div style="font-size:10px;color:var(--yellow);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">Currently active: ${activeKcal}<span onclick="applySuggestedSingle('kcal')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>` : ''}
       </div>
       <div style="background:var(--surface);border-radius:8px;padding:10px;">
         <div style="font-size:10px;color:var(--green);margin-bottom:2px;">PROTEIN</div>
@@ -10085,11 +10098,12 @@ function renderSuggestedTargets() {
         ${activeFat && activeFat !== fatTarget ? `<div style="font-size:10px;color:var(--yellow);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">Currently active: ${activeFat}g<span onclick="applySuggestedSingle('fat')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>` : ''}
       </div>
     </div>
+    ${activeIsLeftover ? `<div style="background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text2);line-height:1.5;">⚠ <strong>${activeKcal}kcal is currently driving your dashboard, but it was never actually confirmed for ${goal === 'gain' ? 'Gain' : 'Maintain'}</strong> — it's what happened to be active when you last switched to this phase, inherited from whichever phase came before. Tap <strong>apply →</strong> above (or Apply these targets below) to set a real ${goal === 'gain' ? 'Gain' : 'Maintain'} figure, and it'll be remembered specifically for this phase from now on.</div>` : ''}
     ${!manualTdee ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;">⚠ No confirmed TDEE set yet — the ${tdee}kcal above is a formula guess (${getBMRFormulaLabel()} + step-based activity), typically accurate to within about ±10-15% for most people, sometimes considerably more off. It's most meaningful as a <strong style="color:var(--text2);">maintenance</strong> starting point specifically — once you've tracked real intake against real weight response for a couple of weeks, enter your own confirmed figure below and this panel will use that instead everywhere, including here.${goal !== 'maintain' ? ` Since your current goal is <strong style="color:var(--text2);">${goal}</strong>, the ${goal === 'lose' ? '−500' : '+400'}kcal adjustment is layered on top of that already-rough estimate, compounding the uncertainty further — treat the ${calTarget}kcal target with proportionally more caution until a confirmed TDEE replaces the guess underneath it.` : ''}</div>` : ''}
     <div style="font-size:11px;color:var(--text3);">Carbs: ≤${carbCeil}g (from your ceiling — unchanged)</div>
     <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${weight}kg · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
     ${isOffTargetMaintain ? `<div style="color:var(--yellow);margin-top:6px;font-size:11px;">⚖️ Weight is currently ${weight > wtHigh ? 'above' : 'below'} your ${wtLow}–${wtHigh}kg target, so this suggests a temporary ${CORRECTION_KCAL}kcal correction rather than pure TDEE — the same adjustment recommended in your Monthly Summary. Once weight is back in range, this reverts to plain TDEE.</div>` : ''}
-    ${(activeKcal && activeKcal !== calTarget) || (activeProt && activeProt !== protTarget) || (activeFat && activeFat !== fatTarget) ? `<div style="margin-top:6px;font-size:11px;">📐 Why these figures might differ from what's active<span onclick="const el=document.getElementById('suggtargets-explain');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="suggtargets-explain" style="display:none;color:var(--text3);line-height:1.5;">This calculator suggests fresh numbers from your <em>current</em> weight and phase each time you open it — it doesn't automatically match what's actually active elsewhere in the app (dashboard, reports) until you tap Apply below.
+    ${!activeIsLeftover && ((activeKcal && activeKcal !== calTarget) || (activeProt && activeProt !== protTarget) || (activeFat && activeFat !== fatTarget)) ? `<div style="margin-top:6px;font-size:11px;">📐 Why these figures might differ from what's active<span onclick="const el=document.getElementById('suggtargets-explain');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="suggtargets-explain" style="display:none;color:var(--text3);line-height:1.5;">This calculator suggests fresh numbers from your <em>current</em> weight and phase each time you open it — it doesn't automatically match what's actually active elsewhere in the app (dashboard, reports) until you tap Apply below.
       ${['gbm','epilepsy','migraine','cluster_headache'].includes(cond) ? `
         ${activeProt && protTarget !== activeProt ? `<br><br><strong>Protein:</strong> this genuinely tracks bodyweight rather than being a fixed protocol number — as weight moves, the suggested figure is meant to move with it. Updating to the fresh number is normal here, not something to be cautious about.` : ''}
         ${isOffTargetMaintain && activeFat && fatTarget > activeFat ? `<br><br><strong>Fat:</strong> this one's different — it's meant to track a fixed therapeutic ratio of calories (≥65%), not scale up independently with bodyweight. Since weight is currently being corrected down, the higher suggested fat figure would work against that. Sticking with the active fat target makes more sense until weight settles, then revisit.` : ''}
