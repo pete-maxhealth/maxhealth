@@ -2765,8 +2765,11 @@
       <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoSelect(this)">
       <input type="file" id="barcodeInput" accept="image/*" capture="environment" style="display:none" onchange="handleBarcodeCapture(this)">
       <div class="input-row-text">
-      <textarea class="chat-input" id="chatInput" placeholder="Log a meal or ask..." rows="1"
+      <div style="position:relative;flex:1;">
+      <textarea class="chat-input" id="chatInput" placeholder="Log a meal or ask..." rows="1" style="padding-right:28px;box-sizing:border-box;width:100%;"
         onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <span onclick="clearChatInput()" title="Clear" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:15px;cursor:pointer;line-height:1;padding:2px;">×</span>
+      </div>
       <button class="send-btn" onclick="sendChat()">
         <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
       </button>
@@ -4703,7 +4706,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.756</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.757</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5642,7 +5645,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.756'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.757'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12036,6 +12039,9 @@ function applyRoutine(id) {
         <button id="routineUnitBtn-kg" onclick="setRoutineUnit('kg')" style="flex:1;padding:6px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);">kg</button>
         <button id="routineUnitBtn-lbs" onclick="setRoutineUnit('lbs')" class="btn-neutral" style="flex:1;padding:6px;border-radius:6px;font-size:11px;">lbs</button>
       </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+        <span onclick="toggleAllRoutineApplyDone()" id="routineApplyDoneAllToggle" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;">Select all done</span>
+      </div>
       <div id="routineApplyRows"></div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
         <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Optional — credits the whole session as Resistance activity, same as a single manual workout.</div>
@@ -12093,7 +12099,8 @@ function renderRoutineApplyRows() {
           <button onclick="moveRoutineApplyExercise(${exIdx},'up')" ${exIdx===0?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${exIdx===0?'var(--border)':'var(--text3)'};cursor:${exIdx===0?'default':'pointer'};line-height:1;">▲</button>
           <button onclick="moveRoutineApplyExercise(${exIdx},'down')" ${exIdx===drafts.length-1?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${exIdx===drafts.length-1?'var(--border)':'var(--text3)'};cursor:${exIdx===drafts.length-1?'default':'pointer'};line-height:1;">▼</button>
         </div>
-        <div style="font-size:12px;color:var(--text2);font-weight:600;flex:1;">${ex.name}</div>
+        <input type="checkbox" onchange="window._routineApplyDrafts[${exIdx}].done=this.checked;renderRoutineApplyRows();" ${ex.done ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;accent-color:var(--accent);">
+        <div style="font-size:12px;color:${ex.done ? 'var(--text3)' : 'var(--text2)'};font-weight:600;flex:1;${ex.done ? 'text-decoration:line-through;' : ''}">${ex.name}</div>
         <span onclick="removeRoutineApplyExercise(${exIdx})" style="cursor:pointer;color:var(--red);font-size:15px;padding:0 4px;" title="Remove from this session only">×</span>
       </div>
       ${ex.sets.map((s, setIdx) => `
@@ -12105,6 +12112,9 @@ function renderRoutineApplyRows() {
       <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
     </div>`).join('') + `
     <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>`;
+
+  const toggleLabel = document.getElementById('routineApplyDoneAllToggle');
+  if (toggleLabel) toggleLabel.textContent = drafts.length && drafts.every(ex => ex.done) ? 'Unselect all' : 'Select all done';
 }
 
 // Covers exactly the gap raised directly: if a routine's saved exercise
@@ -12126,6 +12136,17 @@ function addRoutineApplyExercise() {
 }
 function removeRoutineApplyExercise(exIdx) {
   window._routineApplyDrafts.splice(exIdx, 1);
+  renderRoutineApplyRows();
+}
+// Purely a progress marker for working through a long list - doesn't
+// filter or gate what actually gets saved. An unticked exercise with
+// numbers in it still saves fine; this only tracks "have I dealt with
+// this one yet," separate from whether its numbers happen to be filled in.
+function toggleAllRoutineApplyDone() {
+  const drafts = window._routineApplyDrafts;
+  if (!drafts) return;
+  const allDone = drafts.every(ex => ex.done);
+  drafts.forEach(ex => { ex.done = !allDone; });
   renderRoutineApplyRows();
 }
 
@@ -14185,6 +14206,14 @@ function saveFoodToLibraryFromPanel() {
   if (catEl) catEl.value = ''; // clear after use - the field isn't reset every time this panel opens for a new food (several separate entry points do that), so this at least stops a category silently carrying into a later, unrelated save
 }
 
+function clearChatInput() {
+  const input = document.getElementById('chatInput');
+  if (!input) return;
+  input.value = '';
+  autoResize(input);
+  input.focus();
+}
+
 // ─── CHAT LOGIC ──────────────────────────────────────────
 function sendChat() {
   const input = document.getElementById('chatInput');
@@ -14206,7 +14235,11 @@ function sendChat() {
     const voiceBtn = document.getElementById('voiceBtn');
     if (voiceBtn) { voiceBtn.style.background = ''; voiceBtn.style.borderColor = ''; }
   }
-  input.value = '';
+  // Deliberately NOT cleared to empty - kept as typed/just-sent so a
+  // repeat of the same thing (Jill's example: the same couple of days in
+  // a row) is just tap-and-return again rather than retyping or
+  // re-searching. The new × button next to the box is the explicit way
+  // to empty it when starting something genuinely new.
   autoResize(input);
 
   const photoB64 = _pendingPhotoBase64;
@@ -20936,6 +20969,7 @@ function checkStreakMilestone(streak) {
             <span style="color:var(--yellow);">${e.carbs}g C${e.polyols > 0 ? `<span style="color:var(--text3);"> (was ${e.carbs}g, ${Math.round((e.carbs - e.polyols)*10)/10}g after polyols)</span>` : ''}</span>
           </div>
         </div>
+        <div onclick="copyLogEntryLine(${e.id})" title="Copy this line" style="padding:2px 6px;color:var(--text3);font-size:14px;cursor:pointer;">📋</div>
         <div class="log-del" onclick="deleteLogEntry(${e.id})" style="padding-top:2px;">×</div>
       </div>`;
     }).join('');
@@ -21576,6 +21610,22 @@ function initSwipeDelete() {
     }
     dragging = null;
   }, { passive: true });
+}
+
+// Copies description, amount and macros as one line - format chosen to
+// work either way: pasted as-is it's a readable summary (a message to
+// someone, a note); pasted into the Log box and sent, the leading
+// name+amount is exactly what's needed to match the existing library
+// entry and log again with its locked values, rather than re-triggering
+// a fresh AI estimate that could vary slightly from what was actually
+// eaten. Covers the repeat-the-same-thing-a-few-days-running case
+// directly, without needing to retype or re-search either way.
+function copyLogEntryLine(id) {
+  const e = (state.todayLog || []).find(x => x.id === id);
+  if (!e) return;
+  const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs`;
+  navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
 function deleteLogEntry(id) {
@@ -23261,6 +23311,7 @@ function renderHistory() {
                 return amt ? ` <span style="color:var(--text3);font-size:11px;">(${amt})</span>` : '';
               })()}</span>
               <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C${e.fat ? ` · ${e.fat}g F` : ''}</span>
+              <span onclick="copyHistEntryLine('${day.date}',${j})" title="Copy this line" style="color:var(--text3);cursor:pointer;padding:2px 6px;font-size:14px;">📋</span>
               <span style="color:var(--red);cursor:pointer;padding:2px 6px;font-size:16px;font-weight:700;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})">×</span>
             </div>
           </div>
@@ -23287,6 +23338,29 @@ function editHistEntryByDate(date, entryIdx) {
   const dayIdx = state.history.findIndex(d => d.date === date);
   if (dayIdx === -1) return;
   editHistEntry(dayIdx, entryIdx);
+}
+
+// Same "copy a line to repeat it a few days running" as Today's Log -
+// deliberately re-filters day.log the same way renderHistory's cleanLog
+// does, rather than indexing day.log[entryIdx] directly. The existing
+// edit/delete-by-date functions do index straight into day.log with the
+// filtered position - fine for a day with no filtered-out ghost entries,
+// a real mismatch for one that has some earlier in the list. Not fixed
+// here since it's a separate, pre-existing issue - just not repeated in
+// this new function.
+function copyHistEntryLine(date, entryIdx) {
+  const day = state.history.find(d => d.date === date);
+  if (!day) return;
+  const modeWords = ['standard','occasion','holiday','missed day entry','missed day'];
+  const cleanLog = (day.log||[]).filter(e => {
+    const desc = (e.description||'').trim().toLowerCase();
+    return desc && !modeWords.includes(desc);
+  });
+  const e = cleanLog[entryIdx];
+  if (!e) return;
+  const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein||0}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs||0}g carbs`;
+  navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
 function deleteHistDay(date) {
