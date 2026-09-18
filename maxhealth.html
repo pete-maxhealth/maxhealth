@@ -4703,7 +4703,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.752</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.755</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5642,7 +5642,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.752'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.755'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11934,11 +11934,28 @@ function renderCreateRoutineForm(container, prefillName = '') {
 function renderRoutineExerciseRows() {
   const el = document.getElementById('routineExerciseRows');
   if (!el) return;
+  const n = _routineDraftExercises.length;
   el.innerHTML = _routineDraftExercises.map((name, i) => `
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+      <div style="display:flex;flex-direction:column;gap:1px;">
+        <button onclick="moveRoutineDraftExercise(${i},'up')" ${i===0?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===0?'var(--border)':'var(--text3)'};cursor:${i===0?'default':'pointer'};line-height:1;">▲</button>
+        <button onclick="moveRoutineDraftExercise(${i},'down')" ${i===n-1?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===n-1?'var(--border)':'var(--text3)'};cursor:${i===n-1?'default':'pointer'};line-height:1;">▼</button>
+      </div>
       <input type="text" value="${(name||'').replace(/"/g,'&quot;')}" placeholder="Exercise name" oninput="_routineDraftExercises[${i}]=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
       <span onclick="_routineDraftExercises.splice(${i},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
     </div>`).join('');
+}
+// New exercises always land at the end (addRoutineExerciseRow just pushes),
+// and the Apply screen mirrors this exact order when the routine's used -
+// so a newly-added exercise always surfaced last there too, easy to miss
+// in a long list even though it was never actually missing. This lets the
+// template's own order be fixed directly, once, rather than needing the
+// Apply screen's session-only reorder repeated every single time it's used.
+function moveRoutineDraftExercise(i, direction) {
+  const swapIdx = direction === 'up' ? i - 1 : i + 1;
+  if (swapIdx < 0 || swapIdx >= _routineDraftExercises.length) return;
+  [_routineDraftExercises[i], _routineDraftExercises[swapIdx]] = [_routineDraftExercises[swapIdx], _routineDraftExercises[i]];
+  renderRoutineExerciseRows();
 }
 function addRoutineExerciseRow() {
   _routineDraftExercises.push('');
@@ -12076,7 +12093,8 @@ function renderRoutineApplyRows() {
           <button onclick="moveRoutineApplyExercise(${exIdx},'up')" ${exIdx===0?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${exIdx===0?'var(--border)':'var(--text3)'};cursor:${exIdx===0?'default':'pointer'};line-height:1;">▲</button>
           <button onclick="moveRoutineApplyExercise(${exIdx},'down')" ${exIdx===drafts.length-1?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${exIdx===drafts.length-1?'var(--border)':'var(--text3)'};cursor:${exIdx===drafts.length-1?'default':'pointer'};line-height:1;">▼</button>
         </div>
-        <div style="font-size:12px;color:var(--text2);font-weight:600;">${ex.name}</div>
+        <div style="font-size:12px;color:var(--text2);font-weight:600;flex:1;">${ex.name}</div>
+        <span onclick="removeRoutineApplyExercise(${exIdx})" style="cursor:pointer;color:var(--red);font-size:15px;padding:0 4px;" title="Remove from this session only">×</span>
       </div>
       ${ex.sets.map((s, setIdx) => `
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
@@ -12085,7 +12103,30 @@ function renderRoutineApplyRows() {
           <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
         </div>`).join('')}
       <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
-    </div>`).join('');
+    </div>`).join('') + `
+    <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>`;
+}
+
+// Covers exactly the gap raised directly: if a routine's saved exercise
+// list is ever missing something expected (whatever the cause - a
+// duplicate routine, an edit that didn't save, anything else), there was
+// previously no way to add it here - only "+ add set" on exercises
+// already present. Backing out to edit the routine definition and
+// reapplying was the only option. This adds it directly to today's
+// session only - deliberately doesn't touch the saved routine itself, so
+// a one-off extra exercise doesn't silently change the routine for next
+// time too.
+function addRoutineApplyExercise() {
+  appPrompt('Add exercise', 'e.g. Wide Floor Press', (name) => {
+    name = (name || '').trim();
+    if (!name) return;
+    window._routineApplyDrafts.push({ name, sets: [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}] });
+    renderRoutineApplyRows();
+  });
+}
+function removeRoutineApplyExercise(exIdx) {
+  window._routineApplyDrafts.splice(exIdx, 1);
+  renderRoutineApplyRows();
 }
 
 // Reorders whole exercises, not sets - each exercise's sets already live
@@ -30385,6 +30426,10 @@ function getFullBodyCompositionHistory() {
     const iFatPct = idx('fat_pct');
     const iBoneKg = idx('bone_mass_kg');
     const iHydrationKg = idx('hydration_kg');
+    const iVisceralFat = idx('visceral_fat');
+    const iVascularAge = idx('vascular_age');
+    const iBmrDevice = idx('bmr_device');
+    const iMetabolicAge = idx('metabolic_age');
     if (iDate < 0 || (iMuscleKg < 0 && iFatKg < 0)) return [];
 
     const out = [];
@@ -30408,6 +30453,16 @@ function getFullBodyCompositionHistory() {
         fat_pct: iFatPct >= 0 ? cols[iFatPct]?.trim() : null,
         bone_mass_kg: iBoneKg >= 0 ? cols[iBoneKg]?.trim() : null,
         hydration_kg: iHydrationKg >= 0 ? cols[iHydrationKg]?.trim() : null,
+        // Withings computes and shows these in its own app but leaves them
+        // out of weight.csv entirely - pulled from a separate other.csv
+        // file in the same export instead (see withings.py), so these
+        // are genuinely sparser than the fields above: vascular age in
+        // particular may only have a handful of readings ever, not one
+        // per weigh-in, so null here is often correct rather than missing.
+        visceral_fat: iVisceralFat >= 0 ? cols[iVisceralFat]?.trim() : null,
+        vascular_age: iVascularAge >= 0 ? cols[iVascularAge]?.trim() : null,
+        bmr_device: iBmrDevice >= 0 ? cols[iBmrDevice]?.trim() : null,
+        metabolic_age: iMetabolicAge >= 0 ? cols[iMetabolicAge]?.trim() : null,
       });
     }
     out.sort((a,b) => a.isoDate < b.isoDate ? -1 : 1); // chronological — earliest first
@@ -35407,6 +35462,16 @@ function buildPatientContext(history, conditionFilter = null) {
     latestFatMassKg: latestBodyComp?.fat_mass_kg ?? null,
     latestMuscleMassKg: latestBodyComp?.muscle_mass_kg ?? null,
     fatMassTrend, muscleMassTrend,
+    // Withings-specific extras, not derivable from weight.csv alone (see
+    // getFullBodyCompositionHistory's own note) - genuinely sparser than
+    // the fields above, especially vascular age, so null here is often
+    // correct rather than a gap. Included so a report can actually cite
+    // a real number when one exists, instead of stating none is available
+    // at all just because these particular fields often aren't.
+    latestVisceralFat: latestBodyComp?.visceral_fat ?? null,
+    latestVascularAge: latestBodyComp?.vascular_age ?? null,
+    latestBmrDevice: latestBodyComp?.bmr_device ?? null,
+    latestMetabolicAge: latestBodyComp?.metabolic_age ?? null,
     tdee: tdeeVal,
     tdeeSource,
     formulaTdee: tdeeData?.tdee ?? null,
@@ -35560,6 +35625,12 @@ ${ctx.nonCompliantDetail ? `NON-COMPLIANT DAY DETAIL (use this, not guesswork, t
 CURRENT STREAK: ${ctx.streak} days within ceiling
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
+${(ctx.latestVisceralFat != null || ctx.latestVascularAge != null || ctx.latestBmrDevice != null || ctx.latestMetabolicAge != null) ? `ADDITIONAL SCALE METRICS: ${[
+  ctx.latestVisceralFat != null ? `Visceral fat index ${ctx.latestVisceralFat}` : null,
+  ctx.latestVascularAge != null ? `Vascular age ${ctx.latestVascularAge}` : null,
+  ctx.latestBmrDevice != null ? `Device-measured BMR ${ctx.latestBmrDevice}kcal` : null,
+  ctx.latestMetabolicAge != null ? `Metabolic age ${ctx.latestMetabolicAge}` : null,
+].filter(Boolean).join(' | ')}. These come from the scale's own app, not a clinical/imaging measurement — genuinely useful signals but not a substitute for an actual lipid panel or vascular assessment when discussing cardiovascular risk specifically.` : ''}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
 TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? `${ctx.name}'s own confirmed, weight-trend-validated figure (use this as the authoritative number)` : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against ${ctx.name}'s actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
 When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
