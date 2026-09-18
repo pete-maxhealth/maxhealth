@@ -2784,6 +2784,7 @@
       <button id="searchBtn" onclick="openFoodSearch()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Search food database">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--text2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
+      <button id="pasteMealBtn" onclick="openPasteMealModal()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;" title="Paste a copied meal, with exact macros, today or a past date">📋</button>
       <button id="voiceBtn" onclick="toggleVoiceInput()" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Voice log — say each item, then 'done' to review before logging">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0M12 19v3M8 22h8"/></svg>
       </button>
@@ -4706,7 +4707,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.757</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.758</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5645,7 +5646,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.757'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.758'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -21626,6 +21627,111 @@ function copyLogEntryLine(id) {
   const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
   const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs`;
   navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
+}
+
+// The other half of copyLogEntryLine/copyHistEntryLine: takes a copied
+// line and adds it back as a genuinely new entry, using the exact
+// numbers as-is rather than re-sending the description through the AI
+// parser, which could estimate slightly differently second time round.
+// One shared modal for both today and any past date - the date field
+// inside it is the only thing that changes, not a separate flow per case.
+function openPasteMealModal() {
+  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('pasteMealDate').value = todayStr();
+  document.getElementById('pasteMealModal').style.display = 'flex';
+  // Best-effort auto-fill - this call happens synchronously off the same
+  // tap that opened the modal, which counts as the user gesture most
+  // browsers require for clipboard reads. The explicit button inside the
+  // modal covers it if this attempt is blocked, empty, or unsupported.
+  pasteMealFromClipboard(true);
+}
+
+function closePasteMealModal() {
+  document.getElementById('pasteMealModal').style.display = 'none';
+}
+
+// Parses exactly the format copyLogEntryLine/copyHistEntryLine produce -
+// amount and fat are both optional (fat shows as "—" when never recorded
+// on the original entry).
+function pasteMealFromClipboard(silent) {
+  if (!navigator.clipboard?.readText) {
+    if (!silent) showToast('Clipboard access not available here');
+    return;
+  }
+  navigator.clipboard.readText().then(text => {
+    const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs/i);
+    if (!m) {
+      if (!silent) showToast("Clipboard doesn't look like a copied meal line");
+      return;
+    }
+    document.getElementById('pasteMealDesc').value = m[1].trim();
+    document.getElementById('pasteMealAmount').value = m[2] || '';
+    document.getElementById('pasteMealKcal').value = m[3];
+    document.getElementById('pasteMealProtein').value = m[4];
+    document.getElementById('pasteMealFat').value = m[5] === '—' ? '' : m[5];
+    document.getElementById('pasteMealCarbs').value = m[6];
+    if (!silent) showToast('Pasted ✓ — check the fields, then Add entry');
+  }).catch(() => {
+    if (!silent) showToast('Could not read clipboard');
+  });
+}
+
+function confirmPasteMeal() {
+  const desc = document.getElementById('pasteMealDesc').value.trim();
+  const amount = document.getElementById('pasteMealAmount').value.trim();
+  const kcal = parseFloat(document.getElementById('pasteMealKcal').value);
+  const protein = parseFloat(document.getElementById('pasteMealProtein').value) || 0;
+  const fat = parseFloat(document.getElementById('pasteMealFat').value) || 0;
+  const carbs = parseFloat(document.getElementById('pasteMealCarbs').value) || 0;
+  const dateStr = document.getElementById('pasteMealDate').value.trim() || todayStr();
+  if (!desc) { showToast('Enter a description'); return; }
+  if (isNaN(kcal)) { showToast('Enter a calorie value'); return; }
+
+  const entry = {
+    id: Date.now(), time: nowTime(),
+    description: desc,
+    amount: amount || null,
+    items: [{ name: desc, amount: amount || null, kcal, protein, fat, carbs }],
+    kcal: Math.round(kcal),
+    protein: Math.round(protein * 10) / 10,
+    fat: Math.round(fat * 10) / 10,
+    carbs: Math.round(carbs * 10) / 10,
+  };
+
+  if (dateStr === todayStr()) {
+    state.todayLog.push(entry);
+    saveState();
+    updateDashboard();
+    closePasteMealModal();
+    showToast('Added to today ✓');
+  } else {
+    // Same constraint logFoods()'s own past-day branch already has - only
+    // an existing history day can be added to, not a brand-new one out of
+    // nowhere. Consistent with established behaviour rather than a new rule.
+    const targetDay = state.history.find(h => h.date === dateStr);
+    if (!targetDay) {
+      showToast(`Couldn't find ${dateStr} in history — nothing added`);
+      return;
+    }
+    if (!targetDay.log) targetDay.log = [];
+    targetDay.log.push(entry);
+    // Same recompute-from-log pattern already used by editHistEntry/deleteHistEntry/logFoods
+    targetDay.totals = targetDay.log.reduce((acc, e) => ({
+      kcal:    acc.kcal    + (e.kcal    || 0),
+      protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
+      fat:     Math.round((acc.fat     + (e.fat     || 0)) * 10) / 10,
+      carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
+      fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+      polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+    }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+    saveState();
+    renderHistory();
+    closePasteMealModal();
+    showToast(`Added to ${dateStr} ✓`);
+  }
 }
 
 function deleteLogEntry(id) {
@@ -38874,6 +38980,39 @@ function dismissInsight() {
     <div style="display:flex;gap:8px;">
       <button class="modal-btn cancel" style="flex:1;" onclick="closeMissedDayModal()">Cancel</button>
       <button class="modal-btn confirm-new" style="flex:2;" onclick="saveMissedDay()">Save to History</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pasteMealModal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);align-items:flex-end;">
+  <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:90vh;overflow-y:auto;animation:slideUp 0.25s ease;">
+    <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">PASTE MEAL</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Paste a line copied from Today's Log or History (📋) to add it as a new entry with these exact values — no AI re-estimate, since the numbers are already known.</div>
+
+    <button class="run-btn" onclick="pasteMealFromClipboard()" style="width:100%;margin-bottom:14px;">📋 Paste from clipboard</button>
+
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DESCRIPTION</div>
+      <input id="pasteMealDesc" class="modal-input" placeholder="e.g. Chicken breast" style="font-size:14px;padding:10px 12px;width:100%;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">AMOUNT (optional)</div>
+      <input id="pasteMealAmount" class="modal-input" placeholder="e.g. 150g" style="font-size:14px;padding:10px 12px;width:100%;box-sizing:border-box;">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;">KCAL</div><input id="pasteMealKcal" class="modal-input" type="number" placeholder="0" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:var(--green);margin-bottom:4px;">PROT g</div><input id="pasteMealProtein" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#a78bfa;margin-bottom:4px;">FAT g</div><input id="pasteMealFat" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">CARBS g</div><input id="pasteMealCarbs" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DATE (DD/MM/YY) — defaults to today, change to add to a past day instead</div>
+      <input id="pasteMealDate" class="modal-input" placeholder="e.g. 15/05/26" style="font-size:14px;padding:10px 12px;width:100%;box-sizing:border-box;">
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="modal-btn cancel" style="flex:1;" onclick="closePasteMealModal()">Cancel</button>
+      <button class="modal-btn confirm-new" style="flex:2;" onclick="confirmPasteMeal()">Add entry ✓</button>
     </div>
   </div>
 </div>
