@@ -3631,6 +3631,10 @@
         <div class="provider-btn"        id="rpt-range-all" onclick="setReportRange(0,this)">All time</div>
         <div class="provider-btn"        id="rpt-range-custom" onclick="setReportRange(-1,this)">Custom</div>
       </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+        <input type="checkbox" id="rptIncludeToday" onchange="_rptIncludeToday=this.checked;renderReportSummary();runReportQuery();" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+        <label for="rptIncludeToday" style="font-size:11px;color:var(--text3);cursor:pointer;">Include today (off by default — an incomplete day can skew averages)</label>
+      </div>
       <div id="rpt-custom-dates" style="display:none;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
         <div>
           <div style="font-size:11px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;">From</div>
@@ -4707,7 +4711,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.760</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.761</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5646,7 +5650,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.760'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.761'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -30898,7 +30902,9 @@ let _mmCustomTo = '';
 // inline cutoff-date logic). period > 0 keeps the exact original
 // behavior (rolling N-day cutoff); period === 0 is unchanged (all time,
 // always true); period === -1 is the only new case.
+let _mmIncludeToday = false; // off by default, same reasoning as Trend Analysis's rptIncludeToday
 function _mmDateInRange(dateStr) {
+  if (!_mmIncludeToday && dateStr === todayStr()) return false;
   if (_mmPeriod === 0) return true;
   const p = dateStr.split('/');
   if (p.length !== 3) return false;
@@ -33461,18 +33467,30 @@ function updateCarbZonesCondition() {
   }
 }
 
+let _rptIncludeToday = false; // off by default - an in-progress day can skew a period average
 function getReportHistory() {
   const h = state.history || [];
-  if (_rptRange === 0) return h;
-  if (_rptRange === -1) {
+  let result;
+  if (_rptRange === 0) {
+    result = h;
+  } else if (_rptRange === -1) {
     const from = parseDateStr(document.getElementById('rptDateFrom')?.value);
     const to   = parseDateStr(document.getElementById('rptDateTo')?.value);
-    if (!from || !to) return h;
-    return h.filter(e => { const d = parseDateStr(e.date); return d && d >= from && d <= to; });
+    result = (!from || !to) ? h : h.filter(e => { const d = parseDateStr(e.date); return d && d >= from && d <= to; });
+  } else {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - _rptRange);
+    result = h.filter(e => { const d = parseDateStr(e.date); return d && d >= cutoff; });
   }
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - _rptRange);
-  return h.filter(e => { const d = parseDateStr(e.date); return d && d >= cutoff; });
+  // Excludes today unless explicitly opted in - a day still in progress
+  // (partial logging, no final totals yet) pulling down/up a multi-day
+  // average is exactly the kind of skew a "last 7 days" figure shouldn't
+  // silently include.
+  if (!_rptIncludeToday) {
+    const today = todayStr();
+    result = result.filter(e => e.date !== today);
+  }
+  return result;
 }
 
 function parseDateStr(str) {
@@ -39273,6 +39291,10 @@ function dismissInsight() {
   <div id="mmCustomDateRow" style="display:none;padding:10px 20px 0;gap:8px;">
     <input type="date" id="mmCustomFromInput" onchange="_mmCustomFrom=this.value;renderMMChart();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
     <input type="date" id="mmCustomToInput" onchange="_mmCustomTo=this.value;renderMMChart();" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:8px;">
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 20px 0;">
+    <input type="checkbox" id="mmIncludeToday" onchange="_mmIncludeToday=this.checked;renderMMChart();" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+    <label for="mmIncludeToday" style="font-size:11px;color:var(--text3);cursor:pointer;">Include today (off by default — an incomplete day can skew the comparison)</label>
   </div>
 
   <div style="padding:14px 20px 0;font-size:11px;color:var(--text3);line-height:1.5;">Each line is scaled to its own range so shapes can be compared side by side — tap a point on the chart to see the real values for that day.</div>
