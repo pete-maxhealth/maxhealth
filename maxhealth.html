@@ -4717,7 +4717,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.774</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.775</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5656,7 +5656,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.774'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.775'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -13852,6 +13852,15 @@ function selectLibraryResult(i, q) {
   const matches = loadLibrary().filter(f => f && f.name && !isMealEntry(f) && f.name.toLowerCase().includes(q)).slice(0, 5);
   const f = matches[i];
   if (!f) return;
+  _openFoodAmountPanelForLibraryItem(f);
+}
+
+// Shared by selectLibraryResult (food search overlay) and
+// siteSearchLogLibraryItem (top-level site search's direct "Log" shortcut)
+// - was duplicated once already tonight in an earlier draft of this fix,
+// which is exactly the kind of thing that quietly drifts apart over time
+// as one copy gets a fix the other doesn't. One real implementation now.
+function _openFoodAmountPanelForLibraryItem(f) {
   const isPer100 = f.per100g || !f.portion || /^\d+(\.\d+)?\s*(g|ml|kg|l)\b/i.test(f.portion);
   const baseG = isPer100 ? 100 : (parseFloat(f.portion) || 100);
   // Values in _selectedFoodItem are always expected per-100g downstream
@@ -13867,6 +13876,7 @@ function selectLibraryResult(i, q) {
     fibre: f.fibre || 0, polyols: f.polyols || 0, satFat: 0, sugars: 0, salt: 0, iron: 0
   };
   _lastFoodSourceType = 'search';
+  document.getElementById('foodSearchOverlay').classList.add('open');
   document.getElementById('foodSearchView').style.display = 'none';
   document.getElementById('foodAmountView').classList.add('open');
   document.getElementById('foodAmountName').textContent = f.name;
@@ -15526,7 +15536,7 @@ function filterSiteSearch(query) {
   const q = (query || '').toLowerCase().trim();
 
   if (!q) {
-    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">Start typing to search your library, recipes, saved prompts and settings.</div>`;
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:20px 0;text-align:center;">Start typing to search your library, recipes, saved prompts and settings.<br><br>Tapping a library result opens it to view or edit — tap <strong style="color:var(--accent);">Log →</strong> next to it instead to log an amount directly.</div>`;
     return;
   }
 
@@ -15544,7 +15554,10 @@ function filterSiteSearch(query) {
   if (lib.length || recipeMatches.length) {
     sections.push({
       title: '📚 Library & Recipes',
-      rows: lib.map(f => `<div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="siteSearchOpenLibraryItem(${JSON.stringify(f.name).replace(/"/g,'&quot;')})"><span style="font-size:13px;color:var(--text);">${escape(f.name)}</span></div>`).join('')
+      rows: lib.map(f => `<div style="padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <span style="flex:1;font-size:13px;color:var(--text);cursor:pointer;" onclick="siteSearchOpenLibraryItem(${JSON.stringify(f.name).replace(/"/g,'&quot;')})">${escape(f.name)}</span>
+          <span style="font-size:12px;color:var(--accent);cursor:pointer;white-space:nowrap;" onclick="siteSearchLogLibraryItem(${JSON.stringify(f.name).replace(/"/g,'&quot;')})">Log →</span>
+        </div>`).join('')
         + recipeMatches.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="siteSearchOpenRecipe('${r.id}')"><span style="font-size:13px;color:var(--text);">🍳 ${escape(r.name)}</span></div>`).join('')
     });
   }
@@ -15588,6 +15601,17 @@ function siteSearchOpenLibraryItem(name) {
   switchSubTab('log', 'library');
   const input = document.getElementById('librarySearch');
   if (input) { input.value = name; filterLibrary(name); }
+}
+
+// The shortcut that was actually missing - previously the only thing a
+// library result from site search could do was navigate to the filtered
+// list, which has no amount step at all. Tapping this goes straight to
+// the same amount-entry screen the food search overlay itself opens.
+function siteSearchLogLibraryItem(name) {
+  const f = loadLibrary().find(x => x.name === name);
+  if (!f) return;
+  closeSiteSearch();
+  _openFoodAmountPanelForLibraryItem(f);
 }
 
 function siteSearchOpenRecipe(id) {
