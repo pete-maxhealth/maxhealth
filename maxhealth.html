@@ -3635,6 +3635,10 @@
         <div class="provider-btn"        id="rpt-range-all" onclick="setReportRange(0,this)">All time</div>
         <div class="provider-btn"        id="rpt-range-custom" onclick="setReportRange(-1,this)">Custom</div>
       </div>
+      <div id="rpt-include-today-row" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <input type="checkbox" id="rptIncludeToday" onchange="_rptIncludeToday=this.checked;renderReportSummary();runReportQuery();" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+        <label for="rptIncludeToday" style="font-size:11px;color:var(--text3);cursor:pointer;">Include today (off by default — an incomplete day can skew averages)</label>
+      </div>
       <div id="rpt-custom-dates" style="display:none;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
         <div>
           <div style="font-size:11px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em;">From</div>
@@ -4711,7 +4715,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.765</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.767</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5650,7 +5654,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.765'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.767'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -29080,15 +29084,16 @@ function getTrendsData(forceFullHistory) {
       if (_trendsCustomFrom && dt < new Date(_trendsCustomFrom)) return false;
       if (_trendsCustomTo) { const to = new Date(_trendsCustomTo); to.setHours(23,59,59,999); if (dt > to) return false; }
       return true;
-    }).map(norm);
+    }).filter(d => forceFullHistory || _trendsIncludeToday || d.date !== todayStr()).map(norm);
   }
-  // "All" - same exclusion as the numbered-days branch above; "Today" and
-  // "Custom" are the two exemptions (handled in their own branches above,
-  // untouched), for the same "obvious reasons" as Compare Metrics: Today
-  // IS today by definition, and Custom's explicit dates are authoritative.
-  // forceFullHistory also exempt, same reasoning as the 'today' branch's
-  // own check above - a caller managing its own independent period
-  // filtering (Compare Metrics, via getDrillData) should never have
+  // "All" - same exclusion as the numbered-days branch above. "Today" is
+  // still the one genuine exemption (handled in its own branch above,
+  // untouched) - it's always exactly today by definition, not a range that
+  // might merely reach it, unlike Custom above which no longer gets a free
+  // pass just for being user-picked (same fix as Reports/Compare Metrics -
+  // a custom range ending today deserves the same protection as any other).
+  // forceFullHistory also exempt - a caller managing its own independent
+  // period filtering (Compare Metrics, via getDrillData) should never have
   // Trends' own view state silently imposed on top of its own.
   return histData.filter(d => forceFullHistory || _trendsIncludeToday || d.date !== todayStr()).map(norm);
 }
@@ -30915,12 +30920,11 @@ let _mmCustomTo = '';
 // always true); period === -1 is the only new case.
 let _mmIncludeToday = false; // off by default, same reasoning as Trend Analysis's rptIncludeToday
 function _mmDateInRange(dateStr) {
-  // Custom is exempt - the whole point of picking explicit from/to dates is
-  // that they're authoritative. Silently dropping today underneath a range
-  // someone deliberately set to end today would be a second, invisible
-  // filter overriding their own explicit choice - the exact thing "custom"
-  // exists to avoid.
-  if (_mmPeriod !== -1 && !_mmIncludeToday && dateStr === todayStr()) return false;
+  // No longer exempting Custom - a range whose "to" date isn't today is
+  // unaffected either way (nothing to remove), but one that reaches today
+  // (deliberately, or just from picking "up to now") deserves the same
+  // protection every other period gets, same fix as Reports.
+  if (!_mmIncludeToday && dateStr === todayStr()) return false;
   if (_mmPeriod === 0) return true;
   const p = dateStr.split('/');
   if (p.length !== 3) return false;
@@ -31024,11 +31028,6 @@ function setMMPeriod(period, btn) {
   document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old period's data
   const customRow = document.getElementById('mmCustomDateRow');
   if (customRow) customRow.style.display = period === -1 ? 'flex' : 'none';
-  // Hidden for Custom, not just left inert - a visible control that quietly
-  // does nothing (see _mmDateInRange's own custom exemption above) reads as
-  // broken rather than as "not applicable here."
-  const includeTodayRow = document.getElementById('mmIncludeTodayRow');
-  if (includeTodayRow) includeTodayRow.style.display = period === -1 ? 'none' : 'flex';
   // Same defensive re-sync as Trends' setTrendsFilter - _mmCustomFrom/
   // _mmCustomTo are the real source of truth once picked; restoring the
   // input's displayed value from them here guards against the input's own
@@ -32708,12 +32707,13 @@ function setTrendsFilter(days, btn) {
   const dayNav = document.getElementById('trendsDayNav');
   const customRow = document.getElementById('trendsCustomDateRow');
   if (customRow) customRow.style.display = days === -1 ? 'flex' : 'none';
-  // Hidden for Today (it IS today, nothing to exclude it from) and Custom
-  // (explicit dates are authoritative - same reasoning as Compare Metrics'
-  // identical exemption) - visible only for the numbered-day and All views
-  // that actually use it in getTrendsData().
+  // Hidden only for the literal "Today" view - it IS today by definition,
+  // nothing to exclude it from. Custom now shows it too (same fix as
+  // Reports/Compare Metrics): a custom range ending today still benefits
+  // from the same protection, since nothing stops "up to now" being picked
+  // without specifically thinking about today's data being incomplete.
   const includeTodayRow = document.getElementById('trendsIncludeTodayRow');
-  if (includeTodayRow) includeTodayRow.style.display = (days === 'today' || days === -1) ? 'none' : 'flex';
+  if (includeTodayRow) includeTodayRow.style.display = days === 'today' ? 'none' : 'flex';
   // Defensive re-sync: whatever the exact cause turns out to be (a parent
   // re-render, a tab switch rebuilding this section, or something else not
   // yet pinned down), _trendsCustomFrom/_trendsCustomTo are the real source
@@ -33498,18 +33498,33 @@ function updateCarbZonesCondition() {
   }
 }
 
+let _rptIncludeToday = false; // off by default - an in-progress day can skew a period average
 function getReportHistory() {
   const h = state.history || [];
-  if (_rptRange === 0) return h;
+  const today = todayStr();
+  // Custom no longer skips the today-check entirely - a range whose "to"
+  // date isn't today is unaffected either way (nothing to remove), but one
+  // that does reach today (deliberately, or just from picking "up to now")
+  // deserves the same protection every other period gets, not a silent
+  // exemption just because the range happens to be user-picked.
   if (_rptRange === -1) {
     const from = parseDateStr(document.getElementById('rptDateFrom')?.value);
     const to   = parseDateStr(document.getElementById('rptDateTo')?.value);
     if (!from || !to) return h;
-    return h.filter(e => { const d = parseDateStr(e.date); return d && d >= from && d <= to; });
+    return h.filter(e => {
+      const d = parseDateStr(e.date);
+      return d && d >= from && d <= to && (_rptIncludeToday || e.date !== today);
+    });
+  }
+  if (_rptRange === 0) {
+    return _rptIncludeToday ? h : h.filter(e => e.date !== today);
   }
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - _rptRange);
-  return h.filter(e => { const d = parseDateStr(e.date); return d && d >= cutoff; });
+  return h.filter(e => {
+    const d = parseDateStr(e.date);
+    return d && d >= cutoff && (_rptIncludeToday || e.date !== today);
+  });
 }
 
 function parseDateStr(str) {
