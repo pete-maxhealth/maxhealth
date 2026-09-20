@@ -4717,7 +4717,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.773</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.774</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5656,7 +5656,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.773'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.774'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7401,7 +7401,11 @@ function renderLibrary() {
       </div>
       <div class="library-edit-row">
         <span class="library-edit-label">Portion</span>
-        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs" data-scale-base="${(f.portion||'').replace(/"/g,'&quot;')}" oninput="scaleLibraryEditPortion(${origIdx},this,false)" onchange="scaleLibraryEditPortion(${origIdx},this,true)">
+        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs"
+          data-orig-portion="${(f.portion||'').replace(/"/g,'&quot;')}"
+          data-orig-kcal="${f.kcal||0}" data-orig-protein="${f.protein||0}" data-orig-fat="${f.fat||0}"
+          data-orig-carb="${f.carbs||0}" data-orig-fibre="${f.fibre||0}" data-orig-polyols="${f.polyols||0}"
+          oninput="scaleLibraryEditPortion(${origIdx},this)">
       </div>
       <div style="margin-bottom:6px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
@@ -7786,94 +7790,54 @@ function deleteFromLibrary(index) {
 
 // Was a plain static label with zero connection to the macro fields -
 // nothing scaled, ever, regardless of what the portion was changed to.
-// Deliberately conservative: only scales when both the old and new
-// portion parse as a number followed by the exact same unit text (e.g.
-// "30g" -> "50g") - different units, or anything that doesn't parse
-// cleanly, is left completely alone rather than guessed at, given how
-// much nutrition accuracy matters here.
 //
-// A debounced timer was tried and genuinely failed in testing: any
-// natural pause mid-typing (not just fast back-to-back keystrokes) still
-// gets treated as "finished," so typing "360" digit by digit with an
-// ordinary pause after "18" scaled from a base of 30 right then, before
-// the rest was even typed - a real, observed wrong scale, not a
-// theoretical one. Timing was never the actual fix.
+// Two earlier attempts (a shifting "last known portion" base, then that
+// plus debouncing) both genuinely failed in testing with real, observed
+// wrong scales - not theoretical ones. Both tried to compare the current
+// value against whatever the portion was last seen as, and that shifting
+// reference point kept getting corrupted by intermediate typing states.
 //
-// The real distinction is whether the portion has a unit at all. With a
-// real unit ("30g"), live per-keystroke IS genuinely safe - "1", "18",
-// "180" don't match "g" until the full value's typed, so a pause mid-
-// number never accidentally looks finished. A bare number ("30", no
-// unit) has no such gate - every intermediate digit is itself a complete,
-// valid bare number, so there's no way to tell "still typing" from
-// "done." So: live (oninput) for anything with a unit, blur-only
-// (onchange) for bare numbers specifically - not a timing compromise
-// trying to cover both cases at once.
-// The actual bug from testing: the base (data-scale-base) was being
-// advanced on EVERY call that merely parsed, including ones that didn't
-// scale at all - so typing "30g" from a base of "50g" would silently
-// drag the base itself down to bare "3" after the first keystroke (no
-// unit yet, so no scale applied, but the base moved anyway), then "30"
-// would match THAT corrupted bare base instead of the real "50g" - a
-// ×10 error, confirmed exactly in testing, before "g" was even typed.
-// The unit-gating logic below was sound; advancing the base on every
-// call regardless of outcome silently defeated it.
+// This rebuild copies the pattern every OTHER scaling feature in the app
+// already uses safely (the database search amount panel, the Log-from-
+// Library preview, recipe ingredient amounts): always recompute fresh
+// from a genuinely FIXED original - the real saved kcal/protein/fat/
+// carbs/fibre/polyols and portion, captured once when the form opened
+// (data-orig-* attributes) and never touched again. Nothing here is ever
+// compared against a previous keystroke's result, so there's no shifting
+// state left to corrupt - every calculation is independently correct
+// relative to the one true, unchanging starting point. Safe to run on
+// every keystroke with no special-casing for bare numbers, no debounce,
+// no blur/live distinction needed at all.
 //
-// Fixed by only ever advancing the base on a genuine blur (isBlur=true) -
-// live oninput calls now compute a preview against the STABLE base and
-// apply it, but never write back to data-scale-base themselves. The base
-// is a fixed anchor for the whole typing session; it only moves once,
-// when the edit is actually finished.
-//
-// data-scale-applied guards a second, related problem this created: the
-// input has both oninput and onchange wired to this same function, so
-// once oninput has already scaled a value correctly against the stable
-// base, blur firing afterward on that same unchanged value would run the
-// identical comparison again and apply the same ratio a second time,
-// compounding it (50g -> 30g = x0.6, then re-applied on blur = x0.36).
-// Tracks the last value macros were actually scaled for, independent of
-// the base, so a repeat call for that same value is a no-op rather than
-// a second application.
-function scaleLibraryEditPortion(origIdx, portionEl, isBlur) {
+// Deliberately conservative on top of that: only scales when both the
+// original and current portion parse as a number followed by the exact
+// same unit text (e.g. "30g" -> "50g") - different units, or anything
+// that doesn't parse cleanly, leaves the macro fields untouched rather
+// than guessing, given how much nutrition accuracy matters here.
+function scaleLibraryEditPortion(origIdx, portionEl) {
   const parse = s => {
     const m = (s || '').trim().match(/^([\d.]+)\s*(.*)$/);
     return m ? { num: parseFloat(m[1]), unit: m[2].trim().toLowerCase() } : null;
   };
-  const oldP = parse(portionEl.dataset.scaleBase);
-  // Bare-number base: only ever evaluated on blur, never on live typing -
-  // this is the one case with no safe live signal, per the reasoning above.
-  if (oldP && !oldP.unit && !isBlur) return;
+  const origP = parse(portionEl.dataset.origPortion);
   const newP = parse(portionEl.value);
-  if (newP && portionEl.value !== portionEl.dataset.scaleApplied) {
-    const canScale = oldP && oldP.unit === newP.unit && oldP.num;
-    if (canScale && newP.num / oldP.num !== 1) {
-      const ratio = newP.num / oldP.num;
-      const prevPortionText = portionEl.dataset.scaleBase;
-      const fields = [
-        ['lib-edit-kcal-',    0],
-        ['lib-edit-prot-',    1],
-        ['lib-edit-fat-',     1],
-        ['lib-edit-carb-',    1],
-        ['lib-edit-fibre-',   1],
-        ['lib-edit-polyols-', 1],
-      ];
-      fields.forEach(([prefix, decimals]) => {
-        const el = document.getElementById(prefix + origIdx);
-        if (!el || el.value === '') return;
-        const val = parseFloat(el.value);
-        if (isNaN(val)) return;
-        el.value = (val * ratio).toFixed(decimals);
-      });
-      showToast(`Scaled ×${ratio.toFixed(2)} (${prevPortionText} → ${portionEl.value}) — check the numbers before saving`);
-    }
-    portionEl.dataset.scaleApplied = portionEl.value;
-  }
-  // Only ever commits on blur - a genuine unit change (30g -> 1 tbsp, no
-  // scale applied since units can't be confidently converted) still needs
-  // the reference point updated once the edit is actually finished, so a
-  // LATER same-unit edit (1 tbsp -> 2 tbsp) can scale correctly from
-  // here - but that update must never happen mid-typing, which is
-  // exactly what caused the bug above.
-  if (isBlur && newP) portionEl.dataset.scaleBase = portionEl.value;
+  if (!origP || !newP || origP.unit !== newP.unit || !origP.num) return; // can't confidently scale - leave macros untouched
+  const ratio = newP.num / origP.num;
+  const fields = [
+    ['lib-edit-kcal-',    'origKcal',    0],
+    ['lib-edit-prot-',    'origProtein', 1],
+    ['lib-edit-fat-',     'origFat',     1],
+    ['lib-edit-carb-',    'origCarb',    1],
+    ['lib-edit-fibre-',   'origFibre',   1],
+    ['lib-edit-polyols-', 'origPolyols', 1],
+  ];
+  fields.forEach(([prefix, dataKey, decimals]) => {
+    const el = document.getElementById(prefix + origIdx);
+    if (!el) return;
+    const origVal = parseFloat(portionEl.dataset[dataKey]);
+    if (isNaN(origVal)) return;
+    el.value = (origVal * ratio).toFixed(decimals);
+  });
 }
 
 function openLibraryEdit(index) {
