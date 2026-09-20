@@ -4717,7 +4717,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.769</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.770</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5656,7 +5656,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.769'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.770'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7401,7 +7401,7 @@ function renderLibrary() {
       </div>
       <div class="library-edit-row">
         <span class="library-edit-label">Portion</span>
-        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs">
+        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs" data-scale-base="${(f.portion||'').replace(/"/g,'&quot;')}" onchange="scaleLibraryPortion(${origIdx},this)">
       </div>
       <div style="margin-bottom:6px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
@@ -7782,6 +7782,48 @@ function deleteFromLibrary(index) {
   const f = lib[index];
   if (!f) { console.warn('[library] deleteFromLibrary: index', index, 'not found in lib of length', lib.length); return; }
   appConfirm(`Delete "${f.name}" from library?`, () => { _doDeleteLibraryItem(index); }, null, true);
+}
+
+// Was a plain static label with zero connection to the macro fields -
+// nothing scaled, ever, regardless of what the portion was changed to.
+// Deliberately conservative: only scales when both the old and new
+// portion parse as a number followed by the exact same unit text (e.g.
+// "30g" -> "50g") - different units, or anything that doesn't parse
+// cleanly, is left completely alone rather than guessed at, given how
+// much nutrition accuracy matters here. Compares against whatever the
+// portion last was (data-scale-base), not always the original saved
+// value, so editing portion more than once in the same session scales
+// correctly each time rather than compounding against a stale base.
+function scaleLibraryPortion(origIdx, portionEl) {
+  const parse = s => {
+    const m = (s || '').trim().match(/^([\d.]+)\s*(.*)$/);
+    return m ? { num: parseFloat(m[1]), unit: m[2].trim().toLowerCase() } : null;
+  };
+  const oldP = parse(portionEl.dataset.scaleBase);
+  const newP = parse(portionEl.value);
+  // Always advance the base to the current value, scaled or not - the
+  // next edit should compare against this point, not the stale original.
+  const prevPortionText = portionEl.dataset.scaleBase;
+  portionEl.dataset.scaleBase = portionEl.value;
+  if (!oldP || !newP || oldP.unit !== newP.unit || !oldP.num) return; // can't confidently scale - leave macros untouched
+  const ratio = newP.num / oldP.num;
+  if (ratio === 1) return;
+  const fields = [
+    ['lib-edit-kcal-',    0],
+    ['lib-edit-prot-',    1],
+    ['lib-edit-fat-',     1],
+    ['lib-edit-carb-',    1],
+    ['lib-edit-fibre-',   1],
+    ['lib-edit-polyols-', 1],
+  ];
+  fields.forEach(([prefix, decimals]) => {
+    const el = document.getElementById(prefix + origIdx);
+    if (!el || el.value === '') return;
+    const val = parseFloat(el.value);
+    if (isNaN(val)) return;
+    el.value = (val * ratio).toFixed(decimals);
+  });
+  showToast(`Scaled ×${ratio.toFixed(2)} (${prevPortionText} → ${portionEl.value}) — check the numbers before saving`);
 }
 
 function openLibraryEdit(index) {
