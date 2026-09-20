@@ -4717,7 +4717,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.771</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.772</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5656,7 +5656,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.771'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.772'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7401,7 +7401,7 @@ function renderLibrary() {
       </div>
       <div class="library-edit-row">
         <span class="library-edit-label">Portion</span>
-        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs" data-scale-base="${(f.portion||'').replace(/"/g,'&quot;')}" onchange="scaleLibraryEditPortion(${origIdx},this)">
+        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs" data-scale-base="${(f.portion||'').replace(/"/g,'&quot;')}" oninput="scaleLibraryEditPortion(${origIdx},this)">
       </div>
       <div style="margin-bottom:6px;">
         <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
@@ -7790,15 +7790,26 @@ function deleteFromLibrary(index) {
 // portion parse as a number followed by the exact same unit text (e.g.
 // "30g" -> "50g") - different units, or anything that doesn't parse
 // cleanly, is left completely alone rather than guessed at, given how
-// much nutrition accuracy matters here. Fires on blur (onchange), not
-// per-keystroke - live per-keystroke scaling was tried and reverted: a
-// bare-number portion with no unit at all (e.g. "100") means every
-// keystroke while typing a replacement also parses as a bare number, so
-// each one would count as a "matching unit" and trigger its own
-// intermediate scale before the real value was even finished typing.
-// Waiting for blur sidesteps that entirely - only the final, fully-typed
-// value is ever compared against the base.
+// much nutrition accuracy matters here.
+//
+// Live like every other scaling field in the app, via a short debounce
+// rather than truly instant per-keystroke - fires on every input event,
+// but the actual scale calculation only runs once typing pauses for a
+// moment. A bare-number portion with no unit at all (e.g. "100") means
+// every single keystroke while retyping the number ALSO parses as a bare
+// number - genuinely instant per-keystroke scaling would treat each of
+// those intermediate digits as its own "matching unit" and apply its own
+// wrong scale before the real value was even finished (1 -> 15 -> 150 as
+// three separate, compounding, incorrect scales). The debounce waits for
+// a settled value before ever comparing against the base, so intermediate
+// keystrokes never get their own isolated chance to fire at all - it
+// still feels live, just not literally mid-digit.
+let _libPortionScaleTimer = null;
 function scaleLibraryEditPortion(origIdx, portionEl) {
+  clearTimeout(_libPortionScaleTimer);
+  _libPortionScaleTimer = setTimeout(() => _applyLibraryEditPortionScale(origIdx, portionEl), 450);
+}
+function _applyLibraryEditPortionScale(origIdx, portionEl) {
   const parse = s => {
     const m = (s || '').trim().match(/^([\d.]+)\s*(.*)$/);
     return m ? { num: parseFloat(m[1]), unit: m[2].trim().toLowerCase() } : null;
