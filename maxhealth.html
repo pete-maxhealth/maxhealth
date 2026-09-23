@@ -2036,6 +2036,13 @@
     padding: 4px 0;
     letter-spacing: 0.05em;
   }
+
+/* Chart zoom controls (Deep Dive, Your Journey, Compare metrics) */
+.mh-zoom-row { display:flex; justify-content:flex-end; gap:4px; margin-bottom:6px; }
+.mh-zoom-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2);
+  font-family:'Space Mono',monospace; font-size:12px; min-width:34px; padding:3px 8px; cursor:pointer; touch-action:manipulation; }
+.mh-zoom-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+.mh-zoom-btn:disabled { opacity:0.35; cursor:default; }
 </style>
 </head>
 <body>
@@ -3129,6 +3136,7 @@
       <div class="section-title" id="title-trends-journey" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-journey','trends-journey-wrap','trends-journey-icon')">🗺️ Your Journey <span id="trends-journey-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
       <div id="trends-journey-wrap">
         <div id="journeyLegend" style="font-size:11px;color:var(--text3);margin-bottom:8px;">Weight over your whole tracked history · <span style="color:var(--accent);">●</span> in ketosis &nbsp; <span style="color:var(--yellow);">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day</div>
+        <div class="mh-zoom-row" data-zoom-key="journey"><button type="button" class="mh-zoom-btn" data-zoom="out" onclick="mhChartZoom('journey',-1)" title="Zoom out - see more">−</button><button type="button" class="mh-zoom-btn" data-zoom="fit" onclick="mhChartZoomFit('journey')" title="Fit the whole range on screen">Fit</button><button type="button" class="mh-zoom-btn" data-zoom="in" onclick="mhChartZoom('journey',1)" title="Zoom in - more detail">+</button></div>
         <div id="journeyChartScrollWrap" style="position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <div id="journeyChartInner" style="height:180px;">
             <canvas id="journeyCanvas" style="height:180px;touch-action:pan-x pan-y;"></canvas>
@@ -4717,7 +4725,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.775</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.776</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5656,7 +5664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.775'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.776'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -29191,6 +29199,91 @@ function destroyChart(id) {
 // its OWN logged mode's ceiling, matching the fix applied across Weekly
 // Summary/Oncology Report/Report Summary/streak counter tonight), plus a
 // small marker row for treatment-tagged days along the bottom.
+// ─── Chart zoom (Deep Dive, Your Journey, Compare metrics) ───────────────
+// These three are the only charts that can outgrow the screen (every small
+// trend card / metric card / arc taps through to Deep Dive). Zoom works by
+// changing the pixel width each data point gets:
+//   0  = Fit - the whole range squeezed onto one screen, no side scrolling
+//   22 = the original fixed behaviour (default, so nothing changes until used)
+// Level is remembered per chart. Buttons and two-finger pinch both work.
+const MH_CHART_ZOOM_STEPS = [0, 6, 12, 22, 36, 56];
+const MH_CHART_ZOOM_DEFAULT = 3;
+const MH_CHART_ZOOM_WRAPS = { drill: 'drillChartScrollWrap', journey: 'journeyChartScrollWrap', mm: 'mmChartScrollWrap' };
+
+function mhChartZoomIdx(key) {
+  try {
+    const v = parseInt(localStorage.getItem('mh_chart_zoom_' + key), 10);
+    if (v >= 0 && v < MH_CHART_ZOOM_STEPS.length) return v;
+  } catch (e) {}
+  return MH_CHART_ZOOM_DEFAULT;
+}
+
+function mhChartPxPerPoint(key) {
+  mhChartZoomButtons(key); // keep buttons in step with whatever level is about to be drawn
+  mhChartZoomAttachPinch(key);
+  return MH_CHART_ZOOM_STEPS[mhChartZoomIdx(key)];
+}
+
+function mhChartZoomButtons(key) {
+  const idx = mhChartZoomIdx(key);
+  document.querySelectorAll('.mh-zoom-row[data-zoom-key="' + key + '"]').forEach(row => {
+    const out = row.querySelector('[data-zoom="out"]');
+    const fit = row.querySelector('[data-zoom="fit"]');
+    const inn = row.querySelector('[data-zoom="in"]');
+    if (out) out.disabled = idx === 0;
+    if (inn) inn.disabled = idx === MH_CHART_ZOOM_STEPS.length - 1;
+    if (fit) fit.classList.toggle('active', idx === 0);
+  });
+}
+
+function mhChartZoomSet(key, idx) {
+  idx = Math.max(0, Math.min(MH_CHART_ZOOM_STEPS.length - 1, idx));
+  if (idx === mhChartZoomIdx(key)) return;
+  // Keep the same part of the chart centred after zooming, rather than
+  // jumping back to the start of the range.
+  const wrap = document.getElementById(MH_CHART_ZOOM_WRAPS[key]);
+  let centre = null;
+  if (wrap && wrap.scrollWidth > wrap.clientWidth) {
+    centre = (wrap.scrollLeft + wrap.clientWidth / 2) / wrap.scrollWidth;
+  }
+  try { localStorage.setItem('mh_chart_zoom_' + key, String(idx)); } catch (e) {}
+  mhChartZoomButtons(key);
+  if (key === 'drill' && typeof renderDrill === 'function') renderDrill();
+  else if (key === 'journey' && typeof renderJourneyCard === 'function') renderJourneyCard();
+  else if (key === 'mm' && typeof renderMMChart === 'function') renderMMChart();
+  if (wrap && centre !== null) {
+    // Journey draws a frame later (its own requestAnimationFrame), so wait two.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      wrap.scrollLeft = Math.max(0, centre * wrap.scrollWidth - wrap.clientWidth / 2);
+    }));
+  }
+}
+
+function mhChartZoom(key, delta) { mhChartZoomSet(key, mhChartZoomIdx(key) + delta); }
+function mhChartZoomFit(key) { mhChartZoomSet(key, 0); }
+
+// Two-finger pinch on the chart area: spread = zoom in, pinch = zoom out.
+// Single-finger scrolling and tapping a point are left completely alone.
+const _mhPinchAttached = {};
+function mhChartZoomAttachPinch(key) {
+  if (_mhPinchAttached[key]) return;
+  const wrap = document.getElementById(MH_CHART_ZOOM_WRAPS[key]);
+  if (!wrap) return;
+  _mhPinchAttached[key] = true;
+  let startDist = null;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  wrap.addEventListener('touchstart', e => {
+    startDist = e.touches.length === 2 ? dist(e.touches) : null;
+  }, { passive: true });
+  wrap.addEventListener('touchmove', e => {
+    if (startDist === null || e.touches.length !== 2) return;
+    const ratio = dist(e.touches) / startDist;
+    if (ratio > 1.25) { mhChartZoom(key, 1); startDist = dist(e.touches); }
+    else if (ratio < 0.8) { mhChartZoom(key, -1); startDist = dist(e.touches); }
+  }, { passive: true });
+  wrap.addEventListener('touchend', () => { startDist = null; }, { passive: true });
+}
+
 function renderJourneyCard() {
   const card = document.getElementById('journeyCard');
   if (!card) return;
@@ -29248,7 +29341,7 @@ function renderJourneyCard() {
     const journeyInnerEl = document.getElementById('journeyChartInner');
     const journeyScrollWrapEl = document.getElementById('journeyChartScrollWrap');
     if (journeyInnerEl && journeyScrollWrapEl) {
-      const minPxPerPoint = 22;
+      const minPxPerPoint = mhChartPxPerPoint('journey');
       const naturalWidth = journeyScrollWrapEl.clientWidth;
       const neededWidth = weighed.length * minPxPerPoint;
       journeyInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
@@ -31332,7 +31425,7 @@ function renderMMChart() {
   const mmInnerEl = document.getElementById('mmChartInner');
   const mmScrollWrapEl = document.getElementById('mmChartScrollWrap');
   if (mmInnerEl && mmScrollWrapEl) {
-    const minPxPerPoint = 22;
+    const minPxPerPoint = mhChartPxPerPoint('mm');
     const naturalWidth = mmScrollWrapEl.clientWidth;
     const neededWidth = allDates.length * minPxPerPoint;
     mmInnerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
@@ -32191,7 +32284,7 @@ function renderDrill() {
   const innerEl = document.getElementById('drillChartInner');
   const scrollWrapEl = document.getElementById('drillChartScrollWrap');
   if (innerEl && scrollWrapEl) {
-    const minPxPerPoint = 22;
+    const minPxPerPoint = mhChartPxPerPoint('drill');
     const naturalWidth = scrollWrapEl.clientWidth - 32; // minus the wrap's own padding
     const neededWidth = data.length * minPxPerPoint;
     innerEl.style.width = neededWidth > naturalWidth ? neededWidth + 'px' : '100%';
@@ -39408,6 +39501,7 @@ function dismissInsight() {
 
   <!-- Main chart -->
   <div style="padding:0 20px 20px;">
+    <div class="mh-zoom-row" data-zoom-key="drill"><button type="button" class="mh-zoom-btn" data-zoom="out" onclick="mhChartZoom('drill',-1)" title="Zoom out - see more">−</button><button type="button" class="mh-zoom-btn" data-zoom="fit" onclick="mhChartZoomFit('drill')" title="Fit the whole range on screen">Fit</button><button type="button" class="mh-zoom-btn" data-zoom="in" onclick="mhChartZoom('drill',1)" title="Zoom in - more detail">+</button></div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;" id="drillChartScrollWrap">
       <div id="drillChartInner" style="height:200px;">
         <canvas id="drillChart" style="height:200px;touch-action:pan-x pan-y;"></canvas>
@@ -39478,6 +39572,7 @@ function dismissInsight() {
         </div>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;">
+        <div class="mh-zoom-row" data-zoom-key="mm"><button type="button" class="mh-zoom-btn" data-zoom="out" onclick="mhChartZoom('mm',-1)" title="Zoom out - see more">−</button><button type="button" class="mh-zoom-btn" data-zoom="fit" onclick="mhChartZoomFit('mm')" title="Fit the whole range on screen">Fit</button><button type="button" class="mh-zoom-btn" data-zoom="in" onclick="mhChartZoom('mm',1)" title="Zoom in - more detail">+</button></div>
         <div id="mmChartScrollWrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <div id="mmChartInner" style="height:280px;">
             <canvas id="mmChart" style="height:280px;touch-action:pan-x pan-y;"></canvas>
