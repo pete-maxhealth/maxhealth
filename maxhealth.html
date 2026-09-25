@@ -4725,7 +4725,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.783</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.784</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5665,7 +5665,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.783'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.784'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -17475,6 +17475,18 @@ function isMeatOrFishName(n) {
 function hasCarbSourceInName(n) {
   return /bread(ed|crumb)|batter|sauce|marinade|bbq|honey|sweet|teriyaki|hoisin|glaze|stuffing|coating|gravy|sausage|banger|burger|meatball|nugget|hot ?dog|frankfurter|salami|chorizo|black pudding|haggis|p[aâ]t[ée]/i.test(n || '');
 }
+// Multi-ingredient combos get an auto-generated summary name — "tomatoes +
+// Beef Mince 5% Asda + 10 more" — exactly matching how that label is built
+// elsewhere (search this file for "` + ${...} more`"). isMeatOrFishName()
+// and hasCarbSourceInName() were both written for a single plain ingredient
+// ("Chicken breast") and have no way to know a combo's name doesn't describe
+// its whole composition — a real, confirmed bug: this exact combo (which
+// also contains tomatoes) had its correct, AI-supplied 7.2g carbs silently
+// zeroed because "mince" appeared in its summary label. A name-based
+// heuristic can't safely judge an aggregate it was never meant to look at.
+function isMultiIngredientComboName(n) {
+  return /\+\s*\d+\s*more\s*$/i.test((n || '').trim());
+}
 
 function sanitiseFatValues(items) {
   return items.map(item => {
@@ -17559,7 +17571,7 @@ function sanitiseFatValues(items) {
     // so this now hard-corrects: zero the carbs and recompute kcal from protein+fat
     // only, same as the pure-fat correction above. Skipped if the name implies a
     // genuine carb source (breaded, sauced, marinaded, sweet glaze etc).
-    if (isMeatOrFishName(f.name) && !hasCarbSourceInName(f.name) && (f.carbs || 0) > 0.5) {
+    if (isMeatOrFishName(f.name) && !hasCarbSourceInName(f.name) && !isMultiIngredientComboName(f.name) && (f.carbs || 0) > 0.5) {
       const oldCarbs = f.carbs;
       const oldKcal = f.kcal;
       f.carbs = 0;
@@ -17847,8 +17859,10 @@ function renderMealPreview() {
       const emoji = isMeat ? '🔴' : '⚠️';
       warnings.push(`${emoji} ${f.name}: ${f.protein}g protein seems low for ${Math.round(f.kcal)}kcal — check label or use barcode scan`);
     }
-    // Warn if fat is zero for meat — almost certainly wrong
-    if ((f.fat === 0 || f.fat === null || f.fat === undefined) && !isPureFat(f.name)) {
+    // Warn if fat is zero for meat — almost certainly wrong. Same combo-name
+    // guard as the carbs correction above — a "0g fat" warning is just as
+    // wrong to fire on a combo's aggregate label as a hard carbs correction is.
+    if ((f.fat === 0 || f.fat === null || f.fat === undefined) && !isPureFat(f.name) && !isMultiIngredientComboName(f.name)) {
       const isMeat = /steak|beef|chicken|pork|turkey|lamb|meat|fish|salmon|tuna/i.test(f.name);
       if (isMeat && f.kcal > 100) {
         warnings.push(`🔴 ${f.name}: 0g fat is incorrect for meat — verify label values`);
