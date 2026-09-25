@@ -1,4 +1,45 @@
-# MaxedHealth Changelog — Phase 22 (v3.10.658 – v3.10.743)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.783)
+
+## Native Android Launcher — Built and Working End-to-End
+
+The single biggest onboarding blocker (every early tester hit the same wall — seeing/manually running Termux) is now solved. A native Android app (`com.maxedhealth.launcher`, separate Android Studio project) walks a new install through Termux, Termux:Boot, and Termux:API installation and permission steps automatically via Termux's `RUN_COMMAND` intent, with a single unavoidable manual step (a one-time clipboard paste inside Termux — Termux blocks external apps from writing `allow-external-apps` to its own settings otherwise).
+
+- **Real bug found and fixed**: `RUN_COMMAND` requires its target to be executable, but a file staged on shared storage can never be marked executable — an Android filesystem limit, not a permissions issue. Fixed by having the launcher run Termux's own `bash` with `provision.sh` as an argument, rather than trying to execute the script directly.
+- **A second, separate real bug found in `provision.sh` itself**: its crontab-restoring line piped `crontab -l | grep -v "mh_watchdog"` into the new crontab — on a genuinely empty crontab (exactly what a fresh Termux install has), `grep -v` on empty input exits 1, its normal "found nothing" signal, but under this script's `set -e` that silently killed the whole step before the actual watchdog line ever got added, leaving crontab empty with no error shown anywhere. Confirmed live: this is exactly what happened after Pete's own Termux F-Droid migration — `crond` wasn't even running, and the self-healing watchdog had silently done nothing for hours. Fixed with a simple `|| true`.
+- **Discovered along the way**: an existing daily-use MaxedHealth icon can be a Chrome-installed WebAPK, which gets its own separate storage from plain Chrome even for the identical URL — the launcher now finds and opens that specific installed app directly, falling back to a plain Chrome tab only if it's missing.
+- Custom app icon (heartbeat/MH mark, adaptive icon set for Android 8+).
+
+## Health Connect — Real Integration, Not Just a Plan
+
+Built directly into the launcher (no separate bridge app, unlike an earlier plan documented in TECHNICAL.md — corrected there too). Reads steps, average heart rate, weight, and sleep duration from Android's Health Connect, writes them into the same pipeline inbox every other device uses, and folds into `combined.csv` via a new `extractors/health_connect.py`.
+
+- **Real bug found and fixed**: originally mapped to `hrv` in `update_health.py`'s `SOURCE_FIELDS`/`DEFAULT_PRECEDENCE`, but what's actually read is average heart rate (`HeartRateRecord`), not heart-rate variability (`HeartRateVariabilityRmssdRecord`, a different record type, not currently read at all) — corrected to `hr_avg` before this ever reached real data.
+- Health Connect's permission screen needed two non-obvious manifest pieces to appear at all: declaring both possible package names (`com.google.android.healthconnect.controller` on Android 14+, `com.google.android.apps.healthdata` on older versions) in a `<queries>` block, and a mandatory `<activity-alias>` for Android 14+ that Health Connect silently requires — without it, the permission screen never appears, no crash, no error.
+- Deliberately last in precedence for every field it can supply — an aggregate of whatever else already writes to Health Connect, never overriding a device's own direct reading.
+- A visible on/off switch added (defaults on) — while off, nothing is read and no permission is requested at all, matching this app's stated transparency principle rather than relying on Android's own, much less discoverable, permission-revoke screen.
+- Tested end-to-end on a real device: permission granted through Health Connect's own screen, data read, written to the real inbox, picked up by a real `update_health.py` run, confirmed in `combined.csv`.
+- Known gap, honestly: still lives on a temporary standalone test icon, not the real onboarding/Settings flow; sync is manual only, no scheduled background sync yet.
+
+## Demo Mode — A Real Persona System, Not One Fixed Dataset
+
+"Try a demo first" previously loaded one generic anonymised dataset. It now opens a picker of genuinely different starting points, each with real, internally-consistent data generated to match their own stated targets and story rather than a single dataset relabelled.
+
+- **Ten personas**: two goal-based (general weight loss; body recomposition, with real training-block-driven wearable data — steps/HR/HRV/body composition merged through the app's own real CSV importer, three boot camps and two recovery massages, fat down and muscle up, HRV dipping under load and trending up overall as fitness improves, plus workout history with escalating load), and one for each of the seven supported medical/therapeutic conditions — including two deliberately paired on the same early-stage evidence base with opposite outcomes (one thriving, one still struggling with inconsistent adherence), and a nutrition/effort-focused "still struggling" persona with no medical condition at all, genuinely generating real overage days and real low-activity days rather than just being labelled inconsistent.
+- Real structured Treatment Tracking, condition-appropriate Symptoms, and a ready-made Report Profile wired up for several personas — genuine data behind the "informative clinical report" story, not an empty wizard.
+- **A serious real bug found and fixed, twice**: (1) switching personas without exiting first was overwriting the saved real-account snapshot with demo data, so exiting later could restore the wrong thing, or in one confirmed case, restore nothing at all (a setting silently reverted to its app default). (2) The deeper issue behind that: demo cleanup only ever ran on an explicit "Exit demo" tap — closing the tab, switching apps, or the phone locking (all completely normal usage) skipped it entirely, leaving demo data sitting in real storage indistinguishable from real data, with no banner to warn anyone. Fixed properly: entering demo now also writes a durable backup, and every single page load checks for it and self-heals automatically if a previous session was left open, rather than depending on a graceful exit that real usage often skips. (The person's actual logged food history and weight were never at risk either way — `saveState()` already refuses to persist while demo mode is active.)
+- A real, separately-caught gap while building this: symptoms and a Report Profile originally required a treatment to exist first, which would have silently given nothing to several conditions (migraine, epilepsy) that have genuine symptom-tracking value with no session-based treatment to log. Decoupled.
+
+## Documentation Corrections
+
+`user-guide.html` updated to describe several already-real features it never documented: library auto-categorisation, the recipe ingredient-review screen, "Refresh from Library," "Next meal idea"/"Balance my macros," and the multi-ingredient per-entry editor.
+
+`TECHNICAL.md`'s entire Health Connect section described a different, abandoned architecture (a separate bridge app, syncing via Android's Downloads folder) that was never actually built — rewritten to match what's real. Also corrected: `mhstart`'s real path (`~/bin/mhstart`, not `$PREFIX/bin` as this doc had said twice), `mh_condition`'s real values (9 real options, not 3), and the Auto-update section, previously stated as "confirmed working," corrected to reflect what's actually been found on the real device more than once: `mh_autoupdate.sh` isn't present, and real crontab has, every time it's been checked, contained only the watchdog line.
+
+`README.md` updated: current version number, the demo mode description rewritten for the real persona system, Health Connect added to the wearables list, and a new section introducing the native launcher as the real answer to the onboarding-friction problem this README had been flagging as unresolved.
+
+---
+
+
 
 ## Supplements — Tablet Counts and Per-Period Reordering
 

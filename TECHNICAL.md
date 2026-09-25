@@ -29,8 +29,8 @@ AI requests route through a Cloudflare Worker proxy (`maxhealth-ai.bogginsuk.wor
 | master.csv | `/storage/emulated/0/maxhealth/data/tables/master.csv` |
 | combined.csv | `/storage/emulated/0/maxhealth/data/tables/combined.csv` |
 | library.csv | `/storage/emulated/0/maxhealth/data/tables/library.csv` |
-| `mhstart` command | `$PREFIX/bin/mhstart` (installed by `setup.sh`, works from any directory) |
-| Auto-update script | `~/mh_autoupdate.sh` |
+| `mhstart` command | `~/bin/mhstart` (**confirmed on Pete's live phone 22/09/26 — not `$PREFIX/bin` as this doc previously said**; installed by `setup.sh`, works from any directory) |
+| Auto-update script | `~/mh_autoupdate.sh` — **confirmed NOT present on the live phone** (25/09/26); designed, not deployed — see Auto-update section below |
 | Watchdog script | `~/mh_watchdog.sh` |
 | Boot script (crond) | `~/.termux/boot/start-crond.sh` |
 | Boot script (watchdog) | `~/.termux/boot/start-watchdog.sh` |
@@ -74,7 +74,7 @@ date|kcal|protein|carbs|fat|notes
 | `mh_weight_target_low` | Weight target lower bound |
 | `mh_weight_target_high` | Weight target upper bound |
 | `mh_name` | User name |
-| `mh_condition` | Medical condition (gbm, t2d, general) |
+| `mh_condition` | Selected Condition/Protocol — one of `gbm`, `epilepsy`, `strict_keto`, `migraine`, `cluster_headache`, `t1_diabetes`, `t2_diabetes`, `general`, `recomp` (**this doc previously listed only `gbm, t2d, general` — wrong on the value itself for Type 2 and missing 6 of the 9 real options**) |
 | `mh_visual_theme` | Visual colour theme |
 | `mh_color_scheme` | Dark/light/auto scheme |
 | `mh_recent_scans` | Last 10 barcode scans |
@@ -279,26 +279,55 @@ Three boot scripts in `~/.termux/boot/` fire after any phone reboot:
 |--------|---------|
 | `start-crond.sh` | Starts crond after 5s delay (allows storage to mount) |
 | `start-watchdog.sh` | Acquires wake-lock via `termux-wake-lock`, immediately runs `mh_watchdog.sh` |
-| `maxhealth.sh` | Checks for an update immediately (`mh_autoupdate.sh`), then starts the server (`mhstart`) |
+| `maxhealth.sh` | **Corrected 25/09/26** — confirmed on the live phone this calls `~/maxhealth_sync.sh`, not `mh_autoupdate.sh` (which doesn't exist on-device — see Auto-update below), then starts the server (`mhstart`). Logs to `$ROOT/app/logs/boot.log`. |
 
 `mh_watchdog.sh` runs via cron every minute — checks if `server.py` is alive, restarts it if not, kills duplicate processes. `termux-wake-lock` prevents Android Doze from suspending the check between cron ticks.
 
 Requires: **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux). `setup.sh` (v3.2+) auto-detects whether these are installed and prompts the one-time manual install only when missing.
 
-**`mhstart`** is installed to `$PREFIX/bin/mhstart` by `setup.sh`, so it works as a global command from any directory. An earlier version `cd`'d one level too shallow (`app/` instead of `app/maxhealth/`) — since a failed `cd` doesn't stop a bash script by default, this silently fell through to running `python server.py` from whatever directory the caller happened to already be in, rather than failing loudly. Only ever "worked" because Termux sessions here are almost always already sitting in the app folder when `mhstart` gets typed manually. Fixed to `cd` to the correct path with an explicit failure message if the app folder isn't found.
+**`mhstart`** is installed to `~/bin/mhstart` (confirmed on Pete's live phone, not `$PREFIX/bin` as this doc previously said) by `setup.sh`, so it works as a global command from any directory. An earlier version `cd`'d one level too shallow (`app/` instead of `app/maxhealth/`) — since a failed `cd` doesn't stop a bash script by default, this silently fell through to running `python server.py` from whatever directory the caller happened to already be in, rather than failing loudly. Only ever "worked" because Termux sessions here are almost always already sitting in the app folder when `mhstart` gets typed manually. Fixed to `cd` to the correct path with an explicit failure message if the app folder isn't found.
 
-### Auto-update
+### Auto-update — **designed, not actually deployed**
 
-`~/mh_autoupdate.sh` runs via cron every 30 minutes (`*/30 * * * *`), and once immediately on every boot via `maxhealth.sh` above:
+**This subsection previously stated auto-update as working, confirmed
+fact. Real evidence says otherwise, checked more than once:** `mh_autoupdate.sh`
+was confirmed **not present** on Pete's live phone, and a real `crontab -l`
+on that device has, on every occasion actually checked, contained exactly
+one line — the watchdog, every minute — never an auto-update entry at any
+30-minute interval. Whatever's below is the intended design, not something
+currently running on any real device this has been checked on.
+
+Intended design, if/when actually built and deployed:
 
 1. `git fetch origin main --quiet`
 2. Compares local `HEAD` against `origin/main`
-3. If different: `git reset --hard origin/main`, then kills the running server (the watchdog above picks it back up within 60 seconds — this script deliberately doesn't restart the server itself, avoiding duplicating logic the watchdog already owns)
+3. If different: `git reset --hard origin/main`, then kills the running
+   server (the watchdog picks it back up within 60 seconds — deliberately
+   not restarting the server itself, to avoid duplicating logic the watchdog
+   already owns)
 4. Logs every check to `~/mh_autoupdate.log`
 
-Uses `git reset --hard` rather than a merge deliberately — these are pure end-user devices that should never carry real local code edits, so always converging to exactly what's on GitHub is safer than risking a merge conflict silently blocking every future update forever with no one watching to resolve it.
+`git reset --hard` rather than a merge is the right call for the same
+reason as ever: these are end-user devices that shouldn't carry local code
+edits, so converging to exactly what's on GitHub beats risking a silent,
+unattended merge conflict. That reasoning holds regardless of whether the
+script exists yet.
 
-This exists because devices could otherwise run stale code indefinitely with no way to catch up on their own — every fix required someone to manually `git pull` on that specific device. Folded into `setup.sh` itself (not just patched onto existing installs by hand), so every fresh install gets this automatically.
+**What actually exists and actually runs today:** the watchdog only
+(`~/mh_watchdog.sh`, cron every minute, restarts a dead server.py). That part
+is real, and separately confirmed as fragile in its own way — Termux's
+crontab lives in the app's own private data and is wiped by a reinstall (this
+happened for real on Pete's phone during the F-Droid migration, 24/09/26:
+`crond` wasn't even running and crontab was completely empty, silently, with
+no auto-update to fall back on either since it was never there). `provision.sh`
+now restores the watchdog crontab entry correctly on a fresh install — see
+its own comments for the exact bug (a `grep -v` with no match exiting 1 under
+`set -e`, silently producing an empty crontab).
+
+Without a device staying current on its own, every fix currently requires
+someone to manually `git pull` (or a fresh `bump_and_deploy.sh` push plus
+that pull) on that specific device — which is exactly the gap auto-update
+was meant to close, and hasn't yet.
 
 ### Remote diagnostics — `/system-status`
 
@@ -309,7 +338,7 @@ New `server.py` GET endpoint, wired into the existing App Health Check tool (Set
 - Whether `crond` is actually running (`pgrep -f crond`)
 - How many `server.py` processes are running (`pgrep -f "python.*server.py"` — should be exactly 1)
 
-Built specifically so a stuck device can be debugged **remotely**, without needing Termux command-line access on the affected phone — the person having the issue taps the button and copies the output, no terminal commands needed on their end at all. **Confirmed working on a real, previously stuck device**: first correctly showed `crond` wasn't running (the actual root cause — nothing can fire on schedule regardless of what's in crontab), then, after `crond` was restarted, showed the real log entries proving auto-update genuinely worked unattended at the next scheduled tick.
+Built specifically so a stuck device can be debugged **remotely**, without needing Termux command-line access on the affected phone — the person having the issue taps the button and copies the output, no terminal commands needed on their end at all. **What this actually proved, on a real stuck device**: it correctly showed `crond` wasn't running — a genuinely useful, confirmed-accurate diagnosis. The auto-update log it also reads has, in every real check so far, reflected that the script it would report on isn't present — the diagnostic tool itself is solid; what it would report on auto-update specifically just isn't built yet.
 
 ---
 
@@ -359,28 +388,95 @@ Zepp exports are AES-encrypted zip files. Python's stdlib `zipfile` cannot decry
 
 ## Health Connect data pipeline (Android)
 
-Health Connect has no web or shell-accessible API at all — it's a compiled native Android SDK (`androidx.health.connect:connect-client`, confirmed current as `1.2.0-alpha05`) accessed only via a real app linking the client library. This means, unlike every other device in this pipeline, there's a genuine native Android companion app involved (`maxedhealth-healthbridge`, separate repo) rather than just an extractor parsing an export file.
+**Rewritten 25/09/26 — the previous version of this section described a plan
+that was superseded during actual implementation, not what got built.** No
+separate bridge app or repo exists. Health Connect support lives inside the
+existing native launcher app (`com.maxedhealth.launcher`), in
+`HealthConnectBridge.kt` and (currently, temporarily) its own standalone
+test-icon activity — see Known Gaps below for what that means in practice.
 
-**Data flow:** Health Connect (on-device) → bridge app reads via `HealthConnectClient`, WorkManager syncs hourly once permission is granted once → writes `health_connect_export_{timestamp}.json` to the public Downloads folder via `MediaStore` (not raw file I/O — required on Android 10+ scoped storage, needs no broad storage permission) → lands exactly where Termux's `~/storage/downloads` symlink already looks → `move_exports_to_inbox()` in `server.py` recognises the filename pattern → `extractors/health_connect.py` parses it into the same row shape every other extractor produces.
+Health Connect has no web or shell-accessible API — it's a compiled native
+Android SDK (`androidx.health.connect:connect-client:1.1.0`, current stable,
+not the alpha version this section previously cited) accessed only via a
+real app linking the client library. The launcher already exists and already
+needs to be a real installed app for provisioning, so Health Connect support
+was added directly to it rather than as a second app.
 
-**Export JSON shape** (bridge app's own format, not a Health Connect native shape):
+**Permission model — genuinely different from standard Android permissions.**
+Health Connect shows its own dedicated permission screen (per-data-type
+toggles, not a single Allow/Deny), and getting that screen to appear at all
+required two manifest pieces easy to miss: a `<queries>` block declaring both
+possible Health Connect package names (`com.google.android.healthconnect.controller`
+on Android 14+, `com.google.android.apps.healthdata` on older versions — the
+two are NOT interchangeable, and checking the wrong one silently loops with
+nothing granted), and a mandatory `<activity-alias>` (`ViewPermissionUsageActivity`,
+`android:permission="android.permission.START_VIEW_PERMISSION_USAGE"`)
+required by Health Connect itself on Android 14+ — without it, the permission
+screen never appears at all, no crash, no error, just nothing happening.
+
+**What's actually read** — four things, once per sync, all via
+`HealthConnectClient`: today's step count (`StepsRecord`), average heart
+rate in bpm (`HeartRateRecord` → `hr_avg` — **not HRV**, a different Health
+Connect record type, `HeartRateVariabilityRmssdRecord`, that isn't currently
+read at all; an earlier version of this integration mapped this field to
+`hrv` by mistake and was corrected), latest weight (`WeightRecord`), and
+total sleep duration (`SleepSessionRecord`, summed to minutes).
+
+**Data flow:** Health Connect (on-device) → `HealthConnectBridge.kt` reads
+today's values directly via the client library → writes/updates one entry in
+`/storage/emulated/0/maxhealth/app/data/inbox/health_connect_export.json`
+(a JSON array, one object per date, existing entries for other dates
+preserved) → `extractors/health_connect.py` reads it via the same
+`run(inbox, password=None, dry_run=False)` contract every other extractor
+uses → folds into `combined.csv` via the normal `update_health.py` run, same
+as any other device.
+
+**Export JSON shape** (written directly by the launcher, not a Health
+Connect native shape):
 ```json
-{
-  "source": "health_connect",
-  "exported_at": "2026-08-18T09:00:00Z",
-  "days": [
-    {"date": "2026-08-17", "steps": 8342, "sleep_duration_minutes": 412,
-     "hrv_ms": 38.2, "weight_kg": 92.1}
-  ]
-}
+[
+  {"date": "2026-09-24", "steps": 8342, "hr_avg": 68, "weight": 92.1, "sleep_duration": 412}
+]
 ```
-Any field can be absent per day — the bridge app doesn't guess or fill gaps, same as every other extractor.
+`sleep_duration` is in minutes, matching every other device's convention.
+Any field can be absent for a day — genuinely missing, not zero.
 
-**Precedence:** deliberately last in every field's precedence list (`weight`, `hrv`, `sleep`, `steps`) in `update_health.py`'s `DEFAULT_PRECEDENCE` — it's an aggregate of whatever the phone's own sensor or another app already wrote into Health Connect, so a device's own direct, more detailed export should win when both exist for the same day.
+**Precedence:** deliberately last in every field's precedence list it
+appears in (`weight`, `sleep`, `steps`, and `hr` — **not `hrv`**, matching
+what's actually read) in `update_health.py`'s `DEFAULT_PRECEDENCE` — Health
+Connect is an aggregate of whatever another app or the phone's own sensor
+already wrote there, so a device's own direct export should win when both
+exist for the same day.
 
-**Steps specifically use `aggregate()`, not `readRecords()`** in the bridge app, to avoid double-counting when both the phone and a connected watch report steps into Health Connect for the same period. Confirmed (Android 14+): the phone's own step sensor writes into Health Connect automatically with zero extra app involvement once any app has requested `READ_STEPS` permission, so phone-only users get activity tracking without needing a separate wearable at all. Sleep/HRV/SpO2 remain a genuine hardware limitation — no phone-only path exists for these.
+**Sync is currently manual, not automatic** — no WorkManager, no scheduled
+background sync. A person opens the Health Connect screen in the launcher
+and it reads/writes on that visit only. A `Switch` (`HealthConnectBridge.isEnabled()`
+/ `.setEnabled()`, `SharedPreferences`-backed, defaults on) lets someone turn
+syncing off entirely — while off, nothing is read and no permission is
+requested at all, checked before anything else runs.
 
-**Status:** server-side (extractor, `server.py` branch, `update_health.py` registration) fully built and tested. Bridge app written in Kotlin, not yet built/run in Android Studio — first build pending, same status the (now-discontinued) Wear OS project reached before being parked.
+**Known gaps, honestly:**
+- The whole feature currently lives on a **temporary standalone test icon**
+  ("MH Health Connect Test") on the home screen, separate from the real
+  onboarding/Settings flow — built that way deliberately to prove it worked
+  before wiring it into the real UI, but it hasn't been moved yet. The
+  enable/disable switch lives there too and needs to move with it.
+- `minSdk` for the whole launcher project had to be raised from 24 to 26
+  (Android 8.0+) for the Health Connect client library — a real, if minor,
+  narrowing of which phones the launcher supports at all.
+- No automatic sync, as above — someone has to actually open that screen for
+  data to update.
+- Steps use a single `readRecords()` pull for today, not an `aggregate()`
+  call — double-counting between a phone's own sensor and a connected watch
+  both writing to Health Connect is a real possible failure mode, not yet
+  guarded against.
+
+**Status:** built and tested end-to-end on a real device — permission
+granted through Health Connect's own screen, data read, written to the real
+inbox file, picked up by a real `update_health.py --device health_connect`
+run, confirmed landing correctly in `combined.csv`. Not a "first build
+pending" status; genuinely working, with the gaps above being real known
+limitations of what's there, not untested unknowns.
 
 ---
 
@@ -740,7 +836,7 @@ Deliberately distinct from `_extractGramsFromAmount(str)`, which searches for a 
 - Water target celebration not firing
 - `mh_reorder_manage` order may need re-saving after adding a new reorderable section, since new entries aren't automatically inserted into an already-saved custom order
 - OpenAI has no persistent free tier (unlike Gemini's Flash tier) — multi-AI check will incur small real per-use cost on that provider specifically
-- Health Connect bridge app (Kotlin) written but not yet built/run in Android Studio — first build pending, needs verifying against the real current SDK the same way the Wear OS build needed several rounds of fixing wrong assumptions
+- Health Connect (25/09/26 update — see the "Health Connect data pipeline" section above for the full rewrite): built, tested end-to-end, and working — remaining real gaps are that it still lives on a temporary standalone icon rather than the real onboarding/Settings flow, and syncs only when that screen is opened manually, no scheduled background sync yet
 - `MET.walking` calorie values (2.8/3.5/4.5) are not yet pace-adjusted the same way the effort-label bands now are — calibrated assuming something close to the old universal pace scale, so calorie estimates outside the "moderately active" tier may be slightly off
 - Heylo crackerbread camera/photo logging reported as "hit and miss" — not yet investigated
 - AI photo-reading occasionally misreading polyols rows on certain label layouts — the manual entry gap this caused is now fixed (any item can have fibre/polyols corrected directly), but the underlying AI vision-reading accuracy itself hasn't been revisited

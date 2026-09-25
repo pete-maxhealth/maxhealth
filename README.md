@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.743
+**Version:** v3.10.783
 
 ---
 
@@ -52,8 +52,8 @@
 - **Supplements** — Tablet counts (e.g. "2 capsules") shown separately from the mg dose, and time-of-day lists are reorderable per period via ▲▼ buttons — a supplement in both the morning and evening lists isn't forced to the same relative position in both.
 - **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
-- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
-- **Demo mode, seeded with real data** — "Try a demo first" loads a genuinely rich, anonymised dataset (full 151-item library, 30 real days of history, real recipes/routines/strength sessions) entirely in memory — never touching real storage during a session, exiting restores real data untouched.
+- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Health Connect (Android) also supported — steps, heart rate, weight, and sleep read directly from Android's own health data hub, deliberately last in precedence behind any dedicated device's own reading. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
+- **Demo mode, now with real personas** — "Try a demo first" opens a picker of genuinely different starting points (currently ten: two goal-based — general weight loss, body recomposition with real training-block/HRV progression data — and one persona for each of the seven supported conditions, including two deliberately contrasting outcomes on the same evidence base, and a nutrition/effort-focused "still struggling" case with no medical condition at all). Nutrition history, weight trend, and (for several) treatment sessions/symptoms/a ready-made Report Profile are generated to genuinely match that persona's stated targets and story, not a single fixed dataset relabelled. Entirely in memory — never touches real storage during a session, and now self-heals automatically on the next load even if the session ends without an explicit "Exit demo" (closing the tab, switching apps, or the phone locking no longer leaves demo data stuck in a real account).
 - **Log food to a past day** — from History, add a forgotten or mis-logged item to any previous day through the exact same AI-parsing pipeline used for today (text, photo, barcode, library). Recalculates that day's totals from its full log automatically, no manual arithmetic.
 - **Multi-AI consensus check** — verify any logged item against Claude, Gemini, and ChatGPT independently, one tap. Three estimates agreeing is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as worth finding a real label rather than trusting any of them. Each provider's own numbers are checked for internal consistency before comparing. Per-provider checkboxes let you exclude an outlier before applying an average to a single item.
 - **Activity Credit Balance** — rolling-window tracking (Insights → Trends) of exercise calorie credit earned vs actually eaten back, built from real stored history. A single day under an exercise-boosted target is harmless; this surfaces the pattern if it's happening often enough to compound into something real, with interpretation tailored to your actual Goal/Phase setting.
@@ -61,7 +61,15 @@
 
 ---
 
-## Quick start
+## Getting started (Android)
+
+**The native launcher app is now the real answer to onboarding friction** — every early tester hit the same wall (seeing/manually running Termux), which is exactly what this solves. One APK, installed like any Android app, walks through Termux/Termux:Boot/Termux:API installation and one-time permission steps automatically via `RUN_COMMAND`, with only one unavoidable manual step (a one-time clipboard paste inside Termux, required because Termux blocks external apps from writing `allow-external-apps` to its own settings otherwise). No terminal typing required from the person installing it.
+
+Not yet published anywhere for general download — currently a debug build, handed to testers directly. The launcher project lives in its own Android Studio project (package `com.maxedhealth.launcher`), separate from this repo.
+
+For anyone building/running from source instead (the launcher's own provisioning does this on-device automatically) — the manual path below still works and is what the launcher itself runs under the hood.
+
+## Quick start (manual / advanced)
 
 ```bash
 git clone https://github.com/pete-maxhealth/maxhealth.git
