@@ -64,11 +64,11 @@ INBOX_OLD_RETENTION_DAYS = 180
 # for the full reasoning.
 DEFAULT_PRECEDENCE = {
     'weight':   ['withings', 'manual', 'ringconn', 'amazfit', 'health_connect'],
-    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
+    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit'],
     'sleep':    ['ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
     'steps':    ['garmin', 'withings', 'ringconn', 'amazfit', 'health_connect'],
     'spo2':     ['ringconn', 'withings', 'amazfit'],
-    'hr':       ['ringconn', 'amazfit', 'withings', 'garmin'],
+    'hr':       ['ringconn', 'amazfit', 'withings', 'garmin', 'health_connect'],
 }
 
 # Fields each source provides (used for precedence resolution)
@@ -93,7 +93,7 @@ SOURCE_FIELDS = {
                  'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
                  'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
-    'health_connect': ['steps', 'sleep_duration', 'hrv', 'weight'],
+    'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight'],
 }
 
 # Map metric category → combined.csv fields
