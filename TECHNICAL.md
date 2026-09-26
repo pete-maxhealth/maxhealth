@@ -287,6 +287,16 @@ Requires: **Termux:Boot** and **Termux:API** from F-Droid (same signing key as T
 
 **`mhstart`** is installed to `~/bin/mhstart` (confirmed on Pete's live phone, not `$PREFIX/bin` as this doc previously said) by `setup.sh`, so it works as a global command from any directory. An earlier version `cd`'d one level too shallow (`app/` instead of `app/maxhealth/`) — since a failed `cd` doesn't stop a bash script by default, this silently fell through to running `python server.py` from whatever directory the caller happened to already be in, rather than failing loudly. Only ever "worked" because Termux sessions here are almost always already sitting in the app folder when `mhstart` gets typed manually. Fixed to `cd` to the correct path with an explicit failure message if the app folder isn't found.
 
+### Native launcher's launch flow (`MainActivity.kt`)
+
+Every tap of the MaxedHealth home-screen icon (after first-time provisioning) lands here, not just the watchdog:
+
+1. **Actively nudges the server** via `TermuxBridge.runMhstart()` — a `RUN_COMMAND` intent targeting `~/bin/mhstart` directly (it's inside Termux's own private storage, so unlike `provision.sh` on shared storage, it's already executable — no `bash <path>` wrapper needed). This doesn't just wait and hope the watchdog's next once-a-minute tick catches a dead server.
+2. **Polls `/ping` for up to ~100 seconds** — deliberately longer than the watchdog's worst case (~60s to its next tick, plus real startup time). If the server never answers in that window, shows a real Retry screen (re-runs the same active nudge) instead of opening a doomed Chrome tab.
+3. **Finds the real installed WebAPK dynamically** (`findInstalledWebApk()`) rather than a hardcoded package name — asks `PackageManager` who actually handles this app's own URL and picks whichever result starts `org.chromium.webapk.`, matching how Android itself resolves "which app opens this link." Falls back to a plain Chrome Custom Tab if no WebAPK is found. This is what makes the launcher work on a phone other than the one it was built on — a Chrome-installed WebAPK gets its own separate storage from plain Chrome, even for the identical URL, so a hardcoded/wrong package name silently opens an empty copy of the site.
+4. **A settings gear** (top-right of this same loading screen, shown only when `HealthConnectBridge.isAvailable()` is true) opens the Health Connect screen directly. Tapping it cancels the pending step-2/3 auto-launch via a `Job` reference — without that, the coroutine already waiting to open MaxedHealth fires a moment later regardless of where the user navigated, colliding with whatever screen they just opened.
+5. A 900ms minimum display time applies only on the fast path (server already running) — long enough that the gear icon is actually tappable, short enough not to meaningfully slow down normal use. The slow-start path (step 2 above) already takes far longer than that, so nothing is added there.
+
 ### Auto-update — **designed, not actually deployed**
 
 **This subsection previously stated auto-update as working, confirmed
@@ -455,12 +465,20 @@ and it reads/writes on that visit only. A `Switch` (`HealthConnectBridge.isEnabl
 syncing off entirely — while off, nothing is read and no permission is
 requested at all, checked before anything else runs.
 
+**Reaching the screen (updated 26/09/26):** the earlier standalone "MH Health
+Connect Test" 4th home-screen icon is gone. It was first folded into a
+long-press shortcut on the main icon (`res/xml/shortcuts.xml`), but that
+turned out to be unreachable in practice — confirmed on Pete's phone that
+HyperOS's own launcher doesn't invoke static app shortcuts at all, on any
+app, so no menu ever appeared on long-press. The reliable path now is a
+plain tap-target gear icon on `MainActivity`'s own loading screen (shown
+only when `HealthConnectBridge.isAvailable()` says Health Connect is
+actually usable on the device), which works identically regardless of
+launcher. The shortcut XML is left in place too, for launchers that do
+support it — it just isn't relied on. The enable/disable switch still lives
+on the Health Connect screen itself, reached either way.
+
 **Known gaps, honestly:**
-- The whole feature currently lives on a **temporary standalone test icon**
-  ("MH Health Connect Test") on the home screen, separate from the real
-  onboarding/Settings flow — built that way deliberately to prove it worked
-  before wiring it into the real UI, but it hasn't been moved yet. The
-  enable/disable switch lives there too and needs to move with it.
 - `minSdk` for the whole launcher project had to be raised from 24 to 26
   (Android 8.0+) for the Health Connect client library — a real, if minor,
   narrowing of which phones the launcher supports at all.

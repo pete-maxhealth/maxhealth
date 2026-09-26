@@ -1,4 +1,42 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.783)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.784, HEAD v3.10.780)
+
+**Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. Current live version (HEAD) is v3.10.780; v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.777 — Scrolling Charts Opened on the Oldest Day, Not the Latest
+
+Journey (weight), single-metric Deep Dive, and Compare Metrics charts all correctly size their scrollable area for long history (90D/All), but none of them ever moved the scroll position afterward — so any chart wide enough to scroll opened at `scrollLeft: 0` (the earliest tracked day) instead of the most recent one. Fixed in all three: after sizing the inner scroll width, `scrollLeft` is now set to the far end whenever the chart is actually wider than its wrap.
+
+## v3.10.778 — Read-Aloud Fixed for Long/Paragraph Output
+
+The shared `toggleSpeakText()` function (used by every 🔊 button in the app — chat replies, saved prompts, Reports → Ask AI, GBM Summary) spoke each answer as a single `SpeechSynthesisUtterance`. Two real, separate browser bugs bite that on genuinely long text:
+
+- Chrome/Android's speech engine silently stops producing audio past ~10–15 seconds into one utterance. A partial workaround already existed (a pause/resume "keep alive" nudge, still in place), but it isn't reliable for something minutes long.
+- Android's native TTS engine has a hard character cap per utterance (~4000 chars) — past that, `speak()` can fail to produce any audio at all, not just cut off partway. This is likely why GBM Summary (shorter) worked while longer Reports/saved-prompt answers didn't.
+
+Fixed by splitting text into sentence-sized chunks (~200 chars) and queuing them to play back-to-back, staying safely under both limits regardless of which one was actually the cause on a given phone. Stop/start button behavior unchanged — tapping stop now cleanly halts the whole chunk queue via a cancellation token, not just the currently-playing sentence.
+
+## v3.10.779 — Read-Aloud Added to AI-Suggested Recipe Cards
+
+AI-suggested recipe cards (the "🍽️ Create Recipe from this" bubbles in chat) build their own custom HTML rather than going through the plain-text bubble path other AI replies use, so they never picked up a speak button automatically. Added one (`speakRecipeBubble()` / `_recipeSpeechText()`), reusing the same fixed, chunked `toggleSpeakText()` above — reads title, intro, ingredients, then numbered method steps, in the same order the card displays them. Cook Mode's separate step-by-step voice narration is untouched; each step is short enough that it was never affected by the two bugs above.
+
+## v3.10.780 — Removed Dead Code: `generateDemoData()`
+
+The original single-persona demo dataset generator, fully superseded when the multi-persona system (`generateDemoHistoryForPersona()`) was built, but never removed. Confirmed zero references anywhere (direct calls, string-based lookups) before deleting — ~15KB of a genuinely unreachable function.
+
+## Native Launcher — Compile Fix, Reliable Health Connect Entry Point, Race Condition
+
+Follow-up work on the native Android launcher app (separate from the web app version bumps above — this app doesn't share the same version numbering):
+
+- **Real bug, mine**: `MainActivity.kt` referenced `TermuxBridge.runMhstart()` (added during the earlier server-timeout/retry fix) but the function was never actually written into `TermuxBridge.kt` — a genuine "said I fixed it, didn't" compile error. Added it, following the same `RUN_COMMAND` pattern as `runProvisionScript()`, targeting `~/bin/mhstart` directly (it lives in Termux's own private storage, so — unlike `provision.sh` on shared storage — it's already executable and doesn't need the `bash <path>` wrapper).
+- **Second real bug found alongside it**: `MainActivity.kt` called `Intent(...)` in `findInstalledWebApk()` with no `import android.content.Intent` at all — would have been the very next compile error.
+- **`shortcuts.xml` build failure**: `shortcutShortLabel`/`shortcutLongLabel` must be `@string/...` references — Android's resource linker rejects a literal string there, unlike almost every other XML attribute. Fixed by moving the labels into a new `res/values/strings.xml`.
+- **The long-press shortcut itself turned out to be unreachable**: confirmed on Pete's phone that HyperOS's launcher doesn't invoke static app shortcuts at all — no menu appears on long-press, on any app. Rather than depend on a launcher-specific gesture, added a plain tap-target gear icon directly on the loading screen instead, shown only when `HealthConnectBridge.isAvailable()` says Health Connect is actually usable on the device. The shortcut XML is left in place for launchers that do support it.
+- **`isAvailable()` was stricter than the logic actually proven to work**: it required an exact match to `SDK_AVAILABLE`, while `HealthConnectTestActivity` (tested and working) treats anything that isn't explicitly "unavailable" or "needs a provider update" as usable. Loosened to match.
+- **Edge-to-edge (Android 15 default) hid the gear behind the status bar**: fixed with a real 56dp top margin instead of small internal padding.
+- **A genuine race condition**: tapping the gear opened Health Connect settings, but the coroutine already waiting to auto-open MaxedHealth itself didn't know the user had navigated away — it kept running in the background and fired a moment later regardless, colliding with the screen just opened (this is what "Site cannot be reached" right after tapping the gear actually was). Fixed by cancelling that pending job the moment the gear is tapped.
+- **Added a 900ms minimum display time** before auto-opening MaxedHealth, only when the server was already running (the fast path) — without it, the loading screen (and the gear on it) could flash past in well under a fifth of a second, too fast to tap. Nothing added to the slow-start path, which already takes far longer than that.
+
+---
 
 ## Native Android Launcher — Built and Working End-to-End
 
