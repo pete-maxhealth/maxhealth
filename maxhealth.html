@@ -4725,7 +4725,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.777</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.778</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5665,7 +5665,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.777'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.778'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -19727,11 +19727,53 @@ function _cleanTextForSpeech(text) {
 // the first is still reading would leave the first button stuck showing
 // "stop" even though it's no longer actually playing.
 let _currentSpeakBtn = null;
+
+// Splits into sentence-sized chunks (~200 chars), queued and played back to
+// back rather than spoken as one giant utterance. Fixes two separate real
+// bugs that only show up on genuinely long, multi-paragraph text (a full
+// Report/saved-prompt answer, not a short chat reply) — confirmed 26/09/26,
+// worked for GBM Summary but not longer output elsewhere:
+//   1. Chrome/Android's speechSynthesis silently stops producing audio on a
+//      single utterance past ~10-15s — this app already has a pause/resume
+//      "keep alive" nudge for that (below), but it isn't reliable for
+//      something minutes long.
+//   2. Android's underlying native TTS engine has a hard character cap per
+//      utterance (historically ~4000 chars) - past that, speak() can fail
+//      to produce ANY audio at all, not just cut off partway, which matches
+//      "doesn't work" rather than "stops partway" for the longest outputs.
+// Sentence-sized chunks stay safely under both limits regardless of which
+// one was actually biting on a given phone/Chrome version.
+function _splitTextForSpeech(text) {
+  const sentences = text.match(/[^.!?\n]+[.!?]+(\s+|$)|[^.!?\n]+$/g) || [text];
+  const chunks = [];
+  let current = '';
+  for (const s of sentences) {
+    if (current && (current + s).length > 200) {
+      chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks.length ? chunks : [text];
+}
+
+// Identifies one specific playback run so a superseded/cancelled queue's
+// own chained onend callbacks stop calling speak() for the next chunk,
+// rather than racing a newly-started one or continuing after a stop tap.
+let _activeSpeechToken = null;
+
+function _stopSpeechQueue() {
+  _activeSpeechToken = null;
+  window.speechSynthesis.cancel();
+  window._clearTTSKeepAlive?.(); // don't rely solely on onend/onerror firing after a direct .cancel() - not always reliable across browsers
+}
+
 function toggleSpeakText(btn, text) {
   if (!('speechSynthesis' in window)) { showToast('Read-aloud isn\'t supported on this browser'); return; }
   const wasThisButton = _currentSpeakBtn === btn;
-  window.speechSynthesis.cancel(); // always stop whatever's currently playing first
-  window._clearTTSKeepAlive?.(); // don't rely solely on onend/onerror firing after a direct .cancel() - not always reliable across browsers
+  _stopSpeechQueue(); // always stop whatever's currently playing/queued first
   if (_currentSpeakBtn) { _currentSpeakBtn.textContent = '🔊'; _currentSpeakBtn.style.opacity = '0.7'; }
   if (wasThisButton) { _currentSpeakBtn = null; return; } // second tap on the same bubble = just stop
   // Guard against the empty-text case generally, not just for this one
@@ -19742,14 +19784,28 @@ function toggleSpeakText(btn, text) {
   // onend cleanly, which is exactly what this looked like from the outside.
   const cleaned = _cleanTextForSpeech(text || '');
   if (!cleaned) { showToast('Nothing to read yet'); btn.textContent = '🔊'; btn.style.opacity = '0.7'; _currentSpeakBtn = null; return; }
-  const utterance = new SpeechSynthesisUtterance(cleaned);
-  utterance.onend = utterance.onerror = () => {
-    btn.textContent = '🔊'; btn.style.opacity = '0.7';
-    if (_currentSpeakBtn === btn) _currentSpeakBtn = null;
-  };
+
+  const chunks = _splitTextForSpeech(cleaned);
+  const token = {};
+  _activeSpeechToken = token;
   btn.textContent = '⏹'; btn.style.opacity = '1';
   _currentSpeakBtn = btn;
-  window.speechSynthesis.speak(utterance);
+
+  let i = 0;
+  const playNext = () => {
+    if (_activeSpeechToken !== token) return; // superseded or stopped - don't keep going
+    if (i >= chunks.length) {
+      btn.textContent = '🔊'; btn.style.opacity = '0.7';
+      if (_currentSpeakBtn === btn) _currentSpeakBtn = null;
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(chunks[i++]);
+    // A failed chunk skips ahead rather than silently ending the whole
+    // read-aloud - one bad chunk shouldn't cut off everything after it.
+    utterance.onend = utterance.onerror = playNext;
+    window.speechSynthesis.speak(utterance);
+  };
+  playNext();
 }
 
 // Properly formatted recipe card instead of a wall of unstructured prose — the
