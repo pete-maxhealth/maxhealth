@@ -4790,7 +4790,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.790</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.792</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5753,7 +5753,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.790'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.792'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -34086,6 +34086,88 @@ const MAXHEALTH_SCHEMA = {
   carbs_g:      { desc: 'Carbohydrates', unit: 'g float' },
 };
 
+// MAXHEALTH_SCHEMA (what the AI is asked to map device columns TO) uses its
+// own naming (weight_kg, heart_rate, hrv_rmssd, ...) which mostly - but not
+// entirely - matches combined.csv's real column names via the alias table
+// already built into processCombinedText()'s field-index map. Rather than
+// depend on that partial alias coverage (hrv_rmssd/spo2_avg specifically
+// have no alias back to hrv/spo2), this maps every MAXHEALTH_SCHEMA field
+// straight to the real combined.csv column name explicitly, once, here.
+const SCHEMA_FIELD_TO_COMBINED_COLUMN = {
+  date: 'date', weight_kg: 'weight', steps: 'steps', calories_out: 'calories_active',
+  total_sleep_min: 'sleep_duration', deep_min: 'sleep_deep', rem_min: 'sleep_rem',
+  light_min: 'sleep_light', hrv_rmssd: 'hrv', spo2_avg: 'spo2', heart_rate: 'hr_avg',
+  fat_pct: 'fat_pct', calories_in: 'calories_in', protein_g: 'protein_g', carbs_g: 'carbs_g',
+};
+
+// Applies a single AI-proposed unit_conversion string to a raw string value.
+// Shared by the mapping preview (showMappingConfirmation) and the real
+// transform (applyDeviceMapping) so both ever only implement this once.
+function applyUnitConversion(rawValue, conversion) {
+  const n = parseFloat(rawValue);
+  if (isNaN(n)) return '';
+  if (conversion === 'multiply_60') return (n * 60).toFixed(0);
+  if (conversion === 'divide_2.205') return (n / 2.205).toFixed(1);
+  return rawValue;
+}
+
+// Turns the raw uploaded CSV rows (_pendingRawRows) into a combined.csv-
+// shaped CSV string using the just-confirmed AI column mapping, so the
+// existing, already-tested processCombinedText() merge path can take it
+// from here exactly as it would a manually-uploaded combined.csv. Returns
+// null (with a toast) rather than throwing if the date column can't
+// actually be found — a bad mapping shouldn't silently produce a file full
+// of blank/misaligned rows.
+function applyDeviceMapping(mapping, rawLines) {
+  const headers = rawLines[0].split(',').map(h => h.trim());
+  const dateIdx = headers.indexOf(mapping.date_column);
+  if (dateIdx < 0) {
+    showToast(`Can't find date column "${mapping.date_column}" in the file — cancelled.`);
+    return null;
+  }
+
+  // Only keep mappings whose target field we actually know how to place in
+  // combined.csv's column layout — an AI-proposed target_field outside
+  // MAXHEALTH_SCHEMA is dropped here rather than silently written as a
+  // made-up column processCombinedText would never look for anyway.
+  const usableMappings = mapping.mappings.filter(m => SCHEMA_FIELD_TO_COMBINED_COLUMN[m.target_field]);
+  const outHeaders = ['date', ...usableMappings.map(m => SCHEMA_FIELD_TO_COMBINED_COLUMN[m.target_field])];
+
+  const outRows = [outHeaders.join(',')];
+  for (let i = 1; i < rawLines.length; i++) {
+    const cols = rawLines[i].split(',');
+    const rawDate = (cols[dateIdx] || '').trim();
+    if (!rawDate) continue;
+
+    // Reuses the same DD/MM/YY-oriented parsing the rest of the app's
+    // history already keys on, via the date_format the AI reported -
+    // only ISO passthrough and DD/MM/YYYY are actually handled here since
+    // those are what processCombinedText's own date column expects
+    // (YYYY-MM-DD); anything else is left as-is and processCombinedText's
+    // own existing date validation will just skip that row, same as it
+    // already does for any malformed date in a manually uploaded file.
+    let isoDate = rawDate;
+    if (mapping.date_format && /D.*M.*Y|M.*D.*Y/i.test(mapping.date_format)) {
+      const parts = rawDate.split(/[\/\-]/);
+      if (parts.length === 3 && parts[2].length === 4) {
+        const isMonthFirst = /^M/i.test(mapping.date_format);
+        const [a, b, year] = parts;
+        const [day, month] = isMonthFirst ? [b, a] : [a, b];
+        isoDate = `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`;
+      }
+    }
+
+    const rowVals = usableMappings.map(m => {
+      const ci = headers.indexOf(m.source_column);
+      const raw = ci >= 0 ? (cols[ci] || '').trim() : '';
+      return raw ? applyUnitConversion(raw, m.unit_conversion) : '';
+    });
+    outRows.push([isoDate, ...rowVals].join(','));
+  }
+
+  return outRows.join('\n');
+}
+
 function loadDeviceConfigs() {
   try { return JSON.parse(localStorage.getItem(DEVICE_CONFIGS_KEY) || '[]'); } catch(e) { return []; }
 }
@@ -34154,6 +34236,11 @@ Only include mappings where you are confident. Do not guess. If a column is ambi
         const r = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }]
+          })
         });
         const d = await r.json();
         if (d.error) throw new Error(d.error.message);
@@ -34251,13 +34338,33 @@ function confirmDeviceMapping() {
   else configs.push(config);
   saveDeviceConfigs(configs);
 
+  // Actually apply the mapping now, not just save it for later - the raw
+  // rows are already sitting in _pendingRawRows from the upload, no reason
+  // to make the person re-upload the same file just to have it used.
+  const transformedCsv = applyDeviceMapping(_pendingMapping, _pendingRawRows);
+  const out = document.getElementById('deviceInspectOutput');
+
   document.getElementById('mappingConfirmSection').style.display = 'none';
-  document.getElementById('deviceInspectOutput').className = 'output-box success';
-  document.getElementById('deviceInspectOutput').textContent = `✓ Config saved for "${_pendingDeviceName}"\n\nThis device is now registered. Future imports from this device will use the saved mapping automatically.\n\nThe config JSON is also available in Settings > Export All Data.`;
+
+  if (transformedCsv) {
+    const importOut = document.getElementById('csvImportOutput');
+    processCombinedText(transformedCsv, false, importOut || out);
+    if (out) {
+      out.className = 'output-box success';
+      out.textContent = `✓ Config saved for "${_pendingDeviceName}" and this file's data has been imported.\n\nFuture imports from this device will use this same saved mapping automatically — just upload the file again through this same screen.\n\nThe config JSON is also available in Settings > Export All Data.`;
+    }
+    showToast(`${_pendingDeviceName} imported ✓`);
+  } else {
+    if (out) {
+      out.className = 'output-box success';
+      out.textContent = `✓ Config saved for "${_pendingDeviceName}", but this file's data could not be imported automatically (see above) — the mapping is saved for next time though.`;
+    }
+    showToast(`${_pendingDeviceName} config saved ✓`);
+  }
 
   _pendingMapping = null;
+  _pendingRawRows = null;
   renderSavedDevices();
-  showToast(`${_pendingDeviceName} config saved ✓`);
 }
 
 function updateImportStatus() {
