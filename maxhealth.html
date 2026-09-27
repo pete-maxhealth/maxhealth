@@ -3208,6 +3208,26 @@
       </div>
     </div>
 
+    <div class="metric-card card-unit" id="topFoodsCard" style="margin-bottom:16px;">
+      <div class="section-title" id="title-trends-topfoods" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-topfoods','trends-topfoods-wrap','trends-topfoods-icon')">🍽️ Top Foods <span id="trends-topfoods-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="trends-topfoods-wrap">
+        <div style="display:flex;gap:6px;margin-bottom:10px;">
+          <button class="drill-period" onclick="setTopFoodsPeriod(7,this)">7D</button>
+          <button class="drill-period active" onclick="setTopFoodsPeriod(30,this)">30D</button>
+          <button class="drill-period" onclick="setTopFoodsPeriod(90,this)">90D</button>
+          <button class="drill-period" onclick="setTopFoodsPeriod(0,this)">All</button>
+        </div>
+        <div id="topFoodsContent" style="font-size:12px;color:var(--text2);line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <div class="metric-card card-unit" id="dayOfWeekCard" style="margin-bottom:16px;">
+      <div class="section-title" id="title-trends-dow" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-dow','trends-dow-wrap','trends-dow-icon')">📅 Averages by Day of Week <span id="trends-dow-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="trends-dow-wrap">
+        <div id="dayOfWeekContent" style="font-size:12px;color:var(--text2);line-height:1.6;"></div>
+      </div>
+    </div>
+
     <button onclick="openMultiMetricOverlay()" style="width:100%;padding:12px;margin-bottom:16px;background:var(--surface);border:1px solid var(--accent);border-radius:var(--radius);color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📊 Compare Metrics — overlay any combination on one chart</button>
 
     <!-- Always visible regardless of a card's own hidden state - the
@@ -4770,7 +4790,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.788</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.789</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5733,7 +5753,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.788'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.789'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -30668,9 +30688,108 @@ function drawSparkline(canvasId, vals, color) {
   ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
 }
 
+let _topFoodsPeriod = 30;
+function setTopFoodsPeriod(period, btn) {
+  _topFoodsPeriod = period;
+  document.querySelectorAll('#topFoodsCard .drill-period').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderTopFoodsCard();
+}
+
+// Aggregates every individual food/ingredient logged over the period,
+// grouped by the same normalised-name matching applyLibraryMatches uses
+// for exact library lookups (strips supermarket brand words, handles
+// singular/plural) - "onions", "Onions" and "white onions asda" all roll
+// up into one row instead of fragmenting into near-duplicates. Reads each
+// meal entry's own items[] (the real per-ingredient breakdown, already
+// stored) rather than its summarised description string, since "chicken +
+// rice + 2 more" isn't a food, it's a label for four of them.
+function getTopFoodsData(period) {
+  const cutoff = period > 0 ? (() => { const c = new Date(); c.setDate(c.getDate() - period); return c; })() : null;
+  const byName = new Map();
+  (state.history || []).forEach(d => {
+    if (cutoff) {
+      const p = (d.date || '').split('/').map(Number);
+      if (p.length !== 3) return;
+      const dateObj = new Date(2000 + p[2], p[1] - 1, p[0]);
+      if (dateObj < cutoff) return;
+    }
+    (d.log || []).forEach(entry => {
+      const foods = (entry.items && entry.items.length) ? entry.items : [entry];
+      foods.forEach(f => {
+        const rawName = f.name || entry.description || 'Unknown';
+        const key = (typeof _libNormaliseName === 'function') ? _libNormaliseName(rawName) : rawName.toLowerCase().trim();
+        if (!key) return;
+        const existing = byName.get(key) || { name: rawName, kcal: 0, protein: 0, carbs: 0, fat: 0, count: 0 };
+        existing.kcal    += f.kcal    || 0;
+        existing.protein += f.protein || 0;
+        existing.carbs   += f.carbs   || 0;
+        existing.fat     += f.fat     || 0;
+        existing.count++;
+        if (rawName.length > existing.name.length) existing.name = rawName;
+        byName.set(key, existing);
+      });
+    });
+  });
+  return [...byName.values()].sort((a,b) => b.kcal - a.kcal);
+}
+
+function renderTopFoodsCard() {
+  const el = document.getElementById('topFoodsContent');
+  if (!el) return;
+  const data = getTopFoodsData(_topFoodsPeriod).slice(0, 10);
+  if (!data.length) {
+    el.innerHTML = '<div style="color:var(--text3);">No logged foods in this period yet.</div>';
+    return;
+  }
+  const maxKcal = data[0].kcal || 1;
+  el.innerHTML = data.map((f, i) => {
+    const pct = Math.round(f.kcal / maxKcal * 100);
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">'
+      + '<span style="font-size:13px;color:var(--text);">' + (i+1) + '. ' + f.name.replace(/</g,'&lt;') + ' <span style="color:var(--text3);font-size:11px;">(' + f.count + '×)</span></span>'
+      + '<span style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:13px;color:var(--text);white-space:nowrap;">' + Math.round(f.kcal).toLocaleString() + 'kcal</span>'
+      + '</div>'
+      + '<div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-bottom:3px;"><div style="height:100%;width:' + pct + '%;background:var(--accent);"></div></div>'
+      + '<div style="font-size:11px;color:var(--text3);">' + (Math.round(f.protein*10)/10) + 'g P · ' + (Math.round(f.fat*10)/10) + 'g F · ' + (Math.round(f.carbs*10)/10) + 'g C total</div>'
+      + '</div>';
+  }).join('');
+}
+
+// Average calories per weekday across all logged days - complements the
+// existing weekend-vs-weekday Pattern check (binary weekend/not) by
+// showing which SPECIFIC day actually runs highest, and by how much.
+function renderDayOfWeekCard() {
+  const el = document.getElementById('dayOfWeekContent');
+  if (!el) return;
+  const loggedDays = (state.history || []).filter(d => d.totals && (d.totals.kcal || 0) > 0);
+  if (loggedDays.length < 7) {
+    el.innerHTML = '<div style="color:var(--text3);">Need at least a week of logged days to show this.</div>';
+    return;
+  }
+  const dowIdx = d => { const p = d.date.split('/').map(Number); return new Date(2000 + p[2], p[1] - 1, p[0]).getDay(); };
+  const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const buckets = Array.from({length:7}, () => []);
+  loggedDays.forEach(d => buckets[dowIdx(d)].push(d));
+  const avgKcal = arr => arr.length ? Math.round(arr.reduce((a,d) => a + (d.totals.kcal||0), 0) / arr.length) : 0;
+  const rows = buckets.map((arr, i) => ({ label: labels[i], avg: avgKcal(arr), count: arr.length }));
+  const maxAvg = Math.max(...rows.map(r => r.avg), 1);
+  el.innerHTML = rows.map(r => {
+    const pct = Math.round(r.avg / maxAvg * 100);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">'
+      + '<div style="width:32px;font-size:12px;color:var(--text2);flex-shrink:0;">' + r.label + '</div>'
+      + '<div style="flex:1;height:16px;background:var(--surface2);border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:var(--accent);"></div></div>'
+      + '<div style="width:90px;text-align:right;font-family:\'Syne\',sans-serif;font-weight:700;font-size:12px;color:var(--text);flex-shrink:0;">' + (r.count ? r.avg.toLocaleString() + 'kcal' : '\u2014') + '</div>'
+      + '<div style="width:32px;text-align:right;font-size:10px;color:var(--text3);flex-shrink:0;">' + r.count + 'd</div>'
+      + '</div>';
+  }).join('');
+}
+
 function renderTrends() {
   renderJourneyCard();
   renderPatternsCard();
+  renderTopFoodsCard();
+  renderDayOfWeekCard();
   renderActivityCreditBalance();
   const data = getTrendsData();
   const noData = document.getElementById('trendsNoData');
