@@ -4762,7 +4762,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.783</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.784</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5725,7 +5725,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.783'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.784'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -16951,7 +16951,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
       }, 100);
       return;
     }
-    showMealPreview(foods, text, null);
+    showMealPreview(applyLibraryMatches(foods), text, null);
     return;
   }
 
@@ -17025,11 +17025,11 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
         return;
       }
       const combined = { type: 'food', items: allItems, message: items2.length === 0 ? `Partial parse — second batch failed (r2: ${JSON.stringify(r2)?.slice(0,100)})` : 'Long meal — processed in two parts' };
-      const foods = combined.items.map(i => ({ name: i.name, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, polyols: i.polyols||0, fat: i.fat||0 }));
+      const foods = combined.items.map(i => ({ name: i.name, amount: i.amount || null, kcal: i.kcal||0, protein: i.protein||0, carbs: i.carbs||0, fibre: i.fibre||0, polyols: i.polyols||0, fat: i.fat||0 }));
       if (failedItems.length) {
         addBubble(`⚠ Couldn't get real values for: ${failedItems.map(i => i.name).join(', ')} — left out rather than logging as zero. Try adding ${failedItems.length > 1 ? 'these' : 'this'} separately.`, 'system', 'warn');
       }
-      showMealPreview(sanitiseFatValues(foods), text, 'Long meal — processed in two parts');
+      showMealPreview(sanitiseFatValues(applyLibraryMatches(foods)), text, 'Long meal — processed in two parts');
       return;
     }
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system');
@@ -17166,7 +17166,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
         protein: Math.round(scaledItems.reduce((a,i)=>a+i.protein,0)*100)/100,
         carbs: Math.round(scaledItems.reduce((a,i)=>a+i.carbs,0)*100)/100,
       };
-      showMealPreview(sanitiseFatValues(scaledItems), text, result.message);
+      showMealPreview(sanitiseFatValues(applyLibraryMatches(scaledItems)), text, result.message);
       return;
     }
     if (result.type === 'recipe') { addRecipeBubble(result); return; }
@@ -17825,6 +17825,12 @@ function isMultiIngredientComboName(n) {
 function sanitiseFatValues(items) {
   return items.map(item => {
     const f = {...item};
+    // Library-sourced values (see applyLibraryMatches) are Pete's own
+    // confirmed, locked figures - same reasoning _fatUserEdited already
+    // protects a manually-edited value from these heuristics extends to a
+    // library match: nothing below should be "correcting" a number he
+    // already confirmed once.
+    if (f._source === 'library') return f;
     const nameLower = (f.name || '').toLowerCase();
     // Moved up from the Atwater section below so the zero-fat catch just
     // below can use it too - alcoholic drinks carry real, unaccounted
@@ -17975,6 +17981,55 @@ function sanitiseFatValues(items) {
     }
 
     return f;
+  });
+}
+
+// ─── LIBRARY-FIRST INGREDIENT MATCHING ──────────────────────
+// Three-tier resolution Pete asked for when a typed meal comes back from the
+// AI: (1) an exact library match - his own confirmed values - applies
+// automatically, scaled to whatever amount he typed; (2) no exact match
+// leaves the AI's estimate in place but tagged "AI estimate" so it's
+// visibly not a locked value (the manual "search my library" picker for
+// this tier is a separate, larger follow-up - not in this patch); (3)
+// asking the AI is what already happened upstream of this function, so
+// there's nothing further to do for that tier here. This only ever touches
+// meal-path items - a genuine label/barcode read (per100g/_per100gBase) is
+// Pete's own scanned data already, not a generic guess, so there's nothing
+// for the library to improve on there.
+const _LIB_BRAND_STRIP_RE = /\b(asda|tesco|sainsbury'?s|morrisons|aldi|lidl|waitrose|iceland|co-?op|m&s|marks\s*&?\s*spencer)\b/gi;
+function _libNormaliseName(n) {
+  const singularOf = s => s.replace(/ies$/i, 'y').replace(/([^aeiou])s$/i, '$1');
+  const stripped = (n || '').toLowerCase().trim()
+    .replace(_LIB_BRAND_STRIP_RE, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return singularOf(stripped);
+}
+
+function applyLibraryMatches(foods) {
+  const lib = loadLibrary().filter(f => !isMealEntry(f));
+  return foods.map(f => {
+    // Label/barcode reads are already Pete's own real numbers - leave as-is.
+    if (f.per100g || f._per100gBase) return f;
+    const key = _libNormaliseName(f.name);
+    const match = key ? lib.find(l => _libNormaliseName(l.name) === key) : null;
+    if (!match) return { ...f, _source: 'ai' };
+
+    const libBaseG = _extractGramsFromAmount(match.portion || '') || 100;
+    const libBase = { kcal: match.kcal||0, protein: match.protein||0, fat: match.fat||0, carbs: match.carbs||0, fibre: match.fibre||0, polyols: match.polyols||0 };
+    // Scale to whatever amount was actually typed for this ingredient - NOT
+    // the library's own saved portion size. This is the "100g of onions
+    // should be 50g and scale" case Pete described directly.
+    const requestedG = _extractGramsFromAmount(f.amount || '') || libBaseG;
+    const factor = requestedG / libBaseG;
+    return {
+      ...f,
+      ...scaleMacros(libBase, factor),
+      amount: requestedG + 'g',
+      _base: { ...libBase, baseG: libBaseG },
+      _source: 'library',
+      _libraryId: match.id,
+    };
   });
 }
 
@@ -18342,6 +18397,7 @@ function renderMealPreview() {
           <div style="flex:1;min-width:0;">
             <span style="font-size:14px;color:var(--text);">${f.name}</span>
             ${amt ? `<span style="font-size:11px;color:var(--text3);margin-left:6px;">${amt}</span>` : ''}
+            ${f._source === 'library' ? `<span style="font-size:10px;color:var(--green);margin-left:6px;" title="Your locked library values">📚 Library</span>` : f._source === 'ai' ? `<span style="font-size:10px;color:var(--text3);margin-left:6px;" title="AI estimate — not from your library">🤖 AI estimate</span>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <div style="font-size:11px;white-space:nowrap;color:var(--text3);">
