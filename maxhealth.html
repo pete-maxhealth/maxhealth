@@ -4762,7 +4762,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.784</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.785</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5725,7 +5725,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.784'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.785'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -14172,6 +14172,14 @@ function closeFoodSearch() {
   // cancelled search doesn't silently apply to a future unrelated one
   _comboSearchTarget = null;
   _categorySearchTarget = null;
+  // Backing out of a preview-row search (no result picked) needs the meal
+  // preview bubble un-hidden again - a completed pick already replaces it
+  // entirely via renderMealPreview(), so this only ever matters on cancel.
+  if (_previewSearchFixIndex != null) {
+    _previewSearchFixIndex = null;
+    const bubble = document.getElementById('mealPreviewBubble');
+    if (bubble) bubble.style.display = '';
+  }
 }
 
 function handleFoodSearchOverlayClick(e) {
@@ -14558,6 +14566,35 @@ function logFoodFromDatabase() {
   if (isNaN(grams) || grams <= 0) { showToast('Enter an amount in grams'); return; }
   const factor = grams / 100;
 
+  // Meal-preview "find it myself" mode — tier 2 of the library-first
+  // resolution order. Checked before the combo/recipe modes below (same
+  // reasoning as those: return early so nothing else touches this pick).
+  // Keeps the amount already on the preview row rather than whatever grams
+  // happened to be typed into the search's own amount field, same as the
+  // recipe-fix path does — the row's amount was already what Pete typed
+  // into the original meal text, that's not up for silent renegotiation.
+  if (_previewSearchFixIndex != null) {
+    const idx = _previewSearchFixIndex;
+    _previewSearchFixIndex = null;
+    closeFoodSearch();
+    const foods = window._pendingMealFoods;
+    const existing = foods && foods[idx];
+    if (!existing) { showToast('That item is no longer in the preview'); return; }
+    const keepGrams = _extractGramsFromAmount(existing.amount || '') || grams;
+    const base = { kcal: _selectedFoodItem.kcal, protein: _selectedFoodItem.prot, fat: _selectedFoodItem.fat || 0, carbs: _selectedFoodItem.carb, fibre: _selectedFoodItem.fibre || 0, polyols: _selectedFoodItem.polyols || 0 };
+    const newName = _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name;
+    foods[idx] = {
+      ...existing,
+      name: newName,
+      amount: keepGrams + 'g',
+      ...scaleMacros(base, keepGrams / 100),
+      _base: { ...base, baseG: 100 },
+      _source: 'manual',
+    };
+    renderMealPreview();
+    showToast(`${newName} updated ✓`);
+    return;
+  }
   // Suggested-combo substitute mode — route the picked online result back
   // into that specific combo item, same amount-preserving swap logic as
   // substituteComboItem's normal library-picker path, just with an online
@@ -18397,7 +18434,7 @@ function renderMealPreview() {
           <div style="flex:1;min-width:0;">
             <span style="font-size:14px;color:var(--text);">${f.name}</span>
             ${amt ? `<span style="font-size:11px;color:var(--text3);margin-left:6px;">${amt}</span>` : ''}
-            ${f._source === 'library' ? `<span style="font-size:10px;color:var(--green);margin-left:6px;" title="Your locked library values">📚 Library</span>` : f._source === 'ai' ? `<span style="font-size:10px;color:var(--text3);margin-left:6px;" title="AI estimate — not from your library">🤖 AI estimate</span>` : ''}
+            ${f._source === 'library' ? `<span style="font-size:10px;color:var(--green);margin-left:6px;" title="Your locked library values">📚 Library</span>` : f._source === 'manual' ? `<span style="font-size:10px;color:var(--green);margin-left:6px;" title="Found and confirmed by you">✓ Confirmed</span>` : f._source === 'ai' ? `<span style="font-size:10px;color:var(--text3);margin-left:6px;" title="AI estimate — not from your library">🤖 AI estimate</span>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <div style="font-size:11px;white-space:nowrap;color:var(--text3);">
@@ -18405,6 +18442,8 @@ function renderMealPreview() {
             </div>
             <button onclick="editPreviewItem(${idx})" title="Edit"
               style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;touch-action:manipulation;">✏</button>
+            ${f._source === 'ai' ? `<button onclick="openPreviewIngredientSearch(${idx})" title="Search your library"
+              style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;touch-action:manipulation;">📚</button>` : ''}
             <button onclick="runMultiAICheck(${idx})" title="Verify across 3 AIs"
               style="background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;touch-action:manipulation;">🔍</button>
             ${f._preAverageEstimate ? `<button onclick="revertPreviewItemEstimate(${idx})" title="Revert to original estimate (${Math.round(f._preAverageEstimate.kcal)}kcal · ${f._preAverageEstimate.protein}P · ${f._preAverageEstimate.fat}F · ${f._preAverageEstimate.carbs}C)"
@@ -26214,6 +26253,25 @@ function recipeOpenSearch() {
 let _recipeSearchMode = false;
 let _recipeSearchFixIndex = null; // set when Search is launched FROM a flagged ingredient - tells logFoodFromDatabase() to update that specific row in place rather than push a new one
 let _comboSearchTarget = null; // {comboIndex, itemIndex} - set when Search is launched from a suggested-combo item's substitute picker
+let _previewSearchFixIndex = null; // set when Search is launched from a meal-preview row tagged "AI estimate" - tells logFoodFromDatabase() to update that specific preview row in place, same idea as _recipeSearchFixIndex above
+
+// Tier 2 of the library-first resolution order: search the Library (or
+// Open Food Facts) yourself, pre-filled with the ingredient's own name,
+// rather than accepting an AI estimate untouched. Deliberately reuses the
+// exact same search overlay as everywhere else in the app - no new UI to
+// learn, and Library results already surface first inside it (see
+// _renderMatchingLibraryIngredients).
+function openPreviewIngredientSearch(index) {
+  const foods = window._pendingMealFoods;
+  const item = foods && foods[index];
+  if (!item) return;
+  _previewSearchFixIndex = index;
+  const bubble = document.getElementById('mealPreviewBubble');
+  if (bubble) bubble.style.display = 'none';
+  openFoodSearch();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = item.name; onFoodSearchInput(item.name); }
+}
 
 // Opens the exact same food-search UI used for adding a brand-new recipe
 // ingredient, but pre-filled with a flagged ingredient's own name and wired
