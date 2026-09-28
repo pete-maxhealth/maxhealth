@@ -680,8 +680,17 @@ def main():
         print("\nNo new data extracted from any device.")
         print("Check that export files are in the inbox folder:")
         print(f"  {INBOX}")
-        # Still archive inbox files — they were processed, just yielded no new data
-        if not args.dry_run:
+        # Only archive on a full run (no --device filter) - a single-device
+        # run (e.g. --device manual from a Manual Entry save) must NEVER
+        # sweep the whole inbox, since it only ever looked at its own
+        # extractor. Real incident (28/09/2026): a --device manual run
+        # found no manual extractor, yielded nothing, then archived
+        # health_connect_export.json anyway as collateral damage - that
+        # day's real Health Connect export sat unprocessed in inbox/old/
+        # and never made it into combined.csv, with nothing in the log
+        # calling out that a genuine, unrelated file had just been silently
+        # archived unread.
+        if not args.dry_run and not args.device:
             archive_inbox()
         flush_log()
         return
@@ -707,8 +716,12 @@ def main():
         save_field_sources(field_sources)
         log('pipeline', 'field_sources', 'ok', f"Saved attribution for {len(field_sources)} date(s)")
 
-    # Archive processed inbox files to data/inbox/old/
-    if not args.dry_run:
+    # Archive processed inbox files to data/inbox/old/ - same guard as the
+    # "no new data" branch above: only a full run (no --device filter) may
+    # sweep the whole inbox, since a single-device run only ever looked at
+    # its own extractor and has no business archiving every other device's
+    # untouched export.
+    if not args.dry_run and not args.device:
         archive_inbox()
 
     if not args.dry_run:
