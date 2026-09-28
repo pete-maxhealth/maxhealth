@@ -2568,6 +2568,7 @@
         <div id="strengthRowsWrap">
         <div id="dash-strength-wrap">
         <div id="strengthRows" style="font-size:12px;color:var(--text3);"></div>
+        <div id="strengthSelectBar" style="margin-top:8px;"></div>
         <div id="strengthAddForm" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);max-width:100%;box-sizing:border-box;">
           <input type="text" id="strengthExerciseName" class="modal-input" placeholder="Exercise name (e.g. Bench Press)" style="width:100%;font-size:13px;padding:8px 10px;margin-bottom:8px;box-sizing:border-box;">
           <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -12380,30 +12381,89 @@ function setStrengthUnit(unit) {
   renderStrengthSetRows(); // refresh placeholders to match selected unit
 }
 
+// _strengthSelectMode / _strengthSelectedIds: same bulk-delete gap raised
+// for routines ("no way of bulk deleting if needed, they have to be
+// deleted individually") also applies here — applying a routine drops a
+// whole day's worth of exercises in at once, so clearing a mis-applied
+// routine meant the exact same one-🗑-at-a-time slog. Reset to off on
+// every render, same reasoning as showRoutineList(): this card re-renders
+// often (any log change, tab switch), so anything less would risk leaving
+// it stuck in select mode from an unrelated re-render.
+let _strengthSelectMode = false;
+let _strengthSelectedIds = [];
+
 function renderStrengthCard() {
   const el = document.getElementById('strengthRows');
+  const selectBar = document.getElementById('strengthSelectBar');
   if (!el) return;
   const today = todayStr();
   const sessions = (state.strengthLog || []).filter(s => s.date === today);
   if (!sessions.length) {
     el.innerHTML = '<span style="color:var(--text3);">No strength training logged today.</span>';
+    if (selectBar) selectBar.innerHTML = '';
+    _strengthSelectMode = false;
+    _strengthSelectedIds = [];
     // Was missing here — this branch returned early, meaning the saved collapse
     // state never got restored on a day with nothing logged yet, always opening.
     applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', true);
     return;
   }
-  el.innerHTML = sessions.map(s => {
+  // A session deleted or the day rolling over can drop ids that were
+  // selected — never keep a stale id around, it'd silently do nothing
+  // when "Delete selected" runs.
+  _strengthSelectedIds = _strengthSelectedIds.filter(id => sessions.some(s => s.id === id));
+  const selMode = _strengthSelectMode;
+  el.innerHTML = (selMode ? `<div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><span onclick="toggleStrengthSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">Cancel</span></div>` : `<div style="display:flex;justify-content:flex-end;margin-bottom:4px;"><span onclick="toggleStrengthSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">Select</span></div>`) +
+    sessions.map(s => {
     const setsStr = s.sets.map(st => st.weight_kg != null ? `${st.weight_kg}kg×${st.reps}` : `Bodyweight×${st.reps}`).join(', ');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:8px;">
+      ${selMode ? `<input type="checkbox" onchange="toggleStrengthSelected('${s.id}')" ${_strengthSelectedIds.includes(s.id) ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">` : ''}
       <div style="flex:1;min-width:0;"><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
+      ${selMode ? '' : `
       <span onclick="editStrengthSession('${s.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 8px;border:1px solid var(--accent);border-radius:6px;flex-shrink:0;">Edit</span>
-      <span onclick="deleteStrengthSession('${s.id}')" title="Delete session" style="cursor:pointer;font-size:14px;padding:0 6px;flex-shrink:0;">🗑</span>
+      <span onclick="deleteStrengthSession('${s.id}')" title="Delete session" style="cursor:pointer;font-size:14px;padding:0 6px;flex-shrink:0;">🗑</span>`}
     </div>`;
   }).join('');
+  if (selectBar) {
+    const n = _strengthSelectedIds.length;
+    selectBar.innerHTML = selMode
+      ? `<button onclick="deleteSelectedStrengthSessions()" ${n ? '' : 'disabled'} style="width:100%;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--red);background:${n ? 'var(--red)' : 'var(--surface2)'};color:${n ? '#fff' : 'var(--text3)'};cursor:${n ? 'pointer' : 'default'};">🗑 Delete selected${n ? ` (${n})` : ''}</button>`
+      : '';
+  }
   // This call was never added when the toggle was built — it saved state
   // correctly on tap, but nothing ever restored it on the next render, so the
   // section always came back open regardless of what was left collapsed.
   applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', true);
+}
+
+function toggleStrengthSelectMode() {
+  _strengthSelectMode = !_strengthSelectMode;
+  _strengthSelectedIds = [];
+  renderStrengthCard();
+}
+
+function toggleStrengthSelected(id) {
+  const idx = _strengthSelectedIds.indexOf(id);
+  if (idx > -1) _strengthSelectedIds.splice(idx, 1); else _strengthSelectedIds.push(id);
+  renderStrengthCard();
+}
+
+function deleteSelectedStrengthSessions() {
+  if (!_strengthSelectedIds.length) return;
+  const today = todayStr();
+  const sessions = (state.strengthLog || []).filter(s => s.date === today);
+  const toDelete = sessions.filter(s => _strengthSelectedIds.includes(s.id));
+  if (!toDelete.length) return;
+  const names = toDelete.map(s => s.exercise).join(', ');
+  appConfirm(`Delete ${toDelete.length} session${toDelete.length === 1 ? '' : 's'}? (${names})`, () => {
+    const idSet = new Set(_strengthSelectedIds);
+    state.strengthLog = (state.strengthLog || []).filter(s => !idSet.has(s.id));
+    saveState();
+    _strengthSelectMode = false;
+    _strengthSelectedIds = [];
+    showToast(`${toDelete.length} session${toDelete.length === 1 ? '' : 's'} deleted ✓`);
+    renderStrengthCard();
+  }, null, true);
 }
 
 // Previously there was no way to correct a typo'd exercise name or fix a wrong
