@@ -4417,7 +4417,7 @@
     <div class="settings-card">
       <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Priority order when more than one device reports the same metric on the same day<span onclick="const el=document.getElementById('help-deviceprec');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="help-deviceprec" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">▲▼ moves a device up or down each metric's own list. The pipeline tries each source in order and uses the first one that actually has data for that day and field — a lower device only fills in when everything above it is missing, not just different. Saves automatically to your phone's server as you reorder — takes effect from the next sync, no manual file copying needed.</span></div>
       <div id="precedenceEditor"></div>
-      <div style="margin-top:8px;"><span onclick="const el=document.getElementById('help-deviceprecsave');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;">?</span><span id="help-deviceprecsave" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">Changes take effect on the next sync. A device you add yourself (via "+ Add a new device") can be reordered here for reference, but the pipeline only recognises RingConn, Withings, Zepp/Amazfit, Garmin, Health Connect and Manual — anything else is skipped when saving, without affecting the rest of that metric's order.</span></div>
+      <div style="margin-top:8px;"><span onclick="const el=document.getElementById('help-deviceprecsave');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;">?</span><span id="help-deviceprecsave" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">Changes take effect on the next sync. A device you add yourself (via "+ Add a new device") can be reordered here for reference, but the pipeline only recognises RingConn, Withings, Zepp/Amazfit, Garmin, Health Connect and Manual — anything else is skipped when saving, without affecting the rest of that metric's order. "Manage devices" below removes a device you've stopped using from every metric's list at once — its past data in combined.csv is never touched, only future syncs stop consulting it, and it can be restored any time.</span></div>
     </div>
     </div>
 
@@ -33841,10 +33841,26 @@ const DEVICE_TO_PIPELINE_KEY = {
 // fully orderable here (for your own reference) but savePrecedence() drops
 // it when writing pipeline_prefs.json — see the comment there for why
 // that's a silent skip rather than a blocked save.
+//
+// RETIRED_DEVICES_KEY: raised directly — a device you've stopped using
+// (built-in or custom) needs to come out of every metric's precedence
+// list, without touching its historical rows in combined.csv at all (that
+// data is untouched either way; this only ever changes which sources the
+// PIPELINE consults on future syncs, via getAllDevices() filtering it out
+// below, same mechanism getMetricOrder() already uses to drop any device
+// that's disappeared from the known list). Retiring is reversible
+// (retireDevice() shows a "Restore" list of retired devices), unlike an
+// outright delete, since getting the wrong one is an easy mistake to make
+// when Withings/RingConn/etc. all read similarly in a list.
+const RETIRED_DEVICES_KEY = 'mh_retired_devices';
+function getRetiredDevices() {
+  try { const r = JSON.parse(localStorage.getItem(RETIRED_DEVICES_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch(e) { return []; }
+}
 function getAllDevices() {
   let custom = [];
   try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
-  return [...KNOWN_DEVICES, ...custom];
+  const retired = getRetiredDevices();
+  return [...KNOWN_DEVICES, ...custom].filter(d => !retired.includes(d));
 }
 function addCustomDevice() {
   appPrompt('New device name', 'e.g. Oura, Fitbit', (name) => {
@@ -33853,11 +33869,40 @@ function addCustomDevice() {
     if (getAllDevices().includes(trimmed)) { showToast(`"${trimmed}" already in the list`); return; }
     let custom = [];
     try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
-    custom.push(trimmed);
-    localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
+    // Re-adding a name that was retired un-retires it instead of creating
+    // a second, indistinguishable custom entry.
+    const retired = getRetiredDevices();
+    if (retired.includes(trimmed)) {
+      localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired.filter(d => d !== trimmed)));
+    } else if (!custom.includes(trimmed)) {
+      custom.push(trimmed);
+      localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
+    }
     renderPrecedenceEditor();
     showToast(`"${trimmed}" added — now available for any metric`);
   });
+}
+// Removes a device from every metric's precedence order at once (not a
+// per-metric action) - getMetricOrder() already drops any device that's
+// missing from getAllDevices() when it next rebuilds a list, so nothing
+// else needs to change to make it disappear everywhere. Never touches
+// combined.csv or any historical row - purely which sources future syncs
+// consult, per the design decision this was built against.
+function retireDevice(device) {
+  appConfirm(`Stop using "${device}" for precedence? Its past data stays exactly as recorded — this only removes it from future syncs' priority lists. You can restore it later.`, () => {
+    const retired = getRetiredDevices();
+    if (!retired.includes(device)) retired.push(device);
+    localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired));
+    renderPrecedenceEditor();
+    savePrecedence();
+    showToast(`"${device}" retired ✓`);
+  }, null, true);
+}
+function restoreDevice(device) {
+  const retired = getRetiredDevices().filter(d => d !== device);
+  localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired));
+  renderPrecedenceEditor();
+  showToast(`"${device}" restored — add it back into any metric's order above`);
 }
 // Matches update_health.py's own DEFAULT_PRECEDENCE order exactly (same
 // per-metric fallback chains, just expressed with this editor's display
@@ -33905,7 +33950,29 @@ function renderPrecedenceEditor() {
       </div>`).join('')}
     </div>`;
   }).join('')
-    + `<button onclick="addCustomDevice()" style="width:100%;margin-top:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add a new device</button>`;
+    + `<button onclick="addCustomDevice()" style="width:100%;margin-top:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add a new device</button>`
+    + renderDeviceManageList();
+}
+// Every currently-active device with a single 🗑 to retire it — global,
+// not per-metric, since a device you've stopped using should come out of
+// every list at once (retireDevice() handles that). Separate section from
+// the per-metric orderers above so "stop using this device entirely" reads
+// as a clearly distinct, occasional action from "reorder this metric",
+// which is the thing actually being done most of the time here.
+function renderDeviceManageList() {
+  const devices = getAllDevices();
+  const retired = getRetiredDevices();
+  return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;">MANAGE DEVICES</div>
+      ${devices.map(d => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+        <span style="flex:1;font-size:12px;color:var(--text2);">${d}</span>
+        <span onclick="retireDevice('${d}')" title="Stop using ${d} for precedence — history is kept" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>
+      </div>`).join('')}
+      ${retired.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;">
+        <span style="font-size:10px;color:var(--text3);">Retired:</span>
+        ${retired.map(d => `<button onclick='restoreDevice(${JSON.stringify(d)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;">${d} ↺</button>`).join('')}
+      </div>` : ''}
+    </div>`;
 }
 function movePrecedenceDevice(metricKey, device, direction) {
   const stored = getStoredPrecedence();
