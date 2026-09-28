@@ -33945,22 +33945,39 @@ function getAllDevices() {
   const retired = getRetiredDevices();
   return [...KNOWN_DEVICES, ...custom].filter(d => !retired.includes(d));
 }
+// Shared by addCustomDevice() (manual "+ Add a new device" in Precedence)
+// and confirmDeviceMapping() (onboarding a device via CSV upload on
+// Import) - registering a name here is what makes getAllDevices() see it,
+// which is what makes it show up in Precedence at all. Previously only
+// the manual path did this, so a device onboarded through the CSV mapping
+// flow never appeared in Precedence unless someone also separately typed
+// its name in via "+ Add a new device" - easy to miss, and the two names
+// could then drift (typo, different capitalisation) and silently not
+// match. Folding CSV onboarding into this path means it's automatic and
+// always spelled identically to _pendingDeviceName. getMetricOrder()
+// already appends any device missing from a metric's stored order onto
+// the end of that list, so a freshly-registered device lands last for
+// every metric without this needing to do any positioning itself.
+function registerDevice(trimmed) {
+  if (getAllDevices().includes(trimmed)) return false;
+  let custom = [];
+  try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
+  // Re-adding a name that was retired un-retires it instead of creating
+  // a second, indistinguishable custom entry.
+  const retired = getRetiredDevices();
+  if (retired.includes(trimmed)) {
+    localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired.filter(d => d !== trimmed)));
+  } else if (!custom.includes(trimmed)) {
+    custom.push(trimmed);
+    localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
+  }
+  return true;
+}
 function addCustomDevice() {
   appPrompt('New device name', 'e.g. Oura, Fitbit', (name) => {
     if (!name || !name.trim()) return;
     const trimmed = name.trim();
-    if (getAllDevices().includes(trimmed)) { showToast(`"${trimmed}" already in the list`); return; }
-    let custom = [];
-    try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
-    // Re-adding a name that was retired un-retires it instead of creating
-    // a second, indistinguishable custom entry.
-    const retired = getRetiredDevices();
-    if (retired.includes(trimmed)) {
-      localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired.filter(d => d !== trimmed)));
-    } else if (!custom.includes(trimmed)) {
-      custom.push(trimmed);
-      localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
-    }
+    if (!registerDevice(trimmed)) { showToast(`"${trimmed}" already in the list`); return; }
     renderPrecedenceEditor();
     showToast(`"${trimmed}" added — now available for any metric`);
   });
@@ -34838,6 +34855,15 @@ function confirmDeviceMapping() {
   else configs.push(config);
   saveDeviceConfigs(configs);
 
+  // Also register it as a real Precedence device, same as typing it into
+  // "+ Add a new device" would - onboarding a device here shouldn't
+  // require a second, separate trip to Settings > Device Precedence just
+  // to make it visible there. getMetricOrder() puts a newly-registered
+  // device last in every metric's order automatically (nothing here needs
+  // to position it), so it shows up ready to promote up the list, not
+  // silently defaulted to top priority over devices already trusted.
+  const wasNewDevice = registerDevice(_pendingDeviceName);
+
   // Actually apply the mapping now, not just save it for later - the raw
   // rows are already sitting in _pendingRawRows from the upload, no reason
   // to make the person re-upload the same file just to have it used.
@@ -34851,13 +34877,13 @@ function confirmDeviceMapping() {
     processCombinedText(transformedCsv, false, importOut || out);
     if (out) {
       out.className = 'output-box success';
-      out.textContent = `✓ Config saved for "${_pendingDeviceName}" and this file's data has been imported.\n\nFuture imports from this device will use this same saved mapping automatically — just upload the file again through this same screen.\n\nThe config JSON is also available in Settings > Export All Data.`;
+      out.textContent = `✓ Config saved for "${_pendingDeviceName}" and this file's data has been imported.\n\nFuture imports from this device will use this same saved mapping automatically — just upload the file again through this same screen.${wasNewDevice ? `\n\n"${_pendingDeviceName}" has also been added to Settings > Device Precedence, last in priority for every metric — reorder it there if it should be trusted above another device.` : ''}\n\nThe config JSON is also available in Settings > Export All Data.`;
     }
     showToast(`${_pendingDeviceName} imported ✓`);
   } else {
     if (out) {
       out.className = 'output-box success';
-      out.textContent = `✓ Config saved for "${_pendingDeviceName}", but this file's data could not be imported automatically (see above) — the mapping is saved for next time though.`;
+      out.textContent = `✓ Config saved for "${_pendingDeviceName}", but this file's data could not be imported automatically (see above) — the mapping is saved for next time though.${wasNewDevice ? `\n\n"${_pendingDeviceName}" has also been added to Settings > Device Precedence, last in priority for every metric.` : ''}`;
     }
     showToast(`${_pendingDeviceName} config saved ✓`);
   }
