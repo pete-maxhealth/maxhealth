@@ -3161,10 +3161,10 @@
     <div class="wellness-card card-unit" id="wellnessCard" style="display:none;">
       <div class="wellness-title" id="title-trends-wellness" style="cursor:pointer;" onclick="toggleSection('trends-wellness','trends-wellness-wrap','trends-wellness-icon')">Wellness Balance <span id="trends-wellness-icon" style="font-size:11px;color:var(--text3);font-weight:400;">▾ hide</span></div>
       <div id="trends-wellness-wrap">
-      <div style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:12px;">
-        Each score is your last 7 days with real data, averaged — not just
-        today. A wearable app's own "today" score is a different, single-
-        day number, so don't expect these to match if you check both.
+      <div id="wellnessSubtitle" style="font-size:11px;color:var(--text3);margin-top:-8px;margin-bottom:12px;">
+        Each score averages the real data found in your selected period —
+        not a single "today" figure, so don't expect it to match a wearable
+        app's own same-day score.
       </div>
       <div class="wellness-grid">
         <div class="wellness-metric">
@@ -4823,7 +4823,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.806</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.807</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5856,7 +5856,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.806'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.807'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -29828,13 +29828,17 @@ function showTabTip(tabId) {
 // that's a real bug in one of them, and this panel needs to be independent
 // of the card it's meant to be checking (28/09/2026, added after Pete
 // compared Activity/Vitals here against his wearable's own same-day
-// scores - see the section's own intro text for why a 7-day average can
-// legitimately look very different from a single-day wearable score).
+// scores).
+// Mirrors whatever period Trends' own Today/7D/30D/All/Custom filter
+// currently has selected, same as the live card now does (28/09/2026,
+// Pete's follow-up: the card's average must reflect the selected period,
+// not a hardcoded window) - this panel would be checking a different
+// question than the card if it used its own fixed period instead.
 function renderWellnessDebug() {
   const el = document.getElementById('wellnessDebugContent');
   if (!el) return;
-  const data = getTrendsData(true); // full history, not just today - averages need real days to average over
-  if (!data || !data.length) { el.textContent = 'No history data yet.'; return; }
+  const data = getTrendsData();
+  if (!data || !data.length) { el.textContent = 'No data in the currently selected Trends period.'; return; }
 
   const targets = (getTargets()[state.dayMode || 'standard']) || getTargets().standard;
   const spo2Vals  = data.map(d => d.spo2 || null);
@@ -29844,18 +29848,21 @@ function renderWellnessDebug() {
   const carbVals  = data.map(d => (d.totals && d.totals.carbs != null) ? getEffectiveCarbsForDay(d) : null);
   const protVals  = data.map(d => (d.totals && d.totals.protein != null) ? d.totals.protein : null);
 
-  const last7 = arr => [...arr].filter(v => v != null && !isNaN(v) && v > 0).slice(-7);
+  const periodVals = arr => [...arr].filter(v => v != null && !isNaN(v) && v > 0);
 
-  const lastSleepVals = last7(sleepVals);
+  const lastSleepVals = periodVals(sleepVals);
   const avgSleep7 = lastSleepVals.length ? Math.round(lastSleepVals.reduce((a,b)=>a+b,0)/lastSleepVals.length * 10) / 10 : null;
   const sleepScore = avgSleep7 ? Math.min(100, Math.round(avgSleep7/8*100)) : null;
 
-  const lastStepsVals = last7(stepsVals);
+  const lastStepsVals = periodVals(stepsVals);
   const avgSteps7 = lastStepsVals.length ? Math.round(lastStepsVals.reduce((a,b)=>a+b,0)/lastStepsVals.length) : null;
   const actScore = avgSteps7 ? Math.min(100, Math.round(avgSteps7/10000*100)) : null;
 
   const lastSpO2 = [...spo2Vals].reverse().find(v => v != null && v > 0) || null;
   const lastHRV  = [...hrvVals].reverse().find(v => v != null && v > 0) || null;
+  // Deliberately still its own fixed last-30-readings window, not the
+  // selected period - same reasoning as the live card (a personal HRV
+  // baseline needs real history, which a short period may not have).
   const recentHrvVals = [...hrvVals].filter(v => v != null && v > 0).slice(-30);
   const hrvBaseline = recentHrvVals.length >= 3 ? recentHrvVals.reduce((a,b)=>a+b,0)/recentHrvVals.length : null;
   let vitScore = null, spo2part = null, hrvpart = null;
@@ -29867,8 +29874,8 @@ function renderWellnessDebug() {
 
   const carbTgt = targets.carbs || 50;
   const protTgt = targets.protein || 145;
-  const recentCarbs = last7(carbVals);
-  const recentProts = last7(protVals);
+  const recentCarbs = periodVals(carbVals);
+  const recentProts = periodVals(protVals);
   let nutScore = null, carbAdh = null, protAdh = null;
   if (recentCarbs.length > 0) {
     carbAdh = recentCarbs.filter(v=>v<=carbTgt).length / recentCarbs.length;
@@ -29876,25 +29883,27 @@ function renderWellnessDebug() {
     nutScore = Math.round((carbAdh * 60) + (protAdh * 40));
   }
 
-  const fmtArr = arr => last7(arr).map(v => Math.round(v*10)/10).join(', ') || '(no real days in last 7)';
+  const fmtArr = arr => periodVals(arr).map(v => Math.round(v*10)/10).join(', ') || '(no real days in this period)';
   const na = v => v == null ? '—' : v;
+  const periodLabel = trendsWindow === 'today' ? 'Today' : trendsWindow === 7 ? '7 Days' : trendsWindow === 30 ? '30 Days' : trendsWindow === -1 ? 'Custom' : 'All';
 
   el.innerHTML = `
+    <div style="margin-bottom:10px;color:var(--accent);">Selected Trends period: <strong>${periodLabel}</strong> (${data.length} day${data.length===1?'':'s'} in range)</div>
     <div style="margin-bottom:10px;"><strong style="color:var(--text);">Activity (score: ${na(actScore)})</strong><br>
-      Last 7 real days' steps: ${fmtArr(stepsVals)}<br>
+      Real days' steps in this period: ${fmtArr(stepsVals)}<br>
       Average: ${na(avgSteps7)} steps → ${na(avgSteps7)} / 10,000 × 100 = ${na(actScore)}</div>
     <div style="margin-bottom:10px;"><strong style="color:var(--text);">Vitals (score: ${na(vitScore)})</strong><br>
       Most recent SpO2: ${na(lastSpO2)}% → (${na(lastSpO2)}−88)/12×60 = ${na(spo2part)}<br>
       Most recent HRV: ${na(lastHRV)}ms, your 30-reading baseline: ${hrvBaseline ? Math.round(hrvBaseline*10)/10 : '—'}ms → HRV part = ${na(hrvpart)}<br>
       Total: ${na(spo2part)} + ${na(hrvpart)} = ${na(vitScore)}</div>
     <div style="margin-bottom:10px;"><strong style="color:var(--text);">Sleep (score: ${na(sleepScore)})</strong><br>
-      Last 7 real nights' hours: ${fmtArr(sleepVals)}<br>
+      Real nights' hours in this period: ${fmtArr(sleepVals)}<br>
       Average: ${na(avgSleep7)}h → ${na(avgSleep7)} / 8 × 100 = ${na(sleepScore)}</div>
     <div><strong style="color:var(--text);">Nutrition (score: ${na(nutScore)})</strong><br>
-      Last 7 real days' carbs: ${fmtArr(carbVals)} (ceiling ${carbTgt}g)<br>
-      Last 7 real days' protein: ${fmtArr(protVals)} (target ${protTgt}g)<br>
+      Real days' carbs in this period: ${fmtArr(carbVals)} (ceiling ${carbTgt}g)<br>
+      Real days' protein in this period: ${fmtArr(protVals)} (target ${protTgt}g)<br>
       Carb adherence: ${carbAdh != null ? Math.round(carbAdh*100)+'%' : '—'} × 60 + protein adherence: ${protAdh != null ? Math.round(protAdh*100)+'%' : '—'} × 40 = ${na(nutScore)}</div>
-    <div style="margin-top:12px;color:var(--text3);font-style:italic;">These are all 7-day averages of days actually logged/synced — a wearable app's own "today" score is a different, single-day number, so the two are not expected to match.</div>
+    <div style="margin-top:12px;color:var(--text3);font-style:italic;">These average every real day of data within the period selected at the top of Trends — change the period there (Today/7 Days/30 Days/All/Custom) and reopen this panel to see it update.</div>
   `;
 }
 
@@ -32140,18 +32149,30 @@ function renderTrends() {
   if (wellnessCard) {
     wellnessCard.style.display = 'block';
 
-    // Use last 7-day averages for stable scores, not just latest single value
-    const last7 = n => arr => { const c = arr.filter(v=>v!=null&&!isNaN(v)&&v>0); return c.length ? avg(c.slice(-Math.min(7,c.length))) : null; };
+    // Averaged over whatever period Trends' own Today/7D/30D/All/Custom
+    // filter currently has selected - was hardcoded to "last 7 real days"
+    // regardless of that selector, which silently disagreed with the
+    // period the person had actually chosen to look at (28/09/2026, Pete's
+    // call: "the user specified query period should be reflected, be it
+    // custom, 30 days or whatever"). `data` here already IS that period's
+    // data (getTrendsData() up top), so no separate slicing is needed at
+    // all - just take every real value across the whole selected range.
+    // wellnessPeriodDays (set below, used by the subtitle text) records
+    // how many real days actually went into each score, for the same
+    // reason the debug panel shows its own raw series - so the number is
+    // always independently checkable, not just trusted.
+    const periodVals = arr => arr.filter(v => v != null && !isNaN(v) && v > 0);
 
-    // Sleep score — use last 7 days that actually have sleep data
-    const lastSleepVals = [...sleepVals].filter(v => v != null && v > 0).slice(-7);
+    // Sleep score — every day in the selected period with real sleep data
+    const lastSleepVals = periodVals(sleepVals);
     const avgSleep7 = lastSleepVals.length ? Math.round(lastSleepVals.reduce((a,b)=>a+b,0)/lastSleepVals.length * 10) / 10 : null;
     const sleepScore = avgSleep7 ? Math.min(100, Math.round(avgSleep7/8*100)) : null;
 
-    // Activity score — use last 7 days that actually have steps data
-    const lastStepsVals = [...stepsVals].filter(v => v != null && v > 0).slice(-7);
+    // Activity score — every day in the selected period with real steps data
+    const lastStepsVals = periodVals(stepsVals);
     const avgSteps7 = lastStepsVals.length ? Math.round(lastStepsVals.reduce((a,b)=>a+b,0)/lastStepsVals.length) : null;
     const actScore = avgSteps7 ? Math.min(100, Math.round(avgSteps7/10000*100)) : null;
+    const wellnessPeriodDays = Math.max(lastSleepVals.length, lastStepsVals.length);
 
     // Vitals score — SpO2 + HRV, use last row that actually has these values.
     // HRV is scored against the person's OWN recent baseline (last 30
@@ -32163,6 +32184,11 @@ function renderTrends() {
     // judges HRV (relative to the person's own baseline, not a population
     // number) - previously the two disagreed on the same data, which is
     // exactly the kind of contradiction that erodes trust in either one.
+    // Deliberately its own fixed last-30-readings window, NOT tied to
+    // Trends' period selector like Sleep/Activity/Nutrition above now are -
+    // a personal HRV baseline needs real history to be meaningful, and a
+    // short custom range (or even 7 Days) genuinely isn't enough readings
+    // to establish one, regardless of what period the person is browsing.
     const lastSpO2 = [...spo2Vals].reverse().find(v => v != null && v > 0) || null;
     const lastHRV  = [...hrvVals].reverse().find(v => v != null && v > 0) || null;
     const recentHrvVals = [...hrvVals].filter(v => v != null && v > 0).slice(-30);
@@ -32178,11 +32204,11 @@ function renderTrends() {
       vitScore = Math.min(100, spo2part + hrvpart);
     }
 
-    // Nutrition score — last 7 days with actual carb/protein data
+    // Nutrition score — every day in the selected period with actual carb/protein data
     const carbTgt = targets.carbs || 50;
     const protTgt = targets.protein || 145;
-    const recentCarbs = [...carbVals].filter(v=>v!=null&&!isNaN(v)&&v>0).slice(-7);
-    const recentProts = [...protVals].filter(v=>v!=null&&!isNaN(v)&&v>0).slice(-7);
+    const recentCarbs = periodVals(carbVals);
+    const recentProts = periodVals(protVals);
     let nutScore = null;
     if (recentCarbs.length > 0) {
       const carbAdh = recentCarbs.filter(v=>v<=carbTgt).length / recentCarbs.length;
@@ -32194,6 +32220,19 @@ function renderTrends() {
 
     const statusText = s => s == null ? '—' : s >= 80 ? 'Good' : s >= 60 ? 'Fair' : 'Low';
     const statusCls  = s => s == null ? 'neutral' : s >= 80 ? 'good' : s >= 60 ? 'warn' : 'bad';
+
+    // Subtitle states the ACTUAL number of real days each score drew on,
+    // not just the nominal period length - "30 Days" selected with only 4
+    // real logged days in it should say 4, not imply 30 real data points
+    // went into the average.
+    const wellnessDaysAll = Math.max(wellnessPeriodDays, recentCarbs.length, recentProts.length);
+    const wellnessSubtitleEl = document.getElementById('wellnessSubtitle');
+    if (wellnessSubtitleEl) {
+      const periodLabel = trendsWindow === 'today' ? 'today' : trendsWindow === 7 ? 'the last 7 days' : trendsWindow === 30 ? 'the last 30 days' : trendsWindow === -1 ? 'your custom range' : 'your full history';
+      wellnessSubtitleEl.textContent = wellnessDaysAll > 0
+        ? `Each score averages the ${wellnessDaysAll} real day${wellnessDaysAll===1?'':'s'} of data found in ${periodLabel} — not a single "today" figure, so don't expect it to match a wearable app's own same-day score.`
+        : `No real data found in ${periodLabel} yet to average.`;
+    }
 
     setTimeout(() => {
       drawArc('arcSleep',     sleepScore || 0, '#a78bfa');
