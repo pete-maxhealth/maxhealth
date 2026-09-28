@@ -106,7 +106,22 @@ def _log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
     line = f'[{ts}] {msg}\n'
     pipeline_log.append(line)
-    print(line, end='', flush=True)
+    # pipeline_log (read by the app via /status) is the only copy this
+    # actually needs — the print() below is a convenience for anyone
+    # watching this process's own stdout (e.g. tailing a launcher log).
+    # If stdout's reader is gone (BrokenPipeError/OSError — seen in
+    # practice when the process backgrounding this server drops its
+    # output pipe mid-sync), that must never be allowed to escape: it
+    # previously killed the whole pipeline thread mid-scan, leaving
+    # pipeline_running=False but pipeline_result stuck at None forever —
+    # the app's poll loop has no terminal state to land on, so the UI
+    # sits on "SYNCING..." indefinitely with no error ever surfaced,
+    # even though pipeline_log (and therefore /status's log text) still
+    # has the real detail, right up to and including this very message.
+    try:
+        print(line, end='', flush=True)
+    except (BrokenPipeError, OSError):
+        pass
 
 
 def move_exports_to_inbox():
