@@ -22,6 +22,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.Chart=function(){this.destroy=function(){}}"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<!-- JSZip - bundles Export All Data into one .zip instead of 3 separate staggered
+     downloads (28/09/26, raised directly: "1 button zip backup of all data").
+     onerror leaves window.JSZip undefined rather than throwing - exportAll()
+     checks for that and falls back to the old separate-files behaviour, same
+     graceful-degradation pattern Chart.js already uses above, so a blocked CDN
+     never breaks backing up entirely, just loses the single-zip convenience. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="window.JSZip=undefined"></script>
 <style>
   /* ── THEME SYSTEM ───────────────────────────────────────── */
   :root {
@@ -5096,7 +5103,7 @@
     <div id="set-databackup-wrap">
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div id="dataBackupStatusBlock">
-        <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
+        <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes, routines, supplements, symptoms and treatments — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
         <div class="settings-row" style="margin-bottom:12px;">
           <div class="settings-label">History entries</div>
           <div class="settings-value" id="histCount">—</div>
@@ -11896,7 +11903,40 @@ async function backupCombinedCSV() {
 // inline inside exportAll(), meaning the server-save path would have had
 // to duplicate it rather than share one source of truth.
 function buildFullBackupPayload() {
-  return { state, library: loadLibrary(), recipes: loadRecipes(), routines: loadRoutines(), phaseHistory: getPhaseHistoryRaw(), conditionHistory: getConditionHistoryRaw(), activityLevel: localStorage.getItem('mh_activity_level'), activityLevelHistory: getActivityLevelHistoryRaw(), autoSwitchDays: localStorage.getItem('mh_autoswitch_days'), notifAutoSwitch: localStorage.getItem('mh_notif_autoswitch'), notifActivityAutoSwitch: localStorage.getItem('mh_notif_activity_autoswitch'), exportedAt: new Date().toISOString() };
+  // Supplement/symptom/treatment defs+logs (28/09/26) — genuinely missing
+  // until now, confirmed by tracing localStorage keys directly: these live
+  // under their own mh_supplement_*/mh_symptom_*/mh_treatment_* keys,
+  // completely outside `state`, so "Export All" and the daily server
+  // backup had silently never captured them at all despite the person
+  // configuring and using them regularly. Raised directly ("1 button zip
+  // backup of all data, supplements, nutrition, combined, exercise etc.")
+  // — exercise (state.strengthLog) and nutrition (state.history) were
+  // already covered via `state` itself, but supplements/symptoms/
+  // treatments were the real gap. localStorage.getItem() used directly
+  // rather than each area's own load*() helper, since those parse JSON and
+  // fill in defaults — this should capture exactly what's stored, null and
+  // all, so a restore can tell "never configured" apart from "configured
+  // to be empty".
+  return {
+    state,
+    library: loadLibrary(),
+    recipes: loadRecipes(),
+    routines: loadRoutines(),
+    phaseHistory: getPhaseHistoryRaw(),
+    conditionHistory: getConditionHistoryRaw(),
+    activityLevel: localStorage.getItem('mh_activity_level'),
+    activityLevelHistory: getActivityLevelHistoryRaw(),
+    autoSwitchDays: localStorage.getItem('mh_autoswitch_days'),
+    notifAutoSwitch: localStorage.getItem('mh_notif_autoswitch'),
+    notifActivityAutoSwitch: localStorage.getItem('mh_notif_activity_autoswitch'),
+    supplementDefs: localStorage.getItem('mh_supplement_defs'),
+    supplementLog: localStorage.getItem('mh_supplement_log'),
+    symptomDefs: localStorage.getItem('mh_symptom_defs'),
+    symptomLog: localStorage.getItem('mh_symptom_log'),
+    treatmentDefs: localStorage.getItem('mh_treatment_defs'),
+    treatmentLog: localStorage.getItem('mh_treatment_log'),
+    exportedAt: new Date().toISOString(),
+  };
 }
 
 // Posts the full backup to the local server's /save-full-backup endpoint
@@ -11944,10 +11984,69 @@ function autoBackupIfNeeded() {
   saveFullBackupToServer(true);
 }
 
-function exportAll() {
+// Rewritten (28/09/26) to bundle everything into ONE .zip instead of up to 3
+// separate staggered downloads - raised directly ("1 button zip backup of
+// all data, supplements, nutrition, combined, exercise etc"). Falls back to
+// the old separate-files behaviour if JSZip failed to load (blocked CDN,
+// offline on first load before it's cached) - see the <script> tag's own
+// comment - so backing up never silently does nothing just because the zip
+// library isn't available.
+async function exportAll() {
   const dateStr = todayStr().replace(/\//g,'-');
-  let count = 0;
 
+  // Also push to the server, not just Downloads - explicit button press,
+  // so this one reports success/failure rather than failing silently.
+  // Fired in parallel with building the zip below, not awaited first - a
+  // slow/unreachable server souldn't delay the local download the person is
+  // actually waiting on.
+  saveFullBackupToServer(false);
+
+  // Nutrition CSV (master.csv format) - unchanged from before.
+  const nutritionRows = state.history
+    .filter(h => h.totals?.kcal > 0)
+    .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1)
+    .map(h => `${h.date}|${h.totals.kcal}|${h.totals.protein}|${h.totals.carbs}|${h.notes||''}`)
+    .join('\n');
+
+  // Combined CSV — fetched live from the server when reachable (matches
+  // backupCombinedCSV()'s already-better approach) rather than the
+  // potentially-stale mh_combined_csv_cache, falling back to that cache
+  // only if the live fetch fails (offline, server down) so a backup
+  // attempted without connectivity still captures whatever's on hand
+  // instead of coming up empty.
+  let combinedCsv = null;
+  try {
+    const res = await fetch(`${MH_SERVER}/combined`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) combinedCsv = await res.text();
+  } catch (e) {}
+  if (!combinedCsv) combinedCsv = localStorage.getItem('mh_combined_csv_cache');
+
+  const jsonBackup = JSON.stringify(buildFullBackupPayload(), null, 2);
+
+  if (window.JSZip) {
+    try {
+      const zip = new JSZip();
+      zip.file(`maxhealth_backup_${dateStr}.json`, jsonBackup);
+      if (nutritionRows) zip.file(`master_${dateStr}.csv`, nutritionRows);
+      if (combinedCsv) zip.file(`combined_${dateStr}.csv`, combinedCsv);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `maxhealth_backup_${dateStr}.zip`; a.click();
+      URL.revokeObjectURL(url);
+      showToast('Backup zip saved to Downloads ✓');
+      localStorage.setItem('mh_last_export_nudge', new Date().toISOString().slice(0,10));
+      return;
+    } catch (e) {
+      // Fall through to the separate-files fallback below - a failed zip
+      // build (rare, but e.g. a corrupt blob) shouldn't mean no backup
+      // happens at all.
+    }
+  }
+
+  // Fallback: JSZip unavailable or failed - same staggered separate
+  // downloads this function used before the zip rewrite.
+  let count = 0;
   const download = (content, filename, type) => {
     setTimeout(() => {
       const blob = new Blob([content], { type });
@@ -11955,36 +12054,11 @@ function exportAll() {
       const a    = document.createElement('a');
       a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
-    }, count++ * 600); // stagger downloads to avoid browser blocking
+    }, count++ * 600);
   };
-
-  // 1. JSON backup — now includes recipes and routines, which were previously
-  // missing entirely from this export despite being real, effort-built data.
-  // Also now includes Weight Phase History and the auto-switch settings -
-  // this data has become genuinely load-bearing (History target estimates,
-  // AI report framing, the auto-switch itself all depend on it) but was
-  // never actually captured by this "backup everything" export before.
-  download(
-    JSON.stringify(buildFullBackupPayload(), null, 2),
-    `maxhealth_backup_${dateStr}.json`,
-    'application/json'
-  );
-  // Also push to the server, not just Downloads - explicit button press,
-  // so this one reports success/failure rather than failing silently.
-  saveFullBackupToServer(false);
-
-  // 2. Nutrition CSV (master.csv format)
-  const nutritionRows = state.history
-    .filter(h => h.totals?.kcal > 0)
-    .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1)
-    .map(h => `${h.date}|${h.totals.kcal}|${h.totals.protein}|${h.totals.carbs}|${h.notes||''}`)
-    .join('\n');
+  download(jsonBackup, `maxhealth_backup_${dateStr}.json`, 'application/json');
   if (nutritionRows) download(nutritionRows, `master_${dateStr}.csv`, 'text/csv');
-
-  // 3. Combined CSV from cache
-  const combinedCache = localStorage.getItem('mh_combined_csv_cache');
-  if (combinedCache) download(combinedCache, `combined_${dateStr}.csv`, 'text/csv');
-
+  if (combinedCsv) download(combinedCsv, `combined_${dateStr}.csv`, 'text/csv');
   showToast(`Exporting ${count} file${count > 1 ? 's' : ''}… check Downloads`);
   localStorage.setItem('mh_last_export_nudge', new Date().toISOString().slice(0,10));
 }
@@ -17925,7 +17999,7 @@ function confirmRestoreFromBackup(dateStr) {
     <div style="background:var(--surface);border:1px solid rgba(168,85,247,0.3);border-radius:16px;padding:22px;max-width:400px;width:100%;">
       <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:#a855f7;margin-bottom:12px;">⚠ Replace all current data?</div>
       <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">
-        This will overwrite today's log, your full history, library, recipes and routines with the backup from <strong style="color:var(--text);">${dateStr}</strong>.<br><br>
+        This will overwrite today's log, your full history, library, recipes, routines, and any tracked supplements/symptoms/treatments with the backup from <strong style="color:var(--text);">${dateStr}</strong>.<br><br>
         Anything logged or changed since that backup was made — and isn't also in the backup itself — will be gone. This cannot be undone.
       </div>
       <div style="display:flex;gap:10px;">
@@ -17961,6 +18035,17 @@ async function executeRestoreFromBackup(dateStr) {
     if (backup.autoSwitchDays != null) localStorage.setItem('mh_autoswitch_days', backup.autoSwitchDays);
     if (backup.notifAutoSwitch != null) localStorage.setItem('mh_notif_autoswitch', backup.notifAutoSwitch); // was being backed up but never actually restored before this fix
     if (backup.notifActivityAutoSwitch != null) localStorage.setItem('mh_notif_activity_autoswitch', backup.notifActivityAutoSwitch);
+    // Supplements/symptoms/treatments (28/09/26) - now actually captured by
+    // buildFullBackupPayload() (see its own comment), so an older backup
+    // file simply won't have these keys at all (the != null guard leaves
+    // whatever's already configured on THIS device untouched in that case,
+    // same graceful-miss behaviour every other field here already has).
+    if (backup.supplementDefs != null) localStorage.setItem('mh_supplement_defs', backup.supplementDefs);
+    if (backup.supplementLog != null) localStorage.setItem('mh_supplement_log', backup.supplementLog);
+    if (backup.symptomDefs != null) localStorage.setItem('mh_symptom_defs', backup.symptomDefs);
+    if (backup.symptomLog != null) localStorage.setItem('mh_symptom_log', backup.symptomLog);
+    if (backup.treatmentDefs != null) localStorage.setItem('mh_treatment_defs', backup.treatmentDefs);
+    if (backup.treatmentLog != null) localStorage.setItem('mh_treatment_log', backup.treatmentLog);
     saveState();
 
     if (modal) modal.remove();
