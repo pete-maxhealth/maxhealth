@@ -33815,8 +33815,12 @@ function updateTrendsDayLabel() {
 }
 
 // ─── COMBINED.CSV IMPORT ─────────────────────────────────
-function importCombinedCSVText(text) {
-  // Import combined.csv from a text string (used by auto-load from local server)
+function importCombinedCSVText(text, silent) {
+  // Import combined.csv from a text string (used by auto-load from local
+  // server, and by the background staleness check in
+  // autoImportCombinedIfStale — silent=true there so a routine app open
+  // with genuinely new data on disk updates quietly rather than announcing
+  // itself the same way an explicit, user-initiated Sync does).
   const out    = document.getElementById('csvImportOutput');
   const status = document.getElementById('combinedImportStatus');
   if (!text || !text.trim()) { if(out) out.textContent = 'Empty response from server.'; return; }
@@ -33824,16 +33828,16 @@ function importCombinedCSVText(text) {
   const blob = new Blob([text], { type: 'text/csv' });
   const file = new File([blob], 'combined.csv', { type: 'text/csv' });
   const fakeInput = { files: [file] };
-  importCombinedCSV(fakeInput);
+  importCombinedCSV(fakeInput, silent);
 }
 
-function importCombinedCSV(input) {
+function importCombinedCSV(input, silent) {
   const file = input.files[0];
   if (!file) return;
   const out = document.getElementById('csvImportOutput');
   if (out) { out.className = 'output-box idle'; out.textContent = 'Reading file…'; }
   const reader = new FileReader();
-  reader.onload = function(e) { processCombinedText(e.target.result, false, out); };
+  reader.onload = function(e) { processCombinedText(e.target.result, !!silent, out); };
   reader.onerror = function() { if (out) { out.className = 'output-box error'; out.textContent = 'Error reading file — try again.'; } };
   reader.readAsText(file);
   input.value = '';
@@ -39326,6 +39330,7 @@ async function checkServer() {
       restoreStrengthFromServer();
       restoreSupplementsFromServer();
       restoreMissingHistoryDaysFromServer();
+      autoImportCombinedIfStale();
       renderDataImportCards();
       maybeShowHomeScreenTip();
       // Update mode badge
@@ -39476,6 +39481,48 @@ async function autoLoadCombined() {
     importCombinedCSVText(text);
   } catch(e) {
     showToast('Could not load combined.csv — try manually');
+  }
+}
+
+// Closes the real gap behind tonight's "Trends shows dashes despite
+// combined.csv on disk having real rows for those dates" report: the
+// pipeline (cron, or a manual `python update_health.py` run in Termux)
+// writes combined.csv straight to disk independently of whatever browser
+// tab happens to be open, and NOTHING previously reconnected the two
+// except a person manually tapping Sync (which also re-scans Download,
+// so it correctly reports "nothing found" and stops right there when
+// there's nothing new to fetch - even though the on-disk file already
+// moved on from what this tab has imported) or manually opening Wearable
+// History and tapping its auto-load button. A file already fully correct
+// on disk sat un-imported all night for exactly that reason.
+//
+// Called from checkServer()'s success path (genuine app startup / every
+// time the local server is confirmed reachable) rather than only from
+// doSync()'s completion — the same "on every real load, not just a
+// specific user action" fix already applied to
+// restoreMissingHistoryDaysFromServer() for master.csv's equivalent
+// staleness problem. Compares the freshly-fetched file against the
+// exact cache processCombinedText() itself trusts as "already imported"
+// (mh_combined_csv_cache) and only imports — silently, no toast — when
+// they actually differ, so a normal app open with nothing new stays
+// silent while one where the pipeline moved on since last picks it up
+// automatically, without waiting for the next manual Sync or a stale
+// Trends screen to be noticed and reported.
+async function autoImportCombinedIfStale() {
+  try {
+    const res = await fetch(`${MH_SERVER}/combined`);
+    if (!res.ok) return;
+    const text = await res.text();
+    if (!text || !text.trim()) return;
+    const cached = localStorage.getItem('mh_combined_csv_cache');
+    if (cached === text) return; // already imported, nothing to do
+    _syncedCsvText = text;
+    importCombinedCSVText(text, /*silent=*/true);
+  } catch(e) {
+    // Local server unreachable or a transient fetch error - not worth
+    // surfacing here, checkServer()'s own online/offline handling (and
+    // its retry) already covers that; this is a best-effort background
+    // reconciliation, not the primary sync path.
   }
 }
 
