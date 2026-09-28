@@ -11676,8 +11676,16 @@ function renderJSErrorLog() {
 // since Manual Entry is meant to work from any device (the whole point of
 // "1-button... for Apple users via cloud and for devices without data
 // export capabilities"), so its history shouldn't be stuck to whichever
-// browser happened to make each save. No clear button here to match: the
-// server already manages its own size, nothing here to clear.
+// browser happened to make each save.
+//
+// Each "save" entry gets its own "↩ Clear override" action - added 28/09/26
+// after Pete's own first live test showed a real need for one (pre-filled,
+// untouched fields were being resubmitted as manual overrides - fixed at
+// the form level now, but this is the way back for anything already saved,
+// his 2024-09-01 test included). IMPORTANT: read clear-manual-entry's own
+// real limits before assuming this restores the original device value -
+// it can't, only server.py's clear_manual_entry() docstring has the full
+// explanation, surfaced here in the confirm dialog too.
 async function renderManualEntryLog() {
   const out = document.getElementById('manualEntryLogOutput');
   if (!out) return;
@@ -11691,16 +11699,48 @@ async function renderManualEntryLog() {
       out.textContent = 'No manual entries saved yet.';
       return;
     }
-    out.textContent = log.slice().reverse().map((e, i) => {
+    out.innerHTML = log.slice().reverse().map((e, i) => {
       const ts = (e.timestamp || '').slice(0, 19).replace('T', ' ');
-      const changes = Object.entries(e.changes || {})
-        .map(([field, diff]) => `  ${field}: ${diff.from ?? '—'} → ${diff.to ?? '—'}`)
+      if (e.cleared) {
+        // A prior "clear override" action itself, logged for the same
+        // reason a save is - so the trail shows the full history, not just
+        // saves with no record anything was ever undone.
+        const fieldList = (e.cleared || []).join(', ') || '(none)';
+        return `#${log.length - i} — ${ts} — date ${e.date}\n  ↩ cleared: ${fieldList}`;
+      }
+      const changeFields = Object.keys(e.changes || {});
+      const changes = changeFields
+        .map(field => `  ${field}: ${e.changes[field].from ?? '—'} → ${e.changes[field].to ?? '—'}`)
         .join('\n');
-      return `#${log.length - i} — ${ts} — date ${e.date}\n${changes || '  (no fields changed)'}`;
+      const clearBtn = changeFields.length
+        ? ` <span onclick="clearManualEntryForDate('${e.date}')" style="cursor:pointer;color:#ff5e5e;text-decoration:underline;">[↩ clear override]</span>`
+        : '';
+      return `#${log.length - i} — ${ts} — date ${e.date}${clearBtn}\n${changes || '  (no fields changed)'}`;
     }).join('\n\n');
   } catch(e) {
     out.textContent = 'Could not load manual entry log — server unreachable.';
   }
+}
+
+function clearManualEntryForDate(date) {
+  appConfirm(
+    `Clear the manual entry for ${date}?\n\nThis removes it from Manual Entry so it stops being applied, and reopens that date's fields to your devices on a future sync. It does NOT change the figure currently showing in your data right now — combined.csv isn't automatically recomputed, since the original device export for that date has already been processed and archived. If you need the exact original device value back, that's only recoverable from a timestamped backup in data/backup/ on the device, not through this button.`,
+    async () => {
+      try {
+        const res = await fetch(`${MH_SERVER}/clear-manual-entry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Clear failed');
+        showToast(`Manual entry for ${date} cleared ✓`);
+        await renderManualEntryLog();
+      } catch(e) {
+        showToast('Could not clear manual entry');
+      }
+    }
+  );
 }
 
 function clearJSErrorLog() {

@@ -17,6 +17,7 @@ Endpoints:
   GET  /manual-entry?date=YYYY-MM-DD — held (combined.csv) + manual values for a date (Manual Entry screen)
   POST /save-manual-entry — save a manual entry for a date, triggers a pipeline run
   POST /save-manual-entries-bulk — save many dates at once (CSV template upload), one pipeline run
+  POST /clear-manual-entry — undo a manual override (date, fields?) — see its own docstring for real limits
   GET  /manual-entry-log  — audit trail of manual entry saves (capped, self-trimming)
 
 Usage:
@@ -105,6 +106,12 @@ MANUAL_ENTRY_JSON = os.path.join(INBOX_DIR, 'manual_entry.json')
 # say" or "when was this last changed" on its own.
 MANUAL_ENTRY_LOG_JSON = os.path.join(DATA_DIR, 'manual_entry_log.json')
 MAX_MANUAL_LOG_ENTRIES = 200  # trimmed on every write - see save_manual_entry()
+# update_health.py's own per-date, per-field source attribution (same path
+# it independently derives as FIELD_SOURCES_FILE — needs to stay in sync,
+# same caveat as PREFS_JSON above). Read/cleared by clear_manual_entry()
+# below so "undo" can actually reopen a field to a future real device sync,
+# not just stop showing a stale manual value in this screen.
+FIELD_SOURCES_JSON = os.path.join(DATA_DIR, 'field_sources.json')
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
@@ -530,6 +537,29 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     run_pipeline(device='manual')
                     triggered = True
                 self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'pipeline_triggered': triggered})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
+        # ── POST /clear-manual-entry — undo a manual override ──────────────────
+        # Body: {date, fields?} - omit fields to clear the whole date. Read
+        # clear_manual_entry()'s own docstring before assuming this reverts
+        # combined.csv's value - it doesn't, and can't: the pipeline never
+        # re-reads a device's already-archived export to recompute a field.
+        # This only stops the manual value being re-applied/re-offered going
+        # forward and re-opens that field to a future real sync.
+        if path == '/clear-manual-entry':
+            try:
+                date_str = (body.get('date') or '').strip()
+                if not date_str:
+                    self.send_json({'error': 'date is required'}, 400)
+                    return
+                fields = body.get('fields')  # optional list — None/empty clears the whole date
+                removed, entry_fully_removed = clear_manual_entry(date_str, fields)
+                if not removed:
+                    self.send_json({'error': f'No manual entry found for {date_str}'}, 404)
+                    return
+                self.send_json({'status': 'ok', 'date': date_str, 'cleared': removed, 'entry_fully_removed': entry_fully_removed})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
             return
@@ -1235,6 +1265,108 @@ def save_manual_entry(date_str, fields):
         json.dump(log_entries, f, indent=2)
 
     return cleaned
+
+def clear_manual_entry(date_str, fields=None):
+    """
+    Removes a date's manual override — either specific fields (`fields` given)
+    or the whole entry (`fields` None/empty).
+
+    IMPORTANT, real limitation (found via Pete's own first live test,
+    28/09/26): this can only do two things —
+      1. Remove the value from MANUAL_ENTRY_JSON, so it's no longer offered
+         as a manual override on the next pipeline run and no longer
+         pre-fills the Manual Entry form as "your last manual entry".
+      2. Reset FIELD_SOURCES_JSON's attribution for that field back to
+         unknown, so a FUTURE real device sync for that date is free to set
+         it again (merge_with_precedence() in update_health.py treats
+         unknown attribution as priority 999 — always safely overwritable).
+    It CANNOT restore whatever value/source combined.csv held before the
+    manual save. update_health.py's pipeline is forward-merge-only — it
+    only ever reads a device's CURRENT inbox export, then archives it
+    (archive_inbox()); it never re-reads historical exports to "recompute"
+    a field, so there is no live source left to revert to for a date whose
+    real export has already been processed and archived. The only way back
+    to the exact prior value is a timestamped combined.csv snapshot from
+    data/backup/ (backup_files() takes one before every pipeline write) —
+    this function doesn't touch those, on purpose, so they stay a reliable
+    fallback regardless of what this does.
+
+    Returns (removed_fields, entry_fully_removed).
+    """
+    entries = load_manual_entries()
+    target = None
+    kept = []
+    for entry in entries:
+        if entry.get('date') == date_str:
+            target = entry
+            continue
+        kept.append(entry)
+
+    if target is None:
+        return [], False
+
+    if fields:
+        removed = [f for f in fields if f in target and f != 'date']
+        remaining = {k: v for k, v in target.items() if k == 'date' or k not in fields}
+        entry_fully_removed = len(remaining) <= 1  # only 'date' left
+        if not entry_fully_removed:
+            kept.append(remaining)
+    else:
+        removed = [k for k in target if k != 'date']
+        entry_fully_removed = True
+
+    with open(MANUAL_ENTRY_JSON, 'w', encoding='utf-8') as f:
+        json.dump(kept, f, indent=2)
+
+    # Reset field_sources.json attribution for the cleared fields, so a
+    # future real sync isn't still blocked by a manual claim that no longer
+    # exists. Missing/corrupt file is treated as nothing to clear - same
+    # "unknown is fine, always overwritable" fallback update_health.py's own
+    # merge_with_precedence() already uses for untracked rows.
+    try:
+        if os.path.exists(FIELD_SOURCES_JSON):
+            with open(FIELD_SOURCES_JSON, 'r', encoding='utf-8') as f:
+                field_sources = json.load(f)
+            date_sources = field_sources.get(date_str, {})
+            changed = False
+            for field in removed:
+                if date_sources.get(field) == 'manual':
+                    del date_sources[field]
+                    changed = True
+            if changed:
+                if date_sources:
+                    field_sources[date_str] = date_sources
+                else:
+                    field_sources.pop(date_str, None)
+                tmp_path = FIELD_SOURCES_JSON + '.tmp'
+                with open(tmp_path, 'w', encoding='utf-8') as f:
+                    json.dump(field_sources, f, indent=2, sort_keys=True)
+                os.replace(tmp_path, FIELD_SOURCES_JSON)
+    except Exception:
+        pass  # best-effort - the manual_entry.json removal above is the part that matters most
+
+    # Audit trail — same log, so "cleared" shows up alongside "changed"
+    # rather than vanishing from the history with no record it happened.
+    log_entries = []
+    if os.path.exists(MANUAL_ENTRY_LOG_JSON):
+        try:
+            with open(MANUAL_ENTRY_LOG_JSON, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                log_entries = loaded
+        except Exception:
+            log_entries = []
+    log_entries.append({
+        'timestamp': datetime.now().isoformat(),
+        'date': date_str,
+        'cleared': removed,
+    })
+    if len(log_entries) > MAX_MANUAL_LOG_ENTRIES:
+        log_entries = log_entries[-MAX_MANUAL_LOG_ENTRIES:]
+    with open(MANUAL_ENTRY_LOG_JSON, 'w', encoding='utf-8') as f:
+        json.dump(log_entries, f, indent=2)
+
+    return removed, entry_fully_removed
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
