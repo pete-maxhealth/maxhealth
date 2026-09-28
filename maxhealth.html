@@ -7326,12 +7326,32 @@ const GENERIC_SECTION_IDS = {
     'imp-adddevice': ['title-imp-adddevice', 'imp-adddevice-wrap'],
     'imp-manual': ['title-imp-manual', 'imp-manual-wrap'],
   },
+  // Trends → "Today" window's own daily breakdown (renderDailyView()) -
+  // deliberately a SEPARATE scope from 'trends' above, not folded into it.
+  // 3 of these 7 sections (meals/weight/bodycomp/sleepdetail - 4, really)
+  // only render on days that actually have that data, so the live section
+  // count genuinely varies day to day. getGenericOrder() already falls back
+  // to default order whenever the live set doesn't match what's stored
+  // (by design, elsewhere in this file) - keeping this in its own scope
+  // means that natural day-to-day reset stays contained to just these 7
+  // sections, and never touches the always-stable Journey/Patterns/
+  // Wellness/TopFoods/DayOfWeek order in 'trends' itself.
+  dailyview: {
+    'dv-activity':    ['title-dv-activity', 'dv-activity-wrap'],
+    'dv-sleep':       ['title-dv-sleep', 'dv-sleep-wrap'],
+    'dv-nutrition':   ['title-dv-nutrition', 'dv-nutrition-wrap'],
+    'dv-meals':       ['title-dv-meals', 'dv-meals-wrap'],
+    'dv-weight':      ['title-dv-weight', 'dv-weight-wrap'],
+    'dv-bodycomp':    ['title-dv-bodycomp', 'dv-bodycomp-wrap'],
+    'dv-sleepdetail': ['title-dv-sleepdetail', 'dv-sleepdetail-wrap'],
+  },
 };
 const GENERIC_DEFAULT_ORDER = {
   trends: ['trends-journey', 'trends-patterns', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
+  dailyview: ['dv-activity', 'dv-sleep', 'dv-nutrition', 'dv-meals', 'dv-weight', 'dv-bodycomp', 'dv-sleepdetail'],
 };
 
 function makeContainerReorderable(containerEl, scopeKey) {
@@ -7380,6 +7400,12 @@ function makeContainerReorderable(containerEl, scopeKey) {
 // one of the 4 scopes' HTML (trends already has its own hand-placed
 // trendCardsRestoreStrip for the OTHER hide system - metric cards - so a
 // distinct id here keeps the two from colliding).
+// 'dailyview' (Trends → Today's daily breakdown, 28/09/26) is flat already -
+// containerEl passed for it IS the real list (#trendsDailyView), not an
+// outer subview one level above it like #view-trends is for the other
+// scopes - so it needs the one-level-down assumption skipped, not applied.
+const GENERIC_FLAT_SCOPES = ['dailyview'];
+
 function ensureGenericRestoreStrip(containerEl, scopeKey) {
   const id = 'genericRestoreStrip-' + scopeKey;
   if (document.getElementById(id)) return;
@@ -7389,7 +7415,7 @@ function ensureGenericRestoreStrip(containerEl, scopeKey) {
   // reportsScroll, manageScroll, importScroll). Inserting into containerEl
   // itself would place the strip outside that scroll area, above it,
   // rather than as the first item scrolling with everything else.
-  const scrollEl = containerEl.firstElementChild || containerEl;
+  const scrollEl = GENERIC_FLAT_SCOPES.includes(scopeKey) ? containerEl : (containerEl.firstElementChild || containerEl);
   const strip = document.createElement('div');
   strip.id = id;
   scrollEl.insertBefore(strip, scrollEl.firstChild);
@@ -34389,15 +34415,17 @@ function renderDailyView(data) {
     return div;
   }
 
-  function makeSection(title, rows, drillMetric) {
+  function makeSection(title, rows, drillMetric, key) {
     const sec = document.createElement('div');
     sec.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;';
+    if (key) { sec.className = 'card-unit'; sec.id = key + '-wrap'; }
     if (drillMetric) {
       sec.style.cursor = 'pointer';
       sec.onclick = () => openMetricDrill(drillMetric);
     }
     const drillArrow = drillMetric ? '<span style="color:var(--accent);font-size:11px;font-family:\'Syne\',sans-serif;font-weight:700;">VIEW CHART →</span>' : '';
-    sec.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">' + title + '</div>' + drillArrow + '</div>';
+    const titleIdAttr = key ? ' id="title-' + key + '"' : '';
+    sec.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><div' + titleIdAttr + ' style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">' + title + '</div>' + drillArrow + '</div>';
     rows.forEach(r => sec.appendChild(makeRow(r[0], r[1], r[2], r[3], r[4])));
     return sec;
   }
@@ -34413,7 +34441,7 @@ function renderDailyView(data) {
     ['\uD83D\uDC9C', 'HRV', fmt(d.hrv, ' ms'), 'var(--text)', 'hrv'],
     ['\uD83E\uDEB1', 'SpO2', fmt(d.spo2, '%'), col(d.spo2, 97, 95), 'spo2'],
     ['\uD83D\uDD25', 'Active Cal', fmt(d.calories_active, ' kcal'), 'var(--text)'],
-  ]));
+  ], null, 'dv-activity'));
 
   // Sleep
   const sleepSec = makeSection('Sleep', [
@@ -34422,7 +34450,7 @@ function renderDailyView(data) {
     ['\uD83D\uDD35', 'Light', fmtTime(d.sleep_light), 'var(--blue)'],
     ['\uD83D\uDFE2', 'REM', fmtTime(d.sleep_rem), 'var(--accent)'],
     ['\u2B1C', 'Awake', fmtTime(d.sleep_wake), 'var(--text3)'],
-  ]);
+  ], null, 'dv-sleep');
   el.appendChild(sleepSec);
 
   // Nutrition
@@ -34436,7 +34464,7 @@ function renderDailyView(data) {
     ['\uD83D\uDCAA', 'Protein', prot ? prot + 'g / ' + targets.protein + 'g' : '\u2014', prot >= targets.protein ? 'var(--accent)' : 'var(--yellow)'],
     ['\uD83E\uDD51', 'Fat', fat ? fat + 'g / ' + fatTgt + 'g' : '\u2014', fat >= fatTgt * 0.7 ? 'var(--accent)' : fat > 0 ? 'var(--yellow)' : 'var(--text3)'],
     ['\uD83C\uDF3E', 'Carbs', carbs ? carbs + 'g / ' + targets.carbs + 'g ceiling' : '\u2014', carbs > 0 && carbs <= targets.carbs ? 'var(--accent)' : carbs > targets.carbs ? 'var(--red)' : 'var(--text3)'],
-  ]));
+  ], null, 'dv-nutrition'));
 
   // Meal breakdown - which of this day's logged meals actually drove its
   // totals, ranked by calorie contribution. Built straight from this day's
@@ -34447,8 +34475,10 @@ function renderDailyView(data) {
     const dayKcalTotal = kcal || d.log.reduce((a,e) => a + (e.kcal||0), 0) || 1;
     const sortedMeals = [...d.log].sort((a,b) => (b.kcal||0) - (a.kcal||0));
     const mealsSec = document.createElement('div');
+    mealsSec.className = 'card-unit';
+    mealsSec.id = 'dv-meals-wrap';
     mealsSec.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;';
-    mealsSec.innerHTML = '<div style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Meals \u2014 by calorie contribution</div>'
+    mealsSec.innerHTML = '<div id="title-dv-meals" style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Meals \u2014 by calorie contribution</div>'
       + sortedMeals.map(e => {
           const pct = dayKcalTotal > 0 ? Math.round((e.kcal||0) / dayKcalTotal * 100) : 0;
           const name = (e.description || e.items?.[0]?.name || 'Meal').replace(/</g,'&lt;');
@@ -34467,7 +34497,7 @@ function renderDailyView(data) {
   if (d.weight && d.weight > 0) {
     el.appendChild(makeSection('Weight', [
       ['\u2696\uFE0F', 'Weight', d.weight + ' kg', d.weight >= WEIGHT_TARGET_LOW() && d.weight <= WEIGHT_TARGET_HIGH() ? 'var(--accent)' : 'var(--yellow)'],
-    ]));
+    ], null, 'dv-weight'));
   }
 
   // Body Composition
@@ -34477,7 +34507,7 @@ function renderDailyView(data) {
       ['\uD83D\uDCAA', 'Muscle %', d.muscle_pct ? d.muscle_pct.toFixed(1) + '%' : '\u2014', d.muscle_pct ? (d.muscle_pct > 45 ? 'var(--accent)' : 'var(--yellow)') : 'var(--text3)'],
       ['\uD83E\uDDB4', 'Bone mass', d.bone_mass_kg ? d.bone_mass_kg.toFixed(2) + ' kg' : '\u2014', 'var(--text)'],
       ['\uD83D\uDCA7', 'Hydration', d.hydration_kg ? d.hydration_kg.toFixed(1) + ' kg' : '\u2014', 'var(--blue)'],
-    ]));
+    ], null, 'dv-bodycomp'));
   }
 
   // Sleep efficiency
@@ -34487,8 +34517,19 @@ function renderDailyView(data) {
       ['\uD83C\uDF05', 'Wake time', d.wake_time ? d.wake_time : '\u2014', 'var(--text2)'],
       ['\uD83D\uDCCA', 'Efficiency', d.sleep_efficiency ? d.sleep_efficiency.toFixed(0) + '%' : '\u2014', d.sleep_efficiency ? (d.sleep_efficiency >= 85 ? 'var(--accent)' : d.sleep_efficiency >= 75 ? 'var(--yellow)' : 'var(--red)') : 'var(--text3)'],
       ['\uD83D\uDD07', 'Snoring', d.snoring_min ? d.snoring_min + ' min' : '\u2014', d.snoring_min > 30 ? 'var(--red)' : 'var(--text3)'],
-    ]));
+    ], null, 'dv-sleepdetail'));
   }
+
+  // Hide/reorder controls for this day's sections - a fresh scope
+  // ('dailyview', not 'trends') because 4 of these 7 sections only appear
+  // some days (meals/weight/bodycomp/sleepdetail are all conditional above),
+  // so the live key set varies day to day. Folding that into the trends
+  // scope would let a day with fewer sections silently reset the whole
+  // scope's stored order (see getGenericOrder()'s stale-order fallback) -
+  // keeping it separate contains that instability to just this view.
+  // Runs on every call since el.innerHTML = '' above wipes any previous
+  // injection (the restore-strip/handle elements), not just once.
+  makeContainerReorderable(el, 'dailyview');
 }
 
 
