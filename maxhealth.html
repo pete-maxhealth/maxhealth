@@ -4818,7 +4818,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.803</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.804</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5835,7 +5835,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.803'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.804'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7462,7 +7462,6 @@ const GENERIC_SECTION_IDS = {
   dailyview: {
     'dv-activity':    ['title-dv-activity', 'dv-activity-wrap'],
     'dv-sleep':       ['title-dv-sleep', 'dv-sleep-wrap'],
-    'dv-nutrition':   ['title-dv-nutrition', 'dv-nutrition-wrap'],
     'dv-meals':       ['title-dv-meals', 'dv-meals-wrap'],
     'dv-weight':      ['title-dv-weight', 'dv-weight-wrap'],
     'dv-bodycomp':    ['title-dv-bodycomp', 'dv-bodycomp-wrap'],
@@ -7474,7 +7473,7 @@ const GENERIC_DEFAULT_ORDER = {
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
-  dailyview: ['dv-activity', 'dv-sleep', 'dv-nutrition', 'dv-meals', 'dv-weight', 'dv-bodycomp', 'dv-sleepdetail'],
+  dailyview: ['dv-activity', 'dv-sleep', 'dv-meals', 'dv-weight', 'dv-bodycomp', 'dv-sleepdetail'],
 };
 
 function makeContainerReorderable(containerEl, scopeKey) {
@@ -34693,37 +34692,13 @@ function renderDailyView(data) {
   ], null, 'dv-sleep');
   el.appendChild(sleepSec);
 
-  // Nutrition
+  // Nutrition card deliberately removed (28/09/2026, Pete's call) - it only
+  // ever showed on Trends -> Today, duplicating the Today/dashboard tab's
+  // own calorie/protein/fat/carbs display, and kept drifting out of sync
+  // with it (two separate fixes needed this same session just to make the
+  // two screens agree). kcal is still needed below for the meal-breakdown
+  // section's fallback total, so that one line stays.
   const kcal = d.totals && d.totals.kcal ? d.totals.kcal : 0;
-  const prot = d.totals && d.totals.protein ? d.totals.protein : 0;
-  const carbs = d.totals && d.totals.carbs != null ? getEffectiveCarbsForDay(d) : 0;
-  const fat = d.totals && d.totals.fat ? d.totals.fat : 0;
-  const fatTgt = parseInt(localStorage.getItem('mh_target_fat')) || 247;
-  // Calorie TARGET here must match the Today/dashboard tab's own
-  // adjustedKcalTarget (updateDashboard, ~line 22318) - that one adds
-  // today's earned exercise/steps calorie credit on top of the base
-  // target, this one previously never did, so the two screens showed two
-  // different targets for the exact same logged intake (28/09/2026 - Pete
-  // spotted this: dashboard showed "3400 (+X)", this card just "3400").
-  // Only valid for the day actually being TODAY - getActivities()/
-  // getNonWalkingStepsToday() both read live, current-day state and would
-  // silently misattribute today's activity credit onto a past day being
-  // browsed via the day picker. For a past day, use that day's own stored
-  // d.exercises (same field the calorieDrift pattern-check already reads
-  // historically) instead - no historical equivalent exists for the non-
-  // walking-steps credit, so that part is simply omitted for past days,
-  // same limitation the rest of the app already accepts for that figure.
-  const isViewingToday = _trendsDayOffset === 0;
-  const activityKcalCredit = isViewingToday
-    ? (getActivities() || []).reduce((s, a) => s + calcActivityKcal(a), 0) + calcNonWalkingStepsKcal(getNonWalkingStepsToday().remainder)
-    : (d.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0);
-  const kcalTarget = (targets?.kcal || 0) + activityKcalCredit;
-  el.appendChild(makeSection('Nutrition', [
-    ['\uD83D\uDD25', 'Calories', kcal ? kcal.toLocaleString() + ' / ' + (kcalTarget||'?') + ' kcal' + (activityKcalCredit > 0 ? ' (+' + Math.round(activityKcalCredit) + ')' : '') : '\u2014', col(kcal, kcalTarget * 0.9, kcalTarget * 0.7)],
-    ['\uD83D\uDCAA', 'Protein', prot ? prot + 'g / ' + targets.protein + 'g' : '\u2014', prot >= targets.protein ? 'var(--accent)' : 'var(--yellow)'],
-    ['\uD83E\uDD51', 'Fat', fat ? fat + 'g / ' + fatTgt + 'g' : '\u2014', fat >= fatTgt * 0.7 ? 'var(--accent)' : fat > 0 ? 'var(--yellow)' : 'var(--text3)'],
-    ['\uD83C\uDF3E', 'Carbs', carbs ? carbs + 'g / ' + targets.carbs + 'g ceiling' : '\u2014', carbs > 0 && carbs <= targets.carbs ? 'var(--accent)' : carbs > targets.carbs ? 'var(--red)' : 'var(--text3)'],
-  ], null, 'dv-nutrition'));
 
   // Meal breakdown - which of this day's logged meals actually drove its
   // totals, ranked by calorie contribution. Built straight from this day's
