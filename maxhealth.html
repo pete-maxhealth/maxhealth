@@ -35262,6 +35262,29 @@ function renderManualFieldPicker() {
   el.innerHTML = coreRow + groups;
 }
 
+// Real bug found via Pete's own first test (28/09/26): a pre-filled field
+// showing "already recorded" data — never actually typed into — was being
+// resubmitted on Save exactly as if it had been a genuine manual correction.
+// The value didn't change, but the SOURCE attribution silently did: that
+// date's weight/steps/etc. became manual-sourced forever after, permanently
+// outranking the real device in every future precedence resolution, even
+// though nothing about the reading was actually edited. The help text always
+// promised "only the fields you've actually filled in are written" - this
+// is what makes that literally true, via real dirty-tracking rather than
+// "is the box currently non-empty" (which pre-filled boxes always are).
+//
+// _manualFieldsTouched holds the keys of fields the person has actually
+// typed into since the form was last (re)loaded for a date - reset on every
+// loadManualEntryForDate() call, populated by markManualFieldTouched() on
+// each input's own oninput handler. Only these are ever sent to the server.
+let _manualFieldsTouched = new Set();
+
+function markManualFieldTouched(key) {
+  _manualFieldsTouched.add(key);
+  const el = document.getElementById('manualField_' + key);
+  if (el) el.classList.add('manual-field-touched');
+}
+
 // Renders one input per field in the person's saved template, grouped
 // visually the same way the picker groups them, so the form's own layout
 // stays legible even with every field switched on. Replaces the old fixed
@@ -35274,25 +35297,40 @@ function renderManualEntryFields() {
     const meta = MANUAL_FIELD_META[key];
     const elId = 'manualField_' + key;
     const labelText = meta.unit ? `${meta.label} (${meta.unit})` : meta.label;
+    const onInput = `oninput="markManualFieldTouched('${key}')"`;
     const input = meta.type === 'time'
-      ? `<input type="time" id="${elId}" class="modal-input" style="margin-bottom:0;">`
-      : `<input type="number" step="${meta.step || 1}" id="${elId}" class="modal-input" style="margin-bottom:0;">`;
+      ? `<input type="time" id="${elId}" class="modal-input" style="margin-bottom:0;" ${onInput}>`
+      : `<input type="number" step="${meta.step || 1}" id="${elId}" class="modal-input" style="margin-bottom:0;" ${onInput}>`;
     return `<div><label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px;">${labelText}</label>${input}</div>`;
   }).join('');
+  // Visual cue so it's obvious BEFORE saving what will actually be written -
+  // a pre-filled ("already recorded") field looks visibly different from one
+  // that's been typed into, rather than looking identical and silently
+  // meaning two different things.
+  if (!document.getElementById('manualFieldTouchedStyle')) {
+    const style = document.createElement('style');
+    style.id = 'manualFieldTouchedStyle';
+    style.textContent = '#manualEntryFieldsGrid input.manual-field-touched { border-color: var(--accent) !important; background: rgba(45,235,143,0.08) !important; }';
+    document.head.appendChild(style);
+  }
 }
 
 // Picking a date pre-fills the form from whatever's already on record for
-// that day so the person only has to type what they're actually changing,
-// not re-enter everything — "held" is combined.csv's already-merged row
-// (GET /manual-entry on server.py), "manual" is this date's own prior
-// manual entry if one exists (server.py's manual_entry.json), which takes
-// priority as the pre-fill source since it's what a person most recently
-// confirmed by hand, ahead of a device's possibly-since-corrected reading.
+// that day so the person can SEE what's already known without having to
+// retype it — but pre-filling is display only. Nothing shown this way counts
+// as "touched" (see _manualFieldsTouched above), so simply hitting Save
+// without editing anything sends nothing and changes nothing. "held" is
+// combined.csv's already-merged row (GET /manual-entry on server.py),
+// "manual" is this date's own prior manual entry if one exists (server.py's
+// manual_entry.json), which takes priority as the pre-fill source since
+// it's what a person most recently confirmed by hand, ahead of a device's
+// possibly-since-corrected reading.
 async function loadManualEntryForDate(date) {
   const wrap = document.getElementById('manualEntryFieldsWrap');
   const note = document.getElementById('manualEntrySourceNote');
   if (!date) { if (wrap) wrap.style.display = 'none'; return; }
   renderManualEntryFields();
+  _manualFieldsTouched = new Set(); // fresh date load — nothing's been typed into yet
   const fields = _manualTemplateFields || loadManualTemplateFields();
 
   const setField = (key, val) => {
@@ -35320,9 +35358,9 @@ async function loadManualEntryForDate(date) {
       const hasManual = Object.keys(manual).some(k => k !== 'date' && manual[k] != null);
       const hasHeld = Object.keys(held).some(k => held[k] != null && held[k] !== '');
       if (hasManual) {
-        note.textContent = 'Showing your last manual entry for this date — edit and save to update it.';
+        note.textContent = 'Showing your last manual entry for this date. These fields are pre-filled for reference only — nothing is re-saved unless you actually edit it (edited fields highlight green).';
       } else if (hasHeld) {
-        note.textContent = 'Showing values already recorded for this date from your devices — edit any field to override it.';
+        note.textContent = 'Showing values already recorded for this date from your devices, for reference only — nothing is re-saved unless you actually edit a field (edited fields highlight green).';
       } else {
         note.textContent = 'No data recorded for this date yet — enter what you have.';
       }
@@ -35336,13 +35374,17 @@ async function loadManualEntryForDate(date) {
   }
 }
 
-// Reads every field in the current template from the form, converting
-// display units back to combined.csv's own storage units (only
-// sleep_duration needs this - see MANUAL_FIELD_META's 'store' flag).
+// Reads ONLY fields the person actually typed into (_manualFieldsTouched) -
+// a pre-filled, untouched field is never sent, however "full" its box looks,
+// so simply viewing what's already recorded and hitting Save can never
+// silently reassign that date's source attribution. Converts display units
+// back to combined.csv's own storage units (only sleep_duration needs this -
+// see MANUAL_FIELD_META's 'store' flag).
 function readManualEntryFormValues() {
   const fields = _manualTemplateFields || loadManualTemplateFields();
   const out = {};
   for (const key of fields) {
+    if (!_manualFieldsTouched.has(key)) { out[key] = null; continue; }
     const meta = MANUAL_FIELD_META[key];
     const el = document.getElementById('manualField_' + key);
     if (!el || el.value === '' || el.value == null) { out[key] = null; continue; }
