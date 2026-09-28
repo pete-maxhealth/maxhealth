@@ -13,6 +13,7 @@ Endpoints:
   GET  /sync              — full sync: move exports from Download, run pipeline, serve combined.csv
   GET  /inbox             — list files in inbox
   GET  /pattern-signals   — Day 2 signals for wearables (meal windows, sleep, activity, HRV)
+  POST /save-precedence   — merge source_precedence into pipeline_prefs.json (Settings → Device Precedence)
 
 Usage:
   cd /storage/emulated/0/maxhealth/app/maxhealth
@@ -79,6 +80,12 @@ SUPPLEMENTS_CSV = os.path.join(TABLES_DIR, 'supplements.csv')
 RECIPES_CSV     = os.path.join(TABLES_DIR, 'recipes.csv')
 ROUTINES_CSV    = os.path.join(TABLES_DIR, 'routines.csv')
 STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
+# Same file update_health.py's own PREFS_FILE resolves to — both derive
+# from the same MaxHealth root (this file's ROOT_DIR two levels up from
+# app/maxhealth/, update_health.py's BASE one level up from app/), so this
+# is deliberately not re-derived independently; a change to either path
+# scheme needs both updated together or they'll silently diverge.
+PREFS_JSON      = os.path.join(DATA_DIR, 'pipeline_prefs.json')
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
@@ -395,6 +402,41 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             body = json.loads(raw) if raw else {}
         except Exception:
             self.send_json({'error': 'Invalid JSON body'}, 400)
+            return
+
+        # ── POST /save-precedence — merge source_precedence into pipeline_prefs.json ──
+        # The Settings → Device Precedence screen previously only wrote to the
+        # browser's own localStorage, which update_health.py's load_prefs()
+        # has no access to at all — every reorder made there was silently
+        # doing nothing to real syncs. This is the missing other half: the
+        # one place a browser save actually reaches the file the pipeline's
+        # get_precedence() reads. Merges rather than overwrites pipeline_prefs.json
+        # wholesale, since load_prefs()'s own docstring ("source precedence
+        # etc.") leaves room for other keys to live in this same file later.
+        if path == '/save-precedence':
+            try:
+                incoming = body.get('source_precedence', {})
+                if not isinstance(incoming, dict):
+                    self.send_json({'error': 'source_precedence must be an object'}, 400)
+                    return
+                os.makedirs(DATA_DIR, exist_ok=True)
+                prefs = {}
+                if os.path.exists(PREFS_JSON):
+                    try:
+                        with open(PREFS_JSON, 'r', encoding='utf-8') as f:
+                            prefs = json.load(f)
+                    except Exception:
+                        prefs = {}  # corrupt/unreadable existing file — don't let it block a fresh save
+                existing_prec = prefs.get('source_precedence', {})
+                if not isinstance(existing_prec, dict):
+                    existing_prec = {}
+                existing_prec.update(incoming)
+                prefs['source_precedence'] = existing_prec
+                with open(PREFS_JSON, 'w', encoding='utf-8') as f:
+                    json.dump(prefs, f, indent=2)
+                self.send_json({'status': 'ok', 'source_precedence': existing_prec})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
             return
 
         # ── POST /save-nutrition — save a single day row ──────────────────────

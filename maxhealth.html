@@ -4415,9 +4415,9 @@
     <div class="section-title" id="title-set-deviceprec" style="cursor:pointer;" onclick="toggleSection('set-deviceprec','set-deviceprec-wrap','set-deviceprec-icon')">Device Precedence <span id="set-deviceprec-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-deviceprec-wrap">
     <div class="settings-card">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Priority when two devices report the same metric<span onclick="const el=document.getElementById('help-deviceprec');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="help-deviceprec" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">When two devices provide data for the same metric on the same day, the pipeline uses this priority. Save to download a config file — copy it to /storage/emulated/0/maxhealth/app/data/ for the pipeline to use.</span></div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Priority order when more than one device reports the same metric on the same day<span onclick="const el=document.getElementById('help-deviceprec');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="help-deviceprec" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">▲▼ moves a device up or down each metric's own list. The pipeline tries each source in order and uses the first one that actually has data for that day and field — a lower device only fills in when everything above it is missing, not just different. Saves automatically to your phone's server as you reorder — takes effect from the next sync, no manual file copying needed.</span></div>
       <div id="precedenceEditor"></div>
-      <div style="margin-top:8px;"><span onclick="const el=document.getElementById('help-deviceprecsave');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;">?</span><span id="help-deviceprecsave" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">Changes take effect on next sync. Re-import combined.csv after syncing.</span></div>
+      <div style="margin-top:8px;"><span onclick="const el=document.getElementById('help-deviceprecsave');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;">?</span><span id="help-deviceprecsave" style="display:none;font-size:12px;color:var(--text3);line-height:1.6;margin-top:6px;">Changes take effect on the next sync. A device you add yourself (via "+ Add a new device") can be reordered here for reference, but the pipeline only recognises RingConn, Withings, Zepp/Amazfit, Garmin, Health Connect and Manual — anything else is skipped when saving, without affecting the rest of that metric's order.</span></div>
     </div>
     </div>
 
@@ -33792,15 +33792,59 @@ const PRECEDENCE_METRICS = [
   { key: 'sleep_duration', label: 'Sleep' },
   { key: 'weight', label: 'Weight' },
 ];
-const KNOWN_DEVICES = ['RingConn', 'Withings', 'Zepp/Amazfit', 'Garmin', 'Auto (pipeline default)'];
+// This editor's own keys (hr_avg, sleep_duration) don't match
+// update_health.py's DEFAULT_PRECEDENCE category names (hr, sleep) -
+// genuinely different vocabularies (this editor's keys line up with
+// PRECEDENCE_METRICS/combined.csv field names elsewhere in the app; the
+// pipeline's are its own metric-category names covering several fields
+// each - see METRIC_FIELDS in update_health.py). Translated only at the
+// point of writing pipeline_prefs.json in savePrecedence(), so
+// localStorage and the rendered UI keep using this editor's own key names
+// throughout, and get_precedence()'s `if metric in prec` check (which
+// silently no-ops on an unrecognised key) always sees a name it expects.
+const PRECEDENCE_KEY_TO_PIPELINE_METRIC = {
+  steps: 'steps', hr_avg: 'hr', hrv: 'hrv', spo2: 'spo2',
+  sleep_duration: 'sleep', weight: 'weight',
+};
+// Genuine gap raised directly: this used to be one <select> per metric, so
+// only position 1 could ever be chosen — no way to say "RingConn, then
+// Zepp, then Health Connect" the way the actual pipeline (update_health.py
+// DEFAULT_PRECEDENCE) already works internally, field by field, trying
+// each source in order until one has data for that day. This editor now
+// stores and edits the SAME shape: a full ordered list per metric, not a
+// single value.
+//
+// 'Health Connect' and 'Manual' added to the orderable list itself (they
+// were real pipeline sources before this fix, just not selectable/
+// reorderable here) - raised directly, both wanted as genuine ordered
+// entries rather than an implicit always-last fallback.
+const KNOWN_DEVICES = ['RingConn', 'Withings', 'Zepp/Amazfit', 'Garmin', 'Health Connect', 'Manual'];
+// Maps this editor's display names to update_health.py's own source keys
+// (DEFAULT_PRECEDENCE / SOURCE_FIELDS) - the two vocabularies genuinely
+// differ (e.g. "Zepp/Amazfit" here vs 'amazfit' there), so this is the one
+// place that translation happens, used only when writing pipeline_prefs.json
+// - the browser-side localStorage copy keeps the display names throughout,
+// since that's what's actually rendered and reordered here.
+const DEVICE_TO_PIPELINE_KEY = {
+  'RingConn': 'ringconn',
+  'Withings': 'withings',
+  'Zepp/Amazfit': 'amazfit',
+  'Garmin': 'garmin',
+  'Health Connect': 'health_connect',
+  'Manual': 'manual',
+};
 // Custom devices persist once added — this is what makes a new source "stick"
 // without needing a code change each time, since true auto-detection would need
 // combined.csv to carry per-row device attribution, which the pipeline doesn't
 // currently write and isn't something to build blind without seeing that file.
+// A custom device has no entry in DEVICE_TO_PIPELINE_KEY, so it's still
+// fully orderable here (for your own reference) but savePrecedence() drops
+// it when writing pipeline_prefs.json — see the comment there for why
+// that's a silent skip rather than a blocked save.
 function getAllDevices() {
   let custom = [];
   try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
-  return [...KNOWN_DEVICES.slice(0, -1), ...custom, KNOWN_DEVICES[KNOWN_DEVICES.length - 1]]; // keep "Auto" last
+  return [...KNOWN_DEVICES, ...custom];
 }
 function addCustomDevice() {
   appPrompt('New device name', 'e.g. Oura, Fitbit', (name) => {
@@ -33815,21 +33859,97 @@ function addCustomDevice() {
     showToast(`"${trimmed}" added — now available for any metric`);
   });
 }
+// Matches update_health.py's own DEFAULT_PRECEDENCE order exactly (same
+// per-metric fallback chains, just expressed with this editor's display
+// names) - a first-time user sees their real, already-running pipeline
+// order reflected here from the start, not an arbitrary placeholder that
+// contradicts what's actually happening until they touch every metric.
+const DEFAULT_PRECEDENCE_ORDER = {
+  steps:          ['Garmin', 'Withings', 'RingConn', 'Zepp/Amazfit', 'Health Connect'],
+  hr_avg:         ['RingConn', 'Zepp/Amazfit', 'Withings', 'Garmin', 'Health Connect'],
+  hrv:            ['RingConn', 'Withings', 'Garmin', 'Zepp/Amazfit'],
+  spo2:           ['RingConn', 'Withings', 'Zepp/Amazfit'],
+  sleep_duration: ['RingConn', 'Withings', 'Garmin', 'Zepp/Amazfit', 'Health Connect'],
+  weight:         ['Withings', 'Manual', 'RingConn', 'Zepp/Amazfit', 'Health Connect'],
+};
 function getStoredPrecedence() { try { return JSON.parse(localStorage.getItem(PRECEDENCE_KEY) || '{}'); } catch(e) { return {}; } }
+// One metric's effective order: stored list if present, migrated from the
+// old single-value shape if that's what's there (pre-this-fix saves), else
+// the pipeline-matching default above. Always returns every currently
+// known device exactly once - a device added (custom, or a new
+// KNOWN_DEVICES entry from a future update) after a metric was last saved
+// is appended at the end, so it's never silently missing from the list;
+// one removed (a custom device deleted, in principle) is dropped.
+function getMetricOrder(metricKey, stored) {
+  const allDevices = getAllDevices();
+  let order = stored[metricKey];
+  if (typeof order === 'string') order = [order]; // migrate pre-reorder single-value saves
+  if (!Array.isArray(order)) order = DEFAULT_PRECEDENCE_ORDER[metricKey] || [];
+  order = order.filter(d => allDevices.includes(d));
+  allDevices.forEach(d => { if (!order.includes(d)) order.push(d); });
+  return order;
+}
 function renderPrecedenceEditor() {
   const el = document.getElementById('precedenceEditor');
   if (!el) return;
   const stored = getStoredPrecedence();
-  const defaults = { steps: 'RingConn', hr_avg: 'RingConn', hrv: 'RingConn', spo2: 'RingConn', sleep_duration: 'Zepp/Amazfit', weight: 'Withings' };
-  const devices = getAllDevices();
-  el.innerHTML = PRECEDENCE_METRICS.map(m => `<div class="drill-row"><span class="drill-row-label">${m.label}</span><select id="prec_${m.key}" onfocus="settingsInputCapture(this)" onchange="logAndSave('prec_${m.key}', 'Device Precedence (${m.label})', savePrecedence)" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);font-family:'Syne',sans-serif;">${devices.map(d => `<option value="${d}" ${(stored[m.key]||defaults[m.key])===d?'selected':''}>${d}</option>`).join('')}</select></div>`).join('')
+  el.innerHTML = PRECEDENCE_METRICS.map(m => {
+    const order = getMetricOrder(m.key, stored);
+    return `<div style="margin-bottom:14px;">
+      <div style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:4px;">${m.label}</div>
+      ${order.map((d, i) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+        <span style="width:16px;flex-shrink:0;font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;text-align:right;">${i+1}.</span>
+        <span style="flex:1;font-size:12px;color:var(--text);">${d}</span>
+        <span onclick="movePrecedenceDevice('${m.key}','${d}','up')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 6px;">▲</span>
+        <span onclick="movePrecedenceDevice('${m.key}','${d}','down')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 6px;">▼</span>
+      </div>`).join('')}
+    </div>`;
+  }).join('')
     + `<button onclick="addCustomDevice()" style="width:100%;margin-top:8px;padding:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add a new device</button>`;
 }
+function movePrecedenceDevice(metricKey, device, direction) {
+  const stored = getStoredPrecedence();
+  const order = getMetricOrder(metricKey, stored);
+  const idx = order.indexOf(device);
+  if (idx === -1) return;
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= order.length) { showToast('Already at the ' + (direction === 'up' ? 'top' : 'bottom')); return; }
+  const before = order.join(' → ');
+  [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
+  logSettingChange(`Device Precedence (${(PRECEDENCE_METRICS.find(m => m.key === metricKey) || {}).label || metricKey})`, before, order.join(' → '));
+  stored[metricKey] = order;
+  localStorage.setItem(PRECEDENCE_KEY, JSON.stringify(stored));
+  renderPrecedenceEditor();
+  savePrecedence();
+}
+// Sends the resolved order to the phone's own server so update_health.py
+// actually reads it (pipeline_prefs.json) on the next sync — previously
+// this only ever wrote to browser localStorage, which the Python pipeline
+// has no access to at all, so every change made on this screen was
+// silently doing nothing to real syncs. A custom device (no entry in
+// DEVICE_TO_PIPELINE_KEY) is dropped from each list before sending, not
+// blocked at save time — it's still useful kept in the browser's own
+// order for your own reference/planning, it just can't mean anything to
+// pipeline code that has never heard of it.
 function savePrecedence() {
-  const prec = {};
-  PRECEDENCE_METRICS.forEach(m => { const el = document.getElementById('prec_' + m.key); if (el) prec[m.key] = el.value; });
-  localStorage.setItem(PRECEDENCE_KEY, JSON.stringify(prec));
-  showToast('Precedence settings saved ✓');
+  const stored = getStoredPrecedence();
+  const pipelineOrder = {};
+  PRECEDENCE_METRICS.forEach(m => {
+    const order = getMetricOrder(m.key, stored);
+    const pipelineKey = PRECEDENCE_KEY_TO_PIPELINE_METRIC[m.key];
+    if (!pipelineKey) return; // shouldn't happen — every PRECEDENCE_METRICS entry has a mapping above
+    pipelineOrder[pipelineKey] = order.map(d => DEVICE_TO_PIPELINE_KEY[d]).filter(Boolean);
+  });
+  fetch(`${MH_SERVER}/save-precedence`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_precedence: pipelineOrder })
+  }).then(r => r.json()).then(res => {
+    if (res && res.status === 'ok') showToast('Precedence saved — used from next sync ✓');
+    else showToast('Saved locally, but the phone couldn\'t be reached — will retry next time you open this screen');
+  }).catch(() => {
+    showToast('Saved locally, but the phone couldn\'t be reached — will retry next time you open this screen');
+  });
 }
 
 function toggleKetosisTooltip() {
