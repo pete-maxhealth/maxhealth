@@ -4818,7 +4818,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.800</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.801</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5835,7 +5835,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.800'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.801'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7062,11 +7062,21 @@ function categoriesConflict(catsA, catsB) {
 // source, same reasoning as the standalone MEAT_TYPE_WORDS list: browsing
 // and match-safety have different precision needs.
 const BROWSE_ONLY_CATEGORY_ADDITIONS = { 'nut butter': ['fat', 'protein', 'spreads'] };
+// Internal-only category labels that must keep working for match-safety
+// (detectFoodCategory/fuzzyFindInLibrary) but should never themselves be
+// shown as a suggested/confirmable/browsable category pill - "nut butter"
+// is the canonical compound-match label (see COMPOUND_CATEGORY_CANONICAL),
+// not a category a person would ever want to see or save on its own; the
+// real, useful browsing tags for it are fat/protein/spreads, added above
+// (28/09/2026 - Pete wanted the "Nut Butter" chip itself gone from the add-
+// item suggestion screen, not just hidden after the fact).
+const INTERNAL_ONLY_CATEGORIES = new Set(['nut butter']);
 function getItemCategories(item) {
   if (item && Array.isArray(item.categories) && item.categories.length) return item.categories;
   const base = detectFoodCategory(((item && item.name) || '').toLowerCase());
   const extra = base.flatMap(c => BROWSE_ONLY_CATEGORY_ADDITIONS[c] || []);
-  return extra.length ? [...new Set([...base, ...extra])] : base;
+  const combined = extra.length ? [...new Set([...base, ...extra])] : base;
+  return combined.filter(c => !INTERNAL_ONLY_CATEGORIES.has(c));
 }
 // Deliberately separate from CATEGORY_MAP and NOT user-editable via Manage
 // Categories - this serves a stricter, different purpose. CATEGORY_MAP now
@@ -9478,11 +9488,28 @@ function mergeCategoriesIntoLibraryItem(libItem, cats) {
 // working × buttons) with no way to tell confirmed from guessed until
 // tapping Save did nothing, since categories were never part of that save
 // path (addItemCategory/removeItemCategory write immediately instead).
+// Per-item set of suggested categories the person has dismissed with the ×
+// before ever hitting "Confirm these" - deliberately in-memory only, keyed
+// by origIdx, not persisted anywhere. Nothing is actually saved yet at the
+// suggested stage, so there's nothing in storage to write a removal to;
+// this just narrows what "Confirm these" will save when it's eventually
+// tapped. Cleared implicitly once confirmed/saved (a saved item is no
+// longer "isSuggested", so this set is never consulted for it again).
+const _dismissedSuggestedCategories = {};
+function dismissSuggestedCategory(origIdx, cat) {
+  if (!_dismissedSuggestedCategories[origIdx]) _dismissedSuggestedCategories[origIdx] = new Set();
+  _dismissedSuggestedCategories[origIdx].add(cat);
+  const lib = loadLibrary();
+  if (!lib[origIdx]) return;
+  const remaining = getItemCategories(lib[origIdx]).filter(c => !_dismissedSuggestedCategories[origIdx].has(c));
+  const catsContainer = document.getElementById('lib-edit-cats-' + origIdx);
+  if (catsContainer) catsContainer.innerHTML = renderCategoryChipsHtml(origIdx, remaining, true);
+}
 function renderCategoryChipsHtml(origIdx, categories, isSuggested) {
   const cats = categories || [];
   if (!cats.length) return '<span style="font-size:11px;color:var(--text3);font-style:italic;">none yet</span>';
   const chips = cats.map(c => isSuggested
-    ? `<span style="display:inline-flex;align-items:center;background:transparent;border:1px dashed var(--text3);border-radius:6px;padding:3px 9px;font-size:12px;color:var(--text3);margin:2px 4px 2px 0;text-transform:capitalize;font-style:italic;">${c}</span>`
+    ? `<span style="display:inline-flex;align-items:center;gap:4px;background:transparent;border:1px dashed var(--text3);border-radius:6px;padding:3px 4px 3px 9px;font-size:12px;color:var(--text3);margin:2px 4px 2px 0;text-transform:capitalize;font-style:italic;">${c}<span onclick="dismissSuggestedCategory(${origIdx},'${c}')" style="cursor:pointer;color:var(--text3);padding:2px 5px;font-style:normal;">×</span></span>`
     : `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 4px 3px 9px;font-size:12px;color:var(--text2);margin:2px 4px 2px 0;text-transform:capitalize;">${c}<span onclick="removeItemCategory(${origIdx},'${c}')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">×</span></span>`
   ).join('');
   const confirmNote = isSuggested
@@ -9497,7 +9524,10 @@ function renderCategoryChipsHtml(origIdx, categories, isSuggested) {
 function confirmSuggestedCategories(origIdx) {
   const lib = loadLibrary();
   if (!lib[origIdx]) return;
-  lib[origIdx].categories = getItemCategories(lib[origIdx]).slice();
+  const dismissed = _dismissedSuggestedCategories[origIdx];
+  const suggested = getItemCategories(lib[origIdx]);
+  lib[origIdx].categories = (dismissed ? suggested.filter(c => !dismissed.has(c)) : suggested).slice();
+  delete _dismissedSuggestedCategories[origIdx]; // done its job — item is confirmed now, not suggested anymore
   saveLibrary(lib);
   refreshKnownCategoriesDatalist(lib);
   const catsContainer = document.getElementById('lib-edit-cats-' + origIdx);
