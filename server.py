@@ -14,6 +14,9 @@ Endpoints:
   GET  /inbox             — list files in inbox
   GET  /pattern-signals   — Day 2 signals for wearables (meal windows, sleep, activity, HRV)
   POST /save-precedence   — merge source_precedence into pipeline_prefs.json (Settings → Device Precedence)
+  GET  /manual-entry?date=YYYY-MM-DD — held (combined.csv) + manual values for a date (Manual Entry screen)
+  POST /save-manual-entry — save a manual entry for a date, triggers a pipeline run
+  GET  /manual-entry-log  — audit trail of manual entry saves (capped, self-trimming)
 
 Usage:
   cd /storage/emulated/0/maxhealth/app/maxhealth
@@ -29,6 +32,7 @@ try:
 except ImportError:
     HAS_PYZIPPER = False
 import json
+import csv
 import glob
 import shutil
 import subprocess
@@ -86,6 +90,20 @@ STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 # is deliberately not re-derived independently; a change to either path
 # scheme needs both updated together or they'll silently diverge.
 PREFS_JSON      = os.path.join(DATA_DIR, 'pipeline_prefs.json')
+# Same file extractors/manual.py reads via run(inbox) - INBOX_DIR is this
+# file's own already-derived path, so no separate cross-check comment is
+# needed the way PREFS_JSON above needs one (that one is independently
+# derived by update_health.py; this one is built from a path THIS file
+# already owns).
+MANUAL_ENTRY_JSON = os.path.join(INBOX_DIR, 'manual_entry.json')
+# Audit trail of every manual entry save (28/09/26, raised directly: "A log
+# file is produced and managed automatically so they don't grow too big") -
+# deliberately separate from MANUAL_ENTRY_JSON itself, which only ever holds
+# the CURRENT value per date (get overwritten, not appended - see
+# save_manual_entry() below) and so can't answer "what did this used to
+# say" or "when was this last changed" on its own.
+MANUAL_ENTRY_LOG_JSON = os.path.join(DATA_DIR, 'manual_entry_log.json')
+MAX_MANUAL_LOG_ENTRIES = 200  # trimmed on every write - see save_manual_entry()
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
@@ -439,6 +457,34 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': str(e)}, 400)
             return
 
+        # ── POST /save-manual-entry — Manual Entry screen ──────────────────────
+        # Body: {date, weight?, steps?, hr_avg?, hrv?, spo2?, sleep_duration?} -
+        # any field can be omitted or null, meaning "no manual override for
+        # this field" (see save_manual_entry()'s own comment). Writes to the
+        # real pipeline inbox and an audit log, then kicks off a pipeline run
+        # the same way the app's own Sync button does, so the entry is folded
+        # into combined.csv immediately rather than sitting in the inbox until
+        # something else happens to trigger a sync.
+        if path == '/save-manual-entry':
+            try:
+                date_str = (body.get('date') or '').strip()
+                if not date_str:
+                    self.send_json({'error': 'date is required'}, 400)
+                    return
+                fields = {k: body.get(k) for k in FIELD_NAMES}
+                if not any(v is not None for v in fields.values()):
+                    self.send_json({'error': 'At least one field must have a value'}, 400)
+                    return
+                cleaned = save_manual_entry(date_str, fields)
+                triggered = False
+                if not pipeline_running:
+                    run_pipeline(device='manual')
+                    triggered = True
+                self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'pipeline_triggered': triggered})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
         # ── POST /save-nutrition — save a single day row ──────────────────────
         if path == '/save-nutrition':
             date    = body.get('date', '').strip()
@@ -723,6 +769,40 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        # ── GET /manual-entry?date=YYYY-MM-DD — prefill for the Manual Entry
+        # screen. Returns what's already known for that date from two places:
+        # `held` (combined.csv's current merged row - real device data, or a
+        # prior manual entry's own effect once it's been through a sync) and
+        # `manual` (the raw, currently-saved manual override for that date, if
+        # any - lets the form distinguish "this field's shown value came from
+        # a device" from "this is what I typed in last time", since a device
+        # reading and Pete's own manual correction can genuinely differ).
+        elif path == '/manual-entry':
+            date_str = params.get('date', [''])[0].strip()
+            if not date_str:
+                self.send_json({'error': 'date query param is required'}, 400)
+                return
+            self.send_json({
+                'date': date_str,
+                'held': read_combined_row_for_date(date_str),
+                'manual': get_manual_entry_for_date(date_str),
+            })
+
+        # ── GET /manual-entry-log — audit trail for the Advanced
+        # Troubleshooting Tools viewer (mirrors the Rollover/Settings-Change
+        # log pattern already used elsewhere for viewing a capped log file).
+        elif path == '/manual-entry-log':
+            log_entries = []
+            if os.path.exists(MANUAL_ENTRY_LOG_JSON):
+                try:
+                    with open(MANUAL_ENTRY_LOG_JSON, 'r', encoding='utf-8') as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        log_entries = loaded
+                except Exception:
+                    pass
+            self.send_json({'entries': log_entries})
+
         # Mirrors /combined exactly, for the same reason - strength.csv only
         # ever lives server-side (auto-saved on every workout log), so a
         # client-side "backup to Downloads" button needs a real way to fetch
@@ -983,6 +1063,110 @@ def save_nutrition_row(date, kcal, protein, carbs, fat=0, notes=''):
         f.write('\n'.join(existing) + '\n')
 
     return updated
+
+
+# ─── MANUAL DATA ENTRY (28/09/26) ──────────────────────────────────────────────
+# Backs the Settings/Import → Manual Entry screen. Raised directly: "expand the
+# pipeline setup to house a manual entry screen which gets any live measures
+# from today or last recorded as initial values to overwrite... You could pick
+# an entry date and the form would populate any held data." Three moving parts:
+#   1. MANUAL_ENTRY_JSON - what extractors/manual.py itself reads (the actual
+#      pipeline input, one entry per date, same shape as Health Connect's own
+#      inbox file).
+#   2. MANUAL_ENTRY_LOG_JSON - a separate append-only audit trail of every save
+#      (what changed, when), capped at MAX_MANUAL_LOG_ENTRIES so it can't grow
+#      unbounded - this is the "log file... managed automatically" part.
+#   3. combined.csv itself, read directly for "populate any held data" - the
+#      form should show what's already known for a date (from real devices),
+#      not just what was typed manually before.
+FIELD_NAMES = ['weight', 'steps', 'hr_avg', 'hrv', 'spo2', 'sleep_duration']
+
+def read_combined_row_for_date(date_str):
+    """Returns {field: value} for one date from combined.csv, or {} if not found/no file."""
+    if not os.path.exists(COMBINED):
+        return {}
+    try:
+        with open(COMBINED, 'r', encoding='utf-8', newline='') as f:
+            for row in csv.DictReader(f):
+                if row.get('date') == date_str:
+                    return {k: row[k] for k in FIELD_NAMES if row.get(k)}
+    except Exception:
+        pass
+    return {}
+
+def load_manual_entries():
+    if not os.path.exists(MANUAL_ENTRY_JSON):
+        return []
+    try:
+        with open(MANUAL_ENTRY_JSON, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+def get_manual_entry_for_date(date_str):
+    for entry in load_manual_entries():
+        if entry.get('date') == date_str:
+            return entry
+    return None
+
+def save_manual_entry(date_str, fields):
+    """
+    Writes/replaces MANUAL_ENTRY_JSON's entry for date_str with `fields`
+    (only keys in FIELD_NAMES with a non-None value are kept — an omitted or
+    null field means "no manual override", matching extractors/manual.py's
+    own "only include a field if present" contract). Also appends a diffed
+    audit-log entry, trimmed to MAX_MANUAL_LOG_ENTRIES.
+
+    Returns the cleaned fields dict actually written.
+    """
+    os.makedirs(INBOX_DIR, exist_ok=True)
+    cleaned = {k: fields[k] for k in FIELD_NAMES if fields.get(k) is not None}
+
+    entries = load_manual_entries()
+    previous = None
+    kept = []
+    for entry in entries:
+        if entry.get('date') == date_str:
+            previous = entry
+            continue  # dropped — replaced by the new entry below
+        kept.append(entry)
+    new_entry = {'date': date_str, **cleaned}
+    kept.append(new_entry)
+    with open(MANUAL_ENTRY_JSON, 'w', encoding='utf-8') as f:
+        json.dump(kept, f, indent=2)
+
+    # ── Audit log — diffed against whatever this date held before ──────────
+    changes = {}
+    prev_fields = previous or {}
+    for k in FIELD_NAMES:
+        old_val = prev_fields.get(k)
+        new_val = cleaned.get(k)
+        if old_val != new_val:
+            changes[k] = {'from': old_val, 'to': new_val}
+    log_entries = []
+    if os.path.exists(MANUAL_ENTRY_LOG_JSON):
+        try:
+            with open(MANUAL_ENTRY_LOG_JSON, 'r', encoding='utf-8') as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                log_entries = loaded
+        except Exception:
+            log_entries = []
+    log_entries.append({
+        'timestamp': datetime.now().isoformat(),
+        'date': date_str,
+        'changes': changes,
+    })
+    # Trim from the front — oldest entries drop first, same convention as
+    # update_health.py's own flush_log()/MAX_LOG_LINES for pipeline.log.
+    if len(log_entries) > MAX_MANUAL_LOG_ENTRIES:
+        log_entries = log_entries[-MAX_MANUAL_LOG_ENTRIES:]
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(MANUAL_ENTRY_LOG_JSON, 'w', encoding='utf-8') as f:
+        json.dump(log_entries, f, indent=2)
+
+    return cleaned
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────

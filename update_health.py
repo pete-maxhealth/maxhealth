@@ -62,13 +62,28 @@ INBOX_OLD_RETENTION_DAYS = 180
 # Connect, so a device's own direct, more detailed export should always be
 # preferred when both exist for the same day. See extractors/health_connect.py
 # for the full reasoning.
+#
+# 'manual' now sits FIRST in every list (28/09/26, raised directly) - not
+# just present for weight at position 2 as before. This is a deliberate
+# change from the original weight-only, position-2 placement (originally
+# reasoned as "there just until an import is done") - the new manual entry
+# screen (extractors/manual.py, the /save-manual-entry endpoint) is a
+# different, more deliberate act than that: someone opening this screen and
+# typing a number for a specific date is making an explicit correction, not
+# a casual placeholder, and it was raised directly that it "can overwrite
+# anything... regardless of what a device already recorded." Top position is
+# how that's expressed through this precedence system - no new mechanism
+# needed, since "try sources in order, first one with data for this field
+# wins" already does exactly this once manual is first in every list.
+# validate_row() still requires a value stay within VALIDATION_RANGES, so
+# this doesn't bypass sanity-checking, just device priority.
 DEFAULT_PRECEDENCE = {
-    'weight':   ['withings', 'manual', 'ringconn', 'amazfit', 'health_connect'],
-    'hrv':      ['ringconn', 'withings', 'garmin', 'amazfit'],
-    'sleep':    ['ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
-    'steps':    ['garmin', 'withings', 'ringconn', 'amazfit', 'health_connect'],
-    'spo2':     ['ringconn', 'withings', 'amazfit'],
-    'hr':       ['ringconn', 'amazfit', 'withings', 'garmin', 'health_connect'],
+    'weight':   ['manual', 'withings', 'ringconn', 'amazfit', 'health_connect'],
+    'hrv':      ['manual', 'ringconn', 'withings', 'garmin', 'amazfit'],
+    'sleep':    ['manual', 'ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
+    'steps':    ['manual', 'garmin', 'withings', 'ringconn', 'amazfit', 'health_connect'],
+    'spo2':     ['manual', 'ringconn', 'withings', 'amazfit'],
+    'hr':       ['manual', 'ringconn', 'amazfit', 'withings', 'garmin', 'health_connect'],
 }
 
 # Fields each source provides (used for precedence resolution)
@@ -94,6 +109,11 @@ SOURCE_FIELDS = {
                  'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
     'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight'],
+    # Scope matches the manual entry screen's own field set exactly (raised
+    # directly: "weight, steps, HR, HRV, SpO2, sleep duration") - headline
+    # figures only, not withings-style body-comp breakdowns or sleep-stage
+    # detail, since the form doesn't collect those and shouldn't invent them.
+    'manual': ['weight', 'steps', 'hr_avg', 'hrv', 'spo2', 'sleep_duration'],
 }
 
 # Map metric category → combined.csv fields
@@ -556,7 +576,7 @@ def check_integrity(rows_by_date):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-KNOWN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit', 'health_connect']
+KNOWN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit', 'health_connect', 'manual']
 
 def main():
     parser = argparse.ArgumentParser(description='MaxedHealth Data Pipeline')
