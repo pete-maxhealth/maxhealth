@@ -6939,16 +6939,18 @@ function categoriesConflict(catsA, catsB) {
 // been set.
 //
 // Browse-only additions layered on top of a compound match here - nut
-// butter IS genuinely a fat+protein source and useful to find that way,
-// but detectFoodCategory() itself deliberately does NOT return 'fat'/
-// 'protein' for it, since that function is also what fuzzyFindInLibrary
-// uses for match-disqualification - giving nut butter the same 'fat' tag
-// as dairy butter there would let them fuzzy-match each other again,
-// exactly the false-positive this whole compound-category system was
-// built to prevent in the first place. Kept separate here rather than
-// changed at the source, same reasoning as the standalone MEAT_TYPE_WORDS
-// list: browsing and match-safety have different precision needs.
-const BROWSE_ONLY_CATEGORY_ADDITIONS = { 'nut butter': ['fat', 'protein'] };
+// butter IS genuinely a fat+protein source (and a spread, 28/09/2026 - Pete
+// pointed out peanut butter never showed up under the Spreads pill despite
+// being one) and useful to find all three ways, but detectFoodCategory()
+// itself deliberately does NOT return 'fat'/'protein'/'spreads' for it,
+// since that function is also what fuzzyFindInLibrary uses for
+// match-disqualification - giving nut butter the same 'fat' tag as dairy
+// butter there would let them fuzzy-match each other again, exactly the
+// false-positive this whole compound-category system was built to prevent
+// in the first place. Kept separate here rather than changed at the
+// source, same reasoning as the standalone MEAT_TYPE_WORDS list: browsing
+// and match-safety have different precision needs.
+const BROWSE_ONLY_CATEGORY_ADDITIONS = { 'nut butter': ['fat', 'protein', 'spreads'] };
 function getItemCategories(item) {
   if (item && Array.isArray(item.categories) && item.categories.length) return item.categories;
   const base = detectFoodCategory(((item && item.name) || '').toLowerCase());
@@ -14157,7 +14159,7 @@ async function _runLiveBarcodeDetectionLoop(video) {
       if (barcodes.length > 0) {
         const barcode = barcodes[0].rawValue;
         closeLiveBarcodeScanner();
-        const thinkingMsg = addBubble(`🔍 Found barcode: ${barcode} — looking up…`, 'system');
+        const thinkingMsg = addBubble(`🔍 Found barcode: ${barcode} — looking up…`, 'system', 'thinking');
         await lookupBarcode(barcode, thinkingMsg);
         return; // found one — stop the loop, don't schedule another frame
       }
@@ -14198,7 +14200,7 @@ async function handleBarcodeCapture(input) {
   input.value = '';
 
   // Show scanning indicator
-  const thinkingMsg = addBubble('🔍 Scanning barcode…', 'system');
+  const thinkingMsg = addBubble('🔍 Scanning barcode…', 'system', 'thinking');
 
   try {
     // Use BarcodeDetector API if available (Chrome Android supports this)
@@ -14222,7 +14224,7 @@ async function handleBarcodeCapture(input) {
     };
     reader.readAsDataURL(file);
   } catch(e) {
-    thinkingMsg.textContent = '⚠ Could not read barcode — try the search button instead.';
+    settleBubble(thinkingMsg, '⚠ Could not read barcode — try the search button instead.');
     thinkingMsg.classList.add('warn');
   }
 }
@@ -14234,7 +14236,7 @@ async function lookupBarcode(barcode, statusBubble) {
     const data = await res.json();
 
     if (data.status !== 1 || !data.product) {
-      if (statusBubble) statusBubble.textContent = `⚠ Barcode ${barcode} not found in database — try searching by name.`;
+      settleBubble(statusBubble, `⚠ Barcode ${barcode} not found in database — try searching by name.`);
       return;
     }
 
@@ -14254,7 +14256,7 @@ async function lookupBarcode(barcode, statusBubble) {
     const brand   = p.brands ? p.brands.split(',')[0].trim() : '';
 
     if (!kcal) {
-      if (statusBubble) statusBubble.textContent = `⚠ Found "${name}" but nutrition data is incomplete — try searching by name.`;
+      settleBubble(statusBubble, `⚠ Found "${name}" but nutrition data is incomplete — try searching by name.`);
       return;
     }
 
@@ -14286,7 +14288,7 @@ async function lookupBarcode(barcode, statusBubble) {
     addBubble(`✓ Found: ${displayName}\n⚠ Values from Open Food Facts — verify against label before saving to library.`, 'system', 'success');
 
   } catch(e) {
-    if (statusBubble) statusBubble.textContent = '⚠ Barcode lookup failed — check your connection.';
+    settleBubble(statusBubble, '⚠ Barcode lookup failed — check your connection.');
   }
 }
 
@@ -14298,18 +14300,21 @@ async function lookupBarcodeViaAI(base64, statusBubble) {
       { maxTokens: 100, image: { base64, mimeType: 'image/jpeg' } }
     );
     if (!result.ok) {
-      if (statusBubble) statusBubble.textContent = `⚠ Barcode scan failed: ${result.error}`;
+      settleBubble(statusBubble, `⚠ Barcode scan failed: ${result.error}`);
       return;
     }
     const barcode = result.text.trim().replace(/\D/g, '');
     if (!barcode || result.text.trim() === 'NONE' || barcode.length < 8) {
-      if (statusBubble) statusBubble.textContent = '⚠ Could not read barcode — try holding the camera closer and steadier, or search by name.';
+      settleBubble(statusBubble, '⚠ Could not read barcode — try holding the camera closer and steadier, or search by name.');
       return;
     }
+    // Still waiting, not a final result — the 'thinking' pulse (if this
+    // bubble has it) should carry on through the handoff into lookupBarcode
+    // below, so this one stays a plain textContent write, not settleBubble.
     if (statusBubble) statusBubble.textContent = `🔍 Found barcode: ${barcode} — looking up…`;
     await lookupBarcode(barcode, statusBubble);
   } catch(e) {
-    if (statusBubble) statusBubble.textContent = '⚠ Barcode scan failed — try searching by name instead.';
+    settleBubble(statusBubble, '⚠ Barcode scan failed — try searching by name instead.');
   }
 }
 
@@ -14394,7 +14399,7 @@ Reply ONLY with a JSON object:
   switchTabById('chat');
 
   (async () => {
-    const thinking = addBubble(`🤖 Estimating a typical portion for ${f.name}…`, 'system');
+    const thinking = addBubble(`🤖 Estimating a typical portion for ${f.name}…`, 'system', 'thinking');
     try {
       const result = await callHealthAI(prompt, { maxTokens: 200 });
       if (!result.ok) { thinking.remove(); addBubble(`⚠ Couldn't estimate a portion: ${result.error}`, 'system', 'warn'); return; }
@@ -15957,7 +15962,14 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
 
   const habits = getEatingHabitsSummary();
 
-  addBubble('📚 Checking your library and recipes against what today still needs…', 'system');
+  // 28/09/2026 - given the pulsing 'thinking' look every other waiting
+  // state in the app already has, after Pete pointed out this one (and a
+  // few others under Log) never got it. Reassigned rather than a fixed
+  // const, since the retry path below swaps in a second waiting bubble of
+  // its own - only ever one pulsing bubble alive at a time, always settled
+  // (see settleBubble) or removed right before whatever final message
+  // replaces it, on every success/retry/failure path out of this function.
+  let checkingBubble = addBubble('📚 Checking your library and recipes against what today still needs…', 'system', 'thinking');
 
   const libText = lib.map(f => {
     const cats = getItemCategories(f);
@@ -16087,11 +16099,14 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
     try {
       parsed = await attemptSuggest(false);
     } catch (firstErr) {
-      addBubble('That attempt came back malformed — trying again…', 'system');
+      checkingBubble.remove();
+      checkingBubble = addBubble('That attempt came back malformed — trying again…', 'system', 'thinking');
       parsed = await attemptSuggest(true);
     }
+    checkingBubble.remove();
     renderLibraryComboSuggestions(parsed, lib, recipes);
   } catch (e) {
+    checkingBubble.remove();
     console.error('suggestMealFromLibrary failed:', e); // real reason, for diagnosis — the user-facing message stays generic
     addBubble(`Couldn't reach the AI to check your library after two attempts: ${e.message || 'unknown error'} — try again in a moment.`, 'system', 'warn');
   }
@@ -17324,13 +17339,21 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
   }
   // ── Health context query from Reports — intercept before food parsing ──
   if (text && text.startsWith('My health data')) {
-    addBubble('Analysing your health data...', 'system');
+    // Was previously removed by a document.querySelectorAll('.bubble') scan
+    // matching on textContent - '.bubble' isn't actually a class either
+    // addBubble puts on these elements (they get 'chat-bubble'/'bubble-
+    // system', never a bare 'bubble' token), so that selector always matched
+    // zero elements and this bubble was never actually removed at all, on
+    // top of never having the pulsing 'thinking' look while genuinely
+    // waiting. Captured directly and given both fixes at once (28/09/2026).
+    const analysingBubble = addBubble('Analysing your health data...', 'system', 'thinking');
     try {
       const result = await callHealthAI(text, { maxTokens: 900 });
       const reply = result.ok ? result.text : `Couldn't analyse your data: ${result.error}`;
-      document.querySelectorAll('.bubble').forEach(b => { if (b.textContent === 'Analysing your health data...') b.remove(); });
+      analysingBubble.remove();
       addBubble(reply, 'system');
     } catch(e) {
+      analysingBubble.remove();
       addBubble('Error contacting AI — check your connection.', 'system', 'warn');
     }
     return;
@@ -20663,6 +20686,23 @@ function addBubble(text, type, modifier = '') {
   scroll.appendChild(div);
   scroll.scrollTop = scroll.scrollHeight;
   return div;
+}
+
+// A handful of places (barcode scan/lookup, the health-data AI query) mutate
+// an existing status bubble's own text in place rather than removing it and
+// adding a new one - e.g. "Scanning barcode…" becoming "Found: Peanut
+// Butter" on the same element. If that bubble was created with the
+// 'thinking' modifier (28/09/2026 - added so every waiting state under Log
+// actually shows the pulsing box, not just the AI chat's own "Thinking…"),
+// leaving that class in place would mean the FINAL, resolved message kept
+// glowing forever, which is worse than not pulsing at all. Call this
+// instead of setting .textContent directly whenever a 'thinking' bubble's
+// content is being replaced with its real, final result rather than
+// another still-waiting message.
+function settleBubble(bubbleEl, finalText) {
+  if (!bubbleEl) return;
+  bubbleEl.textContent = finalText;
+  bubbleEl.classList.remove('thinking');
 }
 
 // Strips markdown/HTML-ish characters that would otherwise be read aloud
