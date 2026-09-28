@@ -7279,11 +7279,33 @@ function makeContainerReorderable(containerEl, scopeKey) {
     // redistribute all 3 evenly, visibly shifting the original 2nd child
     // out of its intended position.
     btns.style.marginLeft = 'auto';
-    btns.innerHTML = `<span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${key}','up')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▲</span><span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${key}','down')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▼</span><span class="reorder-pos-badge" style="color:var(--text3);font-size:10px;font-family:Space Mono,monospace;padding:2px 5px;float:right;"></span>`;
+    btns.innerHTML = `<span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${key}','up')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▲</span><span onclick="event.stopPropagation();moveGenericSection('${scopeKey}','${key}','down')" style="cursor:pointer;color:var(--text3);font-size:11px;padding:2px 5px;float:right;">▼</span><span onclick="event.stopPropagation();toggleGenericSectionHidden('${scopeKey}','${key}')" title="Hide" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 5px;float:right;">👁</span><span class="reorder-pos-badge" style="color:var(--text3);font-size:10px;font-family:Space Mono,monospace;padding:2px 5px;float:right;"></span>`;
     titleEl.appendChild(btns);
   });
 
+  ensureGenericRestoreStrip(containerEl, scopeKey);
   applyGenericOrder(scopeKey);
+}
+
+// One restore strip per scope, injected at the top of its container the
+// same way the ▲▼👁 buttons are injected into each title - avoids having
+// to hand-place a matching <div id="...RestoreStrip"> at the top of every
+// one of the 4 scopes' HTML (trends already has its own hand-placed
+// trendCardsRestoreStrip for the OTHER hide system - metric cards - so a
+// distinct id here keeps the two from colliding).
+function ensureGenericRestoreStrip(containerEl, scopeKey) {
+  const id = 'genericRestoreStrip-' + scopeKey;
+  if (document.getElementById(id)) return;
+  // containerEl (e.g. #view-trends) is the outer subview, not the actual
+  // scrollable list - its real content lives one level down, in the single
+  // .trends-scroll/.dash-scroll/.import-scroll child (trendsScroll,
+  // reportsScroll, manageScroll, importScroll). Inserting into containerEl
+  // itself would place the strip outside that scroll area, above it,
+  // rather than as the first item scrolling with everything else.
+  const scrollEl = containerEl.firstElementChild || containerEl;
+  const strip = document.createElement('div');
+  strip.id = id;
+  scrollEl.insertBefore(strip, scrollEl.firstChild);
 }
 
 function getGenericOrder(scopeKey) {
@@ -7301,37 +7323,52 @@ function getGenericOrder(scopeKey) {
   return liveKeys.slice();
 }
 
+// The title+wrap pair are only safe to move/hide directly when they're
+// genuinely flat siblings of one shared scroll container (true for
+// trends/reports/manage). Import's sections are each individually wrapped
+// in their own .import-card - title+wrap are siblings of EACH OTHER within
+// that one card, not of the other sections' title+wrap at all. Acting on
+// them directly there would e.g. reparent everything into whichever
+// section happens to be first in the order (see applyGenericOrder) or
+// hide only the title/content but leave the empty .import-card border
+// sitting in the page. Detecting a .card-unit wrapper and acting on THAT
+// instead, as one atomic block, fixes this for any current or future
+// wrapped scope without touching the (already-correct) flat-scope
+// behavior at all. Shared by applyGenericOrder, hide/show and the restore
+// strip so all three always agree on what "this section" means.
+function genericUnitFor(scopeKey, key) {
+  const idMap = GENERIC_SECTION_IDS[scopeKey];
+  const ids = idMap && idMap[key];
+  if (!ids) return [];
+  const titleEl = document.getElementById(ids[0]);
+  if (!titleEl) return [];
+  const wrapper = titleEl.closest('.card-unit');
+  return wrapper ? [wrapper] : ids.map(id => document.getElementById(id)).filter(Boolean);
+}
+
+function getGenericHidden(scopeKey) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('mh_reorder_hidden_' + scopeKey) || 'null');
+    if (Array.isArray(stored)) return stored;
+  } catch(e) {}
+  return [];
+}
+function saveGenericHidden(scopeKey, hidden) { localStorage.setItem('mh_reorder_hidden_' + scopeKey, JSON.stringify(hidden)); }
+
 function applyGenericOrder(scopeKey) {
   const idMap = GENERIC_SECTION_IDS[scopeKey];
   if (!idMap) return;
   const order = getGenericOrder(scopeKey);
   if (!order.length) return;
+  const hidden = getGenericHidden(scopeKey);
   order.forEach((key, i) => {
     const titleEl = document.getElementById(idMap[key][0]);
     const badge = titleEl?.querySelector('.reorder-pos-badge');
     if (badge) badge.textContent = `${i+1}/${order.length}`;
   });
-  // The title+wrap pair are only safe to move directly when they're
-  // genuinely flat siblings of one shared scroll container (true for
-  // trends/reports/manage). Import's sections are each individually
-  // wrapped in their own .import-card - title+wrap are siblings of EACH
-  // OTHER within that one card, not of the other sections' title+wrap at
-  // all. Moving them directly there reparents everything into whichever
-  // section happens to be first in the order, since allEls[0].parentNode
-  // resolves to that first section's own card rather than a shared
-  // container - gutting every other .import-card to zero children.
-  // Detecting a .card-unit wrapper and moving THAT instead, as one atomic
-  // block, fixes this for any current or future wrapped scope without
-  // touching the (already-correct) flat-scope behavior at all.
-  const unitFor = key => {
-    const titleEl = document.getElementById(idMap[key][0]);
-    if (!titleEl) return [];
-    const wrapper = titleEl.closest('.card-unit');
-    return wrapper ? [wrapper] : (idMap[key] || []).map(id => document.getElementById(id)).filter(Boolean);
-  };
-  const elGroups = order.map(unitFor);
+  const elGroups = order.map(key => genericUnitFor(scopeKey, key));
   const allEls = elGroups.flat();
-  if (!allEls.length) return;
+  if (!allEls.length) { renderGenericRestoreStrip(scopeKey, hidden); return; }
   const parent = allEls[0].parentNode;
   if (!parent) return;
   // Never move anything already correctly placed - appendChild on an
@@ -7339,8 +7376,15 @@ function applyGenericOrder(scopeKey) {
   // destroy focus on any input inside these sections.
   const currentOrder = Array.from(parent.children).filter(c => allEls.includes(c));
   const alreadyCorrect = currentOrder.length === allEls.length && currentOrder.every((el, i) => el === allEls[i]);
-  if (alreadyCorrect) return;
-  allEls.forEach(el => parent.appendChild(el));
+  if (!alreadyCorrect) allEls.forEach(el => parent.appendChild(el));
+  order.forEach(key => {
+    genericUnitFor(scopeKey, key).forEach(el => {
+      const shouldHide = hidden.includes(key);
+      if (shouldHide && el.style.display !== 'none') el.style.display = 'none';
+      if (!shouldHide && el.style.display === 'none') el.style.display = '';
+    });
+  });
+  renderGenericRestoreStrip(scopeKey, hidden);
 }
 
 function moveGenericSection(scopeKey, key, direction) {
@@ -7352,6 +7396,45 @@ function moveGenericSection(scopeKey, key, direction) {
   [order[idx], order[swapIdx]] = [order[swapIdx], order[idx]];
   localStorage.setItem('mh_reorder_' + scopeKey, JSON.stringify(order));
   applyGenericOrder(scopeKey);
+}
+
+function toggleGenericSectionHidden(scopeKey, key) {
+  const hidden = getGenericHidden(scopeKey);
+  const idx = hidden.indexOf(key);
+  if (idx > -1) hidden.splice(idx, 1); else hidden.push(key);
+  saveGenericHidden(scopeKey, hidden);
+  applyGenericOrder(scopeKey);
+}
+
+function genericSectionLabel(scopeKey, key) {
+  const titleEl = document.getElementById((GENERIC_SECTION_IDS[scopeKey] || {})[key]?.[0]);
+  // Title markup isn't uniform enough across trends/reports/manage/import
+  // to rely on child-node position (some titles are bare "icon + text",
+  // some wrap everything in an inner <span>, some interleave a help-icon
+  // button) - textContent over the whole element is the one thing that
+  // reliably captures the visible label in every shape, so this instead
+  // strips out the specific known non-label pieces every title can carry:
+  // the collapse chevron+word, the injected ▲▼👁 controls, any info-icon,
+  // and (set-supplements only) its Clear all/+ Add buttons - then trims
+  // whitespace left behind by the removals and the source HTML's own
+  // indentation.
+  if (!titleEl) return key;
+  let label = titleEl.textContent || '';
+  label = label.replace(/▾\s*hide/gi, '').replace(/▸\s*show/gi, '')
+               .replace(/▲/g, '').replace(/▼/g, '').replace(/👁/g, '')
+               .replace(/ℹ️/g, '').replace(/\d+\/\d+/g, '')
+               .replace(/Clear all/gi, '').replace(/\+\s*Add/gi, '');
+  return label.replace(/\s+/g, ' ').trim() || key;
+}
+
+function renderGenericRestoreStrip(scopeKey, hidden) {
+  const el = document.getElementById('genericRestoreStrip-' + scopeKey);
+  if (!el) return;
+  if (!hidden.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;">
+      <span style="font-size:10px;color:var(--text3);">Hidden:</span>
+      ${hidden.map(k => `<button onclick='toggleGenericSectionHidden(${JSON.stringify(scopeKey)},${JSON.stringify(k)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${genericSectionLabel(scopeKey, k)} +</button>`).join('')}
+    </div>`;
 }
 
 function applyLibraryOrder() {
