@@ -2,25 +2,26 @@
 extractors/manual.py
 
 Reads data/inbox/manual_entry.json — written by server.py's own
-/save-manual-entry endpoint (Settings/Import → Manual Entry screen in
-maxhealth.html), NOT dropped in by the user like a Zepp/Garmin export.
-This extractor's only job is to turn that file into the same
-{date: row_dict} shape every other device produces, via the standard
+/save-manual-entry and /save-manual-entries-bulk endpoints (Settings/Import
+→ Manual Entry screen in maxhealth.html), NOT dropped in by the user like a
+Zepp/Garmin export. This extractor's only job is to turn that file into the
+same {date: row_dict} shape every other device produces, via the standard
 run(inbox, password=None, dry_run=False) contract run_extractor() in
 update_health.py calls.
 
 Field mapping — deliberately matches SOURCE_FIELDS['manual'] in
-update_health.py exactly: weight, steps, hr_avg, hrv, spo2, sleep_duration.
-Scope matches the manual entry form's own fields (raised directly: "weight,
-steps, HR, HRV, SpO2, sleep duration") - headline figures only, not
-withings-style body-comp breakdowns or sleep-stage detail the form doesn't
-collect.
+update_health.py exactly: every real combined.csv column except 'date' and
+'source' (widened 28/09/26 from the original 6 headline fields — see that
+file's own comment on why). The Manual Entry screen only shows whichever of
+these a person has actually opted into via their own "construct CSV"
+template, so in practice most entries will still only ever carry a handful
+of these keys - this file just needs to be ready to carry any of them.
 
-Units: sleep_duration is written in MINUTES to match every other device's
-convention and update_health.py's own VALIDATION_RANGES (0-1440), same as
-health_connect.py - the form itself may show hours to the person, but
-converts to minutes before this file is ever written (see
-saveManualEntry() in maxhealth.html).
+Units: every minute-based field (sleep_duration, sleep_deep/light/rem/wake,
+snoring_min) is written in MINUTES to match every other device's convention
+and update_health.py's own VALIDATION_RANGES - the form itself may show
+some of these in friendlier units to the person, but converts before this
+file is ever written (see saveManualEntry() in maxhealth.html).
 
 Deploy note: like amazfit.py/garmin.py/garmin_merge.py elsewhere in this
 repo, this file's real home is app/extractors/manual.py on the device — a
@@ -32,6 +33,25 @@ hand once, the same way the other extractor files presumably were.
 
 import json
 import os
+
+# Kept as a literal list, deliberately not imported from update_health.py's
+# SOURCE_FIELDS['manual'] — extractors are meant to be standalone modules
+# run_extractor() loads dynamically (see update_health.py), and importing
+# the pipeline's own module back into an extractor would be a real circular
+# dependency the first time update_health.py imported extractors eagerly
+# rather than dynamically. The two lists are meant to match exactly; if one
+# changes, the other needs updating too (same manual-sync obligation that
+# already exists between this file and server.py's own FIELD_NAMES).
+MANUAL_FIELDS = (
+    'weight', 'bmi', 'fat_pct', 'fat_mass_kg', 'muscle_pct', 'muscle_mass_kg',
+    'bone_mass_kg', 'hydration_kg', 'water_pct', 'pwv',
+    'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max',
+    'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
+    'sleep_onset', 'sleep_efficiency', 'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max',
+    'snoring_min', 'bedtime', 'wake_time',
+    'steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m',
+    'hr_avg', 'hr_min', 'hr_max',
+)
 
 
 def run(inbox, password=None, dry_run=False):
@@ -69,10 +89,10 @@ def run(inbox, password=None, dry_run=False):
         # field", not zero. This is what lets manual entry sit first in
         # every metric's DEFAULT_PRECEDENCE (see update_health.py's own
         # comment on that) without blanking out every OTHER field on a date
-        # just because one value was corrected - the form and
-        # /save-manual-entry both already follow this same "omit means
-        # don't touch" contract, this just carries it through.
-        for field in ('weight', 'steps', 'hr_avg', 'hrv', 'spo2', 'sleep_duration'):
+        # just because one value was corrected - the form, the bulk CSV
+        # path, and /save-manual-entry all already follow this same "omit
+        # means don't touch" contract, this just carries it through.
+        for field in MANUAL_FIELDS:
             if entry.get(field) is not None:
                 row[field] = entry[field]
 

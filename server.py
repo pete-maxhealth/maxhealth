@@ -16,6 +16,7 @@ Endpoints:
   POST /save-precedence   — merge source_precedence into pipeline_prefs.json (Settings → Device Precedence)
   GET  /manual-entry?date=YYYY-MM-DD — held (combined.csv) + manual values for a date (Manual Entry screen)
   POST /save-manual-entry — save a manual entry for a date, triggers a pipeline run
+  POST /save-manual-entries-bulk — save many dates at once (CSV template upload), one pipeline run
   GET  /manual-entry-log  — audit trail of manual entry saves (capped, self-trimming)
 
 Usage:
@@ -481,6 +482,54 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     run_pipeline(device='manual')
                     triggered = True
                 self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'pipeline_triggered': triggered})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
+        # ── POST /save-manual-entries-bulk — CSV template upload ───────────────
+        # Body: {entries: [{date, weight?, steps?, ...}, ...]} - the same shape
+        # as a row-per-date "Download CSV template" file once parsed client-side
+        # (see parseAndUploadManualCsv() in maxhealth.html). Exists so filling in
+        # many days at once (the actual point of a downloadable template - "used
+        # as a regular way to import for Apple users via cloud and for devices
+        # without data export capabilities") doesn't mean N separate HTTP round
+        # trips and N separate pipeline runs: every date is written via the same
+        # save_manual_entry() a single date-at-a-time save uses (identical
+        # validation, identical audit-log diffing, so a bulk upload leaves
+        # exactly the same trail a person manually typing each day would have),
+        # then the pipeline runs once at the end for the whole batch.
+        if path == '/save-manual-entries-bulk':
+            try:
+                raw_entries = body.get('entries')
+                if not isinstance(raw_entries, list) or not raw_entries:
+                    self.send_json({'error': 'entries must be a non-empty list'}, 400)
+                    return
+                if len(raw_entries) > 400:
+                    # Generous ceiling, not a real expected case - a person
+                    # filling in a CSV template by hand isn't going to have
+                    # thousands of rows, and this keeps one bad upload from
+                    # rewriting MANUAL_ENTRY_JSON/the audit log hundreds of
+                    # times in a single request.
+                    self.send_json({'error': 'Too many rows in one upload (max 400) — split into smaller batches'}, 400)
+                    return
+                saved = []
+                skipped = []
+                for raw in raw_entries:
+                    date_str = (raw.get('date') or '').strip() if isinstance(raw, dict) else ''
+                    if not date_str:
+                        skipped.append(raw)
+                        continue
+                    fields = {k: raw.get(k) for k in FIELD_NAMES}
+                    if not any(v is not None for v in fields.values()):
+                        skipped.append(raw)  # blank row in the template — nothing to save, not an error
+                        continue
+                    cleaned = save_manual_entry(date_str, fields)
+                    saved.append({'date': date_str, 'saved': cleaned})
+                triggered = False
+                if saved and not pipeline_running:
+                    run_pipeline(device='manual')
+                    triggered = True
+                self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
             return
@@ -1079,7 +1128,26 @@ def save_nutrition_row(date, kcal, protein, carbs, fat=0, notes=''):
 #   3. combined.csv itself, read directly for "populate any held data" - the
 #      form should show what's already known for a date (from real devices),
 #      not just what was typed manually before.
-FIELD_NAMES = ['weight', 'steps', 'hr_avg', 'hrv', 'spo2', 'sleep_duration']
+# Widened (28/09/26) from the original 6 headline fields to the full
+# combined.csv column set (everything ALL_FIELDS in update_health.py has
+# except 'date' and 'source') - the Manual Entry screen itself only shows
+# whichever of these a person has opted into via their own "construct CSV"
+# field template (mh_manual_template_fields in maxhealth.html), but the
+# server side needs to accept any of them so someone with body-comp or
+# sleep-stage data isn't capped at the original 6 just because that's all
+# the first build wired up. Must be kept in sync with manual.py's own
+# MANUAL_FIELDS and update_health.py's SOURCE_FIELDS['manual'] - all three
+# are meant to describe exactly the same set.
+FIELD_NAMES = [
+    'weight', 'bmi', 'fat_pct', 'fat_mass_kg', 'muscle_pct', 'muscle_mass_kg',
+    'bone_mass_kg', 'hydration_kg', 'water_pct', 'pwv',
+    'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max',
+    'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
+    'sleep_onset', 'sleep_efficiency', 'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max',
+    'snoring_min', 'bedtime', 'wake_time',
+    'steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m',
+    'hr_avg', 'hr_min', 'hr_max',
+]
 
 def read_combined_row_for_date(date_str):
     """Returns {field: value} for one date from combined.csv, or {} if not found/no file."""

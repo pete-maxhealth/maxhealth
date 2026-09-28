@@ -109,11 +109,26 @@ SOURCE_FIELDS = {
                  'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
     'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight'],
-    # Scope matches the manual entry screen's own field set exactly (raised
-    # directly: "weight, steps, HR, HRV, SpO2, sleep duration") - headline
-    # figures only, not withings-style body-comp breakdowns or sleep-stage
-    # detail, since the form doesn't collect those and shouldn't invent them.
-    'manual': ['weight', 'steps', 'hr_avg', 'hrv', 'spo2', 'sleep_duration'],
+    # Widened (28/09/26) from the original 6 headline fields to every real
+    # combined.csv column (everything in ALL_FIELDS except 'date' and
+    # 'source', which aren't metric values). The Manual Entry screen itself
+    # still only shows whichever of these a person has actually chosen into
+    # their own template ("construct CSV" picker in maxhealth.html) - most
+    # people will still only ever fill in the original 6 - but the pipeline
+    # side needs to accept all of them so someone with body-comp or
+    # sleep-stage data (an Apple Health export copied over by hand, a scale
+    # with no CSV export, etc.) isn't limited to headline figures just
+    # because the original build only wired up 6. Same "omit means no
+    # override" contract as before - this is a ceiling on what CAN be sent,
+    # not a requirement that every field always is.
+    'manual': ['weight', 'bmi', 'fat_pct', 'fat_mass_kg', 'muscle_pct', 'muscle_mass_kg',
+               'bone_mass_kg', 'hydration_kg', 'water_pct', 'pwv',
+               'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max',
+               'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
+               'sleep_onset', 'sleep_efficiency', 'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max',
+               'snoring_min', 'bedtime', 'wake_time',
+               'steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m',
+               'hr_avg', 'hr_min', 'hr_max'],
 }
 
 # Map metric category → combined.csv fields
