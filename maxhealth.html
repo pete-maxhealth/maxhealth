@@ -4823,7 +4823,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.807</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.808</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -4851,14 +4851,16 @@
     <div class="settings-card">
       <div class="settings-hint" style="margin-bottom:10px;">
         Raw data behind Trends → Wellness Balance card's 4 scores - each score
-        is a 7-day average, not just today's value, so it can legitimately
-        differ a lot from a single-day figure shown elsewhere (e.g. a
+        averages every real day of data within whatever period is currently
+        selected on Trends (Today/7 Days/30 Days/All/Custom), so it can
+        legitimately differ from a single-day figure shown elsewhere (e.g. a
         wearable app's own "today" score). Added 28/09/2026 after Pete
         questioned Activity/Vitals looking wrong against his wearable's
         same-day numbers - this panel exists so a "does the score match the
         real data" question can be checked directly, without guessing.
       </div>
       <div id="wellnessDebugContent" style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);line-height:1.7;">Tap this section to load.</div>
+      <button class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('wellnessDebugContent', 'Wellness debug')">📋 Copy all text</button>
     </div>
     </div>
 
@@ -5175,6 +5177,7 @@
       </button>
       <!-- Progress log — hidden until running -->
       <div id="syncLog" style="display:none;margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-family:Space Mono,monospace;font-size:10px;color:var(--green);line-height:1.8;max-height:160px;overflow-y:auto;white-space:pre-wrap;"></div>
+      <button id="syncLogCopyBtn" class="copy-btn" style="display:none;width:100%;margin-top:8px;font-size:12px;" onclick="copyElementText('syncLog', 'Sync log')">📋 Copy sync log</button>
       <!-- Zepp password notice — shown when encrypted zip detected -->
       <div id="zArchiverNotice" style="display:none;margin-top:12px;background:var(--yellow-dim);border:1px solid rgba(245,197,66,0.25);border-radius:var(--radius-sm);padding:12px 14px;">
         <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;color:var(--yellow);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Zepp zip detected — enter password</div>
@@ -5856,7 +5859,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.807'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.808'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -29834,11 +29837,11 @@ function showTabTip(tabId) {
 // Pete's follow-up: the card's average must reflect the selected period,
 // not a hardcoded window) - this panel would be checking a different
 // question than the card if it used its own fixed period instead.
-function renderWellnessDebug() {
-  const el = document.getElementById('wellnessDebugContent');
-  if (!el) return;
+function _buildWellnessDebugText() {
   const data = getTrendsData();
-  if (!data || !data.length) { el.textContent = 'No data in the currently selected Trends period.'; return; }
+  if (!data || !data.length) {
+    return { html: 'No data in the currently selected Trends period.', text: 'No data in the currently selected Trends period.', count: 0 };
+  }
 
   const targets = (getTargets()[state.dayMode || 'standard']) || getTargets().standard;
   const spo2Vals  = data.map(d => d.spo2 || null);
@@ -29887,7 +29890,7 @@ function renderWellnessDebug() {
   const na = v => v == null ? '—' : v;
   const periodLabel = trendsWindow === 'today' ? 'Today' : trendsWindow === 7 ? '7 Days' : trendsWindow === 30 ? '30 Days' : trendsWindow === -1 ? 'Custom' : 'All';
 
-  el.innerHTML = `
+  const html = `
     <div style="margin-bottom:10px;color:var(--accent);">Selected Trends period: <strong>${periodLabel}</strong> (${data.length} day${data.length===1?'':'s'} in range)</div>
     <div style="margin-bottom:10px;"><strong style="color:var(--text);">Activity (score: ${na(actScore)})</strong><br>
       Real days' steps in this period: ${fmtArr(stepsVals)}<br>
@@ -29905,6 +29908,30 @@ function renderWellnessDebug() {
       Carb adherence: ${carbAdh != null ? Math.round(carbAdh*100)+'%' : '—'} × 60 + protein adherence: ${protAdh != null ? Math.round(protAdh*100)+'%' : '—'} × 40 = ${na(nutScore)}</div>
     <div style="margin-top:12px;color:var(--text3);font-style:italic;">These average every real day of data within the period selected at the top of Trends — change the period there (Today/7 Days/30 Days/All/Custom) and reopen this panel to see it update.</div>
   `;
+
+  const text = `Selected Trends period: ${periodLabel} (${data.length} day${data.length===1?'':'s'} in range)\n\n` +
+    `Activity (score: ${na(actScore)})\n` +
+    `  Real days' steps in this period: ${fmtArr(stepsVals)}\n` +
+    `  Average: ${na(avgSteps7)} steps -> ${na(avgSteps7)} / 10,000 x 100 = ${na(actScore)}\n\n` +
+    `Vitals (score: ${na(vitScore)})\n` +
+    `  Most recent SpO2: ${na(lastSpO2)}% -> (${na(lastSpO2)}-88)/12x60 = ${na(spo2part)}\n` +
+    `  Most recent HRV: ${na(lastHRV)}ms, your 30-reading baseline: ${hrvBaseline ? Math.round(hrvBaseline*10)/10 : '—'}ms -> HRV part = ${na(hrvpart)}\n` +
+    `  Total: ${na(spo2part)} + ${na(hrvpart)} = ${na(vitScore)}\n\n` +
+    `Sleep (score: ${na(sleepScore)})\n` +
+    `  Real nights' hours in this period: ${fmtArr(sleepVals)}\n` +
+    `  Average: ${na(avgSleep7)}h -> ${na(avgSleep7)} / 8 x 100 = ${na(sleepScore)}\n\n` +
+    `Nutrition (score: ${na(nutScore)})\n` +
+    `  Real days' carbs in this period: ${fmtArr(carbVals)} (ceiling ${carbTgt}g)\n` +
+    `  Real days' protein in this period: ${fmtArr(protVals)} (target ${protTgt}g)\n` +
+    `  Carb adherence: ${carbAdh != null ? Math.round(carbAdh*100)+'%' : '—'} x 60 + protein adherence: ${protAdh != null ? Math.round(protAdh*100)+'%' : '—'} x 40 = ${na(nutScore)}`;
+
+  return { html, text, count: data.length };
+}
+
+function renderWellnessDebug() {
+  const el = document.getElementById('wellnessDebugContent');
+  if (!el) return;
+  el.innerHTML = _buildWellnessDebugText().html;
 }
 
 function resetTips() {
@@ -36482,7 +36509,19 @@ const DIAGNOSTIC_SOURCES = [
   { id: 'saveonlycat', label: 'Save-Only Categories Trace (chat "Save only")', builder: () => _buildSaveOnlyCatTraceText() },
   { id: 'bodycomp',    label: 'Body Comp Debug (live snapshot)', builder: () => _buildBodyCompDebugText(), alwaysInclude: true },
   { id: 'rollover',    label: 'Rollover Debug Log', builder: () => _buildRolloverDebugText() },
+  { id: 'wellness',    label: 'Wellness Score Debug (live snapshot, selected Trends period)', builder: () => _buildWellnessDebugText(), alwaysInclude: true },
+  { id: 'synclog',     label: 'Sync Wearable Data log (from last sync run this session)', builder: () => _buildSyncLogDebugText() },
 ];
+
+// Sync log has no independent state to compute - it's just whatever the
+// last doSync() run left in the #syncLog box, so this reads that element
+// directly rather than re-deriving anything (unlike the other builders,
+// which recompute from real app data each time they're called).
+function _buildSyncLogDebugText() {
+  const el = document.getElementById('syncLog');
+  const text = (el && (el.innerText || el.textContent) || '').trim();
+  return { text: text || '(no sync has been run yet this session)', count: text ? 1 : 0 };
+}
 
 function renderDiagnosticsList() {
   const wrap = document.getElementById('diagnosticsSourceList');
@@ -41064,6 +41103,8 @@ async function doSync() {
   btn.textContent = '⟳ SYNCING…';
   log.style.display = 'block';
   log.textContent = '';
+  const logCopyBtn = document.getElementById('syncLogCopyBtn');
+  if (logCopyBtn) logCopyBtn.style.display = 'block';
   if (notice) notice.style.display = 'none';
   setServerDot('busy');
   const msg = document.getElementById('syncStatusMsg');
