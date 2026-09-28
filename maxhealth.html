@@ -6480,6 +6480,10 @@ function loadLibrary() {
 
 function saveLibrary(lib) {
   if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  // Single choke-point for every library save, regardless of entry route
+  // (manual add, AI parse, barcode, CSV import...) - normalize every name
+  // here so it's applied automatically, not as a one-off cleanup (28/09/2026).
+  lib.forEach(f => { if (f && f.name) f.name = normalizeFoodName(f.name); });
   const json = JSON.stringify(lib);
   localStorage.setItem(LIBRARY_KEY, json);
   localStorage.setItem('mh_library_backup', json);
@@ -6715,6 +6719,92 @@ const LIBRARY_KNOWN_BRANDS = ['asda','tesco',"tesco's",'sainsburys','sainsbury',
 function canonicalBrand(matched) {
   return matched.replace(/'s$/, '').replace(/s$/, '');
 }
+
+// Nicest single canonical display form for each supermarket, used only when
+// a bare brand word is being extracted into its own "(Brand)" group by
+// normalizeFoodName() below - ordinary title-casing already handles correct
+// capitalisation everywhere else a brand word appears (including inside an
+// existing paren group), so this map's only job is picking ONE consistent
+// spelling regardless of which variant (asda/ASDA, sainsbury/sainsburys/
+// sainsbury's) was typed.
+const BRAND_DISPLAY_NAME = {
+  asda: 'Asda', tesco: 'Tesco', sainsbury: "Sainsbury's",
+  morrison: 'Morrisons', waitrose: 'Waitrose', aldi: 'Aldi', lidl: 'Lidl',
+};
+
+const TITLECASE_MINOR_WORDS = new Set(['a','an','and','the','of','in','on','with','or','to','by','for','from','as','at','&']);
+
+// Capitalises one whitespace-delimited token, preserving any leading/
+// trailing punctuation it carries (an opening "(", a stray "—", a trailing
+// "," or ")") rather than naively uppercasing whatever character happens to
+// be first - that naive approach would silently leave something like
+// "(skin-on)" lowercase throughout, since charAt(0) would be "(", not "s".
+function titleCaseToken(token, isFirst) {
+  const m = token.match(/^(\W*)([\w'-]*)(\W*)$/);
+  if (!m) return token;
+  const [, lead, core, trail] = m;
+  if (!core) return token; // pure punctuation, e.g. a lone "—"
+  if (/\d/.test(core)) return lead + core + trail; // "350g", "6" — never touched
+  // Short existing ALL-CAPS words (KP, UK...) are left exactly as-is, rather
+  // than forced through normal title-casing, since these are almost always
+  // initialisms, not ordinary words that happen to be capitalised.
+  if (/^[A-Z]{2,3}$/.test(core)) return lead + core + trail;
+  const lower = core.toLowerCase();
+  const cased = (!isFirst && TITLECASE_MINOR_WORDS.has(lower))
+    ? lower
+    : lower.charAt(0).toUpperCase() + lower.slice(1);
+  return lead + cased + trail;
+}
+
+function titleCaseText(text) {
+  let firstRealWordSeen = false;
+  return text.split(' ').map(tok => {
+    if (!tok) return tok;
+    const isFirst = !firstRealWordSeen;
+    if (/[a-zA-Z]/.test(tok)) firstRealWordSeen = true;
+    return titleCaseToken(tok, isFirst);
+  }).join(' ');
+}
+
+// Single source of truth for how an ingredient/recipe name should look once
+// saved - called from saveLibrary() and saveRecipes() so every future entry
+// gets this applied automatically regardless of how it was created (typed by
+// hand, AI-parsed from a photo/description, a barcode lookup, the recipe
+// builder, CSV import...), per Pete's "force all future entries down the
+// same way" (28/09/2026). Two things, deliberately conservative:
+//   1. Title-case the whole name.
+//   2. If a bare supermarket name (Asda, Tesco...) sits as the LAST word of
+//      the name, pull it out into its own "(Brand)" group. Deliberately
+//      only the trailing position - a brand word buried mid-phrase ("3
+//      Cheese & Onion by ASDA CO") is real product wording, not a simple
+//      appended tag, and an already-parenthesised brand ("...Mix (Asda)")
+//      is naturally left alone too, since the last "word" there includes
+//      the parens and won't match a bare brand string.
+// Never touches category names/labels - those are handled separately (see
+// CATEGORY_REVIEW_OPTIONS etc.), stay lowercase in the underlying data on
+// purpose for matching, and are only ever capitalised at display time via
+// CSS text-transform or a one-off label build, same as before this feature.
+function normalizeFoodName(name) {
+  if (!name || typeof name !== 'string') return name;
+  let main = name.trim();
+  if (!main) return main;
+
+  const words = main.split(' ');
+  const lastWordClean = (words[words.length - 1] || '').replace(/[.,]+$/, '').toLowerCase();
+  const matchedBrand = LIBRARY_KNOWN_BRANDS.find(b => b === lastWordClean);
+  let extractedBrandGroup = '';
+  if (matchedBrand) {
+    const display = BRAND_DISPLAY_NAME[canonicalBrand(matchedBrand)];
+    if (display) {
+      main = words.slice(0, -1).join(' ').trim();
+      extractedBrandGroup = `(${display})`;
+    }
+  }
+
+  const titleCased = titleCaseText(main);
+  return [titleCased, extractedBrandGroup].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+}
+
 // Was a hardcoded const - now editable data (see loadCategoryWords below),
 // seeded from this exact map as the default on first use.
 //
@@ -26118,6 +26208,15 @@ function loadRecipes() {
 }
 function saveRecipes(recipes) {
   if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  // Single choke-point for every recipe save - normalize the recipe's own
+  // title AND each ingredient's name, same "force all future entries down
+  // the same way" rule as saveLibrary() (28/09/2026).
+  recipes.forEach(r => {
+    if (r && r.name) r.name = normalizeFoodName(r.name);
+    if (r && Array.isArray(r.ingredients)) {
+      r.ingredients.forEach(ing => { if (ing && ing.name) ing.name = normalizeFoodName(ing.name); });
+    }
+  });
   const json = JSON.stringify(recipes);
   localStorage.setItem('mh_recipes', json);
   localStorage.setItem('mh_recipes_backup', json);
