@@ -12472,8 +12472,21 @@ function _saveRoutinesCSV(routines) {
   }).catch(() => {});
 }
 
+// _routineSelectMode / _routineSelectedIds: bulk-delete state, raised
+// directly ("no way of bulk deleting if needed, they have to be deleted
+// individually"). No other deletable list in the app has a multi-select
+// yet (Library, saved queries, devices, etc. are all one-🗑-per-row too),
+// so this is deliberately scoped to just routines rather than building a
+// shared mechanism speculatively - reset to off every time the list is
+// (re)opened, same as _routineEditingId just above, so leaving the
+// Routines screen never leaves it stuck in select mode next time.
+let _routineSelectMode = false;
+let _routineSelectedIds = [];
+
 function showRoutineList() {
   _routineEditingId = null; // neutral state - editRoutine()/duplicateRoutine() set this themselves when actually entering that mode
+  _routineSelectMode = false;
+  _routineSelectedIds = [];
   const routines = loadRoutines();
   const container = document.getElementById('routineListContainer');
   if (!container) return;
@@ -12485,17 +12498,64 @@ function showRoutineList() {
     `;
     return;
   }
-  container.innerHTML = routines.map(r => `
+  renderRoutineListBody();
+}
+
+// Split out from showRoutineList so toggling select mode / (de)selecting a
+// row can just re-render the list body without resetting scroll position
+// or touching the empty-state branch above (which only ever applies when
+// there's nothing to select from anyway).
+function renderRoutineListBody() {
+  const routines = loadRoutines();
+  const container = document.getElementById('routineListContainer');
+  if (!container) return;
+  const selMode = _routineSelectMode;
+  const n = _routineSelectedIds.length;
+  container.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:4px;">
+      <span onclick="toggleRoutineSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">${selMode ? 'Cancel' : 'Select'}</span>
+    </div>` +
+    routines.map(r => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      ${selMode ? `<input type="checkbox" onchange="toggleRoutineSelected('${r.id}')" ${_routineSelectedIds.includes(r.id) ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">` : ''}
       <span style="flex:1;font-size:13px;color:var(--text2);">${r.name} <span style="color:var(--text3);font-size:11px;">(${r.exercises.length} exercises)</span></span>
+      ${selMode ? '' : `
       <span onclick="applyRoutine('${r.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Apply</span>
       <span onclick="editRoutine('${r.id}')" title="Edit this routine's exercise list in place" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">✏️ Edit</span>
       <span onclick="duplicateRoutine('${r.id}')" title="Duplicate as a starting point for a new routine" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">📋 Copy</span>
-      <span onclick="deleteRoutine('${r.id}')" title="Delete routine" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>
-    </div>`).join('') + `
-    <button onclick="showCreateRoutineForm()" class="btn-neutral" style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;">+ Create another routine</button>
-    <button onclick="document.getElementById('routineListContainer').innerHTML=''" style="width:100%;padding:6px;margin-top:6px;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;">Close</button>
-  `;
+      <span onclick="deleteRoutine('${r.id}')" title="Delete routine" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>`}
+    </div>`).join('') +
+    (selMode
+      ? `<button onclick="deleteSelectedRoutines()" ${n ? '' : 'disabled'} style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;border:1px solid var(--red);background:${n ? 'var(--red)' : 'var(--surface2)'};color:${n ? '#fff' : 'var(--text3)'};cursor:${n ? 'pointer' : 'default'};">🗑 Delete selected${n ? ` (${n})` : ''}</button>`
+      : `<button onclick="showCreateRoutineForm()" class="btn-neutral" style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;">+ Create another routine</button>
+    <button onclick="document.getElementById('routineListContainer').innerHTML=''" style="width:100%;padding:6px;margin-top:6px;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;">Close</button>`);
+}
+
+function toggleRoutineSelectMode() {
+  _routineSelectMode = !_routineSelectMode;
+  _routineSelectedIds = [];
+  renderRoutineListBody();
+}
+
+function toggleRoutineSelected(id) {
+  const idx = _routineSelectedIds.indexOf(id);
+  if (idx > -1) _routineSelectedIds.splice(idx, 1); else _routineSelectedIds.push(id);
+  renderRoutineListBody();
+}
+
+function deleteSelectedRoutines() {
+  if (!_routineSelectedIds.length) return;
+  const routines = loadRoutines();
+  const toDelete = routines.filter(r => _routineSelectedIds.includes(r.id));
+  if (!toDelete.length) return;
+  const names = toDelete.map(r => r.name).join(', ');
+  appConfirm(`Delete ${toDelete.length} routine${toDelete.length === 1 ? '' : 's'}? (${names})`, () => {
+    saveRoutines(routines.filter(r => !_routineSelectedIds.includes(r.id)));
+    _routineSelectMode = false;
+    _routineSelectedIds = [];
+    showToast(`${toDelete.length} routine${toDelete.length === 1 ? '' : 's'} deleted ✓`);
+    showRoutineList();
+  }, null, true);
 }
 
 // Genuine gap raised directly: no way to edit a saved routine in place -
