@@ -4882,7 +4882,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.828</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.829</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5912,7 +5912,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.828'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.829'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -22670,134 +22670,6 @@ function updateDashboard(skipActivityRender) {
   const _hasRes = getActivities().some(a => a.enabled && a.duration && a.type === 'resistance');
   const _adjProt = targets.protein + (_hasRes ? 15 : 0);
 
-// Ketosis streak milestones — the counter previously just ticked up silently
-// with no acknowledgment of the days that actually mean something. Tied to
-// genuine markers of sustained metabolic pressure, not generic gamification —
-// fires once per threshold ever, using a persisted list rather than a date
-// check, since updateDashboard() runs far too often to gate on "today".
-// Same bug class as the badge/Trends/getKetosisStatus fixes tonight -
-// every milestone message claimed a "ketosis"/"metabolic state" specifically,
-// regardless of whether the actual selected condition is ketogenic at all.
-// Two parallel sets rather than string-patching one set at lookup time,
-// since the non-keto versions need genuinely different wording throughout,
-// not just a word swapped mid-sentence.
-const STREAK_MILESTONES_KETO = {
-  7:   { emoji: '🔥', text: 'One full week in ketosis — a real first foothold.' },
-  14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real metabolic state, not a good day here and there.' },
-  30:  { emoji: '🔥', text: 'A full month in deep ketosis. That\'s sustained metabolic pressure on this thing for 30 days straight.' },
-  50:  { emoji: '🔥', text: '50 days. Genuinely serious consistency.' },
-  100: { emoji: '🏆', text: '100 days in ketosis. A hundred days of doing the hard, unglamorous work, every single day.' },
-  200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
-  365: { emoji: '🏆', text: 'A full year in ketosis. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
-};
-const STREAK_MILESTONES_GENERAL = {
-  7:   { emoji: '🔥', text: 'One full week under your carb target — a real first foothold.' },
-  14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real habit, not a good day here and there.' },
-  30:  { emoji: '🔥', text: 'A full month under target. That\'s sustained consistency for 30 days straight.' },
-  50:  { emoji: '🔥', text: '50 days. Genuinely serious consistency.' },
-  100: { emoji: '🏆', text: '100 days under target. A hundred days of doing the hard, unglamorous work, every single day.' },
-  200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
-  365: { emoji: '🏆', text: 'A full year under target. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
-};
-const STREAK_MILESTONES = new Proxy({}, { get(_, key) { return (isKetogenicCondition() ? STREAK_MILESTONES_KETO : STREAK_MILESTONES_GENERAL)[key]; } });
-function checkStreakMilestone(streak) {
-  if (!STREAK_MILESTONES[streak]) return;
-  let celebrated = [];
-  try { celebrated = JSON.parse(localStorage.getItem('mh_celebrated_milestones') || '[]'); } catch(e) {}
-  if (celebrated.includes(streak)) return;
-  celebrated.push(streak);
-  localStorage.setItem('mh_celebrated_milestones', JSON.stringify(celebrated));
-  const m = STREAK_MILESTONES[streak];
-  addBubble(`${m.emoji} <strong>${streak} day streak.</strong> ${m.text}`, 'system');
-  showToast(`${m.emoji} ${streak} day streak!`);
-}
-
-// ─── TDEE STILL-ACCURATE NUDGE ──────────────────────────────────────────────
-// Real gap found in a broader app audit (29/09/2026): mh_tdee is a one-time
-// manually-confirmed figure (saveTdee()) that the app never revisits - once
-// set, it's trusted forever regardless of what real weight trend actually
-// does afterward. MacroFactor-style apps auto-recalculate weekly from
-// logged-intake-vs-weight-trend outcomes; this deliberately does NOT copy
-// that (silently changing a number this many downstream calculations rely
-// on - reports, targets, AI context - without the person's own sign-off
-// would be a worse trade than the staleness it fixes). Instead: a periodic,
-// opt-in NUDGE using data already collected (real logged intake, real
-// weight trend), surfaced the same way a streak milestone is, never a
-// silent auto-change to mh_tdee itself.
-// Shared DD/MM/YY -> real Date parser, same convention already used inline
-// all over this file (e.g. `new Date('20'+p[2]+'-'+p[1]+'-'+p[0])`) -
-// pulled out here just so checkTdeeStillAccurate() below isn't repeating
-// the same split/reorder three times.
-function _parseDDMMYY(dateStr) {
-  const p = (dateStr || '').split('/');
-  if (p.length !== 3) return null;
-  return new Date(`20${p[2]}-${p[1]}-${p[0]}`);
-}
-
-function checkTdeeStillAccurate() {
-  const manualTdee = parseInt(localStorage.getItem('mh_tdee'));
-  if (!manualTdee) return; // nothing confirmed yet - nothing to re-check
-  const confirmedDate = localStorage.getItem('mh_tdee_confirmed_date');
-  if (!confirmedDate) return; // confirmed before this tracking existed - can't measure "since when"
-
-  const confirmedAt = _parseDDMMYY(confirmedDate);
-  if (!confirmedAt) return;
-  const daysSince = Math.floor((Date.now() - confirmedAt.getTime()) / 86400000);
-  if (daysSince < 14) return; // needs at least 2 weeks of real data to say anything meaningful
-
-  // Only ask again once every 14 days even if the person dismisses it or
-  // just doesn't open the app to see it - re-nagging daily about the same
-  // stale figure would be worse than the staleness itself.
-  const lastAsked = localStorage.getItem('mh_tdee_check_dismissed');
-  if (lastAsked) {
-    const lastAskedAt = _parseDDMMYY(lastAsked);
-    if (lastAskedAt) {
-      const daysSinceAsked = Math.floor((Date.now() - lastAskedAt.getTime()) / 86400000);
-      if (daysSinceAsked < 14) return;
-    }
-  }
-
-  // Real weight trend over the same window this TDEE has been trusted for
-  // (capped at 30 days - a genuinely stale confirmation from months ago
-  // shouldn't pull in that much history, since goal/phase may well have
-  // changed since).
-  const windowDays = Math.min(daysSince, 30);
-  const cutoff = new Date(Date.now() - windowDays * 86400000);
-  const windowHistory = state.history.filter(h => {
-    const p = (h.date || '').split('/');
-    if (p.length !== 3) return false;
-    return new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff && h.weight;
-  }).sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
-  if (windowHistory.length < 4) return; // too few real weigh-ins to trust a trend over this window
-
-  const actualWtChange = windowHistory[windowHistory.length - 1].weight - windowHistory[0].weight;
-  const goal = localStorage.getItem('mh_goal') || 'gain';
-  // Roughly how much weight the current phase's calorie target implies over
-  // this window, at the standard ~7700kcal/kg rule of thumb - same figure
-  // used implicitly by the lose/gain kcal offsets elsewhere (TDEE±500/400).
-  const dailyOffset = goal === 'lose' ? -500 : goal === 'gain' ? 400 : 0;
-  const expectedWtChange = Math.round((dailyOffset * windowDays / 7700) * 10) / 10;
-
-  if (goal === 'maintain') {
-    // For Maintain, "still accurate" means weight staying roughly flat -
-    // any real drift either way is the signal, not a directional miss.
-    if (Math.abs(actualWtChange) < 1.0) return; // within normal fluctuation, nothing to flag
-  } else {
-    // For Lose/Gain, flag when the REAL trend is moving the wrong way, or
-    // barely moving at all, relative to what the confirmed TDEE implies -
-    // not just "any small numeric gap", which would fire constantly on
-    // ordinary week-to-week noise.
-    const movingWrongWay = (goal === 'lose' && actualWtChange > -0.3) || (goal === 'gain' && actualWtChange < 0.3);
-    if (!movingWrongWay) return;
-  }
-
-  localStorage.setItem('mh_tdee_check_dismissed', todayStr());
-  const dirWord = actualWtChange > 0 ? 'gained' : actualWtChange < 0 ? 'lost' : 'stayed within';
-  const msg = goal === 'maintain'
-    ? `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Weight has ${dirWord === 'stayed within' ? 'stayed flat' : `${dirWord} ${Math.abs(actualWtChange)}kg`} over the last ${windowDays} days on a Maintain target — if that's not intentional, your real maintenance calories may have shifted. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`
-    : `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Over the last ${windowDays} days on a ${goal === 'lose' ? 'Lose' : 'Gain'} target, weight has ${dirWord} ${Math.abs(actualWtChange)}kg — expected roughly ${Math.abs(expectedWtChange)}kg ${goal === 'lose' ? 'lost' : 'gained'} in that time. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`;
-  addBubble(msg, 'system');
-}
 
   // Ketosis badge - uses net-carb-aware effective carbs if that setting is
   // on (polyols and fibre subtracted), same effCarbs already computed above
@@ -23005,6 +22877,135 @@ function checkTdeeStillAccurate() {
   // Macro Ratio was the one Pete actually caught, but the same ordering bug
   // could have masked a hide on any dashboard section, not just that one.
   applyDashboardOrder();
+}
+
+// Ketosis streak milestones — the counter previously just ticked up silently
+// with no acknowledgment of the days that actually mean something. Tied to
+// genuine markers of sustained metabolic pressure, not generic gamification —
+// fires once per threshold ever, using a persisted list rather than a date
+// check, since updateDashboard() runs far too often to gate on "today".
+// Same bug class as the badge/Trends/getKetosisStatus fixes tonight -
+// every milestone message claimed a "ketosis"/"metabolic state" specifically,
+// regardless of whether the actual selected condition is ketogenic at all.
+// Two parallel sets rather than string-patching one set at lookup time,
+// since the non-keto versions need genuinely different wording throughout,
+// not just a word swapped mid-sentence.
+const STREAK_MILESTONES_KETO = {
+  7:   { emoji: '🔥', text: 'One full week in ketosis — a real first foothold.' },
+  14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real metabolic state, not a good day here and there.' },
+  30:  { emoji: '🔥', text: 'A full month in deep ketosis. That\'s sustained metabolic pressure on this thing for 30 days straight.' },
+  50:  { emoji: '🔥', text: '50 days. Genuinely serious consistency.' },
+  100: { emoji: '🏆', text: '100 days in ketosis. A hundred days of doing the hard, unglamorous work, every single day.' },
+  200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
+  365: { emoji: '🏆', text: 'A full year in ketosis. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
+};
+const STREAK_MILESTONES_GENERAL = {
+  7:   { emoji: '🔥', text: 'One full week under your carb target — a real first foothold.' },
+  14:  { emoji: '🔥', text: 'Two weeks sustained. This is becoming a real habit, not a good day here and there.' },
+  30:  { emoji: '🔥', text: 'A full month under target. That\'s sustained consistency for 30 days straight.' },
+  50:  { emoji: '🔥', text: '50 days. Genuinely serious consistency.' },
+  100: { emoji: '🏆', text: '100 days under target. A hundred days of doing the hard, unglamorous work, every single day.' },
+  200: { emoji: '🏆', text: '200 days. This is who you are now, not just something you\'re doing.' },
+  365: { emoji: '🏆', text: 'A full year under target. However this goes from here, this is a genuinely remarkable thing to have sustained.' },
+};
+const STREAK_MILESTONES = new Proxy({}, { get(_, key) { return (isKetogenicCondition() ? STREAK_MILESTONES_KETO : STREAK_MILESTONES_GENERAL)[key]; } });
+function checkStreakMilestone(streak) {
+  if (!STREAK_MILESTONES[streak]) return;
+  let celebrated = [];
+  try { celebrated = JSON.parse(localStorage.getItem('mh_celebrated_milestones') || '[]'); } catch(e) {}
+  if (celebrated.includes(streak)) return;
+  celebrated.push(streak);
+  localStorage.setItem('mh_celebrated_milestones', JSON.stringify(celebrated));
+  const m = STREAK_MILESTONES[streak];
+  addBubble(`${m.emoji} <strong>${streak} day streak.</strong> ${m.text}`, 'system');
+  showToast(`${m.emoji} ${streak} day streak!`);
+}
+
+// ─── TDEE STILL-ACCURATE NUDGE ──────────────────────────────────────────────
+// Real gap found in a broader app audit (29/09/2026): mh_tdee is a one-time
+// manually-confirmed figure (saveTdee()) that the app never revisits - once
+// set, it's trusted forever regardless of what real weight trend actually
+// does afterward. MacroFactor-style apps auto-recalculate weekly from
+// logged-intake-vs-weight-trend outcomes; this deliberately does NOT copy
+// that (silently changing a number this many downstream calculations rely
+// on - reports, targets, AI context - without the person's own sign-off
+// would be a worse trade than the staleness it fixes). Instead: a periodic,
+// opt-in NUDGE using data already collected (real logged intake, real
+// weight trend), surfaced the same way a streak milestone is, never a
+// silent auto-change to mh_tdee itself.
+// Shared DD/MM/YY -> real Date parser, same convention already used inline
+// all over this file (e.g. `new Date('20'+p[2]+'-'+p[1]+'-'+p[0])`) -
+// pulled out here just so checkTdeeStillAccurate() below isn't repeating
+// the same split/reorder three times.
+function _parseDDMMYY(dateStr) {
+  const p = (dateStr || '').split('/');
+  if (p.length !== 3) return null;
+  return new Date(`20${p[2]}-${p[1]}-${p[0]}`);
+}
+
+function checkTdeeStillAccurate() {
+  const manualTdee = parseInt(localStorage.getItem('mh_tdee'));
+  if (!manualTdee) return; // nothing confirmed yet - nothing to re-check
+  const confirmedDate = localStorage.getItem('mh_tdee_confirmed_date');
+  if (!confirmedDate) return; // confirmed before this tracking existed - can't measure "since when"
+
+  const confirmedAt = _parseDDMMYY(confirmedDate);
+  if (!confirmedAt) return;
+  const daysSince = Math.floor((Date.now() - confirmedAt.getTime()) / 86400000);
+  if (daysSince < 14) return; // needs at least 2 weeks of real data to say anything meaningful
+
+  // Only ask again once every 14 days even if the person dismisses it or
+  // just doesn't open the app to see it - re-nagging daily about the same
+  // stale figure would be worse than the staleness itself.
+  const lastAsked = localStorage.getItem('mh_tdee_check_dismissed');
+  if (lastAsked) {
+    const lastAskedAt = _parseDDMMYY(lastAsked);
+    if (lastAskedAt) {
+      const daysSinceAsked = Math.floor((Date.now() - lastAskedAt.getTime()) / 86400000);
+      if (daysSinceAsked < 14) return;
+    }
+  }
+
+  // Real weight trend over the same window this TDEE has been trusted for
+  // (capped at 30 days - a genuinely stale confirmation from months ago
+  // shouldn't pull in that much history, since goal/phase may well have
+  // changed since).
+  const windowDays = Math.min(daysSince, 30);
+  const cutoff = new Date(Date.now() - windowDays * 86400000);
+  const windowHistory = state.history.filter(h => {
+    const p = (h.date || '').split('/');
+    if (p.length !== 3) return false;
+    return new Date(`20${p[2]}-${p[1]}-${p[0]}`) >= cutoff && h.weight;
+  }).sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
+  if (windowHistory.length < 4) return; // too few real weigh-ins to trust a trend over this window
+
+  const actualWtChange = windowHistory[windowHistory.length - 1].weight - windowHistory[0].weight;
+  const goal = localStorage.getItem('mh_goal') || 'gain';
+  // Roughly how much weight the current phase's calorie target implies over
+  // this window, at the standard ~7700kcal/kg rule of thumb - same figure
+  // used implicitly by the lose/gain kcal offsets elsewhere (TDEE±500/400).
+  const dailyOffset = goal === 'lose' ? -500 : goal === 'gain' ? 400 : 0;
+  const expectedWtChange = Math.round((dailyOffset * windowDays / 7700) * 10) / 10;
+
+  if (goal === 'maintain') {
+    // For Maintain, "still accurate" means weight staying roughly flat -
+    // any real drift either way is the signal, not a directional miss.
+    if (Math.abs(actualWtChange) < 1.0) return; // within normal fluctuation, nothing to flag
+  } else {
+    // For Lose/Gain, flag when the REAL trend is moving the wrong way, or
+    // barely moving at all, relative to what the confirmed TDEE implies -
+    // not just "any small numeric gap", which would fire constantly on
+    // ordinary week-to-week noise.
+    const movingWrongWay = (goal === 'lose' && actualWtChange > -0.3) || (goal === 'gain' && actualWtChange < 0.3);
+    if (!movingWrongWay) return;
+  }
+
+  localStorage.setItem('mh_tdee_check_dismissed', todayStr());
+  const dirWord = actualWtChange > 0 ? 'gained' : actualWtChange < 0 ? 'lost' : 'stayed within';
+  const msg = goal === 'maintain'
+    ? `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Weight has ${dirWord === 'stayed within' ? 'stayed flat' : `${dirWord} ${Math.abs(actualWtChange)}kg`} over the last ${windowDays} days on a Maintain target — if that's not intentional, your real maintenance calories may have shifted. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`
+    : `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Over the last ${windowDays} days on a ${goal === 'lose' ? 'Lose' : 'Gain'} target, weight has ${dirWord} ${Math.abs(actualWtChange)}kg — expected roughly ${Math.abs(expectedWtChange)}kg ${goal === 'lose' ? 'lost' : 'gained'} in that time. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`;
+  addBubble(msg, 'system');
 }
 
 function scaleLogEdit(id, pct) {
