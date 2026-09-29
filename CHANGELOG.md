@@ -1,6 +1,16 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.838, HEAD v3.10.838)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.839, HEAD v3.10.839)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.839 — "7 Days" On Trends Was Only Showing 6
+
+Pete: "This is not 7 days of my data" — the Trends screen's 7-day view (and 30-day, and any other fixed window) was actually showing one fewer day than advertised whenever "Include today" was left off (the default, since an in-progress day can skew an average/trend line).
+
+The cutoff date math was already correct — `now - 7 days` genuinely reserves a 7-calendar-day window including today. But today then got silently dropped by the separate today-exclusion filter that runs right after, and nothing compensated for that lost slot — so "7 Days" rendered as 6 (e.g. 23rd–28th, missing both the 29th and effectively one more day of real history than intended).
+
+Fixed `getTrendsData()`: when today is going to be excluded (not `_trendsIncludeToday`, not `forceFullHistory`), the cutoff is pushed back one extra day so the window still shows a genuine 7 (or 30, etc.) days, ending yesterday rather than quietly shrinking by one. Verified directly: with today excluded, a 7-day window now returns 7 real dates ending yesterday; with "Include today" on, it returns 7 real dates ending today, unchanged from before.
+
+(Investigated and ruled out as part of this: whether flat-looking SpO2/heart-rate values on the chart were a demo-persona data leak — confirmed the demo-persona generator never fabricates SpO2/HR/HRV/sleep data at all, only meals and weight, so that's not a route this bug could come from.)
 
 ## v3.10.838 — Routine Template kg/lbs Toggle Didn't Visually Update
 
