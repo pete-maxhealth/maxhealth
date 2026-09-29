@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.832, HEAD v3.10.832)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.833, HEAD v3.10.833)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.833 — Alphabetical Sort Now Ignores Leading Icons
+
+Follow-up to v3.10.832: Pete flagged that section titles with a leading emoji — "📐 Formulas & Technical Reference", "🩸 Lab Results + Log Panel" — were sorting by the emoji's Unicode codepoint rather than by the first real letter, landing them in odd spots instead of under F/L where someone scanning alphabetically would look for them. Added a small `_stripLeadingIconForSort()` helper (strips a leading emoji/symbol run and its trailing whitespace, for comparison purposes only) and wired it into both restore-strip sort comparators (`renderGenericRestoreStrip`, `renderDashboardRestoreStrip`). Display is untouched — pills still show their icon — only the sort comparison ignores it now.
 
 ## v3.10.832 — Collapsed Section Pills Now Alphabetical, Everywhere
 
