@@ -1,6 +1,22 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.817, HEAD v3.10.817)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.821, HEAD v3.10.821)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.821 — Lab Results Tracker: Real Bloodwork Now Has a Home
+
+MaxedHealth previously had no way to log real lab-drawn bloodwork anywhere, despite being comfortable with device-derived biomarkers throughout — a gap found during a competitive-research pass against premium health-tracking apps (several offer PDF lab-report auto-parsing; this ships the underlying data model and manual entry first). New **🩸 Lab Results** section in Settings → Manage: a growing list of dated lab panels (not daily-reset, matching the Treatment Tracking pattern rather than Symptom Tracking's, since a blood draw is a periodic event, not a daily one), each panel logging only the markers it actually reported across 5 groups — Lipids, Liver Function, Glucose & Metabolic, Inflammatory & Blood Count, and Kidney Function (14 markers total, each with its own reference range) — nothing assumed or defaulted for markers left blank. Panels can be edited or deleted, are included in full backup/restore and demo-mode's real-data snapshot/restore, and the single most recent panel (regardless of report period, since draws are sparse) now appears in the AI report's context, with any out-of-range marker flagged for discussion with the treating clinician — the prompt is explicit that this is informational, not a diagnosis.
+
+## v3.10.820 — TDEE-Still-Accurate Nudge
+
+Another competitive-research find: premium trackers prompt a TDEE recheck when real-world weight trend stops matching what the current goal + TDEE predicts. New `checkTdeeStillAccurate()`: once a manually-confirmed TDEE is 14+ days old, with at least 4 real weigh-ins in the trend window, compares actual weight change against what the active goal (Lose/Gain/Maintain) implies — flat when it shouldn't be, or moving the wrong way — and surfaces a one-time-per-14-days nudge bubble. Never auto-changes `mh_tdee` itself; purely a prompt to re-check.
+
+## v3.10.819 — Real GKI (Glucose Ketone Index) Logging
+
+MaxedHealth could only ever infer ketosis compliance from logged food. New **🩸 Log a real reading** flow (from the Carb Zones tooltip) lets an actual blood glucose + blood ketone meter reading be logged directly, computing a real GKI (glucose ÷ ketones × 100) stored per-day alongside the rest of that day's history. Full integration: today's reading shown color-coded (therapeutic ketosis <2.0 green, <3.0 yellow, else red) right where the diet-inferred estimate already lived; a new GKI Trends card and Compare-Metrics entry; and a new AI-report context line explicitly distinguished from the existing diet-inferred figure, so the two are never conflated.
+
+## v3.10.818 — Water Target Celebration Now Fires From Every Logging Path
+
+The "target reached" toast only ever fired from one of three ways to log water (quick-add buttons), not the custom-amount or voice-logging paths — so hitting the day's target via either of those went uncelebrated. Refactored all three into a shared `_addWaterAndCelebrate()`, so the celebration (and its once-per-day guard) now fires consistently regardless of how the water was logged.
 
 ## v3.10.804-807 — Wellness Balance Card: From "Wrong" to "Explained" to Actually Fixed
 
