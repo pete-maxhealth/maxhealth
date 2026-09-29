@@ -1,6 +1,12 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.837, HEAD v3.10.837)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.838, HEAD v3.10.838)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.838 — Routine Template kg/lbs Toggle Didn't Visually Update
+
+Pete: "Strength training won't let's me select lbs" — turned out to be specifically the kg/lbs toggle added in v3.10.836 to the routine create/edit template screen. The toggle was actually working correctly underneath the whole time — tapping "lbs" genuinely switched `_routineFormUnit` and converted every displayed weight — but `setRoutineFormUnit()` never updated the two buttons' own styling, unlike the two other kg/lbs toggles in the app (manual-log form, Apply Routine screen), which both explicitly restyle their buttons on switch. So "kg" stayed visually highlighted forever, making it look like the tap did nothing even though it had worked.
+
+Fixed `setRoutineFormUnit()` to restyle both buttons on every switch, matching the pattern `setStrengthUnit()`/`setRoutineUnit()` already use. Verified directly: toggling to lbs moves the highlighted border/background from the kg button to the lbs button, and back again on toggling back.
 
 ## v3.10.837 — Portion Wasn't Pre-Filling When Re-Searching a Meal-Preview or Recipe Item
 
