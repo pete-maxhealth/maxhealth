@@ -4850,7 +4850,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.814</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.815</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5868,7 +5868,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.814'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.815'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -7756,6 +7756,91 @@ function resetLibrarySectionOrder() {
   showToast('Library section order reset to default ✓');
 }
 
+// Builds the full edit-form HTML for one library item (every field, category
+// chips, AI-check panel) — split out of renderItems() (inside renderLibrary
+// below) so it can be built lazily, on first EDIT tap, rather than for every
+// item on every render. See the comment at renderItems' edit-form shell for
+// the real DOM-size bug this fixes.
+function buildLibraryEditFormHtml(f, origIdx) {
+  const deleteBtn = `<button class="library-edit-cancel" style="color:var(--red);border-color:rgba(255,94,94,0.3);margin-right:auto;" onclick="deleteFromLibrary(${origIdx})">Delete</button>`;
+  return `
+      <div class="library-edit-row">
+        <span class="library-edit-label">Name</span>
+        <input class="library-edit-input" id="lib-edit-name-${origIdx}" value="${f.name.replace(/"/g,'&quot;')}">
+      </div>
+      <div class="library-edit-row">
+        <span class="library-edit-label">Portion</span>
+        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs"
+          data-orig-portion="${(f.portion||'').replace(/"/g,'&quot;')}"
+          data-orig-kcal="${f.kcal||0}" data-orig-protein="${f.protein||0}" data-orig-fat="${f.fat||0}"
+          data-orig-carb="${f.carbs||0}" data-orig-fibre="${f.fibre||0}" data-orig-polyols="${f.polyols||0}"
+          oninput="scaleLibraryEditPortion(${origIdx},this)">
+      </div>
+      <div style="margin-bottom:6px;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
+        <div id="lib-edit-cats-${origIdx}" style="margin-bottom:6px;">${(Array.isArray(f.categories) && f.categories.length) ? renderCategoryChipsHtml(origIdx, f.categories, false) : renderCategoryChipsHtml(origIdx, getItemCategories(f), true)}</div>
+        <div style="display:flex;gap:6px;">
+          <input id="lib-edit-newcat-${origIdx}" list="allKnownCategories" type="text" placeholder="add a category, e.g. dairy" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;">
+          <button onclick="addItemCategory(${origIdx})" style="padding:6px 10px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:8px;font-size:12px;cursor:pointer;">+ Add</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">KCAL</div>
+          <input class="library-edit-input" id="lib-edit-kcal-${origIdx}" type="number" value="${f.kcal}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--green);margin-bottom:3px;font-family:Space Mono,monospace;">PROTEIN g</div>
+          <input class="library-edit-input" id="lib-edit-prot-${origIdx}" type="number" step="0.1" value="${f.protein}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:#a78bfa;margin-bottom:3px;font-family:Space Mono,monospace;">FAT g</div>
+          <input class="library-edit-input" id="lib-edit-fat-${origIdx}" type="number" step="0.1" value="${f.fat||0}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--yellow);margin-bottom:3px;font-family:Space Mono,monospace;">CARBS g</div>
+          <input class="library-edit-input" id="lib-edit-carb-${origIdx}" type="number" step="0.1" value="${f.carbs}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">FIBRE g</div>
+          <input class="library-edit-input" id="lib-edit-fibre-${origIdx}" type="number" step="0.1" value="${f.fibre||0}" style="width:100%;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">POLYOLS g</div>
+          <input class="library-edit-input" id="lib-edit-polyols-${origIdx}" type="number" step="0.1" value="${f.polyols||0}" style="width:100%;">
+        </div>
+      </div>
+      <button class="copy-btn" style="width:100%;margin-bottom:6px;padding:7px;font-size:11px;" onclick="runLibraryEditTripleAI(${origIdx})">🔍 Verify across 3 AIs</button>
+      <div id="lib-edit-aicheck-${origIdx}" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;"></div>
+      <div style="margin-bottom:6px;">
+        <span onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'grid':'none';" style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;">ⓘ More info (sat fat, sugars, salt, iron)</span>
+        <div style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SAT FAT g</div>
+            <input class="library-edit-input" id="lib-edit-satfat-${origIdx}" type="number" step="0.1" value="${f.satFat||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SUGARS g</div>
+            <input class="library-edit-input" id="lib-edit-sugars-${origIdx}" type="number" step="0.1" value="${f.sugars||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SALT g</div>
+            <input class="library-edit-input" id="lib-edit-salt-${origIdx}" type="number" step="0.01" value="${f.salt||0}" style="width:100%;">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">IRON mg</div>
+            <input class="library-edit-input" id="lib-edit-iron-${origIdx}" type="number" step="0.1" value="${f.iron||0}" style="width:100%;">
+          </div>
+        </div>
+      </div>
+      <div class="library-edit-actions">
+        ${deleteBtn}
+        <button class="library-edit-cancel" onclick="cancelLibraryEdit(${origIdx})">Cancel</button>
+        <button class="library-edit-save" onclick="saveLibraryEdit(${origIdx})">Save</button>
+      </div>
+  `;
+}
+
 function renderLibrary() {
   try {
   applyLibraryOrder();
@@ -7886,84 +7971,19 @@ function renderLibrary() {
         f.items.map(i => `<span style="color:var(--text2);">${i.name}</span>${i.amount ? ' <span style="color:var(--text3);font-size:10px;">(${i.amount})</span>' : ''}`).join(' &nbsp;·&nbsp; ') +
         '</div>'
       : '';
-    const deleteBtn = `<button class="library-edit-cancel" style="color:var(--red);border-color:rgba(255,94,94,0.3);margin-right:auto;" onclick="deleteFromLibrary(${origIdx})">Delete</button>`;
+    // Edit form is now an empty shell here (see buildLibraryEditFormHtml,
+    // filled in lazily by openLibraryEdit on first tap) - real perf/DOM-size
+    // bug found 29/09/2026: every single library item was getting its FULL
+    // edit form (every input, category chips, AI-check panel) built and
+    // injected into the page on every render, whether or not anyone ever
+    // opened it - as the library grows this means hundreds of fully-built
+    // hidden forms sitting in the DOM at once, not just lightweight display
+    // rows, which is exactly what made the page feel unmanageable. Nothing
+    // downstream (saveLibraryEdit, category chip functions, etc.) assumed
+    // the form pre-existed at render time - they all already look it up by
+    // id when called - so building it lazily needed no other changes.
     return `
-    <div class="library-edit-form" id="lib-edit-form-${origIdx}">
-      <div class="library-edit-row">
-        <span class="library-edit-label">Name</span>
-        <input class="library-edit-input" id="lib-edit-name-${origIdx}" value="${f.name.replace(/"/g,'&quot;')}">
-      </div>
-      <div class="library-edit-row">
-        <span class="library-edit-label">Portion</span>
-        <input class="library-edit-input" id="lib-edit-portion-${origIdx}" value="${f.portion||''}" placeholder="e.g. 30g, 1 tbsp, 2 tabs"
-          data-orig-portion="${(f.portion||'').replace(/"/g,'&quot;')}"
-          data-orig-kcal="${f.kcal||0}" data-orig-protein="${f.protein||0}" data-orig-fat="${f.fat||0}"
-          data-orig-carb="${f.carbs||0}" data-orig-fibre="${f.fibre||0}" data-orig-polyols="${f.polyols||0}"
-          oninput="scaleLibraryEditPortion(${origIdx},this)">
-      </div>
-      <div style="margin-bottom:6px;">
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">CATEGORIES</div>
-        <div id="lib-edit-cats-${origIdx}" style="margin-bottom:6px;">${(Array.isArray(f.categories) && f.categories.length) ? renderCategoryChipsHtml(origIdx, f.categories, false) : renderCategoryChipsHtml(origIdx, getItemCategories(f), true)}</div>
-        <div style="display:flex;gap:6px;">
-          <input id="lib-edit-newcat-${origIdx}" list="allKnownCategories" type="text" placeholder="add a category, e.g. dairy" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:12px;">
-          <button onclick="addItemCategory(${origIdx})" style="padding:6px 10px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:8px;font-size:12px;cursor:pointer;">+ Add</button>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-        <div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">KCAL</div>
-          <input class="library-edit-input" id="lib-edit-kcal-${origIdx}" type="number" value="${f.kcal}" style="width:100%;">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--green);margin-bottom:3px;font-family:Space Mono,monospace;">PROTEIN g</div>
-          <input class="library-edit-input" id="lib-edit-prot-${origIdx}" type="number" step="0.1" value="${f.protein}" style="width:100%;">
-        </div>
-        <div>
-          <div style="font-size:10px;color:#a78bfa;margin-bottom:3px;font-family:Space Mono,monospace;">FAT g</div>
-          <input class="library-edit-input" id="lib-edit-fat-${origIdx}" type="number" step="0.1" value="${f.fat||0}" style="width:100%;">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--yellow);margin-bottom:3px;font-family:Space Mono,monospace;">CARBS g</div>
-          <input class="library-edit-input" id="lib-edit-carb-${origIdx}" type="number" step="0.1" value="${f.carbs}" style="width:100%;">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">FIBRE g</div>
-          <input class="library-edit-input" id="lib-edit-fibre-${origIdx}" type="number" step="0.1" value="${f.fibre||0}" style="width:100%;">
-        </div>
-        <div>
-          <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">POLYOLS g</div>
-          <input class="library-edit-input" id="lib-edit-polyols-${origIdx}" type="number" step="0.1" value="${f.polyols||0}" style="width:100%;">
-        </div>
-      </div>
-      <button class="copy-btn" style="width:100%;margin-bottom:6px;padding:7px;font-size:11px;" onclick="runLibraryEditTripleAI(${origIdx})">🔍 Verify across 3 AIs</button>
-      <div id="lib-edit-aicheck-${origIdx}" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;"></div>
-      <div style="margin-bottom:6px;">
-        <span onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'grid':'none';" style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;">ⓘ More info (sat fat, sugars, salt, iron)</span>
-        <div style="display:none;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SAT FAT g</div>
-            <input class="library-edit-input" id="lib-edit-satfat-${origIdx}" type="number" step="0.1" value="${f.satFat||0}" style="width:100%;">
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SUGARS g</div>
-            <input class="library-edit-input" id="lib-edit-sugars-${origIdx}" type="number" step="0.1" value="${f.sugars||0}" style="width:100%;">
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">SALT g</div>
-            <input class="library-edit-input" id="lib-edit-salt-${origIdx}" type="number" step="0.01" value="${f.salt||0}" style="width:100%;">
-          </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;font-family:Space Mono,monospace;">IRON mg</div>
-            <input class="library-edit-input" id="lib-edit-iron-${origIdx}" type="number" step="0.1" value="${f.iron||0}" style="width:100%;">
-          </div>
-        </div>
-      </div>
-      <div class="library-edit-actions">
-        ${deleteBtn}
-        <button class="library-edit-cancel" onclick="cancelLibraryEdit(${origIdx})">Cancel</button>
-        <button class="library-edit-save" onclick="saveLibraryEdit(${origIdx})">Save</button>
-      </div>
-    </div>
+    <div class="library-edit-form" id="lib-edit-form-${origIdx}"></div>
     <div class="library-item" id="lib-item-${origIdx}">
       <div class="library-item-info">
         <div class="library-item-name">${f.name}</div>
@@ -8335,9 +8355,13 @@ function scaleLibraryEditPortion(origIdx, portionEl) {
 }
 
 function openLibraryEdit(index) {
-  // Hide any other open edit forms first
+  // Hide any other open edit forms first, and empty them back out - not
+  // just hide them - so only the one form actually being edited carries
+  // any real DOM weight at a time. See buildLibraryEditFormHtml's comment
+  // for why this matters as the library grows.
   document.querySelectorAll('.library-edit-form.open').forEach(el => {
     el.classList.remove('open');
+    el.innerHTML = '';
     const i = el.id.replace('lib-edit-form-', '');
     const item = document.getElementById('lib-item-' + i);
     if (item) item.style.display = 'flex';
@@ -8345,6 +8369,14 @@ function openLibraryEdit(index) {
   const form = document.getElementById('lib-edit-form-' + index);
   const item = document.getElementById('lib-item-' + index);
   if (!form || !item) return;
+  // Built lazily here, on first open, rather than upfront for every item on
+  // every render - the whole point of the shell/lazy-build split.
+  if (!form.innerHTML.trim()) {
+    const lib = loadLibrary();
+    const f = lib[index];
+    if (!f) return;
+    form.innerHTML = buildLibraryEditFormHtml(f, index);
+  }
   form.classList.add('open');
   item.style.display = 'none';
   document.getElementById('lib-edit-name-' + index).focus();
@@ -8353,7 +8385,7 @@ function openLibraryEdit(index) {
 function cancelLibraryEdit(index) {
   const form = document.getElementById('lib-edit-form-' + index);
   const item = document.getElementById('lib-item-' + index);
-  if (form) form.classList.remove('open');
+  if (form) { form.classList.remove('open'); form.innerHTML = ''; }
   if (item) item.style.display = 'flex';
   // Real gap found: editing an item from within Browse Categories always
   // landed back on the main Library list afterward, regardless of where the
