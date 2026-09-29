@@ -4882,7 +4882,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.822</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.824</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5006,7 +5006,8 @@
     <button class="settings-save-btn" onclick="event.stopPropagation();openLabPanelModal(null);">+ Log Panel</button>
   </div>
   <div id="labResultsContent">
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;"><span class="help-slot" data-id="labresults" data-text="Real bloodwork results — lipids, liver function, glucose/HbA1c, inflammatory markers, kidney function and more — logged against the date of the actual draw, not daily like nutrition. Each panel only needs the markers it actually reported; nothing is assumed or defaulted. Trend charts and AI reports can reference these once logged."></span></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px;"><span class="help-slot" data-id="labresults" data-text="Real bloodwork results — lipids, liver function, glucose/HbA1c, inflammatory markers, kidney function and more — logged against the date of the actual draw, not daily like nutrition. Each panel only needs the markers it actually reported; nothing is assumed or defaulted. Trend charts and AI reports can reference these once logged. Every marker is also available in Trends → Compare Metrics, so it can be charted alongside weight, GKI, treatments or anything else tracked."></span></div>
+    <div id="labTrendChips" style="display:none;"></div>
     <div id="labResultsListInner">
       <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">Loading…</div>
     </div>
@@ -5911,7 +5912,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.822'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.824'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -23967,7 +23968,6 @@ function toggleSupplement(id, period) {
 const DEFAULT_SYMPTOMS = []; // empty by default - built by the user, not assumed
 
 function loadSymptomDefs() {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return typeof generateDemoSymptoms === 'function' ? generateDemoSymptoms() : DEFAULT_SYMPTOMS.slice();
   try {
     const stored = localStorage.getItem('mh_symptom_defs');
     if (stored) return JSON.parse(stored);
@@ -23976,7 +23976,15 @@ function loadSymptomDefs() {
 }
 
 function saveSymptomDefs(defs) {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  // No demo-mode guard, matching saveTreatmentDefs' own (already-correct)
+  // pattern — real state is protected by the snapshot/restore mechanism in
+  // startDemoMode()/exitDemoMode(), not by individual save functions
+  // refusing to write. Found as a real bug (29/09/2026): this guard existed
+  // but loadSymptomDefs()'s demo branch called a generateDemoSymptoms()
+  // that was never actually written, so every persona's real symptomDefs
+  // (built correctly by applyPersonaClinicalSetup) silently fell back to
+  // an empty DEFAULT_SYMPTOMS list in demo mode — Priya/Tom/Maria/Raj/
+  // Grace's whole symptom-tracking narrative was invisible in the demo.
   localStorage.setItem('mh_symptom_defs', JSON.stringify(defs));
 }
 
@@ -24117,9 +24125,35 @@ function getLabMarkerTrend(markerId) {
     .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
 }
 
+// Trend chips — one per marker with 2+ real readings logged (a single
+// reading has nothing to trend against yet), each opening the exact same
+// full chart/stats Deep Dive view every other tracked metric uses (see
+// DRILL_CONFIG's lab-marker registration, 29/09/2026) via openChartLightbox.
+// Real gap this closes: lab data previously only ever surfaced as the
+// latest panel's raw numbers in this list and in the AI report — no way to
+// actually SEE a marker moving over time without this.
+function renderLabTrendChips() {
+  const el = document.getElementById('labTrendChips');
+  if (!el) return;
+  const withTrend = LAB_MARKERS_FLAT
+    .map(m => ({ m, trend: getLabMarkerTrend(m.id) }))
+    .filter(x => x.trend.length >= 2);
+  if (!withTrend.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">📈 View a trend:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+      ${withTrend.map(({m, trend}) => {
+        const latest = trend[trend.length - 1].value;
+        const outOfRange = m.ref && (latest < m.ref[0] || latest > m.ref[1]);
+        return `<button onclick="openChartLightbox('lab_${m.id}')" style="background:var(--surface2);border:1px solid ${outOfRange ? 'var(--red)' : 'var(--border)'};border-radius:14px;padding:5px 11px;font-size:11px;color:${outOfRange ? 'var(--red)' : 'var(--text2)'};cursor:pointer;">${m.name} (${trend.length}) ${outOfRange ? '⚠' : ''}</button>`;
+      }).join('')}
+    </div>`;
+}
+
 function renderLabResultsSettings() {
   const el = document.getElementById('labResultsListInner');
   if (!el) return;
+  renderLabTrendChips();
   const entries = loadLabResults();
   if (!entries.length) {
     el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No lab panels logged yet.<br>Tap + Log Panel to add your first one.</div>';
@@ -33293,6 +33327,37 @@ const DRILL_CONFIG = {
   // of this inversion, same reasoning as why carbs/calories have no ref.
   gki:        { title: 'GKI (Glucose Ketone Index)', unit: '', color: '#f472b6', icon: '🩸', field: 'gki', ref: [0,2], refLabel: 'Therapeutic ketosis target', lowerIsBetter: true },
 };
+// Lab markers registered as real DRILL_CONFIG entries (29/09/2026) — real
+// gap found: Lab Results existed (v3.10.821) but only ever surfaced as the
+// single most recent panel in the AI report, never as a chartable/
+// comparable metric like every other tracked figure in this app. Sparse by
+// nature (a handful of panels a year, not daily) so these are special-
+// cased in getDrillData() to read from getLabMarkerTrend() rather than the
+// daily state.history array every other metric above reads from — same
+// reasoning as fat_pct/muscle_pct/bone_mass/hydration's own
+// getFullBodyCompositionHistory() special-case, except lab markers are
+// deliberately NOT forward-filled between readings the way those are: a
+// stale lab value silently implied as "current" on every day since the
+// last draw would be actively misleading for something this infrequent,
+// so the chart honestly shows sparse points with real gaps between them.
+// `field` here is unused (getDrillData's lab branch reads getLabMarkerTrend
+// directly) but kept populated with the marker id for consistency/debugging.
+// Colors deliberately vary across the four clinical groups (red-ish for
+// lipids, amber for liver, blue for metabolic, green/purple for
+// inflammatory/kidney) so a Compare Metrics overlay of several lab markers
+// at once is still visually distinguishable at a glance.
+(function() {
+  const labColors = { 'Lipids': '#f87171', 'Liver Function': '#f59e0b', 'Glucose & Metabolic': '#38bdf8', 'Inflammatory & Blood Count': '#a78bfa', 'Kidney Function': '#4ade80' };
+  const labIcons  = { 'Lipids': '🩸', 'Liver Function': '🫀', 'Glucose & Metabolic': '🍬', 'Inflammatory & Blood Count': '🔬', 'Kidney Function': '💧' };
+  LAB_MARKER_GROUPS.forEach(g => {
+    g.markers.forEach(m => {
+      DRILL_CONFIG['lab_' + m.id] = {
+        title: m.name, unit: m.unit, color: labColors[g.label] || '#94a3b8', icon: labIcons[g.label] || '🩸',
+        field: m.id, ref: m.ref, refLabel: 'Reference range', isLabMarker: true, labMarkerId: m.id,
+      };
+    });
+  });
+})();
 
 // Returns a history entry's fat grams — uses the genuinely recorded value if present,
 // otherwise back-calculates it from kcal/protein/carbs (calories must balance across
@@ -33537,6 +33602,25 @@ function getDrillData(metric, period) {
     return filled;
   }
 
+  // Lab markers — sparse, periodic readings (a handful of panels a year,
+  // not daily), read straight from getLabMarkerTrend() rather than
+  // state.history. Deliberately NO forward-fill between readings (unlike
+  // the body-composition branch above): a lab value silently implied as
+  // "current" every day since the last draw would misrepresent how
+  // infrequent real testing actually is. Real gaps in the chart are the
+  // honest representation here.
+  if (cfg.isLabMarker) {
+    const trend = getLabMarkerTrend(cfg.labMarkerId);
+    const filtered = period > 0
+      ? trend.filter(d => {
+          const dt = _parseDDMMYY(d.date);
+          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - period);
+          return dt && dt >= cutoff;
+        })
+      : trend;
+    return filtered.map(d => ({ date: d.date, val: d.value, raw: d }));
+  }
+
   // getDrillData always has its own explicit period parameter (used here
   // and below) - it should never inherit whatever Trends' own Today/multi-
   // day toggle happens to be set to, which is what forceFullHistory=true
@@ -33617,8 +33701,11 @@ function getDrillData(metric, period) {
 
 function openMetricDrill(metric) {
   _drillMetric = metric;
-  // For weight and body comp — default to All since scale data is infrequent
-  _drillPeriod = (metric === 'weight') ? 0 : 30;
+  // For weight, body comp, and lab markers — default to All since real
+  // readings are infrequent (a lab panel especially: a handful a year, not
+  // daily) - a 30-day default would show zero or one point almost always.
+  const cfg = getDrillConfig(metric);
+  _drillPeriod = (metric === 'weight' || cfg?.isLabMarker) ? 0 : 30;
   document.getElementById('metricDrillOverlay').style.display = 'block';
   // document.body.style.overflow = 'hidden'; // removed — prevents overlay scroll on Android
   // Reset period buttons — highlight correct one
@@ -33681,7 +33768,7 @@ let _mmSelectedMetrics = null; // lazy-loaded from localStorage on first open
 function getAllOverlayableMetrics() {
   const base = Object.keys(DRILL_CONFIG).map(key => {
     const cfg = getDrillConfig(key);
-    return { key, title: cfg.title, color: cfg.color, unit: cfg.unit, icon: cfg.icon, isSymptom: false };
+    return { key, title: cfg.title, color: cfg.color, unit: cfg.unit, icon: cfg.icon, isSymptom: false, isLabMarker: !!cfg.isLabMarker };
   });
   // Symptoms are user-defined, not a fixed registry entry - generated fresh
   // each time rather than hardcoded, since the list changes as symptoms are
@@ -33808,6 +33895,7 @@ const MM_METRIC_GROUPS = [
   { label: 'Vitals & Sleep', match: m => ['hr', 'hrv', 'spo2', 'sleep', 'gki'].includes(m.key) },
   { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'ketosis', 'water'].includes(m.key) },
   { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
+  { label: 'Lab Results', match: m => m.isLabMarker },
   { label: 'Symptoms', match: m => m.isSymptom },
 ];
 // Which groups are currently expanded - collapsed by default except the
@@ -39438,6 +39526,21 @@ function buildPatientContext(history, conditionFilter = null) {
     const outOfRange = def.ref && (val < def.ref[0] || val > def.ref[1]);
     return `${def.name}: ${val}${def.unit}${outOfRange ? ` (outside ${def.ref[0]}-${def.ref[1]} reference range)` : ''}`;
   }).filter(Boolean).join(', ') : null;
+  // Real trend across multiple draws, not just the latest panel's snapshot
+  // (29/09/2026) — a single reading can't say whether LDL is climbing or
+  // falling, only where it sits right now. Built for every marker with 2+
+  // logged values, using the same getLabMarkerTrend() the Compare
+  // Metrics/Deep Dive chart uses, so the AI's narrative and the actual
+  // chart the person can look at always agree with each other.
+  const labTrendSummary = (typeof getLabMarkerTrend === 'function') ? LAB_MARKERS_FLAT.map(def => {
+    const trend = getLabMarkerTrend(def.id);
+    if (trend.length < 2) return null;
+    const first = trend[0].value, last = trend[trend.length - 1].value;
+    const delta = Math.round((last - first) * 100) / 100;
+    const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'unchanged';
+    const outOfRange = def.ref && (last < def.ref[0] || last > def.ref[1]);
+    return `${def.name}: ${trend.length} readings from ${trend[0].date} to ${trend[trend.length-1].date}, ${first}${def.unit} → ${last}${def.unit} (${dir}${delta !== 0 ? ` ${Math.abs(delta)}${def.unit}` : ''})${outOfRange ? ` — currently outside ${def.ref[0]}-${def.ref[1]} reference range` : ''}`;
+  }).filter(Boolean).join('\n  ') : null;
 
   return {
     name, cond, goal, n, gapDays, t, wtLow, wtHigh,
@@ -39458,7 +39561,7 @@ function buildPatientContext(history, conditionFilter = null) {
     latestMetabolicAge: latestBodyComp?.metabolic_age ?? null,
     avgSleepHrs, sleepBelowRecommended, sleepDaysCount: sleepInWindow.length,
     gkiReadingsCount: gkiReadings.length, avgGKI, latestGKIReading,
-    latestLabPanel, latestLabSummary,
+    latestLabPanel, latestLabSummary, labTrendSummary,
     loggingStreak: (typeof calcLoggingStreak === 'function') ? calcLoggingStreak() : null,
     tdee: tdeeVal,
     tdeeSource,
@@ -39615,6 +39718,7 @@ LOGGING STREAK (distinct from the above — days with anything logged at all, re
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
 GKI (real blood glucose/ketone meter readings — the actual measured biomarker, distinct from CARB COMPLIANCE above which is diet-inferred, not measured): ${ctx.gkiReadingsCount > 0 ? `${ctx.gkiReadingsCount} reading(s) this period, avg ${ctx.avgGKI}, most recent ${ctx.latestGKIReading.gki} on ${ctx.latestGKIReading.date} (target < 2.0 for therapeutic ketosis)` : 'No real GKI readings logged this period — only the diet-inferred carb-ceiling adherence above is available, do not present that as a measured GKI figure.'}
 MOST RECENT LAB PANEL (bloodwork — NOT limited to the current report period, since a lab draw is periodic, not daily; this is simply the latest one logged, however old): ${ctx.latestLabPanel ? `${ctx.latestLabPanel.date}${ctx.latestLabPanel.labName ? ` (${ctx.latestLabPanel.labName})` : ''} — ${ctx.latestLabSummary || 'no markers recorded'}. Flag anything marked outside its reference range as worth discussing with the treating clinician — do not offer a diagnosis or treatment change yourself.` : 'No lab panels logged yet.'}
+LAB MARKER TRENDS (across all draws logged for a marker, not just the most recent — also NOT limited to the report period, same reasoning as above): ${ctx.labTrendSummary ? `\n  ${ctx.labTrendSummary}` : 'No marker has 2+ readings yet to show a real trend — only single, isolated values are available (see MOST RECENT LAB PANEL above).'}
 BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
 ${(ctx.latestVisceralFat != null || ctx.latestVascularAge != null || ctx.latestBmrDevice != null || ctx.latestMetabolicAge != null) ? `ADDITIONAL SCALE METRICS: ${[
   ctx.latestVisceralFat != null ? `Visceral fat index ${ctx.latestVisceralFat}` : null,
@@ -40882,6 +40986,13 @@ const DEMO_PERSONAS = [
       { daysAgo: 44, phase: 'maintain' },
       { daysAgo: 30, phase: 'loss' },
     ],
+    // Routine annual GP health check, not condition-driven — the ordinary
+    // "just good to know" case most users would actually have. Modest,
+    // realistic improvement as weight comes down, not a dramatic arc.
+    labPanels: [
+      { daysAgo: 40, labName: 'GP Surgery — Annual Check', values: { total_chol: 5.8, ldl: 3.6, hdl: 1.4, triglycerides: 1.6 } },
+      { daysAgo: 8,  labName: 'GP Surgery — Follow-up', values: { total_chol: 5.4, ldl: 3.2, hdl: 1.5, triglycerides: 1.3 } },
+    ],
   },
   {
     id: 'john', name: 'John', age: 47, sex: 'male', height: 178,
@@ -40899,6 +41010,17 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition', 'Body Composition'],
       includeSymptoms: false,
     },
+    // Three real panels across the test window — the textbook case for lab
+    // trending: HbA1c and lipids genuinely improving as weight comes down
+    // and carbs stay in check, which is exactly the story a real T2
+    // diabetic on this protocol would want their GP to see. Deliberately
+    // NOT a straight line — real bloodwork has noise (triglycerides dip
+    // then tick back up slightly) even while the overall direction holds.
+    labPanels: [
+      { daysAgo: 42, labName: 'GP Surgery', values: { hba1c: 58, fasting_glucose: 8.9, total_chol: 5.6, ldl: 3.4, hdl: 1.1, triglycerides: 2.3 } },
+      { daysAgo: 21, labName: 'GP Surgery', values: { hba1c: 51, fasting_glucose: 7.4, total_chol: 5.1, ldl: 3.0, hdl: 1.2, triglycerides: 2.0 } },
+      { daysAgo: 3,  labName: 'GP Surgery', values: { hba1c: 46, fasting_glucose: 6.5, total_chol: 4.7, ldl: 2.6, hdl: 1.3, triglycerides: 1.8 } },
+    ],
   },
   {
     id: 'maria', name: 'Maria', age: 44, sex: 'female', height: 165,
@@ -40946,6 +41068,20 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition', 'Body Composition'],
       includeSymptoms: true,
     },
+    // Bloodwork around both chemotherapy cycles (see treatmentCycles above,
+    // same daysAgo anchors) — genuinely what gets monitored through active
+    // treatment: liver function (chemo hepatotoxicity risk), kidney
+    // function, and CRP (infection/inflammation risk while immunosuppressed).
+    // Deliberately shows real cycle-related dips — ALT/AST rise during each
+    // cycle then recover between them — rather than a flat "everything's
+    // fine" line, since that's the clinically realistic pattern and exactly
+    // what a real oncology report would want visible.
+    labPanels: [
+      { daysAgo: 40, labName: "Maria's Care Team", values: { alt: 22, ast: 24, ggt: 28, albumin: 42, creatinine: 68, egfr: 98, crp: 3 } },
+      { daysAgo: 35, labName: "Maria's Care Team", values: { alt: 48, ast: 51, ggt: 44, albumin: 38, creatinine: 74, egfr: 91, crp: 9 } },
+      { daysAgo: 16, labName: "Maria's Care Team", values: { alt: 26, ast: 27, ggt: 31, albumin: 41, creatinine: 70, egfr: 96, crp: 4 } },
+      { daysAgo: 11, labName: "Maria's Care Team", values: { alt: 44, ast: 46, ggt: 40, albumin: 39, creatinine: 73, egfr: 93, crp: 8 } },
+    ],
   },
   {
     id: 'alex', name: 'Alex', age: 29, sex: 'male', height: 180,
@@ -40992,6 +41128,14 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Body Composition', 'Exercise'],
       includeSymptoms: false,
     },
+    // Baseline sports-performance bloodwork a serious trainee would
+    // actually get — kidney function (training load/hydration), lipids,
+    // and iron-adjacent inflammatory markers. Single panel only — a
+    // performance-focused 29-year-old wouldn't be getting repeat bloods
+    // over a 6-week window the way a monitored medical condition would.
+    labPanels: [
+      { daysAgo: 30, labName: "Alex's GP", values: { total_chol: 4.3, ldl: 2.4, hdl: 1.7, triglycerides: 0.9, creatinine: 88, egfr: 112 } },
+    ],
   },
   // The remaining five conditions the app actually supports (Condition/
   // Protocol dropdown), completing coverage of all 7 medical/therapeutic
@@ -41020,6 +41164,15 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition'],
       includeSymptoms: true,
     },
+    // Standard monitoring for a sustained therapeutic ketogenic diet —
+    // lipids and liver function are what a neurology team would routinely
+    // check, both staying comfortably in range across two panels (his
+    // adherence has been strong, so nothing dramatic here — reassurance,
+    // not a problem to flag).
+    labPanels: [
+      { daysAgo: 38, labName: "Raj's Neurology Team", values: { total_chol: 4.9, ldl: 2.9, hdl: 1.4, triglycerides: 1.1, alt: 24, ast: 22 } },
+      { daysAgo: 12, labName: "Raj's Neurology Team", values: { total_chol: 4.7, ldl: 2.7, hdl: 1.5, triglycerides: 1.0, alt: 23, ast: 21 } },
+    ],
   },
   {
     id: 'sam', name: 'Sam', age: 26, sex: 'female', height: 168,
@@ -41030,6 +41183,13 @@ const DEMO_PERSONAS = [
     bio: "26, no medical condition — chose strict ketogenic eating six weeks ago for general metabolic health and weight loss, largely self-directed after reading about it rather than following a clinical protocol. Testing the app's value for someone who isn't managing an illness: does it still hold up as a genuinely useful, non-clinical keto tracker, not just a medical tool.",
     weightPhaseHistory: [
       { daysAgo: 44, phase: 'loss' },
+    ],
+    // Self-directed private check, not clinician-ordered — the kind of
+    // one-off panel someone doing keto on their own initiative might get
+    // out of curiosity rather than a monitoring schedule. Single panel,
+    // good numbers early on.
+    labPanels: [
+      { daysAgo: 20, labName: 'Private Blood Test', values: { total_chol: 4.6, ldl: 2.5, hdl: 1.6, triglycerides: 0.8, fasting_glucose: 4.8 } },
     ],
   },
   {
@@ -41052,6 +41212,14 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition'],
       includeSymptoms: true,
     },
+    // Consistent with her "still struggling" story — essentially flat
+    // across two panels, no real change, because inconsistent carb
+    // adherence hasn't given the diet a genuine chance to show a metabolic
+    // effect either way. Deliberately unremarkable, not a success arc.
+    labPanels: [
+      { daysAgo: 36, labName: "Priya's Neurologist", values: { total_chol: 5.0, fasting_glucose: 5.1, crp: 2.8 } },
+      { daysAgo: 9,  labName: "Priya's Neurologist", values: { total_chol: 5.0, fasting_glucose: 5.2, crp: 3.1 } },
+    ],
   },
   {
     id: 'tom', name: 'Tom', age: 51, sex: 'male', height: 181,
@@ -41073,6 +41241,14 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition'],
       includeSymptoms: true,
     },
+    // Matches his strong-response, consistent-adherence story — kidney
+    // function and lipids both comfortably in range across the trial,
+    // routine monitoring for a sustained ketogenic diet at his age, nothing
+    // of concern, consistent with genuinely good real-world compliance.
+    labPanels: [
+      { daysAgo: 55, labName: "Tom's Headache Clinic", values: { creatinine: 82, egfr: 91, total_chol: 5.1, ldl: 3.0, hdl: 1.3 } },
+      { daysAgo: 20, labName: "Tom's Headache Clinic", values: { creatinine: 80, egfr: 93, total_chol: 4.9, ldl: 2.8, hdl: 1.4 } },
+    ],
   },
   {
     id: 'grace', name: 'Grace', age: 31, sex: 'female', height: 170,
@@ -41092,6 +41268,16 @@ const DEMO_PERSONAS = [
       metricGroupHint: ['Nutrition'],
       includeSymptoms: true,
     },
+    // T1's routine quarterly HbA1c check, not a restriction-driven story
+    // like John's — Grace manages via insulin dosing accuracy, so this
+    // shows genuinely stable, well-controlled numbers rather than a
+    // dramatic improvement arc. Two panels only (real quarterly spacing,
+    // not monthly like John/Maria) — enough to show the trend view work
+    // without overstating how often T1 bloodwork actually changes.
+    labPanels: [
+      { daysAgo: 40, labName: "Grace's Diabetes Team", values: { hba1c: 54, fasting_glucose: 6.8 } },
+      { daysAgo: 6,  labName: "Grace's Diabetes Team", values: { hba1c: 52, fasting_glucose: 6.6 } },
+    ],
   },
   // The nutrition/effort-focused counterpart to Priya's condition-related
   // struggle — no medical condition at all here, just genuinely inconsistent
@@ -41109,6 +41295,15 @@ const DEMO_PERSONAS = [
     ],
     adherenceStyle: 'inconsistent',
     activityStyle: 'inconsistent',
+    // Matches her stalled-progress story — cholesterol essentially
+    // unchanged across two panels, consistent with weight barely moving
+    // despite the stated goal. Genuinely unremarkable, not a problem to
+    // dramatize, just real data that hasn't shifted because the habits
+    // behind it haven't shifted either.
+    labPanels: [
+      { daysAgo: 50, labName: 'GP Surgery', values: { total_chol: 5.5, ldl: 3.3, hdl: 1.3, triglycerides: 1.7 } },
+      { daysAgo: 12, labName: 'GP Surgery', values: { total_chol: 5.4, ldl: 3.3, hdl: 1.3, triglycerides: 1.8 } },
+    ],
   },
 ];
 
@@ -41439,6 +41634,21 @@ function applyPersonaClinicalSetup(persona) {
     }
   } else {
     saveSymptomDefs([]);
+  }
+
+  // Lab Results — same daysAgo-relative-to-today pattern as treatment
+  // sessions above, so demo panels always land at a sensible recent date
+  // regardless of which real day the demo is actually being viewed on.
+  if (persona.labPanels && persona.labPanels.length) {
+    const today = new Date();
+    const entries = persona.labPanels.map((p, idx) => {
+      const d = new Date(today); d.setDate(d.getDate() - p.daysAgo);
+      const dateStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(2)}`;
+      return { id: `lab_demo_${persona.id}_${idx}`, date: dateStr, labName: p.labName || '', values: p.values || {}, custom: [] };
+    }).sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1);
+    saveLabResults(entries);
+  } else {
+    saveLabResults([]);
   }
 
   if (persona.reportProfile) {
