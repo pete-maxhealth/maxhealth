@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.825, HEAD v3.10.825)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.826, HEAD v3.10.826)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.826 — Sam Gets the Same Before/After Treatment
+
+Second of the scoped follow-ups: Sam (self-directed strict keto, no medical condition — her whole bio is literally "does this hold up as a useful tracker for someone not managing an illness") upgraded from one static panel to a real baseline-vs-six-weeks-in pair, mirroring Alex's before/after pattern. Genuine early metabolic response shown — triglycerides and fasting glucose down, HDL up — the fast-moving early result that would actually make someone doing this off their own back want to keep checking. Doris and Karen remain single/light-touch panels for now (the "feature exists for ordinary users too" case, not active correlation) — candidates for the same upgrade if wanted later.
 
 ## v3.10.825 — Alex Gets a Real Before/After Lab Trend
 
