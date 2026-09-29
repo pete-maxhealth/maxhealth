@@ -1,6 +1,16 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.833, HEAD v3.10.833)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.834, HEAD v3.10.834)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.834 — Demo Personas Get Fixed Themes; Bill Gets Real PEMFiT Branding
+
+Second "shop window" request: every demo persona now has its own fixed, distinct look — base theme, accent colour, icon pack — instead of all 11 sharing one hardcoded Vital theme. Reused the app's own existing theme system entirely (Dark/Aurora/Carbon/Slate/Light bases, Vital/Pulse/Forge icon packs, custom accent colours) rather than inventing new CSS; every accent was run through the app's own dark/light contrast-safety check before being assigned, so nothing renders illegibly. Switching persona mid-demo now switches the whole look, not just the data.
+
+Bill specifically gets real PEMFiT branding: exact colours sampled directly from the logo Pete provided (orange `#f37122`, grey `#8b8c8e` tagline — not guessed), used as both his in-app theme accent and his demo report profile's branding colour, with the actual PEMFiT logo embedded so his exported report PDFs carry it too.
+
+**Also fixed along the way, found during this work:** switching theme/accent/icon-pack while in demo mode was writing straight to the real account's localStorage keys (`mh_theme`, `mh_custom_accent`, `mh_icon_pack`, and the org-branding keys `mh_org_logo`/`mh_org_name`) with **none of them captured or restored** by demo mode's snapshot/exit/abandoned-session-recovery safety net — the exact same class of gap that caused the v3.10.830 lab-results leak, just waiting to happen the moment persona theming existed to trigger it. All five fields are now captured in `startDemoMode()`'s snapshot, restored on a clean `exitDemoMode()`, and restored by `healFromAbandonedDemoSession()` on next load if the session was left running uncleanly — verified by direct execution testing (not just code review): entering Bill's demo, then simulating both a clean exit and an abandoned session, confirmed the real account's original theme/accent/org-logo values come back exactly, every time.
+
+**Known limitation, not new:** exported report PDFs render the org logo into a fixed 16×16mm square (`buildProfileReportPDF`) regardless of the source image's aspect ratio — pre-existing behaviour, same as it would be for any real user's uploaded logo, not something this change introduced or attempted to fix. PEMFiT's wide wordmark will appear squashed in that one spot until that's addressed separately.
 
 ## v3.10.833 — Alphabetical Sort Now Ignores Leading Icons
 

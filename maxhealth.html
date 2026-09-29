@@ -4882,7 +4882,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.833</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.834</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5912,7 +5912,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.833'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.834'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -5963,6 +5963,12 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
     restore('mh_symptom_log', backup.symptomLog);
     restore('mh_lab_results', backup.labResults);
     restore('mh_report_profiles', backup.reportProfiles);
+    restore('mh_theme', backup.theme);
+    restore('mh_visual_theme', backup.visualTheme);
+    restore('mh_custom_accent', backup.customAccent);
+    restore('mh_icon_pack', backup.iconPack);
+    restore('mh_org_logo', backup.orgLogo);
+    restore('mh_org_name', backup.orgName);
   } catch(e) {
     console.warn('[healFromAbandonedDemoSession] restore failed, clearing markers anyway:', e);
   }
@@ -40861,9 +40867,9 @@ function startDemoMode(personaId) {
   // demo mode; switching personas after that just swaps the demo data itself.
   if (!_demoMode) {
     _demoMode=true;
-    // Save current visual theme and switch to Vital for demo
+    // Save current visual theme (base theme/accent/icon-pack are captured
+    // further down in _realState, all before any persona theme is applied).
     _preDemoVisualTheme = localStorage.getItem('mh_visual_theme') || 'none';
-    setVisualTheme('vital');
     // Save real state reference — do NOT save to localStorage. Extended
     // 24/09/26 to also capture condition/goal/weight-target AND (after the
     // "Doris is a male" report — genuinely was, this was never being set at
@@ -40892,6 +40898,20 @@ function startDemoMode(personaId) {
       symptomLog:    localStorage.getItem('mh_symptom_log'),
       labResults:    localStorage.getItem('mh_lab_results'),
       reportProfiles: localStorage.getItem('mh_report_profiles'),
+      // Theme/appearance fields — added alongside per-persona fixed themes.
+      // These were never captured before (same class of gap the lab-results
+      // leak was), so a demo persona's theme/accent/icon-pack could silently
+      // become the real account's after an abandoned (unclean) exit. Captured
+      // here BEFORE any persona-theme change happens below, so this genuinely
+      // reflects what the real account had, not whatever the demo just set.
+      theme:        localStorage.getItem('mh_theme'),
+      visualTheme:  localStorage.getItem('mh_visual_theme'),
+      customAccent: localStorage.getItem('mh_custom_accent'),
+      iconPack:     localStorage.getItem('mh_icon_pack'),
+      // Org branding (report PDF header) — Bill's PEMFiT report profile sets
+      // these globally-scoped keys, same leak risk as the fields above.
+      orgLogo:      localStorage.getItem('mh_org_logo'),
+      orgName:      localStorage.getItem('mh_org_name'),
     };
     // Durable copy of everything above EXCEPT the in-memory `.state` (nutrition
     // history/weight were never at risk — saveState() already refuses to
@@ -40941,6 +40961,21 @@ function startDemoMode(personaId) {
   const wearableCsv = generateDemoWearableCSV(persona);
   if (wearableCsv) processCombinedText(wearableCsv, true);
   applyPersonaClinicalSetup(persona);
+  // Fixed per-persona theme, icon pack and accent colour — applied on every
+  // call (not just first entry), so switching persona mid-demo genuinely
+  // switches the look too, not just the data. setVisualTheme() already
+  // auto-selects the matching icon pack for the visual theme (VISUAL_TO_PACK),
+  // so no separate setIconPack() call is needed here. Falls back to the
+  // previous shared Vital theme for any persona without its own demoTheme
+  // (there shouldn't be one, but this avoids a blank/default look if one is
+  // ever added without it).
+  if (persona.demoTheme) {
+    applyTheme(persona.demoTheme.base);
+    setVisualTheme(persona.demoTheme.visualTheme);
+    applyCustomAccent(persona.demoTheme.accent);
+  } else {
+    setVisualTheme('vital');
+  }
   document.getElementById('onboardingOverlay').style.display='none';
   document.getElementById('demoBanner').style.display='block';
   closeDemoPersonaPicker();
@@ -40996,6 +41031,36 @@ function exitDemoMode() {
     else                            localStorage.removeItem('mh_lab_results');
     if (_realState.reportProfiles) localStorage.setItem('mh_report_profiles', _realState.reportProfiles);
     else                             localStorage.removeItem('mh_report_profiles');
+    // Theme/appearance — a demo persona now sets its own fixed base theme,
+    // accent colour and icon pack (see startDemoMode()), so these must be
+    // restored on exit exactly like every other field above, not left as
+    // whatever the last persona set. mh_visual_theme itself is already
+    // handled by setVisualTheme(_preDemoVisualTheme) above; restoring it
+    // again here via localStorage.setItem would be redundant but harmless —
+    // included anyway so this block is a complete, self-contained restore
+    // of everything captured, matching the pattern of every field above it.
+    if (_realState.theme)        localStorage.setItem('mh_theme', _realState.theme);
+    else                          localStorage.removeItem('mh_theme');
+    if (_realState.visualTheme)  localStorage.setItem('mh_visual_theme', _realState.visualTheme);
+    else                          localStorage.removeItem('mh_visual_theme');
+    if (_realState.customAccent) localStorage.setItem('mh_custom_accent', _realState.customAccent);
+    else                          localStorage.removeItem('mh_custom_accent');
+    if (_realState.iconPack)     localStorage.setItem('mh_icon_pack', _realState.iconPack);
+    else                          localStorage.removeItem('mh_icon_pack');
+    // Re-apply the real base theme now that its localStorage value is
+    // restored — setVisualTheme() above only ever touched the visual-theme
+    // overlay, never the base palette, so without this a demo persona's
+    // base theme (e.g. Bill's midnight) would stay visually applied to the
+    // real account until the next full page load.
+    applyTheme(_realState.theme || 'midnight');
+    // Same reasoning for icon pack — setVisualTheme() above may have already
+    // set an auto-matched pack for the restored visual theme, but a manual
+    // override (distinct from that auto pack) needs explicitly re-applying.
+    if (_realState.iconPack) setIconPack(_realState.iconPack);
+    if (_realState.orgLogo) localStorage.setItem('mh_org_logo', _realState.orgLogo);
+    else                     localStorage.removeItem('mh_org_logo');
+    if (_realState.orgName) localStorage.setItem('mh_org_name', _realState.orgName);
+    else                     localStorage.removeItem('mh_org_name');
     // Clear the durable backup on a clean exit too — otherwise a stale copy
     // could sit there and get wrongly replayed by healFromAbandonedDemoSession()
     // on some future load if mh_demo_active ever got set again without this
@@ -41031,9 +41096,19 @@ function exitDemoMode() {
 // persona would be many more hours of content authoring for questionable
 // extra realism; this gets the meaningful part (condition-appropriate,
 // internally-consistent data) working properly instead.
+// Bill's real PEMFiT branding (task: "Here's the PEMFiT logo and colours" —
+// exact colours sampled directly from the provided logo image, not guessed:
+// orange wordmark #f37122, grey tagline #8b8c8e; #f37122 is used as his
+// demoTheme accent above and reused here for his report profile's orgColor
+// too, so the in-app theme and any exported PDF match. Resized client-side
+// style (max 240px longest side, same convention handleOrgLogoUpload() uses
+// for a real uploaded logo) before encoding, to keep this reasonably sized.
+const PEMFIT_LOGO_DATA_URL = 'data:image/png;base64,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';
+
 const DEMO_PERSONAS = [
   {
     id: 'doris', name: 'Doris', age: 58, sex: 'female', height: 162,
+    demoTheme: { base: 'light', accent: '#0ea875', visualTheme: 'none' },
     condition: 'general', goal: 'lose', carbStyle: 'moderate',
     weight: 84.5, startWeight: 86.2, weightGoalLow: 72, weightGoalHigh: 74,
     targets: { kcal: 1650, protein: 100, carbs: 130 },
@@ -41053,6 +41128,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'john', name: 'John', age: 47, sex: 'male', height: 178,
+    demoTheme: { base: 'midnight', accent: '#ff5e5e', visualTheme: 'vital' },
     condition: 't2_diabetes', goal: 'lose', carbStyle: 'moderate',
     weight: 98.0, startWeight: 101.5, weightGoalLow: 85, weightGoalHigh: 87,
     targets: { kcal: 1900, protein: 140, carbs: 90 },
@@ -41081,6 +41157,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'maria', name: 'Maria', age: 44, sex: 'female', height: 165,
+    demoTheme: { base: 'aurora', accent: '#a78bfa', visualTheme: 'none' },
     condition: 'gbm', goal: 'maintain', carbStyle: 'low',
     weight: 68.0, startWeight: 68.6, weightGoalLow: 66, weightGoalHigh: 68,
     targets: { kcal: 2100, protein: 110, carbs: 50 },
@@ -41142,6 +41219,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'alex', name: 'Alex', age: 29, sex: 'male', height: 180,
+    demoTheme: { base: 'carbon', accent: '#f59e0b', visualTheme: 'forge' },
     condition: 'recomp', goal: 'gain', carbStyle: 'low',
     weight: 76.0, startWeight: 74.8, weightGoalLow: 78, weightGoalHigh: 80,
     targets: { kcal: 2800, protein: 180, carbs: 120 },
@@ -41214,6 +41292,7 @@ const DEMO_PERSONAS = [
   // report" story on a different condition from Maria's.
   {
     id: 'raj', name: 'Raj', age: 34, sex: 'male', height: 175,
+    demoTheme: { base: 'slate', accent: '#38bdf8', visualTheme: 'vital' },
     condition: 'epilepsy', goal: 'maintain', carbStyle: 'low',
     weight: 79.0, startWeight: 79.4, weightGoalLow: 77, weightGoalHigh: 79,
     targets: { kcal: 2200, protein: 120, carbs: 50 },
@@ -41242,6 +41321,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'sam', name: 'Sam', age: 26, sex: 'female', height: 168,
+    demoTheme: { base: 'light', accent: '#16a34a', visualTheme: 'pulse' },
     condition: 'strict_keto', goal: 'lose', carbStyle: 'low',
     weight: 71.5, startWeight: 73.0, weightGoalLow: 62, weightGoalHigh: 64,
     targets: { kcal: 1750, protein: 115, carbs: 45 },
@@ -41265,6 +41345,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'priya', name: 'Priya', age: 39, sex: 'female', height: 163,
+    demoTheme: { base: 'midnight', accent: '#f5c542', visualTheme: 'none' },
     condition: 'migraine', goal: 'maintain', carbStyle: 'low',
     weight: 64.0, startWeight: 63.6, weightGoalLow: 62, weightGoalHigh: 65,
     targets: { kcal: 1900, protein: 100, carbs: 50 },
@@ -41294,6 +41375,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'tom', name: 'Tom', age: 51, sex: 'male', height: 181,
+    demoTheme: { base: 'carbon', accent: '#6366f1', visualTheme: 'forge' },
     condition: 'cluster_headache', goal: 'maintain', carbStyle: 'low',
     weight: 88.0, startWeight: 88.5, weightGoalLow: 86, weightGoalHigh: 89,
     targets: { kcal: 2300, protein: 130, carbs: 50 },
@@ -41323,6 +41405,7 @@ const DEMO_PERSONAS = [
   },
   {
     id: 'grace', name: 'Grace', age: 31, sex: 'female', height: 170,
+    demoTheme: { base: 'aurora', accent: '#34d399', visualTheme: 'pulse' },
     condition: 't1_diabetes', goal: 'maintain', carbStyle: 'moderate',
     weight: 66.0, startWeight: 66.2, weightGoalLow: 64, weightGoalHigh: 68,
     targets: { kcal: 2000, protein: 105, carbs: 140 },
@@ -41356,6 +41439,7 @@ const DEMO_PERSONAS = [
   // on for the most ordinary kind of user, not a clinical edge case.
   {
     id: 'karen', name: 'Karen', age: 41, sex: 'female', height: 166,
+    demoTheme: { base: 'slate', accent: '#818cf8', visualTheme: 'none' },
     condition: 'general', goal: 'lose', carbStyle: 'moderate',
     weight: 79.5, startWeight: 79.8, weightGoalLow: 68, weightGoalHigh: 70,
     targets: { kcal: 1700, protein: 105, carbs: 130 },
@@ -41393,6 +41477,7 @@ const DEMO_PERSONAS = [
   // relationship rather than a clinical diagnosis.
   {
     id: 'bill', name: 'Bill', age: 54, sex: 'male', height: 177,
+    demoTheme: { base: 'midnight', accent: '#f37122', visualTheme: 'forge' },
     condition: 'general', goal: 'maintain', carbStyle: 'moderate',
     weight: 86.0, startWeight: 86.5, weightGoalLow: 83, weightGoalHigh: 87,
     targets: { kcal: 2400, protein: 130, carbs: 200 },
@@ -41411,6 +41496,8 @@ const DEMO_PERSONAS = [
     reportProfile: {
       name: 'PEMFiT Progress Update',
       orgName: 'PEMFiT',
+      orgColor: '#f37122', // real PEMFiT orange, sampled from the provided logo
+      orgLogo: PEMFIT_LOGO_DATA_URL,
       metricGroupHint: ['Nutrition'],
       includeSymptoms: true,
     },
@@ -41774,7 +41861,11 @@ function applyPersonaClinicalSetup(persona) {
       id: 'rptprof_demo_' + persona.id,
       name: persona.reportProfile.name,
       orgName: persona.reportProfile.orgName,
-      orgColor: REPORT_WIZARD_COLORS[0],
+      // Was hardcoded to the first wizard preset for every persona,
+      // regardless of what they'd naturally use — now honours a persona's
+      // own orgColor (e.g. Bill's real PEMFiT orange) when it sets one,
+      // falling back to the previous default otherwise.
+      orgColor: persona.reportProfile.orgColor || REPORT_WIZARD_COLORS[0],
       treatmentId,
       metrics: metricKeys,
       includeSymptoms: !!persona.reportProfile.includeSymptoms,
@@ -41782,6 +41873,16 @@ function applyPersonaClinicalSetup(persona) {
       schedule: { frequency: 'none', dayOfWeek: 0 },
       lastSent: null,
     }]);
+    // Org logo/name are global (mh_org_logo/mh_org_name), not per-profile —
+    // same mechanism the header wordmark and every report PDF already read.
+    // Only set when a persona actually provides one (currently just Bill,
+    // with a real PEMFiT logo); captured/restored by the same demo-safety
+    // net as every other field above (see startDemoMode/exitDemoMode/
+    // healFromAbandonedDemoSession), so this never leaks into a real account.
+    if (persona.reportProfile.orgLogo) {
+      localStorage.setItem('mh_org_logo', persona.reportProfile.orgLogo);
+      localStorage.setItem('mh_org_name', persona.reportProfile.orgName || '');
+    }
   } else {
     saveReportProfiles([]);
   }
