@@ -4882,7 +4882,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.834</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.835</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5912,7 +5912,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.834'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.835'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6178,9 +6178,12 @@ function saveState() {
     if (log.length) {
       const rows = [];
       log.forEach(s => s.sets.forEach((set, i) => {
-        rows.push([s.date, (s.exercise||'').replace(/\|/g,'/'), i+1, set.reps, set.weight_kg ?? ''].join('|'));
+        rows.push([s.date, (s.exercise||'').replace(/\|/g,'/'), i+1, set.reps, set.weight_kg ?? '', (set.note||'').replace(/\|/g,'/')].join('|'));
       }));
-      const csv = 'date|exercise|set|reps|weight_kg\n' + rows.join('\n');
+      // note column added alongside routine templates gaining per-set notes -
+      // appended at the end, so an older export/import that doesn't know
+      // about it still reads the first five columns exactly as before.
+      const csv = 'date|exercise|set|reps|weight_kg|note\n' + rows.join('\n');
       fetch(`${MH_SERVER}/save-strength-csv`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
@@ -13037,7 +13040,10 @@ function renderStrengthCard() {
       <span onclick="toggleStrengthSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">${selMode ? 'Cancel' : 'Select'}</span>
     </div>` +
     sessions.map(s => {
-    const setsStr = s.sets.map(st => st.weight_kg != null ? `${st.weight_kg}kg×${st.reps}` : `Bodyweight×${st.reps}`).join(', ');
+    const setsStr = s.sets.map(st => {
+      const base = st.weight_kg != null ? `${st.weight_kg}kg×${st.reps}` : `Bodyweight×${st.reps}`;
+      return st.note ? `${base} (${st.note})` : base;
+    }).join(', ');
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);gap:8px;">
       ${selMode ? `<input type="checkbox" onchange="toggleStrengthSelected('${s.id}')" ${_strengthSelectedIds.includes(s.id) ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">` : ''}
       <div style="flex:1;min-width:0;"><span style="color:var(--text2);font-weight:600;">${s.exercise}</span><br><span style="font-size:11px;color:var(--text3);">${setsStr}</span></div>
@@ -13104,7 +13110,7 @@ function editStrengthSession(id) {
   if (!session) return;
   showStrengthAddForm();
   document.getElementById('strengthExerciseName').value = session.exercise;
-  _strengthDraftSets = session.sets.map(st => ({ reps: String(st.reps), weight_kg: st.weight_kg != null ? String(st.weight_kg) : '' }));
+  _strengthDraftSets = session.sets.map(st => ({ reps: String(st.reps), weight_kg: st.weight_kg != null ? String(st.weight_kg) : '', note: st.note || '' }));
   _strengthEditingId = id;
   renderStrengthSetRows();
   const saveBtn = document.querySelector('#strengthAddForm .run-btn');
@@ -13115,6 +13121,19 @@ function editStrengthSession(id) {
 // A routine is just a named, ordered list of exercise names — reps/weight/
 // duration deliberately aren't part of the template, since those are exactly
 // what changes session to session even when doing "the same routine".
+// Normalizes one routine's exercises to the current { name, sets } shape.
+// Routines saved before per-exercise sets/reps/weight/notes existed have
+// exercises as plain strings (e.g. "Rowing") — converted here to
+// { name: "Rowing", sets: [] } so every caller downstream can rely on the
+// object shape unconditionally, without needing its own legacy check.
+// Genuinely a read-time normalization only: doesn't write anything back,
+// so an old routine stays exactly as saved until the user actually edits
+// and re-saves it (at which point saveNewRoutine() writes the new shape).
+function _normalizeRoutineExercises(exercises) {
+  return (exercises || []).map(ex =>
+    typeof ex === 'string' ? { name: ex, sets: [] } : { name: ex?.name || '', sets: ex?.sets || [] }
+  );
+}
 function loadRoutines() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return generateDemoRoutines();
   // Same redundancy pattern as library and recipes — built fresh tonight with no
@@ -13131,7 +13150,7 @@ function loadRoutines() {
             localStorage.setItem('mh_routines', raw);
             console.log(`[routines] Restored from ${key}`);
           }
-          return routines;
+          return routines.map(r => ({ ...r, exercises: _normalizeRoutineExercises(r.exercises) }));
         }
       }
     } catch(e) {}
@@ -13147,11 +13166,32 @@ function saveRoutines(routines) {
   _saveRoutinesCSV(routines);
 }
 
+// Encodes one exercise (name + optional template sets) as a single
+// semicolon-list token. A bare exercise with no fixed sets stays just its
+// name, unchanged from before — so old, still-current routines round-trip
+// through this CSV exactly as before. An exercise WITH template sets gets
+// its sets appended as compact JSON after a tab character (a tab can't
+// appear in a typed exercise name/note, and stays readable if the CSV is
+// ever opened by hand, unlike a heavier escaping scheme).
+function _encodeRoutineExerciseForCSV(ex) {
+  const name = (ex.name || '').replace(/\|/g,'/').replace(/;/g,',');
+  if (!ex.sets || !ex.sets.length) return name;
+  return name + '\t' + JSON.stringify(ex.sets);
+}
+function _decodeRoutineExerciseFromCSV(token) {
+  const tabIdx = token.indexOf('\t');
+  if (tabIdx === -1) return { name: token, sets: [] };
+  try {
+    return { name: token.slice(0, tabIdx), sets: JSON.parse(token.slice(tabIdx + 1)) || [] };
+  } catch(e) {
+    return { name: token.slice(0, tabIdx), sets: [] };
+  }
+}
 function _saveRoutinesCSV(routines) {
   // Same server-backup pattern as the library. Requires a matching
   // /save-routines-csv route on the Termux server.
   const rows = routines.map(r =>
-    [r.id||'', (r.name||'').replace(/\|/g,'/'), r.exercises.join(';').replace(/\|/g,'/')].join('|')
+    [r.id||'', (r.name||'').replace(/\|/g,'/'), r.exercises.map(_encodeRoutineExerciseForCSV).join(';')].join('|')
   );
   const csv = 'id|name|exercises_semicolon_separated\n' + rows.join('\n');
   fetch(`${MH_SERVER}/save-routines-csv`, {
@@ -13265,7 +13305,11 @@ function deleteSelectedRoutines() {
 function editRoutine(id) {
   const source = loadRoutines().find(r => r.id === id);
   if (!source) return;
-  _routineDraftExercises = [...source.exercises];
+  // Deep clone, not a shallow [...] copy — exercises are now objects with a
+  // nested sets array, and editing a draft set's reps/weight/note must never
+  // mutate the saved routine's own data in place before Save is even pressed
+  // (a shallow copy only protects the array itself, not what's inside it).
+  _routineDraftExercises = JSON.parse(JSON.stringify(source.exercises));
   _routineEditingId = id;
   const container = document.getElementById('routineListContainer');
   renderCreateRoutineForm(container, source.name);
@@ -13283,7 +13327,7 @@ function editRoutine(id) {
 function duplicateRoutine(id) {
   const source = loadRoutines().find(r => r.id === id);
   if (!source) return;
-  _routineDraftExercises = [...source.exercises];
+  _routineDraftExercises = JSON.parse(JSON.stringify(source.exercises)); // deep clone — see editRoutine() above
   _routineEditingId = null; // a copy is a new routine, never edits the source
   const container = document.getElementById('routineListContainer');
   renderCreateRoutineForm(container, `${source.name} (copy)`);
@@ -13302,8 +13346,16 @@ function deleteRoutine(id) {
 // ── Create a new routine (name + list of exercise names, no numbers) ──
 let _routineDraftExercises = [];
 let _routineEditingId = null; // set by editRoutine() below; null means this form is creating a new routine
+// Each draft exercise is now { name, sets: [{reps, weight_kg, note}] } rather
+// than a bare name string - lets a routine's template carry fixed sets/reps/
+// weight/notes (e.g. "Rowing, 40 x 60kg, Purple band 40-80kg"), not just an
+// exercise name that pulls numbers from whatever was last logged. sets can
+// be an empty array - a routine that's still just a name list (or a name
+// with no fixed numbers yet) works exactly as before.
+function _blankRoutineDraftExercise() { return { name: '', sets: [] }; }
+function _blankRoutineDraftSet() { return { reps: '', weight_kg: '', note: '' }; }
 function showCreateRoutineForm() {
-  _routineDraftExercises = [''];
+  _routineDraftExercises = [_blankRoutineDraftExercise()];
   _routineEditingId = null;
   const container = document.getElementById('routineListContainer');
   renderCreateRoutineForm(container);
@@ -13328,14 +13380,28 @@ function renderRoutineExerciseRows() {
   const el = document.getElementById('routineExerciseRows');
   if (!el) return;
   const n = _routineDraftExercises.length;
-  el.innerHTML = _routineDraftExercises.map((name, i) => `
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
-      <div style="display:flex;flex-direction:column;gap:1px;">
-        <button onclick="moveRoutineDraftExercise(${i},'up')" ${i===0?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===0?'var(--border)':'var(--text3)'};cursor:${i===0?'default':'pointer'};line-height:1;">▲</button>
-        <button onclick="moveRoutineDraftExercise(${i},'down')" ${i===n-1?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===n-1?'var(--border)':'var(--text3)'};cursor:${i===n-1?'default':'pointer'};line-height:1;">▼</button>
+  el.innerHTML = _routineDraftExercises.map((ex, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px;">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+        <div style="display:flex;flex-direction:column;gap:1px;">
+          <button onclick="moveRoutineDraftExercise(${i},'up')" ${i===0?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===0?'var(--border)':'var(--text3)'};cursor:${i===0?'default':'pointer'};line-height:1;">▲</button>
+          <button onclick="moveRoutineDraftExercise(${i},'down')" ${i===n-1?'disabled':''} style="background:transparent;border:none;padding:0;font-size:10px;color:${i===n-1?'var(--border)':'var(--text3)'};cursor:${i===n-1?'default':'pointer'};line-height:1;">▼</button>
+        </div>
+        <input type="text" value="${(ex.name||'').replace(/"/g,'&quot;')}" placeholder="Exercise name" oninput="_routineDraftExercises[${i}].name=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+        <span onclick="_routineDraftExercises.splice(${i},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
       </div>
-      <input type="text" value="${(name||'').replace(/"/g,'&quot;')}" placeholder="Exercise name" oninput="_routineDraftExercises[${i}]=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
-      <span onclick="_routineDraftExercises.splice(${i},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;">×</span>
+      <div style="padding-left:20px;">
+        ${(ex.sets||[]).map((s, si) => `
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;">
+          <span style="font-size:10px;color:var(--text3);width:14px;flex-shrink:0;">${si+1}</span>
+          <input type="number" placeholder="reps" value="${s.reps}" oninput="_routineDraftExercises[${i}].sets[${si}].reps=this.value" style="width:52px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" placeholder="kg" value="${s.weight_kg}" step="0.5" oninput="_routineDraftExercises[${i}].sets[${si}].weight_kg=this.value" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="text" placeholder="Note — e.g. Purple band 40-80kg" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="_routineDraftExercises[${i}].sets[${si}].note=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <span onclick="_routineDraftExercises[${i}].sets.splice(${si},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;flex-shrink:0;">×</span>
+        </div>`).join('')}
+        <span onclick="_routineDraftExercises[${i}].sets.push(_blankRoutineDraftSet());renderRoutineExerciseRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
+        ${(ex.sets||[]).length ? '' : `<div style="font-size:10px;color:var(--text3);margin-top:2px;">No fixed sets yet — applying this routine will ask what to pre-fill from.</div>`}
+      </div>
     </div>`).join('');
 }
 // New exercises always land at the end (addRoutineExerciseRow just pushes),
@@ -13351,13 +13417,29 @@ function moveRoutineDraftExercise(i, direction) {
   renderRoutineExerciseRows();
 }
 function addRoutineExerciseRow() {
-  _routineDraftExercises.push('');
+  _routineDraftExercises.push(_blankRoutineDraftExercise());
   renderRoutineExerciseRows();
+}
+// Cleans a draft exercise's sets into the saved shape - blank rows (no reps
+// typed) are dropped rather than saved as empty placeholders, same "skip
+// what's genuinely blank" rule the manual/apply logging forms already use.
+// Weight and note are both optional per set (bodyweight exercises, or a set
+// with nothing worth noting).
+function _cleanRoutineDraftSets(sets) {
+  return (sets || [])
+    .filter(s => s.reps !== '' && s.reps != null)
+    .map(s => ({
+      reps: parseInt(s.reps),
+      weight_kg: (s.weight_kg !== '' && s.weight_kg != null) ? parseFloat(s.weight_kg) : null,
+      note: (s.note || '').trim() || null,
+    }));
 }
 function saveNewRoutine() {
   const name = document.getElementById('newRoutineName')?.value.trim();
   if (!name) { showToast('Enter a routine name'); return; }
-  const exercises = _routineDraftExercises.map(e => e.trim()).filter(Boolean);
+  const exercises = _routineDraftExercises
+    .map(e => ({ name: (e.name || '').trim(), sets: _cleanRoutineDraftSets(e.sets) }))
+    .filter(e => e.name);
   if (!exercises.length) { showToast('Add at least one exercise'); return; }
   const routines = loadRoutines();
   if (_routineEditingId) {
@@ -13388,7 +13470,21 @@ function showSaveTodayAsRoutineForm() {
   if (!log.length) { showToast('Nothing logged to save as a routine'); return; }
   const parseD = d => { const p = (d||'').split('/'); return p.length===3 ? new Date(`20${p[2]}-${p[1]}-${p[0]}`) : new Date(0); };
   const mostRecentDate = log.reduce((latest, s) => parseD(s.date) > parseD(latest) ? s.date : latest, log[0].date);
-  const exercises = [...new Set(log.filter(s => s.date === mostRecentDate).map(s => s.exercise))];
+  const sessions = log.filter(s => s.date === mostRecentDate);
+  // Carries the actual logged sets/reps/weight/notes into the template too,
+  // not just the exercise names - saving a real session as a routine is
+  // exactly the moment those numbers are already sitting right there, so
+  // this now gives a genuine starting template rather than a bare name list
+  // that would need every number re-entered by hand afterwards anyway.
+  // Where an exercise name repeats on the same day (rare, but possible if
+  // logged in two separate entries), its sets are combined in log order.
+  const exerciseNames = [...new Set(sessions.map(s => s.exercise))];
+  const exercises = exerciseNames.map(name => ({
+    name,
+    sets: sessions.filter(s => s.exercise === name).flatMap(s =>
+      (s.sets || []).map(set => ({ reps: set.reps, weight_kg: set.weight_kg, note: set.note || null }))
+    ),
+  }));
   if (!exercises.length) { showToast('Nothing logged to save as a routine'); return; }
   appPrompt(`Name this routine (from ${mostRecentDate})`, 'e.g. Full Body Test', (name) => {
     if (!name || !name.trim()) return;
@@ -13449,18 +13545,26 @@ function applyRoutine(id) {
         <button onclick="showRoutineList()" class="btn-neutral" style="flex:1;padding:8px;border-radius:6px;font-size:13px;">Cancel</button>
       </div>
     </div>`;
-  // Pre-fill each exercise with its last logged reps/weight as a starting point
-  // to edit — previously this always started blank, which meant applying a
-  // routine gave nothing to work from and no record of what was done last time,
-  // exactly the gap that led to real progression data getting lost.
-  window._routineApplyDrafts = routine.exercises.map(name => {
-    const lastSets = getLastLoggedSets(name);
-    return {
-      name,
-      sets: lastSets && lastSets.length
-        ? lastSets.map(s => ({ reps: String(s.reps), weight_kg: s.weight_kg != null ? String(s.weight_kg) : '' }))
-        : [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}]
-    };
+  // Pre-fill each exercise from whichever source(s) it actually has:
+  //  - only a saved template (fixed sets/reps/weight/notes) → use it
+  //  - only logged history for that name → use it, exactly as before
+  //  - both → don't silently pick one; hasChoice shows a small inline
+  //    toggle per exercise (see renderRoutineApplyRows), defaulted to the
+  //    template but switchable at any time — so it's always the user's
+  //    call, never a silent guess about which one they meant this time
+  //  - neither → blank 3-row default, as before
+  window._routineApplyDrafts = routine.exercises.map(ex => {
+    const lastSets = getLastLoggedSets(ex.name);
+    const hasHistory = !!(lastSets && lastSets.length);
+    const hasTemplate = !!(ex.sets && ex.sets.length);
+    const fromTemplate = () => ex.sets.map(s => ({ reps: String(s.reps), weight_kg: s.weight_kg != null ? String(s.weight_kg) : '', note: s.note || '' }));
+    const fromHistory = () => lastSets.map(s => ({ reps: String(s.reps), weight_kg: s.weight_kg != null ? String(s.weight_kg) : '', note: s.note || '' }));
+    if (hasTemplate && hasHistory) {
+      return { name: ex.name, hasChoice: true, source: 'template', _template: ex.sets, _lastSets: lastSets, sets: fromTemplate() };
+    }
+    if (hasTemplate) return { name: ex.name, hasChoice: false, source: 'template', sets: fromTemplate() };
+    if (hasHistory)  return { name: ex.name, hasChoice: false, source: 'history',  sets: fromHistory() };
+    return { name: ex.name, hasChoice: false, source: 'blank', sets: [{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''}] };
   });
   // Stored weights are always in kg — force the toggle to match so a pre-filled
   // number never sits under a mismatched "lbs" label.
@@ -13478,6 +13582,25 @@ function setRoutineUnit(unit) {
   });
   renderRoutineApplyRows();
 }
+// Switches one exercise's draft sets between its saved template and its
+// last logged session. hasChoice (both _template and _lastSets present, set
+// once in applyRoutine() and never cleared) controls whether the toggle
+// chips keep showing; .source tracks which one is CURRENTLY selected, purely
+// for the chips' active styling — the two are deliberately separate so
+// switching back and forth doesn't make the choice disappear after the
+// first pick. Re-derives from the original _template/_lastSets rather than
+// trying to convert whatever's currently in .sets, so switching never loses
+// precision or drops the note field — any in-progress typing in the
+// currently-shown source is simply replaced, same as picking a period on
+// Compare Metrics.
+function setRoutineApplyExerciseSource(exIdx, source) {
+  const ex = window._routineApplyDrafts?.[exIdx];
+  if (!ex) return;
+  ex.source = source;
+  const src = source === 'template' ? ex._template : ex._lastSets;
+  ex.sets = (src || []).map(s => ({ reps: String(s.reps), weight_kg: s.weight_kg != null ? String(s.weight_kg) : '', note: s.note || '' }));
+  renderRoutineApplyRows();
+}
 function renderRoutineApplyRows() {
   const el = document.getElementById('routineApplyRows');
   if (!el || !window._routineApplyDrafts) return;
@@ -13493,13 +13616,19 @@ function renderRoutineApplyRows() {
         <div style="font-size:12px;color:${ex.done ? 'var(--text3)' : 'var(--text2)'};font-weight:600;flex:1;${ex.done ? 'text-decoration:line-through;' : ''}">${ex.name}</div>
         <span onclick="removeRoutineApplyExercise(${exIdx})" style="cursor:pointer;color:var(--red);font-size:15px;padding:0 4px;" title="Remove from this session only">×</span>
       </div>
+      ${ex.hasChoice ? `
+      <div style="display:flex;gap:6px;margin:0 0 6px 22px;">
+        <span onclick="setRoutineApplyExerciseSource(${exIdx},'template')" style="cursor:pointer;font-size:10px;padding:3px 8px;border-radius:10px;border:1px solid ${ex.source==='template'?'var(--accent)':'var(--border)'};background:${ex.source==='template'?'var(--accent-dim)':'transparent'};color:${ex.source==='template'?'var(--accent)':'var(--text3)'};">📋 Template</span>
+        <span onclick="setRoutineApplyExerciseSource(${exIdx},'history')" style="cursor:pointer;font-size:10px;padding:3px 8px;border-radius:10px;border:1px solid ${ex.source==='history'?'var(--accent)':'var(--border)'};background:${ex.source==='history'?'var(--accent-dim)':'transparent'};color:${ex.source==='history'?'var(--accent)':'var(--text3)'};">🕓 Last session</span>
+      </div>` : ''}
       ${ex.sets.map((s, setIdx) => `
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
-          <span style="font-size:10px;color:var(--text3);width:14px;">${setIdx+1}</span>
-          <input type="number" placeholder="reps" value="${s.reps}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].reps=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
-          <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;">
+          <span style="font-size:10px;color:var(--text3);width:14px;flex-shrink:0;">${setIdx+1}</span>
+          <input type="number" placeholder="reps" value="${s.reps}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].reps=this.value" style="width:52px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="text" placeholder="Note" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].note=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
         </div>`).join('')}
-      <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
+      <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:'',note:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
     </div>`).join('') + `
     <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>`;
 
@@ -13520,7 +13649,7 @@ function addRoutineApplyExercise() {
   appPrompt('Add exercise', 'e.g. Wide Floor Press', (name) => {
     name = (name || '').trim();
     if (!name) return;
-    window._routineApplyDrafts.push({ name, sets: [{reps:'',weight_kg:''},{reps:'',weight_kg:''},{reps:'',weight_kg:''}] });
+    window._routineApplyDrafts.push({ name, hasChoice: false, source: 'blank', sets: [{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''}] });
     renderRoutineApplyRows();
   });
 }
@@ -13565,7 +13694,7 @@ function saveRoutineSession() {
       const hasWeight = s.weight_kg !== '' && s.weight_kg != null;
       const raw = hasWeight ? parseFloat(s.weight_kg) : null;
       const kg = hasWeight ? (_strengthUnit === 'lbs' ? Math.round(raw * LBS_TO_KG * 10) / 10 : raw) : null;
-      return { reps: parseInt(s.reps), weight_kg: kg };
+      return { reps: parseInt(s.reps), weight_kg: kg, note: (s.note || '').trim() || null };
     });
     if (!sets.length) return; // skip exercises left entirely blank this session
     const entry = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date: todayStr(), exercise: ex.name, sets };
@@ -13614,7 +13743,7 @@ function saveRoutineSession() {
 }
 
 function showStrengthAddForm() {
-  _strengthDraftSets = [{ reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }, { reps: '', weight_kg: '' }];
+  _strengthDraftSets = [{ reps: '', weight_kg: '', note: '' }, { reps: '', weight_kg: '', note: '' }, { reps: '', weight_kg: '', note: '' }];
   _strengthEditingId = null;
   document.getElementById('strengthExerciseName').value = '';
   const durEl = document.getElementById('strengthSessionDuration');
@@ -13638,16 +13767,17 @@ function renderStrengthSetRows() {
   const el = document.getElementById('strengthSetRows');
   if (!el) return;
   el.innerHTML = _strengthDraftSets.map((s, i) => `
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;max-width:100%;">
+    <div style="display:flex;gap:5px;align-items:center;margin-bottom:6px;max-width:100%;">
       <span style="font-size:11px;color:var(--text3);width:16px;flex-shrink:0;">${i + 1}</span>
-      <input type="number" placeholder="reps" value="${s.reps}" oninput="updateStrengthDraftField(${i},'reps',this.value)" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
-      <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="updateStrengthDraftField(${i},'weight_kg',this.value)" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <input type="number" placeholder="reps" value="${s.reps}" oninput="updateStrengthDraftField(${i},'reps',this.value)" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="updateStrengthDraftField(${i},'weight_kg',this.value)" style="width:60px;flex-shrink:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+      <input type="text" placeholder="Note" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="updateStrengthDraftField(${i},'note',this.value)" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
       <span onclick="removeStrengthSetRow(${i})" style="cursor:pointer;color:var(--red);font-size:16px;padding:0 6px;flex-shrink:0;">×</span>
     </div>`).join('');
 }
 
 function addStrengthSetRow() {
-  _strengthDraftSets.push({ reps: '', weight_kg: '' });
+  _strengthDraftSets.push({ reps: '', weight_kg: '', note: '' });
   renderStrengthSetRows();
 }
 
@@ -13688,7 +13818,7 @@ function saveStrengthWorkout() {
       const hasWeight = s.weight_kg !== '' && s.weight_kg != null;
       const raw = hasWeight ? parseFloat(s.weight_kg) : null;
       const kg = hasWeight ? (_strengthUnit === 'lbs' ? Math.round(raw * LBS_TO_KG * 10) / 10 : raw) : null;
-      return { reps: parseInt(s.reps), weight_kg: kg };
+      return { reps: parseInt(s.reps), weight_kg: kg, note: (s.note || '').trim() || null };
     });
   if (!sets.length) { showToast('Enter at least reps for one set'); return; }
 
@@ -18343,15 +18473,16 @@ const DATA_CONFIGS = {
   },
   routines: {
     label: 'Routines',
-    description: 'Your saved workout routines (exercise-name templates) — backed up to routines.csv. Import to restore or transfer to another device.',
+    description: 'Your saved workout routines (exercises, with any fixed sets/reps/weight/notes) — backed up to routines.csv. Import to restore or transfer to another device.',
     filename: 'routines.csv',
     header: 'id|name|exercises_semicolon_separated',
     load: () => loadRoutines(),
     save: arr => saveRoutines(arr),
-    toRow: r => [r.id||'', (r.name||'').replace(/\|/g,'/'), (r.exercises||[]).join(';').replace(/\|/g,'/')].join('|'),
+    toRow: r => [r.id||'', (r.name||'').replace(/\|/g,'/'), (r.exercises||[]).map(_encodeRoutineExerciseForCSV).join(';')].join('|'),
     fromLine: parts => {
       const [id, name, exercisesSemicolon] = parts;
-      return { id: id || 'routine_'+Date.now(), name, exercises: (exercisesSemicolon||'').split(';').filter(Boolean) };
+      const exercises = (exercisesSemicolon||'').split(';').filter(Boolean).map(_decodeRoutineExerciseFromCSV);
+      return { id: id || 'routine_'+Date.now(), name, exercises };
     },
     filterValid: r => !!r.name,
     afterChange: () => { if (typeof showRoutineList === 'function') showRoutineList(); },
@@ -18360,7 +18491,7 @@ const DATA_CONFIGS = {
     label: 'Strength Training Log',
     description: 'Your logged workout sessions (sets, reps, weights) — backed up to strength.csv. Import to restore or transfer to another device.',
     filename: 'strength.csv',
-    header: 'date|exercise|set|reps|weight_kg',
+    header: 'date|exercise|set|reps|weight_kg|note',
     // Strength is structurally different from the other four — one row per
     // SET rather than one row per array item, with multiple rows making up
     // a single session — so it gets its own multi-row read/write pair
@@ -18395,15 +18526,19 @@ const DATA_CONFIGS = {
       if (toAdd.some(s => s.date === todayStr())) tagResistanceFromSetsLogged();
       if (typeof updateDashboard === 'function') updateDashboard();
     },
-    toRows: s => (s.sets||[]).map((set, i) => [s.date, (s.exercise||'').replace(/\|/g,'/'), i+1, set.reps, set.weight_kg ?? ''].join('|')),
+    toRows: s => (s.sets||[]).map((set, i) => [s.date, (s.exercise||'').replace(/\|/g,'/'), i+1, set.reps, set.weight_kg ?? '', (set.note||'').replace(/\|/g,'/')].join('|')),
+    // note (parts[5]) added alongside routine templates gaining per-set
+    // notes - an older strength.csv without that column simply has parts[5]
+    // undefined, which the ternary below already treats as "no note", so
+    // importing an old backup still works exactly as before.
     fromLines: lines => {
       const grouped = {};
       lines.forEach(line => {
         const parts = line.split('|');
-        const date = parts[0], exercise = parts[1], reps = parts[3], weight = parts[4];
+        const date = parts[0], exercise = parts[1], reps = parts[3], weight = parts[4], note = parts[5];
         const key = date + '||' + exercise;
         if (!grouped[key]) grouped[key] = { id: 'str'+Date.now()+Math.random().toString(36).slice(2,6), date, exercise, sets: [] };
-        grouped[key].sets.push({ reps: parseInt(reps)||0, weight_kg: (weight && weight.trim()!=='') ? parseFloat(weight) : null });
+        grouped[key].sets.push({ reps: parseInt(reps)||0, weight_kg: (weight && weight.trim()!=='') ? parseFloat(weight) : null, note: (note && note.trim()!=='') ? note.trim() : null });
       });
       return Object.values(grouped);
     },
@@ -38588,7 +38723,9 @@ function mergeExerciseNames(keepIdx) {
   log.forEach(s => { if (group.includes((s.exercise || '').trim())) s.exercise = keepName; });
   const routines = loadRoutines();
   routines.forEach(r => {
-    r.exercises = (r.exercises || []).map(ex => group.includes((ex || '').trim()) ? keepName : ex);
+    // Exercises are { name, sets } objects now, not bare strings - rename by
+    // .name, keeping each exercise's own template sets/notes untouched.
+    r.exercises = (r.exercises || []).map(ex => group.includes((ex.name || '').trim()) ? { ...ex, name: keepName } : ex);
   });
   saveRoutines(routines);
   saveState();

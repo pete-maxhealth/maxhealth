@@ -1,6 +1,21 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.834, HEAD v3.10.834)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.835, HEAD v3.10.835)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.835 — Routine Templates Can Now Carry Fixed Sets, Reps, Weight & Notes
+
+Pete's own request, with a real example: "Rowing, 40 x 60kg, Purple band 40-80kg / Rowing, 20 x 60kg, Purple band 40-80kg / Rowing, 10 x 60kg, Purple band 40-80kg" saved as part of the routine template itself, auto-populating when applied — not just an exercise name that pulls numbers from whatever was logged last time.
+
+A saved routine's exercises were previously just plain names (`exercises: ['Rowing', 'Squats']`) — sets/reps/weight always came from `getLastLoggedSets()`, whatever was logged most recently for that name. Now each exercise in a routine template can carry its own fixed sets, each with reps, weight, and a free-text note (e.g. "Purple band 40-80kg") — set when creating or editing a routine, in the same per-exercise +/− row editor as before, now with per-set rows underneath each exercise.
+
+**When applying a routine, three cases:**
+- Only a template exists (no logged history yet for that exercise) → template pre-fills silently, no interruption.
+- Only logged history exists (no template sets) → pre-fills from history, exactly as before.
+- **Both exist** → doesn't guess. A small "📋 Template / 🕓 Last session" toggle appears under that exercise, defaulted to the template but switchable any time before logging — every switch re-derives cleanly from the original data, so nothing is lost going back and forth.
+
+Notes carry all the way through: template → the Apply screen's set rows → `state.strengthLog` once logged → the Strength Training card's session summary → `strength.csv` (server backup) and the routines/strength backup-restore CSVs (a `note` column appended at the end of each, so older exported files without it still import correctly). The manual "Log a workout" form (outside routines) also gained a note field per set in the same pass, for consistency.
+
+**Backward compatible:** existing routines saved before this change (plain-string exercise lists) are normalized transparently on load — they behave exactly as before (auto-fill from last session, no template chip) until edited and re-saved, at which point they pick up the new shape. Verified directly: built a routine matching Pete's exact example, applied it with no history (went straight to template), logged it, then re-applied with both template and history now present (correctly offered the choice, switching both ways preserved the data) — and separately confirmed an old plain-string routine still loads and normalizes correctly.
 
 ## v3.10.834 — Demo Personas Get Fixed Themes; Bill Gets Real PEMFiT Branding
 
