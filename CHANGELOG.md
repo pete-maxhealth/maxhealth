@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.824, HEAD v3.10.824)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.825, HEAD v3.10.825)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.825 — Alex Gets a Real Before/After Lab Trend
+
+Reasonable follow-up question: does any non-clinical demo persona show what it looks like for someone who just has their own bloods and wants to see how nutrition and training measure against them — not a monitored condition, just personal curiosity? Alex (recomp/training, no medical condition) was the natural fit — already the most metrics-driven persona (HRV, body composition, training load) — but only had one static panel. Upgraded to two: a pre-training-block check and a post-block check bracketing his three boot camp phases, with values that move plausibly with his known trajectory (HDL up, triglycerides down — a realistic low-carb response; creatinine up slightly from higher training load/muscle mass, not a kidney concern, eGFR stays comfortably normal). Now shows a genuine two-point trend, not a single snapshot, demonstrating the lab-trend features from v3.10.823 for someone with zero medical reason to be tracking bloodwork at all — just wanting to see if it's working.
 
 ## v3.10.824 — Demo Personas Get Real Lab Panels, Plus a Genuine Symptom-Tracking Bug Fixed
 
