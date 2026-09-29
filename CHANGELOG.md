@@ -1,6 +1,16 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.821, HEAD v3.10.821)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.822, HEAD v3.10.822)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.822 — Non-Medical Side: Electrolytes, a Logging Streak, and Recipes From What You Actually Have
+
+Second competitive-research pass, this time against general nutrition/fitness/habit apps (MyFitnessPal, Cronometer, Lose It, Streaks, Habitify) rather than medical trackers. Worth noting first: on barcode scanning and photo-based meal logging, MaxedHealth already beats the field — both are real (Open Food Facts lookup, AI photo/label parsing) and neither is paywalled, versus MyFitnessPal locking both behind Premium in 2024. Three genuine gaps found and fixed:
+
+**Potassium & magnesium tracking** — extended the existing satFat/sugars/salt/iron field set (library edit form, Open Food Facts barcode/search lookups, `calcTotals()`) to include potassium and magnesium, both pulled automatically from Open Food Facts where available. Specifically relevant for anyone eating low-carb, where electrolyte management is a known real issue. While in this code, also fixed a pre-existing gap where reusing a saved-search library item silently zeroed out its satFat/sugars/salt/iron instead of reading the real stored values.
+
+**General logging streak** — new `calcLoggingStreak()`, deliberately separate from the existing ketosis-adherence streak (which correctly resets the moment a day goes over the carb ceiling, even on a perfectly-logged day). This one counts consecutive days with anything logged at all, rewarding the more basic — and often harder — habit of just showing up, the way dedicated habit-tracker apps do. Shown as a small line under the main dashboard badge, in Your Journey's stats, with its own milestone celebrations (7/14/30/50/100/200/365 days), and now available to the AI report as a distinct figure from carb-ceiling adherence.
+
+**Recipe suggestions from your own library** — new "📦 Suggest a recipe from what's in my library" option (Library → Try Something New). Deliberately not a paste-a-URL importer: this app has no backend fetch/CORS-proxy path, so scraping arbitrary recipe sites client-side would fail on most of them. Instead, the AI is handed real ingredients already in the library (with real macros) and composes a recipe from actual stock, sized to current macro targets — reuses the exact same generate → parse → "Create Recipe" pipeline already built for the general recipe-discovery mode.
 
 ## v3.10.821 — Lab Results Tracker: Real Bloodwork Now Has a Home
 
