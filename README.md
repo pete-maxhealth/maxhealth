@@ -79,19 +79,19 @@ mhstart
 # Open http://localhost:5757
 ```
 
-**Note:** `setup.sh` only creates the folder structure (see File structure below) — `mhstart` isn't installed by it, so this Quick Start currently assumes `mhstart` already exists on the device from some other step. Needs clarifying: is that a manual one-off, or is there a second script this README is missing?
+**Note:** `setup.sh` does the full job in one run — packages, storage permission, cloning/updating the repo, and installing the watchdog, auto-updater, boot scripts, and the `mhstart` command itself (into `$PREFIX/bin`, so it works from any directory). `mhstart` doesn't need a separate manual step; running `setup.sh` once is enough.
 
 ## Auto-start on boot — self-healing, fully automatic
 
-**Everything in this section describes the intended, target behavior — it is not what `setup.sh` actually does today.** `setup.sh`'s real content is five `mkdir -p` lines and nothing else (confirmed directly from the file). The watchdog, auto-update, boot scripts, and `mhstart` installation described below are either done manually on each device, live in a script not yet captured in this repo, or genuinely don't exist yet — needs establishing which, then either fixing `setup.sh` to actually do this or correcting this section to describe what really happens.
+**Confirmed directly against `setup.sh`'s real content — this is what it actually installs, not a target/aspirational description.**
 
 - **Watchdog** (`~/mh_watchdog.sh`, via cron every minute) — checks the server is alive, restarts it if not, kills duplicate instances if more than one is somehow running
 - **Auto-update** (`~/mh_autoupdate.sh`, via cron every 30 minutes and once on every boot) — checks GitHub for anything new and pulls it automatically, so a device never needs a manual `git pull` to stay current
 - **Boot scripts** in `~/.termux/boot/` start crond, hold a wake-lock (stops Android's battery-saving Doze mode suspending the checks between cron ticks), and start the server itself
 
-After a reboot, give it a minute, then confirm the server's running on its own (`curl http://localhost:5757/ping`) — no manual Termux interaction needed, assuming the above is actually in place on that device.
+After a reboot, give it a minute, then confirm the server's running on its own (`curl http://localhost:5757/ping`) — no manual Termux interaction needed.
 
-Requires **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux). Whether `setup.sh` actually prompts for these is unconfirmed — the version reviewed doesn't reference them at all.
+Requires **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux) — `setup.sh` checks for both at the start of Step 1.5 and walks through installing them (opens each F-Droid page directly) if either is missing.
 
 Note for cloud/GitHub Pages users: none of this is required — it only applies to local Termux setups.
 
