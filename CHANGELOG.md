@@ -1,6 +1,12 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.835, HEAD v3.10.835)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.836, HEAD v3.10.836)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.836 — kg/lbs Toggle Was Missing From the Routine Template Editor
+
+Pete: "No lbs switch from kg?" — the routine create/edit template form added in v3.10.835 had no unit toggle at all, unlike the two other places weight gets entered (the Apply Routine screen and the manual "Log a workout" form), which both already have one.
+
+Added a kg/lbs toggle to the routine template editor, right under the routine name field. It uses its own independent unit state (`_routineFormUnit`), deliberately separate from the one the Apply Routine screen and manual-log form share (`_strengthUnit`) — so switching units while building a template has no effect on what unit those other forms are showing, and vice versa. As always, weight is stored on the routine as true kg (`weight_kg`) regardless of entry unit; the toggle only changes how the numbers are displayed and typed while the form is open. Switching units converts whatever's currently on screen on the spot (60kg → 132.3lbs), rather than reinterpreting the same digits under a new unit. Reopening a routine to edit or duplicate it always shows kg first, since that's what's actually stored — never whatever unit was last selected.
 
 ## v3.10.835 — Routine Templates Can Now Carry Fixed Sets, Reps, Weight & Notes
 
