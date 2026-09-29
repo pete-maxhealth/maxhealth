@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.830, HEAD v3.10.830)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.831, HEAD v3.10.831)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.831 — Demo Picker Visual Polish (Shop-Window Pass, Part 1)
+
+First piece of the "make the demo a proper shop window" work, scoped specifically for an in-person pitch (phone screen broadcast to a room, narrated live) rather than a generic redesign — so this deliberately focuses on the very first thing anyone in the room sees: the demo persona picker and the always-visible demo banner. The picker was previously hardcoding a fixed dark palette (`#1c2230`/`#151a23`/etc.) regardless of the active theme, making it look like an unstyled dev screen bolted onto an otherwise polished app; now fully theme-aware via CSS variables, so it matches whatever visual theme is actually selected. Each of the 10 personas now gets its own icon for fast visual scanning on a small screen from across a room, and cards show only the short tagline rather than the full bio paragraph — a wall of text per card was unreadable at a glance on a mirrored phone display; the full bio remains available for anyone exploring solo later. The demo banner (visible throughout the whole live session) got a small legibility bump — slightly bolder, slightly larger — so it reads as a clear, intentional status rather than fine print. Deliberately left the demo entry point's location alone (Settings → Manage → Try Demo Mode) per Pete's own call — navigation speed isn't the actual problem when the demo gets queued up before the meeting starts.
 
 ## v3.10.830 — SERIOUS DATA-SAFETY BUG FIXED: Demo Data Could Overwrite Real Lab Results
 
