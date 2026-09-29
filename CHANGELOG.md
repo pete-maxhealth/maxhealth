@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.826, HEAD v3.10.826)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.827, HEAD v3.10.827)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.827 — 10th Demo Persona: Bill, a PEMFiT Use Case
+
+First of the three "All 3" follow-ups (persona → pitch doc refresh → visual polish, in that order). Added a 10th demo persona, Bill — 54, chronic lower back pain from years of physical work, no other condition being managed, started regular PEMF sessions eight weeks ago and wanted a proper way to see whether they were actually helping rather than going on how a given week felt. His story is carried entirely by Treatment Tracking: 7 PEMF sessions over 6 weeks logged against a self-tracked pain/sleep/mobility symptom trio, showing a genuine, gradual improvement — exactly the shape of evidence a real PEMFiT customer would want to see reflected back at them. Built specifically so the demo has a case that mirrors PEMFiT's own actual use case, not just a generic wellness persona, ahead of refreshing the PEMFiT pitch document next. No new mechanics — `showDemoPersonaPicker()` is fully array-driven, so Bill needed zero additional UI wiring.
 
 ## v3.10.826 — Sam Gets the Same Before/After Treatment
 
