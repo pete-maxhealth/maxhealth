@@ -4850,7 +4850,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.817</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.818</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5868,7 +5868,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.817'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.818'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -12066,7 +12066,17 @@ function saveWeightTarget() {
   showToast(`Weight target saved: ${low}–${high} kg`);
 }
 
-function logWater(ml) {
+// Real bug (found in a full audit of water logging paths, 29/09/2026):
+// only logWater() (the preset +Glass/+Can/+Pint/+Bottle buttons) ever
+// checked for the water target being reached — logWaterCustom() and the
+// voice-input path below both mutated state.waterToday directly and
+// never checked at all, so "no celebration" was really "celebration only
+// fires from one of three entry points", not truly absent. Centralized
+// the add+check into one function so every path behaves the same way.
+// Gated per-day (not a persisted "ever celebrated" list like streak
+// milestones) since this is a daily target, not a lifetime one — resets
+// naturally every day because it's keyed on today's date.
+function _addWaterAndCelebrate(ml, toastPrefix) {
   state.waterToday = (state.waterToday || 0) + ml;
   saveState();
   updateDashboard();
@@ -12074,14 +12084,23 @@ function logWater(ml) {
   const actHrs = getActivities().filter(a=>a.enabled&&a.duration).reduce((s,a)=>s+(parseFloat(a.duration)||0)/60,0);
   const target = baseTarget + Math.round(actHrs * 500);
   const total = state.waterToday;
-  showToast('+' + ml + 'ml logged');
+  showToast(toastPrefix);
   if (total >= target) {
-    setTimeout(() => showToast('💧 Water target reached! ' + total + 'ml / ' + target + 'ml'), 500);
+    const today = todayStr();
+    const key = 'mh_water_celebrated_' + today;
+    if (localStorage.getItem(key) !== '1') {
+      localStorage.setItem(key, '1');
+      setTimeout(() => showToast('💧 Water target reached! ' + total + 'ml / ' + target + 'ml'), 500);
+    }
   }
 }
 
+function logWater(ml) {
+  _addWaterAndCelebrate(ml, '+' + ml + 'ml logged');
+}
+
 function logWaterCustom() {
-  appPrompt('Add water', 'Amount in ml', (val) => { const ml = parseInt(val); if (!isNaN(ml) && ml > 0) { state.waterToday = (state.waterToday||0) + ml; saveState(); updateDashboard(); showToast(`+${ml}ml added`); } });
+  appPrompt('Add water', 'Amount in ml', (val) => { const ml = parseInt(val); if (!isNaN(ml) && ml > 0) { _addWaterAndCelebrate(ml, `+${ml}ml added`); } });
 }
 
 function resetWater() {
@@ -12139,10 +12158,7 @@ function toggleWaterVoiceInput() {
     const text = e.results[0][0].transcript.trim();
     const ml = _parseWaterAmount(text);
     if (ml === null) { showToast(`Didn't catch an amount in "${text}" - try "250ml" or "a glass"`); return; }
-    state.waterToday = (state.waterToday || 0) + ml;
-    saveState();
-    updateDashboard();
-    showToast(`🎤 +${ml}ml added`);
+    _addWaterAndCelebrate(ml, `🎤 +${ml}ml added`);
   };
   rec.onerror = (e) => {
     if (e.error === 'no-speech' || e.error === 'aborted') return;
