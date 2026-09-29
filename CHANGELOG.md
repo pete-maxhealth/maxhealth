@@ -1,6 +1,14 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.836, HEAD v3.10.836)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.837, HEAD v3.10.837)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.837 — Portion Wasn't Pre-Filling When Re-Searching a Meal-Preview or Recipe Item
+
+Pete: "Portion not populating for edit" — tapping the 🔍 search icon on an "AI estimate" row in a meal preview (or a flagged recipe ingredient) to pick a proper match, then landing on the amount screen with "Enter grams" blank and "Enter amount above" still showing, even though the item clearly already had an amount (e.g. 470g).
+
+Root cause: the item's existing `.amount` is stored as a display string almost everywhere in the app — `"470g"`, `"150ml"`, etc. — not a bare number, and the amount screen was assigning that string straight into `foodAmountGrams`, a `type="number"` input. Browsers silently reject a non-numeric value on a number input, so it just stayed empty — no error, no console warning, nothing to see wrong except the blank box.
+
+Added `_fixingIngredientGrams()`, which pulls out the leading number regardless of whether `.amount` is already numeric or a unit-suffixed string, and used it in all three places the food-search amount screen tries to pre-fill from a "fixing" ingredient (Open Food Facts result, AI-estimate result, library result). Verified directly: `"470g"` → `470`, `"150ml"` → `150`, `"x1"` → `1`, a bare number passes through unchanged, and a missing/empty amount still correctly leaves the field blank.
 
 ## v3.10.836 — kg/lbs Toggle Was Missing From the Routine Template Editor
 
