@@ -4882,7 +4882,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.827</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.828</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5912,7 +5912,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.827'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.828'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -33875,8 +33875,32 @@ function setMMPeriod(period, btn) {
 
 function toggleMMMetric(key) {
   const idx = _mmSelectedMetrics.indexOf(key);
+  const turningOn = idx === -1;
   if (idx > -1) _mmSelectedMetrics.splice(idx, 1); else _mmSelectedMetrics.push(key);
   saveMMSelectedMetrics();
+  // Real gap found via user report: lab markers (and weight/body-comp, same
+  // reasoning as openMetricDrill's own period default) are infrequent real
+  // readings, not daily ones - a two-panel lab trend spread weeks apart is
+  // routinely invisible under the 7D/30D default because one of the two
+  // points falls outside the window, making "compare two readings" look
+  // broken even though both readings are genuinely there. Unlike the
+  // single-metric Deep Dive view (which always opens fresh and can just
+  // default straight to All), Compare Metrics is a persistent, multi-metric
+  // picker - so this only widens the period, and only the first time it
+  // would otherwise show nothing, rather than overriding a period the
+  // person deliberately chose for other metrics already on the chart.
+  if (turningOn && _mmPeriod !== 0 && _mmPeriod !== -1) {
+    const cfg = getDrillConfig(key);
+    const isSparse = key === 'weight' || cfg?.isLabMarker;
+    if (isSparse) {
+      const hasDataInWindow = getDrillData(key, _mmPeriod).some(d => d.val != null);
+      if (!hasDataInWindow && getDrillData(key, 0).some(d => d.val != null)) {
+        _mmPeriod = 0;
+        document.querySelectorAll('#mmPeriodBtns .drill-period').forEach((b, i) => b.classList.toggle('active', i === 2));
+        showToast('Switched to "All" — readings for this metric are too spread out to show in the current period');
+      }
+    }
+  }
   renderMMMetricPicker();
   document.getElementById('mmDayPanel').style.display = 'none'; // stale otherwise - it'd reference the old metric selection
   renderMMChart();

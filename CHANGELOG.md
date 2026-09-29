@@ -1,6 +1,10 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.827, HEAD v3.10.827)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.828, HEAD v3.10.828)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.828 — Real Bug: Compare Metrics Couldn't Actually Compare Sparse Lab Panels
+
+Found via direct testing: on the demo site, Alex's before/after lab trend looked broken in Compare Metrics — you could see each lab marker individually, but overlaying/comparing them showed nothing useful. Root cause: `openMetricDrill()`'s single-metric Deep Dive view was fixed back in v3.10.823 to default lab markers (and weight) to the "All" period, since real readings are infrequent and a 30-day default shows zero or one point almost always — but Compare Metrics never got the same fix, and Alex's two panels (39 days ago and 6 days ago) don't both fit inside the default 30-day window, so the older panel silently fell outside it. Fixed: selecting a lab marker (or weight) in Compare Metrics now checks whether it actually has data in the current period, and if not — but it does have data across all time — automatically widens to "All" with a toast explaining why, rather than leaving someone staring at what looks like an empty comparison. Only triggers the first time a sparse metric would otherwise show nothing; never overrides a period chosen deliberately for other metrics already on the chart.
 
 ## v3.10.827 — 10th Demo Persona: Bill, a PEMFiT Use Case
 
