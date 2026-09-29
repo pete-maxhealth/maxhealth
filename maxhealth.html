@@ -4839,7 +4839,7 @@
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.812</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.813</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5857,7 +5857,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.812'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.813'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -26261,6 +26261,55 @@ let _recipeIngredients = [];
 let _recipeSteps = [];
 let _editingRecipeId = null;
 
+// Real data-loss bug reported 29/09/2026: recipes take a while to fine-tune,
+// and everything above lived only in these in-memory variables - a screen
+// timeout, Android backgrounding the tab, or any full page reload silently
+// threw away whatever had been built so far, landing back on Log/Log with
+// no trace anything was in progress. This autosaves a draft to localStorage
+// on every meaningful change, and offers to restore it on next load.
+const RECIPE_DRAFT_KEY = 'mh_recipe_draft';
+function _saveRecipeDraft() {
+  try {
+    const name = document.getElementById('recipeName')?.value || '';
+    const servings = document.getElementById('recipeServings')?.value || 1;
+    // Nothing worth protecting yet - don't leave a stale empty draft sitting
+    // around from just opening the builder and closing it immediately.
+    if (!name.trim() && !_recipeIngredients.length && !_recipeSteps.length) {
+      localStorage.removeItem(RECIPE_DRAFT_KEY);
+      return;
+    }
+    localStorage.setItem(RECIPE_DRAFT_KEY, JSON.stringify({
+      name, servings,
+      ingredients: _recipeIngredients,
+      steps: _recipeSteps,
+      editingRecipeId: _editingRecipeId,
+      savedAt: new Date().toISOString(),
+    }));
+  } catch(e) {}
+}
+function _clearRecipeDraft() {
+  try { localStorage.removeItem(RECIPE_DRAFT_KEY); } catch(e) {}
+}
+// Called once on startup (see bottom of file) - if a draft exists, ask
+// before reopening the builder over whatever screen the app landed on,
+// rather than silently jumping the user into it.
+function _maybeOfferRecipeDraftRestore() {
+  let draft;
+  try { draft = JSON.parse(localStorage.getItem(RECIPE_DRAFT_KEY) || 'null'); } catch(e) { draft = null; }
+  if (!draft) return;
+  const label = draft.name?.trim() ? `"${draft.name.trim()}"` : 'your in-progress recipe';
+  appConfirm(`Looks like ${label} didn't get saved last time (${(draft.ingredients||[]).length} ingredient${(draft.ingredients||[]).length===1?'':'s'} added). Resume editing it?`, () => {
+    openRecipeBuilder(draft.editingRecipeId || null);
+    document.getElementById('recipeName').value = draft.name || '';
+    document.getElementById('recipeServings').value = draft.servings || 1;
+    _recipeIngredients = draft.ingredients || [];
+    _recipeSteps = draft.steps || [];
+    renderRecipeIngredients();
+    renderRecipeSteps();
+    updateRecipeTotals();
+  }, () => { _clearRecipeDraft(); }, false, { confirm: 'Resume', cancel: 'Discard' });
+}
+
 function loadRecipes() {
   if (typeof _demoMode !== 'undefined' && _demoMode) return generateDemoRecipes();
   // Same three-key redundancy and auto-restore pattern proven for the food
@@ -26380,6 +26429,18 @@ function closeRecipeBuilder() {
   if (_recipeStepVoiceActive) stopRecipeStepVoiceInput(null, false);
   _builderReleaseWakeLock();
   document.getElementById('recipeBuilderModal').style.display = 'none';
+}
+
+// Cancel/× both call this, not closeRecipeBuilder() directly - an explicit
+// cancel is the one case where losing the draft is genuinely intended, so
+// it's cleared here rather than in closeRecipeBuilder() itself (which also
+// runs after a successful save, where the draft is already cleared by
+// saveRecipe(), and must NOT run on an unintentional close such as a reload
+// wiping the in-memory state — that's exactly the case the draft exists to
+// survive).
+function cancelRecipeBuilder() {
+  _clearRecipeDraft();
+  closeRecipeBuilder();
 }
 
 // Separate wake lock instance from Cook Mode's (_cookWakeLock) since the two
@@ -28138,6 +28199,7 @@ function refreshRecipeFromLibrary() {
 }
 
 function updateRecipeTotals() {
+  _saveRecipeDraft(); // called after every ingredient/step/name/servings change - see RECIPE_DRAFT_KEY comment
   const totalsBar = document.getElementById('recipeTotalsBar');
   const totalsText = document.getElementById('recipeTotalsText');
   const perServingText = document.getElementById('recipePerServingText');
@@ -28245,6 +28307,7 @@ function saveRecipe() {
     recipes.push({ id: 'r_' + Date.now(), name, servings, ingredients: _recipeIngredients, steps: _recipeSteps, total, created: new Date().toISOString() });
   }
   saveRecipes(recipes);
+  _clearRecipeDraft();
   closeRecipeBuilder();
   setTimeout(renderRecipeList, 100);
   showToast(`Recipe "${name}" saved ✓`);
@@ -41369,6 +41432,9 @@ try {
   checkOnboarding();
   checkDataIntegrity();
   showNewUserBanner();
+  // Slight delay so this doesn't collide with onboarding/new-user banner
+  // dialogs firing on the same startup tick - see RECIPE_DRAFT_KEY comment.
+  setTimeout(_maybeOfferRecipeDraftRestore, 800);
   registerServiceWorker();
   // Genuinely run the server check (and everything nested inside it - library/
   // recipes/routines/strength/supplements restore, and critically the
@@ -42455,7 +42521,7 @@ function dismissInsight() {
       <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;" id="recipeBuilderTitle">NEW RECIPE</div>
       <div style="display:flex;align-items:center;gap:14px;">
         <span onclick="openVoiceCommandHelp('builder')" style="color:var(--text3);cursor:pointer;font-size:16px;" title="Voice commands">❓</span>
-        <div onclick="closeRecipeBuilder()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
+        <div onclick="cancelRecipeBuilder()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
       </div>
     </div>
 
@@ -42557,7 +42623,7 @@ function dismissInsight() {
     <button class="copy-btn" style="width:100%;margin-bottom:16px;font-size:12px;" onclick="refreshRecipeFromLibrary()">🔄 Refresh from Library</button>
 
     <div style="display:flex;gap:8px;">
-      <button class="modal-btn cancel" style="flex:1;" onclick="closeRecipeBuilder()">Cancel</button>
+      <button class="modal-btn cancel" style="flex:1;" onclick="cancelRecipeBuilder()">Cancel</button>
       <button class="modal-btn confirm-new" style="flex:2;" onclick="saveRecipe()" id="saveRecipeBtn">Save Recipe</button>
     </div>
   </div>
