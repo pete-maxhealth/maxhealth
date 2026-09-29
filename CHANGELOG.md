@@ -1,6 +1,48 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.784, HEAD v3.10.780)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.817, HEAD v3.10.817)
 
-**Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. Current live version (HEAD) is v3.10.780; v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+**Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.804-807 — Wellness Balance Card: From "Wrong" to "Explained" to Actually Fixed
+
+Reported as the Activity/Vitals scores looking wrong against a wearable app's own same-day numbers. Three passes, each one real: v3.10.804 clarified the card's subtitle was a 7-day average, not "today" (a labelling fix, not the underlying issue); v3.10.805 added a **Wellness Score Debug** panel (Settings) so the raw data behind each of the 4 scores could be checked directly instead of guessed at; v3.10.807 (Pete's own follow-up — "the user specified query period should be reflected, be it custom, 30 days or whatever") fixed the actual bug: Sleep/Activity/Nutrition ignored Trends' own Today/7D/30D/All/Custom selector entirely and always averaged a hardcoded last-7-real-days window. Now they average whatever period is currently selected, with a dynamic subtitle stating the real day-count found. Vitals' HRV baseline deliberately stays a fixed last-30-readings window regardless of period (a personal baseline needs real history a short custom range may not have) — documented explicitly so it isn't mistaken for a leftover bug. The Debug panel was updated to mirror the same selected period, so it's checking the same question the live card answers, not a different one.
+
+## v3.10.808-811 — Copy Diagnostics for Claude Extended, Then Two Real Bugs Found In It
+
+Extended the existing combined-diagnostics export to include Wellness Score Debug and the Sync Wearable Data log as new sources (v3.10.808), then moved Wellness Score Debug itself into Advanced Tools with its own icon (💗, v3.10.809) for consistency with the rest of the debug-tools family.
+
+Reported: "Copy diagnostic for Claude isn't maintaining state." First pass (v3.10.810) found and fixed a real but different bug — `renderDiagnosticsList()` was rebuilding its checkbox list from scratch on every expand/collapse, silently discarding the user's own tick/untick choices back to computed defaults. Reported as unresolved. Root cause (v3.10.811) turned out to be the section's own collapsed/expanded state, not its checkboxes: **Copy Diagnostics** was missing from the load-time collapse-state array that runs at app startup, so it silently reverted to open on every app reopen regardless of what was left last time — see v3.10.817 below, where 6 more Advanced Tools sections turned out to have exactly the same gap.
+
+## v3.10.812 — Removed Orphaned Duplicate `#dupeScanBanner`
+
+Leftover from an earlier Library Tools split: two `#dupeScanBanner` elements existed in the DOM (a duplicate ID), one live next to the Find Duplicates button, one an orphaned dead copy above the library search bar with no JS reference anywhere. Removed the dead one. Found via a routine health-check sanity run.
+
+## v3.10.813 — Recipe Drafts Now Autosave
+
+Reported: recipe editing "often loses the screen if it times out" — a screen timeout or Android backgrounding the tab silently discarded an in-progress recipe, since `_recipeIngredients`/`_recipeSteps`/`_editingRecipeId` lived only in memory with zero persistence. New `mh_recipe_draft` localStorage key, written on every totals update, offered back ("Looks like '\<name\>' didn't get saved last time — resume editing it?") on next app open, and cleared on both a successful save and an explicit cancel.
+
+## v3.10.814 — "+ Add Food" De-elevated
+
+Previously sat alone in its own row at the top of Food Library, more prominent than its actual frequency of use justified. Moved into the Library Tools row alongside Batch voice-build/Find Duplicates/Auto-Categorize/Preview Categories.
+
+## v3.10.815 — Library Edit Forms Now Lazy-Built (Real DOM-Weight Fix)
+
+Every library item's full edit form (name, portion, category chips, 6 macro inputs, AI-verify panel, More Info reveal, delete/cancel/save) was being built into the DOM for **every item on every render**, regardless of whether it was ever opened — a genuine, growing performance cost as the library grows, reported as "the page becomes more unmanageable when unhidden." Refactored into `buildLibraryEditFormHtml()`, called lazily only the first time a given item's edit form is actually opened, with the shell emptied again (`innerHTML = ''`) on close so only one form ever carries real weight at a time.
+
+## v3.10.816 — Health Connect Data Not Appearing: Cross-Origin Caching Root Cause Found
+
+Long-running investigation ("still no data from Health Connect for yesterday") that ruled out, in order, with direct verification at each step: the Python extraction pipeline (confirmed correct via `csv.DictReader` and `awk` field-counts directly against the real file), a duplicate/stale `combined.csv` (confirmed only one file exists via `find`), server-side caching (`server.py` reads the file fresh on every request, confirmed via code read and direct `curl`), and service-worker caching (`sw.js` explicitly uses `cache: 'no-store'`, confirmed via direct read).
+
+Actual root cause: `autoImportCombinedIfStale()`'s fetch to the local pipeline server (`http://localhost:5757/combined`) is **cross-origin** relative to the app's own page origin — and a service worker only ever intercepts same-origin requests within its scope, so `sw.js`'s `no-store` handling had never applied to this request at all, despite looking airtight. Left exposed to the browser's own default HTTP cache heuristics, which could silently serve a stale `/combined` response across a PWA suspend/resume cycle. Fixed on both ends: the fetch itself now sets `cache: 'no-store'` explicitly, and `server.py` also sends `Cache-Control: no-store, no-cache, must-revalidate` + `Pragma: no-cache` on `/combined`, so no cache layer anywhere can serve it stale regardless of client-side fetch options.
+
+Separately, and likely the actual original trigger for the missing-data symptom before this fix: `update_health.py` (unversioned, see below) was found to archive the entire inbox — including a genuinely unprocessed Health Connect export — on a single-device run that had nothing to do with Health Connect at all.
+
+## v3.10.817 — 6 More Advanced Tools Sections Missing Their Startup Collapse-State Registration
+
+Same bug class as v3.10.811 (Copy Diagnostics), found by auditing every Advanced Tools section against both collapse-state arrays rather than assuming the earlier fix had caught everything: **Log Mutation Debug, Save Debug Trace, Settings Change Log, JS Error Log, Manual Entry Log,** and **Label Read Log** were all correctly registered in the "full audit sweep" array (runs on every Manage/Customise tab switch) but missing from the separate array that runs once at app startup — so all 6 silently reverted to their HTML-authored default (open) on every fresh app open, regardless of what was left last time. All 11 real Advanced Tools sections are now confirmed present in both arrays.
+
+## Unversioned — `update_health.py`: Single-Device Pipeline Runs No Longer Archive the Whole Inbox
+
+Real incident (28/09/2026): a Manual Entry save triggers `update_health.py --device manual`. No manual extractor exists, so that run yielded nothing — but `archive_inbox()` ran anyway on the way out, and it archives **every** file in the inbox unconditionally, with no concept of which device actually looked at which file. That swept a genuine, unprocessed `health_connect_export.json` straight to `inbox/old/` without it ever being extracted — `combined.csv`'s last real Health Connect row was stuck on the 27th, and nothing in the log called out that an unrelated file had just been archived unread. Fixed: `archive_inbox()` now only runs on a full pipeline run (no `--device` filter) — a single-device run has no business archiving every other device's untouched export.
 
 ## v3.10.777 — Scrolling Charts Opened on the Oldest Day, Not the Latest
 
