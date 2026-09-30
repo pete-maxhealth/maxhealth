@@ -19,7 +19,19 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.Chart=function(){this.destroy=function(){}}"></script>
+<!-- 01/10/26 — the fallback stub below was missing a static .register, so a
+     blocked/failed CDN load didn't actually degrade gracefully: it threw
+     straight out of Chart.register(...) further down the page (a top-level
+     call, unguarded), which silently aborted the ENTIRE rest of this file's
+     script from that point on — including CONDITION_META's own declaration,
+     and with it every single feature defined after it in load order
+     (Device Precedence's reorder/persistence among them). Confirmed via a
+     headless repro: blocking just this one CDN script reproduced "Device
+     Precedence resets to position 1 and stays open" exactly, with zero
+     visible error to the person using the app. Chart.register is a static
+     method on the real Chart constructor, not an instance method, so it's
+     added directly onto the stub function itself here. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.Chart=function(){this.destroy=function(){}};window.Chart.register=function(){}"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <!-- JSZip - bundles Export All Data into one .zip instead of 3 separate staggered
@@ -31686,7 +31698,15 @@ const mhDataLabelPlugin = {
     });
   }
 };
-Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin);
+// 01/10/26 — guarded: this is a top-level call with nothing above it to
+// catch a throw, so ANY reason Chart.register isn't a real function (a CDN
+// that fails outside the exact way the <script onerror> above anticipates,
+// a future Chart.js version that changes its API, etc.) would silently kill
+// every single line of script that follows it in this file for the rest of
+// the session — confirmed this is exactly how Device Precedence's reorder
+// stopped persisting with zero visible error. try/catch here means a
+// genuinely broken Chart.js only costs charts, never the rest of the app.
+try { Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin); } catch (e) { console.warn('Chart.register failed — charts may not render, rest of the app continues:', e); }
 
 // Threshold-aware colour, reused for both segment coloring (line style)
 // and per-point coloring (bar/point style) - one metric, one rule, applied
