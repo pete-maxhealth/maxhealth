@@ -4900,6 +4900,17 @@
         <div class="settings-label">Developed by</div>
         <div class="settings-value">Pete</div>
       </div>
+      <!-- 01/10/26 — the automatic update check (registerServiceWorker, on
+           load and on tab-focus) is the normal path, but it's silent when
+           nothing's new and gives no way to ask on demand — raised directly
+           after the Chart.js bug this same evening meant a real update sat
+           unseen. This button reuses the exact same reg.update() call and
+           existing updatefound/showUpdateAvailableBanner listeners, so a
+           found update behaves identically either way; it only adds
+           feedback for the "nothing new" case, which the automatic path
+           never needed to handle out loud. -->
+      <button class="copy-btn" id="checkUpdateBtn" onclick="manualCheckForUpdate()" style="margin-top:12px;">🔄 CHECK FOR UPDATES</button>
+      <div class="settings-hint" style="margin-top:6px;">MaxedHealth normally checks for a new version on its own — use this if you want to check right now instead of waiting.</div>
       <div class="settings-hint" style="margin-top:8px;line-height:1.7;">
         Built by a GBM patient who needed it. Given freely to everyone who does.
       </div>
@@ -40793,11 +40804,20 @@ Prose only. No bullet points. Direct and clinical. Do not catastrophise.`;
 
 // ─── PWA / SERVICE WORKER (P9) ────────────────────────────
 
+// 01/10/26 — kept so manualCheckForUpdate() (Settings > About) can call
+// reg.update() on the SAME registration this function already sets up,
+// rather than re-registering or duplicating the updatefound/statechange
+// listeners below. Stays null until registration succeeds; the manual
+// button checks for that and tells the person plainly if it's not ready
+// yet instead of silently doing nothing.
+let _swRegistration = null;
+
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.getRegistrations().then(regs => { regs.forEach(reg => reg.unregister()); });
   const swPath = new URL('sw.js', window.location.href).pathname;
   navigator.serviceWorker.register(swPath).then(reg => {
+    _swRegistration = reg;
     navigator.serviceWorker.addEventListener('message', event => {
       if (event.data?.action === 'switchTab') switchTabById(event.data.tab);
     });
@@ -40835,6 +40855,51 @@ function registerServiceWorker() {
       if (document.visibilityState === 'visible') reg.update().catch(() => {});
     });
   }).catch(err => console.warn('SW registration failed (non-fatal):', err));
+}
+
+// 01/10/26 — Settings > About > "Check for updates" button. The automatic
+// checks (on load, on tab-focus) already cover the common case; this exists
+// for the moment someone specifically wants to know right now, e.g. right
+// after hearing a fix shipped. Uses the SAME registration and the SAME
+// updatefound/statechange listeners already wired up in
+// registerServiceWorker() — a found update shows the identical banner
+// either way, so there's exactly one "new version" UI in the whole app, not
+// two that could drift apart. This function's only real job is the case the
+// automatic path never needed to speak to out loud: telling the person
+// clearly when there ISN'T a new version, rather than leaving a manual
+// button that can silently do nothing and look broken.
+function manualCheckForUpdate() {
+  const btn = document.getElementById('checkUpdateBtn');
+  if (!_swRegistration) {
+    showToast("Can't check right now — try again in a moment");
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '🔄 Checking…'; }
+  // If an update IS found, showUpdateAvailableBanner() fires via the
+  // existing updatefound listener before this timeout — bannerShown below
+  // catches that so the "you're up to date" toast never appears alongside
+  // (or after) the real banner for the same check.
+  let bannerShown = false;
+  const bannerWatcher = () => { if (document.getElementById('swUpdateBanner')) bannerShown = true; };
+  const watcherInterval = setInterval(bannerWatcher, 200);
+  _swRegistration.update().then(() => {
+    // updatefound (if it's going to fire at all) fires synchronously as
+    // part of this same update() call resolving, on every browser this
+    // app supports — 500ms is just a safety margin, not a real wait for
+    // anything slow, so this never makes a normal "up to date" check feel
+    // sluggish.
+    setTimeout(() => {
+      clearInterval(watcherInterval);
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
+      if (!bannerShown && !document.getElementById('swUpdateBanner')) {
+        showToast("You're on the latest version ✓");
+      }
+    }, 500);
+  }).catch(() => {
+    clearInterval(watcherInterval);
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
+    showToast("Couldn't check for updates — check your connection and try again");
+  });
 }
 
 function showUpdateAvailableBanner(newWorker) {
