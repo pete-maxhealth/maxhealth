@@ -79,10 +79,14 @@ INBOX_OLD_RETENTION_DAYS = 180
 # this doesn't bypass sanity-checking, just device priority.
 DEFAULT_PRECEDENCE = {
     'weight':   ['manual', 'withings', 'ringconn', 'amazfit', 'health_connect'],
-    'hrv':      ['manual', 'ringconn', 'withings', 'garmin', 'amazfit'],
+    # health_connect added to hrv/spo2 30/09/26, same lowest-precedence spot
+    # already used for it everywhere else in this table — it can only ever
+    # fill a gap none of the other sources reported, never override one of
+    # them.
+    'hrv':      ['manual', 'ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
     'sleep':    ['manual', 'ringconn', 'withings', 'garmin', 'amazfit', 'health_connect'],
     'steps':    ['manual', 'garmin', 'withings', 'ringconn', 'amazfit', 'health_connect'],
-    'spo2':     ['manual', 'ringconn', 'withings', 'amazfit'],
+    'spo2':     ['manual', 'ringconn', 'withings', 'amazfit', 'health_connect'],
     'hr':       ['manual', 'ringconn', 'amazfit', 'withings', 'garmin', 'health_connect'],
 }
 
@@ -108,7 +112,15 @@ SOURCE_FIELDS = {
                  'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
                  'bedtime', 'wake_time', 'hr_avg', 'hr_min', 'hr_max', 'hrv', 'spo2',
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
-    'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight'],
+    # 30/09/26 — widened from the original 4 (steps/sleep_duration/hr_avg/weight)
+    # to add hrv, spo2, calories_active — the launcher's HealthConnectBridge.kt
+    # now reads and sends these three too (Pete noticed them permanently empty
+    # on the Today screen; health_connect had simply never been given permission
+    # to carry them, on either side — Kotlin wasn't reading them AND this
+    # whitelist would have dropped them even if it had). Same lowest-precedence
+    # position as before in every field's source list above: health_connect can
+    # never override a real device's own reading, only fill a genuine gap.
+    'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight', 'hrv', 'spo2', 'calories_active'],
     # Widened (28/09/26) from the original 6 headline fields to every real
     # combined.csv column (everything in ALL_FIELDS except 'date' and
     # 'source', which aren't metric values). The Manual Entry screen itself
