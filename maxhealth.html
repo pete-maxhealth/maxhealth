@@ -10105,6 +10105,117 @@ function confirmOverwriteExistingLibraryItem(existingId) {
   _advanceIngredientSaveQueueIfActive({ type: 'overwritten', text: diffText });
 }
 
+// ─── SLEEP-SOURCE OVERLAP RESOLUTION ──────────────────────
+// 30/09/26 — the native launcher's HealthConnectBridge.kt (Kotlin, not in
+// this file) reads raw sleep sessions from Android Health Connect. Most
+// days there's one session, or several clearly-separate ones (a nap) — both
+// resolve automatically on-device, nothing reaches here. The one case it
+// deliberately does NOT resolve itself is a genuine overlap: two different
+// sources (e.g. Zepp and RingConn) both reporting for the same night, close
+// enough in time that summing them double-counts the night and unioning
+// them just guesses which device's edge reading to trust. Neither is a
+// number worth writing silently, so it's queued instead, server-side, for
+// this comparison card — same interaction shape as showAddFoodComparison()
+// above: side-by-side values, an explicit per-instance choice, nothing
+// applied by default.
+//
+// Deliberately no "remember this choice" option anywhere in this flow. A
+// dead battery or a slipped strap on one night doesn't mean the same
+// source is wrong every night, so every future genuine overlap — even
+// between the same two sources — gets its own fresh prompt rather than a
+// rule quietly auto-applying from here on.
+
+async function checkSleepConflicts() {
+  try {
+    const res = await fetch(`${MH_SERVER}/sleep-conflicts`, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return; // server not reachable / not running — quietly skip, retried next open
+    const data = await res.json();
+    const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
+    if (!conflicts.length) return; // the ordinary case — nothing to show, nothing logged client-side either
+    // Oldest first, but only ever show one at a time — resolving it re-checks
+    // for the next, rather than stacking multiple modals.
+    showSleepConflictComparison(conflicts[0]);
+  } catch (e) {
+    // Offline, server not up yet, etc. — same "just try again next open"
+    // handling as the rest of this app's server-dependent startup calls.
+  }
+}
+
+function showSleepConflictComparison(conflict) {
+  const existing = document.getElementById('sleepConflictModal');
+  if (existing) existing.remove();
+
+  const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const fmtHours = mins => (mins / 60).toFixed(1) + 'h';
+  const dateLabel = new Date(conflict.date + 'T12:00:00').toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+
+  const sessions = conflict.sessions || [];
+  const sumMinutes = sessions.reduce((s, x) => s + (x.duration_minutes || 0), 0);
+
+  const row = (label, a, b) => `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--text3);">${label}</span><span style="color:var(--text);">${a}</span><span style="color:var(--accent);">${b}</span></div>`;
+
+  const modal = document.createElement('div');
+  modal.id = 'sleepConflictModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:80vh;overflow-y:auto;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Sleep sources disagree — ${dateLabel}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">${sessions.length} sources reported overlapping sleep for this night. Which is right?</div>
+      ${sessions.length === 2 ? `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:6px;">
+            <span></span><span style="color:var(--text);">${sessions[0].source}</span><span style="color:var(--accent);">${sessions[1].source}</span>
+          </div>
+          ${row('Start', fmtTime(sessions[0].start), fmtTime(sessions[1].start))}
+          ${row('End', fmtTime(sessions[0].end), fmtTime(sessions[1].end))}
+          ${row('Duration', fmtHours(sessions[0].duration_minutes), fmtHours(sessions[1].duration_minutes))}
+        </div>` : sessions.map(s => `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:12px;">
+          <span style="color:var(--text);font-weight:600;">${s.source}</span>
+          <span style="color:var(--text3);"> — ${fmtTime(s.start)}–${fmtTime(s.end)} (${fmtHours(s.duration_minutes)})</span>
+        </div>`).join('')}
+      ${sessions.map(s => `
+        <button onclick="resolveSleepConflict('${conflict.date}', {type:'use_source', source:'${s.source}'})" style="width:100%;padding:10px;background:none;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;margin-bottom:8px;">Use ${s.source} — ${fmtHours(s.duration_minutes)}</button>
+      `).join('')}
+      <button onclick="resolveSleepConflict('${conflict.date}', {type:'sum'})" style="width:100%;padding:10px;background:none;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;margin-bottom:8px;">Both genuinely happened — add them (${fmtHours(sumMinutes)})</button>
+      <button onclick="resolveSleepConflict('${conflict.date}', {type:'skip'})"
+        style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;margin-top:4px;">Decide later</button>
+    </div>`;
+
+  document.body.appendChild(modal);
+  // Deliberately no backdrop-click-to-dismiss (unlike the food comparison
+  // modal) — this isn't a "back to edit" situation with an underlying form
+  // to return to, and an accidental dismiss would just mean re-asking next
+  // open anyway. "Decide later" above covers the same intent explicitly.
+}
+
+async function resolveSleepConflict(date, resolution) {
+  document.getElementById('sleepConflictModal')?.remove();
+  try {
+    const res = await fetch(`${MH_SERVER}/resolve-sleep-conflict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, resolution })
+    });
+    const data = await res.json();
+    if (data && data.status === 'ok') {
+      if (resolution.type === 'skip') {
+        showToast('Left for next time — you\'ll be asked again next sync');
+      } else {
+        showToast(`Sleep for ${date} updated ✓`);
+        if (data.pipeline_triggered) setTimeout(() => checkServer(), 1500); // pick up the re-synced value
+      }
+    } else {
+      showToast(data?.error || 'Couldn\'t save that — try again from Import if it persists');
+    }
+  } catch (e) {
+    showToast('Phone not reachable — this will still be waiting next time you open the app');
+  }
+  // Show the next pending conflict, if any — one at a time, same as the
+  // initial check.
+  setTimeout(checkSleepConflicts, 400);
+}
+
 // ─── NAVIGATION ──────────────────────────────────────────
 const NAV_MAP = {
   'dash':        ['today',    'dash'],
@@ -42872,6 +42983,11 @@ try {
   // silently skipping the whole recovery for that entire session.
   checkServer().then(ok => { if (!ok) setTimeout(checkServer, 5000); });
   setTimeout(checkNotifications, 3000);
+  // Cheap: usually nothing pending, one fetch, nothing shown. Only ever
+  // returns anything for the narrow case of a genuine overlap between two
+  // sleep-recording sources on the same night — see HealthConnectBridge.kt's
+  // resolveSleepHours() for why this can't be resolved automatically.
+  setTimeout(checkSleepConflicts, 1500);
   // Stored globally (not a bare setInterval) so the idle-timeout feature can
   // genuinely stop this while paused, not just hide its visible effects -
   // that's the actual battery-relevant part of pausing, not the overlay itself.

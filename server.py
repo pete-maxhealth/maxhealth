@@ -19,6 +19,8 @@ Endpoints:
   POST /save-manual-entries-bulk — save many dates at once (CSV template upload), one pipeline run
   POST /clear-manual-entry — undo a manual override (date, fields?) — see its own docstring for real limits
   GET  /manual-entry-log  — audit trail of manual entry saves (capped, self-trimming)
+  GET  /sleep-conflicts   — pending sleep-source overlaps awaiting a decision (comparison card)
+  POST /resolve-sleep-conflict — apply/skip a sleep-overlap decision for one date
 
 Usage:
   cd /storage/emulated/0/maxhealth/app/maxhealth
@@ -92,6 +94,12 @@ STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 # is deliberately not re-derived independently; a change to either path
 # scheme needs both updated together or they'll silently diverge.
 PREFS_JSON      = os.path.join(DATA_DIR, 'pipeline_prefs.json')
+# Written by the native launcher's HealthConnectBridge.kt (Kotlin, not this
+# repo) when it detects two sleep sources genuinely overlapping for the same
+# night and can't resolve it algorithmically — see that file's
+# resolveSleepHours() doc comment for why. Same DATA_DIR both sides already
+# share, so no new path convention is being introduced here.
+SLEEP_CONFLICTS_JSON = os.path.join(DATA_DIR, 'sleep_conflicts_pending.json')
 # Same file extractors/manual.py reads via run(inbox) - INBOX_DIR is this
 # file's own already-derived path, so no separate cross-check comment is
 # needed the way PREFS_JSON above needs one (that one is independently
@@ -564,6 +572,109 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': str(e)}, 400)
             return
 
+        # ── POST /resolve-sleep-conflict — comparison card's per-instance choice ──
+        # Body: {date, resolution}, resolution one of:
+        #   {"type": "use_source", "source": "<matches a session's source>"} — use that
+        #     session's own duration for the date, written the same way a Manual
+        #     Entry save already works (save_manual_entry), so it goes through
+        #     the real pipeline/precedence/audit-log machinery rather than a
+        #     parallel path.
+        #   {"type": "sum"} — the person judges both sessions genuinely happened
+        #     (e.g. a device double-booked a nap awkwardly) — add them.
+        #   {"type": "skip"} — don't record anything for this date; just clear
+        #     it from the pending list so it stops being asked about today (it
+        #     WILL be asked again if a future sync re-detects the same overlap
+        #     for this date — see the "leave the switch active" note below).
+        # Deliberately no "remember this choice for next time" option — every
+        # future genuine overlap, even for the same two sources, gets its own
+        # fresh prompt. Different nights can have different dead batteries,
+        # different sensor misses; a rule that sounded right for one night
+        # isn't guaranteed right for the next one, so nothing here is ever
+        # auto-applied without being asked.
+        if path == '/resolve-sleep-conflict':
+            try:
+                date_str = (body.get('date') or '').strip()
+                resolution = body.get('resolution') or {}
+                if not date_str:
+                    self.send_json({'error': 'date is required'}, 400)
+                    return
+                res_type = resolution.get('type')
+                if res_type not in ('use_source', 'sum', 'skip'):
+                    self.send_json({'error': 'resolution.type must be use_source, sum, or skip'}, 400)
+                    return
+
+                pending = []
+                if os.path.exists(SLEEP_CONFLICTS_JSON):
+                    try:
+                        with open(SLEEP_CONFLICTS_JSON, 'r', encoding='utf-8') as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, list):
+                            pending = loaded
+                    except Exception:
+                        pending = []
+                match = next((c for c in pending if c.get('date') == date_str), None)
+                if not match:
+                    self.send_json({'error': f'No pending sleep conflict found for {date_str}'}, 404)
+                    return
+
+                chosen_minutes = None
+                chosen_label = 'skipped'
+                if res_type == 'use_source':
+                    source = resolution.get('source')
+                    session = next((s for s in match.get('sessions', []) if s.get('source') == source), None)
+                    if not session:
+                        self.send_json({'error': f'source "{source}" not found in this conflict'}, 400)
+                        return
+                    chosen_minutes = session.get('duration_minutes')
+                    chosen_label = source
+                elif res_type == 'sum':
+                    chosen_minutes = sum(s.get('duration_minutes', 0) for s in match.get('sessions', []))
+                    chosen_label = 'sum of both'
+
+                # Remove from the pending queue either way — resolved or
+                # explicitly skipped, it shouldn't keep nagging on this same
+                # detection. A fresh overlap (even same date, re-synced) gets
+                # re-queued by the Kotlin side and will show up again.
+                remaining = [c for c in pending if c.get('date') != date_str]
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(SLEEP_CONFLICTS_JSON, 'w', encoding='utf-8') as f:
+                    json.dump(remaining, f, indent=2)
+
+                pipeline_triggered = False
+                if chosen_minutes is not None:
+                    save_manual_entry(date_str, {'sleep_duration': chosen_minutes})
+                    if not pipeline_running:
+                        run_pipeline(device='manual')
+                        pipeline_triggered = True
+
+                # Paired with the Kotlin side's detection log line — same file,
+                # same format, so both halves of the story sit together.
+                try:
+                    os.makedirs(LOGS_DIR, exist_ok=True)
+                    log_path = os.path.join(LOGS_DIR, 'pipeline.log')
+                    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    line = f"{ts} | {'health_connect':<10} | {'sleep':<8} | {'OK':<6} | Sleep overlap for {date_str} resolved — chose {chosen_label}"
+                    existing = []
+                    if os.path.exists(log_path):
+                        with open(log_path, 'r', encoding='utf-8') as f:
+                            existing = f.read().splitlines()
+                    combined = (existing + [line])[-500:]
+                    with open(log_path, 'w', encoding='utf-8') as f:
+                        f.write('\n'.join(combined) + '\n')
+                except Exception:
+                    pass  # logging must never block the actual resolution
+
+                self.send_json({
+                    'status': 'ok',
+                    'date': date_str,
+                    'resolution': res_type,
+                    'sleep_duration_minutes': chosen_minutes,
+                    'pipeline_triggered': pipeline_triggered,
+                })
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
         # ── POST /save-nutrition — save a single day row ──────────────────────
         if path == '/save-nutrition':
             date    = body.get('date', '').strip()
@@ -873,6 +984,23 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 'held': read_combined_row_for_date(date_str),
                 'manual': get_manual_entry_for_date(date_str),
             })
+
+        # ── GET /sleep-conflicts — pending sleep-source overlaps waiting on a
+        # decision, queued by HealthConnectBridge.kt on the Kotlin side. Read
+        # fresh on every app open (not cached), so a resolution made from
+        # another device shows up immediately rather than the stale list
+        # lingering until next sync.
+        elif path == '/sleep-conflicts':
+            conflicts = []
+            if os.path.exists(SLEEP_CONFLICTS_JSON):
+                try:
+                    with open(SLEEP_CONFLICTS_JSON, 'r', encoding='utf-8') as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        conflicts = loaded
+                except Exception:
+                    pass
+            self.send_json({'conflicts': conflicts})
 
         # ── GET /manual-entry-log — audit trail for the Advanced
         # Troubleshooting Tools viewer (mirrors the Rollover/Settings-Change
