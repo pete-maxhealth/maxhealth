@@ -950,6 +950,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - p09 meal logging with a stubbed AI (3 conditions x 4 typings) + suggestion-request regression; needs `service_workers='block'` in Playwright or the SW hides requests from route()
 - `p10_devices.py` — custom devices/patterns/precedence survive a browser wipe; user extractors (`data/extractors/`) and patterns work end to end; backup + restore of prefs, devices and extractors.
 - `p11_library.py` — add/edit/search/log-a-portion/delete in the food library, and a full restore from the server copy after a browser wipe.
+- `p12_manual_entry.py` — typed manual entry (units, out-of-range, future date) and CSV upload in Excel/UK/EU styles, plus a 500-row history.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety

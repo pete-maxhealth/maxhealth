@@ -45,7 +45,7 @@ import time
 import http.server
 import urllib.parse
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ── Phase 14: Pattern Detection for Wearables ──────────────────────────────────
 try:
@@ -568,12 +568,16 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 if not any(v is not None for v in fields.values()):
                     self.send_json({'error': 'At least one field must have a value'}, 400)
                     return
+                fields, problems = prepare_manual_entry(date_str, fields)
+                if not fields:
+                    self.send_json({'error': 'Nothing saved: ' + '; '.join(problems or ['no usable values'])}, 400)
+                    return
                 cleaned = save_manual_entry(date_str, fields)
                 triggered = False
                 if not pipeline_running:
                     run_pipeline(device='manual')
                     triggered = True
-                self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'pipeline_triggered': triggered})
+                self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'rejected': problems, 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
             return
@@ -606,6 +610,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     return
                 saved = []
                 skipped = []
+                rejected = []
                 for raw in raw_entries:
                     date_str = (raw.get('date') or '').strip() if isinstance(raw, dict) else ''
                     if not date_str:
@@ -615,13 +620,19 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     if not any(v is not None for v in fields.values()):
                         skipped.append(raw)  # blank row in the template — nothing to save, not an error
                         continue
+                    fields, problems = prepare_manual_entry(date_str, fields)
+                    if problems:
+                        rejected.extend(f'{date_str}: {x}' for x in problems)
+                    if not fields:
+                        skipped.append(raw)
+                        continue
                     cleaned = save_manual_entry(date_str, fields)
                     saved.append({'date': date_str, 'saved': cleaned})
                 triggered = False
                 if saved and not pipeline_running:
                     run_pipeline(device='manual')
                     triggered = True
-                self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'pipeline_triggered': triggered})
+                self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'rejected': rejected[:20], 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
             return
@@ -1476,6 +1487,37 @@ def get_manual_entry_for_date(date_str):
         if entry.get('date') == date_str:
             return entry
     return None
+
+def prepare_manual_entry(date_str, fields):
+    """01/10/26 - checked at SAVE time (the pipeline used to be the only place a bad value was
+    caught, silently, so the person was told "Saved" for a weight of 700 kg or a date of
+    05/10/2026 that never reached their data). Returns (clean_fields, problems) where
+    problems is a list of plain-English strings. A bad date rejects the whole row."""
+    problems = []
+    try:
+        d = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except Exception:
+        return {}, [f'"{date_str}" is not a valid date (use YYYY-MM-DD)']
+    if d > (datetime.now() + timedelta(days=1)).date():
+        return {}, [f'{date_str} is in the future']
+    try:
+        import update_health as _uh
+        ranges = _uh.VALIDATION_RANGES
+    except Exception:
+        ranges = {}
+    clean = {}
+    for k in FIELD_NAMES:
+        v = fields.get(k)
+        if v is None:
+            continue
+        if k in ranges and isinstance(v, (int, float)):
+            lo, hi = ranges[k]
+            if not (lo <= v <= hi):
+                problems.append(f'{k} {v} is outside the believable range {lo}-{hi}')
+                continue
+        clean[k] = v
+    return clean, problems
+
 
 def save_manual_entry(date_str, fields):
     """

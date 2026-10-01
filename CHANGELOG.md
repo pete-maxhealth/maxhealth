@@ -12,6 +12,15 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.852 — Manual Entry And CSV Import Tell The Truth
+
+Found by the new manual-entry persona test (`p12_manual_entry.py`).
+
+- **UK dates** (05/10/2026, 5-10-26, 05.10.2026) in an uploaded CSV were reported as "Uploaded" and then silently dropped by the pipeline. They are now converted; a date that can't be read (31/02/2026) is reported by name.
+- **Excel-style files** now work: semicolon or tab separators, decimal commas (70,6), quoted thousands ("6,007"), capitalised/padded headers ("Date, Weight").
+- **Long histories**: anything over 400 rows was refused outright. The app now uploads in batches, so a year or two of Apple-Health-style daily data goes in one go.
+- **Out-of-range values** (a 700 kg weight, a 2031 date) used to be told "Saved" and then quietly discarded by the pipeline. The server now checks at save time and the screen says exactly what was NOT saved and why; valid fields in the same entry are still saved.
+
 ## v3.10.851 — Library Restore No Longer Loses Detail
 
 Found by the new library persona test (`p11_library.py`).

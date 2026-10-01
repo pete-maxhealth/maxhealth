@@ -4902,7 +4902,7 @@
       </div>
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.851</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.852</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5943,7 +5943,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.851'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.852'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -37378,13 +37378,14 @@ async function saveManualEntry() {
     // loop with the green-highlight cue on the form itself: what turned
     // green is what this confirms actually went through.
     const savedLabels = Object.keys(values)
-      .filter(k => values[k] != null)
+      .filter(k => values[k] != null && (data.saved ? data.saved[k] != null : true))
       .map(k => MANUAL_FIELD_META[k]?.label || k);
     const savedList = savedLabels.join(', ');
 
+    if (data.rejected && data.rejected.length && out) out.dataset.rej = data.rejected.join('; '); else if (out) delete out.dataset.rej;
     if (out) {
       out.className = 'output-box success';
-      out.textContent = `✓ Saved for ${date}: ${savedList}.${data.pipeline_triggered ? ' Pipeline ran and combined data has been refreshed.' : ' A sync is already in progress — this will be picked up on its next run.'}`;
+      out.textContent = `✓ Saved for ${date}: ${savedList}.${data.pipeline_triggered ? ' Pipeline ran and combined data has been refreshed.' : ' A sync is already in progress — this will be picked up on its next run.'}${data.rejected && data.rejected.length ? ' ⚠ NOT saved: ' + data.rejected.join('; ') + '.' : ''}`;
     }
     showToast(`✓ Saved ${savedList} for ${date}`);
     // Re-load so the form reflects what was actually stored (e.g. if the
@@ -37436,6 +37437,44 @@ function triggerManualCsvUpload() {
 // without ever touching this app's own download) and POSTs every non-blank
 // row in one request to /save-manual-entries-bulk, which runs the pipeline
 // once for the whole batch rather than once per row.
+// 01/10/26 — a real CSV reader. The old one split on "," only, so Excel's semicolon files
+// (UK/EU locales), quoted cells like "6,007", capitalised or padded headers ("Date, Weight")
+// and UK dates (05/10/2026) all failed or - worse - were "uploaded" and then silently dropped.
+function _csvDetectDelimiter(headerLine) {
+  const counts = { ',': 0, ';': 0, '\t': 0 };
+  let q = false;
+  for (const ch of headerLine) { if (ch === '"') q = !q; else if (!q && ch in counts) counts[ch]++; }
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+}
+function _csvSplitLine(line, delim) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === delim) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur); return out;
+}
+// Accepts 2026-10-05, 05/10/2026, 5-10-26, 05.10.2026 (UK order, day first). Returns ISO or ''.
+function _normaliseCsvDate(raw) {
+  const t = String(raw || '').trim().replace(/^﻿/, '');
+  let y, m, d, mt;
+  if ((mt = t.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[T ].*)?$/))) { y = +mt[1]; m = +mt[2]; d = +mt[3]; }
+  else if ((mt = t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2}|\d{4})$/))) { d = +mt[1]; m = +mt[2]; y = +mt[3]; if (y < 100) y += 2000; }
+  else return '';
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return '';
+  return dt.toISOString().slice(0, 10);
+}
+function _csvNumber(raw, delim) {
+  let t = String(raw).trim().replace(/\s/g, '');
+  if (!t) return NaN;
+  if (delim === ';' || (/^\d+,\d{1,2}$/.test(t) && !t.includes('.'))) t = t.replace(/\./g, '').replace(',', '.');   // 70,6 / 1.234,5
+  else t = t.replace(/,(?=\d{3}(\D|$))/g, '');                                                                      // 6,007
+  return /^-?\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
+}
 function handleManualCsvFileSelected(input) {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -37443,22 +37482,23 @@ function handleManualCsvFileSelected(input) {
   reader.onload = async (e) => {
     const out = document.getElementById('manualEntryOutput');
     try {
-      const text = e.target.result;
-      const lines = text.replace(/\r/g, '').trim().split('\n').filter(Boolean);
+      const text = String(e.target.result).replace(/^﻿/, '');
+      const lines = text.replace(/\r/g, '').trim().split('\n').filter(l => l.trim());
       if (lines.length < 2) throw new Error('File appears empty');
-      const headers = lines[0].split(',').map(h => h.trim());
+      const delim = _csvDetectDelimiter(lines[0]);
+      const headers = _csvSplitLine(lines[0], delim).map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
       const dateIdx = headers.indexOf('date');
       if (dateIdx < 0) throw new Error('No "date" column found in the CSV header');
       const fieldIdx = {};
       headers.forEach((h, i) => { if (MANUAL_FIELD_META[h]) fieldIdx[h] = i; });
       if (!Object.keys(fieldIdx).length) throw new Error('No recognised field columns found — check the header row matches a downloaded template');
 
-      const entries = [];
+      const entries = []; const badDates = [];
       for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',');
-        const date = (cols[dateIdx] || '').trim();
-        if (!date) continue;
-        const entry = { date };
+        const cols = _csvSplitLine(lines[i], delim);
+        const rawDate = (cols[dateIdx] || '').trim();
+        if (!rawDate) continue;
+        const entry = { date: _normaliseCsvDate(rawDate) };
         let hasValue = false;
         for (const [field, idx] of Object.entries(fieldIdx)) {
           const raw = (cols[idx] || '').trim();
@@ -37467,49 +37507,55 @@ function handleManualCsvFileSelected(input) {
           if (meta.type === 'time') {
             entry[field] = raw;
           } else {
-            const n = parseFloat(raw);
+            const n = _csvNumber(raw, delim);
             if (isNaN(n)) continue;
             entry[field] = meta.store === 'minutes-to-hours' ? Math.round(n * 60) : n;
           }
           hasValue = true;
         }
-        if (hasValue) entries.push(entry);
+        if (!hasValue) continue;
+        if (!entry.date) { badDates.push(rawDate); continue; }
+        entries.push(entry);
       }
-      if (!entries.length) throw new Error('No filled-in rows found — every row was blank or unrecognised');
+      if (!entries.length) throw new Error(badDates.length ? `No usable rows — couldn't read the date "${badDates[0]}" (use 2026-10-05 or 05/10/2026)` : 'No filled-in rows found — every row was blank or unrecognised');
 
-      if (out) { out.style.display = 'block'; out.className = 'output-box'; out.textContent = `Uploading ${entries.length} day(s)…`; }
-      const res = await fetch(`${MH_SERVER}/save-manual-entries-bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries })
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
-
-      if (data.pipeline_triggered) {
-        if (out) out.textContent = `Uploaded ${data.saved.length} day(s) — running pipeline…`;
-        await new Promise((resolve) => {
-          const timer = setInterval(async () => {
-            try {
-              const sres = await fetch(`${MH_SERVER}/status`);
-              const sdata = await sres.json();
-              if (!sdata.running) { clearInterval(timer); resolve(); }
-            } catch(err) { clearInterval(timer); resolve(); }
-          }, 1000);
+      // Chunked: a long history (e.g. a year or two of daily rows) used to be refused outright
+      // by the server's 400-row ceiling.
+      const CHUNK = 200; let savedN = 0, skippedN = 0; const rejected = [];
+      for (let o = 0; o < entries.length; o += CHUNK) {
+        if (out) { out.style.display = 'block'; out.className = 'output-box'; out.textContent = `Uploading ${Math.min(o + CHUNK, entries.length)} of ${entries.length} day(s)…`; }
+        const res = await fetch(`${MH_SERVER}/save-manual-entries-bulk`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: entries.slice(o, o + CHUNK) })
         });
-        await autoLoadCombined();
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
+        savedN += data.saved.length; skippedN += data.skipped_count || 0; rejected.push(...(data.rejected || []));
+        if (data.pipeline_triggered) {
+          if (out) out.textContent = `Uploaded ${savedN} day(s) — running pipeline…`;
+          await new Promise((resolve) => {
+            const timer = setInterval(async () => {
+              try { const sdata = await (await fetch(`${MH_SERVER}/status`)).json(); if (!sdata.running) { clearInterval(timer); resolve(); } }
+              catch(err) { clearInterval(timer); resolve(); }
+            }, 1000);
+          });
+        }
       }
-
+      await autoLoadCombined();
+      const notes = [];
+      if (skippedN) notes.push(`skipped ${skippedN} blank/invalid row(s)`);
+      if (badDates.length) notes.push(`${badDates.length} row(s) had a date I couldn't read (e.g. "${badDates[0]}")`);
+      if (rejected.length) notes.push(`not saved: ${rejected.slice(0, 3).join('; ')}${rejected.length > 3 ? '…' : ''}`);
       if (out) {
-        out.className = 'output-box success';
-        out.textContent = `✓ Uploaded ${data.saved.length} day(s)${data.skipped_count ? `, skipped ${data.skipped_count} blank/invalid row(s)` : ''}.${data.pipeline_triggered ? ' Pipeline ran and combined data has been refreshed.' : ''}`;
+        out.className = (badDates.length || rejected.length) ? 'output-box' : 'output-box success';
+        out.textContent = `✓ Uploaded ${savedN} day(s)${notes.length ? ' — ' + notes.join(' · ') : ''}. Combined data has been refreshed.`;
       }
-      showToast(`${data.saved.length} day(s) imported ✓`);
+      showToast(`${savedN} day(s) imported ✓`);
     } catch(err) {
       if (out) { out.style.display = 'block'; out.className = 'output-box error'; out.textContent = `✗ ${err.message}`; }
       showToast('Could not import CSV template');
     } finally {
-      input.value = ''; // allow re-selecting the same file name later
+      input.value = '';
     }
   };
   reader.readAsText(file);
