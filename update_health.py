@@ -222,6 +222,13 @@ def get_precedence(prefs):
     for metric, order in user_prec.items():
         if metric in prec:
             prec[metric] = order
+    # 01/10/26 — manual is ALWAYS first, whatever order was saved. The Settings
+    # editor used to append "Manual" to the bottom of most lists and send that to
+    # pipeline_prefs.json, which would have made a typed-in correction lose to
+    # every device. A manual entry is the person overruling the machines; it is
+    # not a rankable source.
+    for metric, order in prec.items():
+        prec[metric] = ['manual'] + [src for src in order if src != 'manual']
     return prec
 
 
