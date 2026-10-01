@@ -506,7 +506,12 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
                             else 999  # unknown/untracked - always safely overwritable
                         )
                         new_priority = prio_sources.index(source)
-                        if new_priority < current_priority:
+                        # <= (not <): the SAME source re-reporting a field is a
+                        # fresher reading of the same thing and must win. With
+                        # strict < a source could never correct itself, so a
+                        # wrong Health Connect sleep total (01/10/26: 13h32m)
+                        # stayed forever even after the launcher was fixed.
+                        if new_priority <= current_priority:
                             row[field] = src_val
                             sources_used.add(source)
                             date_field_sources[field] = source
