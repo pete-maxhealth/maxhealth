@@ -445,6 +445,43 @@ def run_pipeline(device=None, dry_run=False, auto_sync=False):
     return True
 
 
+# ── Scheduled jobs self-install (01/10/26) ────────────────────────────────────
+# A fresh launcher install only gets the watchdog cron line, so a new user never got
+# app updates or the 30-minute merge. On startup (Termux only) add whichever of those
+# two lines is missing. Existing lines are never changed or removed.
+def ensure_scheduled_jobs(force=False):
+    home = os.path.expanduser('~')
+    if not (force or os.environ.get('MH_FORCE_CRON_SETUP') or '/com.termux/' in home):
+        return []
+    ct = shutil.which('crontab')
+    if not ct:
+        return []
+    added = []
+    try:
+        src = os.path.join(APP_DIR, 'mh_autoupdate.sh')
+        dst = os.path.join(home, 'mh_autoupdate.sh')
+        if os.path.exists(src) and not os.path.exists(dst):
+            shutil.copyfile(src, dst); os.chmod(dst, 0o755); added.append('mh_autoupdate.sh')
+        r = subprocess.run([ct, '-l'], capture_output=True, text=True, timeout=15)
+        current = r.stdout if r.returncode == 0 else ''
+        lines = current.rstrip('\n').split('\n') if current.strip() else []
+        want = [
+            ('update_health.py', '*/30 * * * * cd %s && python3 update_health.py >> %s 2>&1' % (APP_DIR, os.path.join(LOGS_DIR, 'cron_pipeline.log'))),
+            ('mh_autoupdate', '5,35 * * * * ~/mh_autoupdate.sh'),
+        ]
+        for marker, line in want:
+            if not any(marker in l and not l.lstrip().startswith('#') for l in lines):
+                lines.append(line); added.append(marker)
+        if any(a != 'mh_autoupdate.sh' for a in added):
+            os.makedirs(LOGS_DIR, exist_ok=True)
+            subprocess.run([ct, '-'], input='\n'.join(lines) + '\n', text=True, timeout=15)
+        if added:
+            print('  [setup] added scheduled jobs:', ', '.join(added))
+    except Exception as e:
+        print('  [setup] could not check scheduled jobs:', e)
+    return added
+
+
 # ── Health Connect auto-merge (01/10/26) ──────────────────────────────────────
 # The launcher drops health_connect_export.json into the inbox every 30 minutes, but
 # merging it into combined.csv depended on a separate cron job that a new install does
@@ -1823,6 +1860,7 @@ def main():
 
     server = http.server.HTTPServer(('127.0.0.1', PORT), MaxHealthHandler)
     threading.Thread(target=_hc_watch_loop, daemon=True).start()
+    ensure_scheduled_jobs()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
