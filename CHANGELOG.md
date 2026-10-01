@@ -12,6 +12,12 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.859 — Recipes: Hand-Typed Ingredients Log Correctly, Steps Survive A Restore
+
+Found by the new recipes persona test (p22).
+- **Logging a recipe inflated oils and fats.** An ingredient typed in by hand has macros for one portion but no weight. Logging invented "100g × your share", and the pure-fat safety check then trusted that made-up weight: 120 kcal of olive oil logged as 450 kcal, 50g fat. Ingredients without a weight now log as "1 portion" (or "0.5 portions"); ingredients with a real weight still log in grams.
+- **Recipe steps were never backed up.** `recipes.csv` had no column for them, so after a browser wipe the recipe came back with ingredients and no method. Steps are now saved (new `steps_json` column; older 8-column files still restore). Pipes in ingredient names, notes and steps are escaped rather than replaced with "/".
+
 ## v3.10.858 — Fresh Installs Now Get The Update And Merge Jobs Automatically
 
 Pete's phone runs three cron jobs (watchdog every minute, GitHub auto-update at :05/:35, `update_health.py` every 30 minutes). The launcher's `provision.sh` only ever created the watchdog line, so a fresh install never got app updates or the 30-minute merge. On startup, in Termux only, the server now adds whichever of those two lines is missing and installs `mh_autoupdate.sh` (now kept in the repo) if absent. Existing lines are never changed or removed, a commented-out line doesn't count as present, and the check is a no-op outside Termux. No launcher rebuild needed. Test: p21 (fresh, already-complete, watchdog-only and commented-out crontabs).
