@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.849 — Typing A Plain Meal Now Logs It
+
+Found by persona p09 (meal logging, AI stubbed):
+- **A bare two-food phrase such as "chicken breast and rice" was hijacked into a meal-SUGGESTION request, not logged.** For a new user with an empty library the app answered "Your library is empty - nothing to check against yet" and the meal never reached the AI. A bare phrase now only counts as a suggestion request when at least one part is a generic category word (protein, meat, veg, carb...). "protein and pasta" and "meat and 2 veg" still work as requests (tested). Behaviour change to be aware of: "chicken and pasta" typed alone now LOGS a meal rather than suggesting one.
+- **The AI was told "the user is on a strict low-carb, high-protein protocol" for every condition**, even a general user with a 150 g carb target. Now only for the ketogenic-based conditions; others are told to follow their own targets and not assume low-carb.
+- p09 covers 3 conditions x 4 ways of typing a meal through preview, "Log it", Today totals and stored entry.
+- Note for distribution: users on the default provider send every AI call through the developer's own Cloudflare Worker (per-device daily cap). Worth a decision before more people use the app.
+
 ## v3.10.848 — GBM-Only Content No Longer Shown To Everyone
 
 Found by persona p08 (one user per condition, tapping real tabs):
