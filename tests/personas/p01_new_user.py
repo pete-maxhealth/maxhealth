@@ -1,5 +1,5 @@
 """Persona 1: brand-new user walks the setup wizard in many variants."""
-import sys, re, itertools; sys.path.insert(0, __file__.rsplit('/',1)[0])
+import sys, re; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
 NOISE = ('ERR_TUNNEL', 'status of 404', 'ERR_NAME_NOT_RESOLVED', 'cdn.jsdelivr', 'cdnjs', 'fonts.g')
@@ -9,7 +9,7 @@ VARIANTS = [
   dict(name='Pat', sex='male', age='56', hu='cm', h='180', wu='st', w='13', t='12', act='sedentary', goal='lose', cond='gbm'),
   dict(name='Dee', sex='female', age='29', hu='cm', h='165', wu='kg', w='60', t='', act='active', goal='gain', cond='t1_diabetes'),
   dict(name='Kim', sex='female', age='71', hu='cm', h='158', wu='kg', w='72', t='65', act='light', goal='lose', cond='epilepsy'),
-  dict(name='X', sex='male', age='', hu='cm', h='', wu='kg', w='', t='', act=None, goal=None, cond=None),  # skips everything
+  dict(name='X', sex='male', age='', hu='cm', h='', wu='kg', w='', t='', act=None, goal=None, cond=None),
 ]
 def run(v, pw):
     f = Findings(); b = pw.chromium.launch()
@@ -37,9 +37,9 @@ def run(v, pw):
     if ob != 'none': f.add('BUG', f'wizard still showing after Finish (display={ob})')
     txt = page.inner_text('body')
     for bad in ('NaN', 'undefined', 'null', 'Infinity', '[object'):
-        if re.search(r'\b'+re.escape(bad)+r'\b', txt): f.add('BUG', f'"{bad}" visible on Today screen')
-    stored = page.evaluate("({kcal:localStorage.getItem('mh_target_kcal'),name:localStorage.getItem('mh_name')||localStorage.getItem('mh_user_name')})")
-    print(f"  {v['name']}: kcal field='{kcal}' protein='{prot}' stored={stored}")
+        if re.search(r'\b'+re.escape(bad)+r'\b', txt): f.add('BUG', f'"{bad}" visible on screen')
+    stored = page.evaluate("({kcal:localStorage.getItem('mh_target_kcal')})")
+    print(f"  kcal field='{kcal}' protein='{prot}' stored={stored}")
     page.screenshot(path=f"/tmp/claude-0/work/p01_{v['name']}.png"); b.close(); return f
 total = 0
 with fresh_server() as root, sync_playwright() as pw:

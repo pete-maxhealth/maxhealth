@@ -4898,7 +4898,7 @@
       </div>
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.845</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.846</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5939,7 +5939,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.845'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.846'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -43534,12 +43534,28 @@ function setWeightUnit(unit) {
   }
 }
 
+// Whole number formed by the digits typed after the decimal point of an input
+// ("5.6" -> 6, "5.06" -> 6, "5.10" -> 10). Falls back to the numeric value when
+// the field's text doesn't match val (e.g. called with a stored number).
+function _fractionDigits(inputId, val) {
+  const el = document.getElementById(inputId);
+  const s = el ? String(el.value).trim() : '';
+  if (s && parseFloat(s) === val) {
+    const dot = s.indexOf('.');
+    return dot < 0 ? 0 : (parseInt(s.slice(dot + 1), 10) || 0);
+  }
+  return Math.round((val - Math.floor(val)) * 100);
+}
+
 function getWeightInKg(val) {
   if (!val) return null;
   if (_weightUnit === 'lbs') return Math.round(val * 0.453592 * 10) / 10;
   if (_weightUnit === 'st') {
+    // 01/10/26 - read the digits after the point literally (12.10 = 12st 10lb,
+    // 12.7 = 12st 7lb). The old (val - stones) * 10 turned a typed "12.10" into
+    // 12.1 -> 1lb, silently wrong by 9lb.
     const stones = Math.floor(val);
-    const lbs = Math.round((val - stones) * 10);
+    const lbs = _fractionDigits('onboardWeight', val);
     return Math.round((stones * 6.35029 + lbs * 0.453592) * 10) / 10;
   }
   return val;
@@ -43569,7 +43585,7 @@ function setHeightUnit(unit) {
   } else {
     if (cmBtn) cmBtn.style.cssText = inactive;
     if (ftBtn) ftBtn.style.cssText = active;
-    if (hLabel) hLabel.textContent = "Height (ft.in e.g. 5.11 = 5ft 11in)";
+    if (hLabel) hLabel.textContent = "Height (ft.in e.g. 5.6 = 5ft 6in, 5.11 = 5ft 11in)";
     if (hInput) { hInput.placeholder = 'e.g. 5.11'; hInput.step = '0.01'; }
   }
 }
@@ -43577,8 +43593,12 @@ function setHeightUnit(unit) {
 function getHeightInCm(val) {
   if (!val) return null;
   if (_heightUnit === 'ft') {
+    // 01/10/26 - digits after the point are INCHES, read literally: 5.6 = 5ft 6in,
+    // 5.06 = 5ft 6in, 5.11 = 5ft 11in. The old (val - feet) * 100 turned a typed
+    // "5.6" (the obvious way to write 5ft 6in) into 5ft 60in = 304cm, which gave a
+    // brand-new user a ~3,500kcal daily target without any visible error.
     const feet = Math.floor(val);
-    const inches = Math.round((val - feet) * 100);
+    const inches = _fractionDigits('onboardHeight', val);
     return Math.round((feet * 30.48 + inches * 2.54) * 10) / 10;
   }
   return val;

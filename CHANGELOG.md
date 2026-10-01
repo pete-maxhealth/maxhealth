@@ -12,6 +12,11 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.846 — Feet/Stones Input Fix Found By New-User Testing
+
+- **Fixed:** typing a height as `5.6` (5ft 6in) was read as 5ft **60** inches = 304cm, giving a new user a ~3,570 kcal daily target with no visible error. Digits after the point are now read literally as inches (5.6 = 5.06 = 5ft 6in; 5.10 = 5ft 10in). Same fix for stones: `12.10` was read as 12st 1lb, now 12st 10lb. Label now shows `5.6 = 5ft 6in`.
+- New `tests/personas/` harness: fresh server + empty data + headless Chromium. p01 walks the setup wizard across 6 profiles/units/conditions; p02 checks unit parsing. Both pass.
+
 ## v3.10.845 — Health Connect Sync-Age Indicator
 
 - New server route `/sync-status` reports when the launcher last delivered a Health Connect export (newest `health_connect_export*.json` in inbox or inbox/old).
