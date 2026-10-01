@@ -96,6 +96,7 @@ STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 # scheme needs both updated together or they'll silently diverge.
 PREFS_JSON      = os.path.join(DATA_DIR, 'pipeline_prefs.json')
 DEVICES_JSON    = os.path.join(DATA_DIR, 'devices.json')
+ERROR_LOG_JSON  = os.path.join(DATA_DIR, 'error_log.json')
 USER_EXT_DIR    = os.path.join(DATA_DIR, 'extractors')
 # Written by the native launcher's HealthConnectBridge.kt (Kotlin, not this
 # repo) when it detects two sleep sources genuinely overlapping for the same
@@ -536,6 +537,44 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'status': 'ok', 'source_precedence': existing_prec})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
+            return
+
+        # ── POST /log-client-error — the app reports a JS error it caught (01/10/26) ──
+        # Body: {sig, kind, msg, src, line, v}. Stored de-duplicated by `sig` with a count and
+        # first/last seen, capped at 200 entries. Messages are already truncated and have long
+        # digit runs removed client-side, so no health values are kept.
+        if path == '/log-client-error':
+            try:
+                sig = str(body.get('sig', ''))[:300]
+                if not sig:
+                    self.send_json({'error': 'sig required'}, 400)
+                    return
+                log = []
+                if os.path.exists(ERROR_LOG_JSON):
+                    try:
+                        with open(ERROR_LOG_JSON, 'r', encoding='utf-8') as f:
+                            log = json.load(f)
+                        if not isinstance(log, list):
+                            log = []
+                    except Exception:
+                        log = []
+                now = datetime.now().isoformat(timespec='seconds')
+                e = next((x for x in log if x.get('sig') == sig), None)
+                if e:
+                    e['count'] = e.get('count', 1) + 1
+                    e['last'] = now
+                    e['v'] = str(body.get('v', ''))[:20]
+                else:
+                    log.append({'sig': sig, 'kind': str(body.get('kind', ''))[:20], 'msg': str(body.get('msg', ''))[:200],
+                                'src': str(body.get('src', ''))[:120], 'line': body.get('line'), 'v': str(body.get('v', ''))[:20],
+                                'count': 1, 'first': now, 'last': now})
+                    log = log[-200:]
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(ERROR_LOG_JSON, 'w', encoding='utf-8') as f:
+                    json.dump(log, f)
+                self.send_json({'status': 'ok'})
+            except Exception as ex:
+                self.send_json({'error': str(ex)}, 400)
             return
 
         # ── POST /save-devices — custom devices, retired list, file patterns ──
@@ -1035,6 +1074,13 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         # Newest health_connect_export*.json the launcher has written, whether
         # still in inbox/ or already archived to inbox/old/. Lets the app say
         # "last data 3h ago" so a silently stalled background sync is visible.
+        elif path == '/selfcheck':
+            try:
+                import selfcheck as _sc
+                self.send_json(_sc.run_selfcheck())
+            except Exception as ex:
+                self.send_json({'error': str(ex)}, 500)
+
         elif path == '/devices':
             d = _load_devices()
             clean = _clean_devices(d)

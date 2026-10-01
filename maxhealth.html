@@ -4901,8 +4901,12 @@
         <div class="settings-value" id="syncAgeDisplay" style="text-align:right;">Checking…</div>
       </div>
       <div class="settings-row">
+        <div class="settings-label">System health</div>
+        <div class="settings-value" id="selfCheckDisplay" style="text-align:right;">Checking…</div>
+      </div>
+      <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.853</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.854</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5943,7 +5947,35 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.853'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.854'; // single source of truth — bump here each release
+
+// ── Error capture (01/10/26) ─────────────────────────────────────────────────
+// Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
+// reported to the phone's server (data/error_log.json) so a self-check can summarise them.
+// Messages are truncated and long digit runs removed, so no health values are stored.
+(function() {
+  const KEY = 'mh_error_log', MAX = 60; let sent = 0;
+  const clean = v => String(v == null ? '' : v).replace(/\d{4,}/g, '#').slice(0, 200);
+  function record(kind, msg, src, line) {
+    try {
+      const file = src ? String(src).split('/').pop().slice(0, 60) : '';
+      const sig = kind + '|' + clean(msg) + '|' + file + ':' + (line || '');
+      let log = []; try { log = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch(e) {}
+      const now = new Date().toISOString();
+      const e = log.find(x => x.sig === sig);
+      if (e) { e.count++; e.last = now; e.v = APP_VERSION; }
+      else { log.push({ sig, kind, msg: clean(msg), src: file, line: line || null, count: 1, first: now, last: now, v: APP_VERSION }); if (log.length > MAX) log.shift(); }
+      localStorage.setItem(KEY, JSON.stringify(log));
+      if (sent < 20) {
+        sent++;
+        fetch('http://localhost:5757/log-client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sig, kind, msg: clean(msg), src: file, line: line || null, v: APP_VERSION }) }).catch(() => {});
+      }
+    } catch(e) {}
+  }
+  window.addEventListener('error', ev => record('js', ev.message, ev.filename, ev.lineno));
+  window.addEventListener('unhandledrejection', ev => record('promise', (ev.reason && ev.reason.message) || ev.reason));
+})();
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11664,8 +11696,22 @@ async function updateSyncAgeDisplay() {
   } catch (e) { el.textContent = 'Server not reachable'; }
 }
 
+// 01/10/26 - plain-language system health from selfcheck.py (pipeline log, data integrity, app errors, backups).
+async function updateSelfCheckDisplay() {
+  const el = document.getElementById('selfCheckDisplay');
+  if (!el) return;
+  try {
+    const j = await (await fetch(`${MH_SERVER}/selfcheck`)).json();
+    if (j.error) { el.textContent = 'Not available'; return; }
+    const icon = j.status === 'green' ? '✅' : j.status === 'amber' ? '🟡' : '🔴';
+    const esc = t => String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    el.innerHTML = `${icon} ${esc(j.headline)}` + (j.items || []).slice(0, 3).map(i => `<br><span style="font-size:11px;color:var(--text3);">${esc(i.text)}</span>`).join('');
+  } catch (e) { el.textContent = 'Server not reachable'; }
+}
+
 function initSettings() {
   updateSyncAgeDisplay();
+  updateSelfCheckDisplay();
   pullDevicesFromServer();
   applyOrgBranding();
   const verEl = document.getElementById('settingsVersionDisplay');

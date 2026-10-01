@@ -953,6 +953,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p12_manual_entry.py` — typed manual entry (units, out-of-range, future date) and CSV upload in Excel/UK/EU styles, plus a 500-row history.
 - `p13_reports.py` — Reports/Insights screens and treatment report for no-data, 45-day and GBM users.
 - `p14_stack_themes_settings.py` — supplements, routines, strength log (restore after wipe), every theme combination (contrast), settings controls.
+- `p15_selfcheck.py` — self-check: healthy = green, seeded corruption = red, JS errors recorded once with a count and shown in Settings.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety

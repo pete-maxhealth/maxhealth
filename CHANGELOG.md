@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.854 — Self-Check And Error Log (Stage One Of Self-Monitoring)
+
+- **Error capture:** the app records uncaught JavaScript errors and unhandled promise rejections, de-duplicated with counts, first/last seen and app version. They are reported to `data/error_log.json` on the phone. Messages are truncated and long digit runs removed, so no health values are kept.
+- **`selfcheck.py`** (also `GET /selfcheck`): checks `combined.csv` integrity and freshness, the pipeline log (errors/warnings this week, ignoring normal "no export for a device you don't own" noise), recorded app errors, and backup age. Result is **Nothing to worry about / One to know / One to watch**, written to `data/selfcheck.json`.
+- **Settings → About → System health** shows that headline plus the top three items in plain English.
+- `error_log.json` joins the backup rotation and `--restore`.
+- New persona test `p15_selfcheck.py`. Checked against the real 830-day backup: no false alarms (only "newest data is 5 days old", which was true of that backup).
+
 ## v3.10.853 — Supplements Fixed; Reports, Themes, Routines Verified
 
 Found by the new persona tests `p13_reports.py` and `p14_stack_themes_settings.py`.

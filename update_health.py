@@ -306,6 +306,7 @@ def backup_files():
         (FIELD_SOURCES_FILE, 'field_sources', 'json'),
         (PREFS_FILE,     'pipeline_prefs', 'json'),
         (DEVICES_FILE,   'devices',      'json'),
+        (os.path.join(BASE, 'data', 'error_log.json'), 'error_log', 'json'),
     ]:
         if os.path.exists(src_path):
             dst = os.path.join(BACKUP_DIR, f"{name}_{ts}.{ext}")
@@ -314,7 +315,7 @@ def backup_files():
 
     # Trim backups older than 7 days per file type
     cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json'),('pipeline_prefs','json'),('devices','json'),('extractors','zip')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json'),('pipeline_prefs','json'),('devices','json'),('error_log','json'),('extractors','zip')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         for f in glob.glob(pattern):
             if os.path.getmtime(f) < cutoff:
@@ -377,7 +378,7 @@ def restore_backup(backup_path):
         flush_log()
         print("\nRestored user extractors")
         return
-    prefix_map.update({'pipeline_prefs_': PREFS_FILE, 'devices_': DEVICES_FILE})
+    prefix_map.update({'pipeline_prefs_': PREFS_FILE, 'devices_': DEVICES_FILE, 'error_log_': os.path.join(BASE, 'data', 'error_log.json')})
     dest = None
     for prefix, path in prefix_map.items():
         if fname.startswith(prefix):
