@@ -306,6 +306,7 @@ def backup_files():
         (FIELD_SOURCES_FILE, 'field_sources', 'json'),
         (PREFS_FILE,     'pipeline_prefs', 'json'),
         (DEVICES_FILE,   'devices',      'json'),
+        (os.path.join(INBOX, 'manual_entry.json'), 'manual_entry', 'json'),
         (os.path.join(BASE, 'data', 'error_log.json'), 'error_log', 'json'),
     ]:
         if os.path.exists(src_path):
@@ -315,7 +316,7 @@ def backup_files():
 
     # Trim backups older than 7 days per file type
     cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json'),('pipeline_prefs','json'),('devices','json'),('error_log','json'),('extractors','zip')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json'),('pipeline_prefs','json'),('devices','json'),('manual_entry','json'),('error_log','json'),('extractors','zip')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         for f in glob.glob(pattern):
             if os.path.getmtime(f) < cutoff:
@@ -378,7 +379,7 @@ def restore_backup(backup_path):
         flush_log()
         print("\nRestored user extractors")
         return
-    prefix_map.update({'pipeline_prefs_': PREFS_FILE, 'devices_': DEVICES_FILE, 'error_log_': os.path.join(BASE, 'data', 'error_log.json')})
+    prefix_map.update({'pipeline_prefs_': PREFS_FILE, 'devices_': DEVICES_FILE, 'manual_entry_': os.path.join(INBOX, 'manual_entry.json'), 'error_log_': os.path.join(BASE, 'data', 'error_log.json')})
     dest = None
     for prefix, path in prefix_map.items():
         if fname.startswith(prefix):
@@ -891,6 +892,13 @@ def archive_inbox():
     for item in os.listdir(INBOX):
         if item == 'old':
             continue  # Never move the old/ folder itself
+        if item == 'manual_entry.json':
+            # 01/10/26 — the typed-in corrections are the record of what the person
+            # overruled. Archiving them meant a correction saved while a sync was
+            # running was moved away before it was ever applied, and the device value
+            # came back ("overwritten again"). They stay in place and are re-applied
+            # (manual is always first) on every run.
+            continue
         src = os.path.join(INBOX, item)
         dst = os.path.join(old_dir, item)
 

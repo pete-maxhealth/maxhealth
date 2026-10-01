@@ -956,6 +956,8 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p15_selfcheck.py` — self-check: healthy = green, seeded corruption = red, JS errors recorded once with a count and shown in Settings.
 - `p16_real_exports.py` — PRIVATE: replays real Withings/RingConn/Zepp exports from `MH_FIXTURES` (default `/root/maxhealth_fixtures`, never committed) and compares against the real phone result. Skips (passes) when the files are absent, e.g. the nightly cloud run.
 - `p17_winzip_aes.py` — WinZip-AES reader (Zepp export): FIPS test vectors, round trip, wrong password, tamper detection.
+- `p18_midnight.py` — midnight rollover: closed-app gaps (1/5/40 days), no duplicates, empty day, app left open across midnight.
+- `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety

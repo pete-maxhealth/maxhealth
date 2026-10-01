@@ -143,6 +143,7 @@ CORS = {
 # ─── PIPELINE STATE ───────────────────────────────────────────────────────────
 pipeline_lock    = threading.Lock()
 pipeline_running = False
+pending_manual_run = False
 pipeline_log     = []
 pipeline_result  = None   # 'ok' | 'error' | None
 
@@ -371,7 +372,7 @@ def run_pipeline(device=None, dry_run=False, auto_sync=False):
         pipeline_result = None
 
     def _run():
-        global pipeline_running, pipeline_result
+        global pipeline_running, pipeline_result, pending_manual_run
 
         try:
             # ── Move exports if auto_sync ──────────────────────────────────
@@ -435,9 +436,27 @@ def run_pipeline(device=None, dry_run=False, auto_sync=False):
             pipeline_result = 'error'
         finally:
             pipeline_running = False
+            # A manual correction saved while this run was in progress: apply it now.
+            if pending_manual_run:
+                pending_manual_run = False
+                run_pipeline(device='manual')
 
     threading.Thread(target=_run, daemon=True).start()
     return True
+
+
+def run_manual_pipeline():
+    """Apply manual entries now, or queue it to run the moment the current run ends.
+    Returns True if started immediately. (01/10/26: a correction saved during a sync was
+    never applied, so the device value came back.)"""
+    global pending_manual_run
+    with pipeline_lock:
+        busy = pipeline_running
+        if busy:
+            pending_manual_run = True
+    if busy:
+        return False
+    return run_pipeline(device='manual')
 
 
 # ─── REQUEST HANDLER ──────────────────────────────────────────────────────────
@@ -612,10 +631,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     self.send_json({'error': 'Nothing saved: ' + '; '.join(problems or ['no usable values'])}, 400)
                     return
                 cleaned = save_manual_entry(date_str, fields)
-                triggered = False
-                if not pipeline_running:
-                    run_pipeline(device='manual')
-                    triggered = True
+                triggered = run_manual_pipeline()
                 self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'rejected': problems, 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
@@ -667,10 +683,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                         continue
                     cleaned = save_manual_entry(date_str, fields)
                     saved.append({'date': date_str, 'saved': cleaned})
-                triggered = False
-                if saved and not pipeline_running:
-                    run_pipeline(device='manual')
-                    triggered = True
+                triggered = run_manual_pipeline() if saved else False
                 self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'rejected': rejected[:20], 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
@@ -770,9 +783,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 pipeline_triggered = False
                 if chosen_minutes is not None:
                     save_manual_entry(date_str, {'sleep_duration': chosen_minutes})
-                    if not pipeline_running:
-                        run_pipeline(device='manual')
-                        pipeline_triggered = True
+                    pipeline_triggered = run_manual_pipeline()
 
                 # Paired with the Kotlin side's detection log line — same file,
                 # same format, so both halves of the story sit together.

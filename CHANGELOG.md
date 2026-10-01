@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.856 — Manual Sleep Correction Sticks, SpO2 Rounded, Midnight Rollover While Open
+
+**Manual correction overwritten (Pete: "sleep still stuck, even though I altered via manual").** Two real holes, both found by reproducing it. (1) Every full sync archived `manual_entry.json` into `inbox/old/`, so a correction saved while a sync was already running was moved away before it was applied, and the Health Connect value came back; if the field-attribution file was ever lost, the device value then won outright. The file now stays in the inbox, is re-applied (manual first) on every run, and is included in the 7-day backups and `--restore`. (2) A manual save during a running sync used to say "will be picked up" but nothing picked it up. It is now queued and runs the moment that sync ends. Test: p19 (fails on the old code, passes now).
+
+**SpO2 showed 95.47619047619048%.** The Trends day list and the SpO2 card now round to one decimal (the list's shared formatter, so HR, HRV and calories are covered too).
+
+**App left open past midnight.** The day only rolled over when something redrew the dashboard, so a phone resumed next morning could still show yesterday's meals. It now checks on becoming visible, on focus, and every minute, through the existing single rollover path. Test: p18 (also covers 1/5/40-day gaps, no duplicates, empty days).
+
 ## v3.10.855 — Zepp/Amazfit Export Now Opens Without ZArchiver Or pyzipper
 
 Found by replaying Pete's real exports (private test `p16_real_exports.py`).
