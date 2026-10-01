@@ -846,9 +846,8 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
 
 
         elif path == '/extract-zepp':
-            if not HAS_PYZIPPER:
-                self.send_json({'error': 'pyzipper not installed — run: pip install pyzipper --break-system-packages'}, 500)
-                return
+            # 01/10/26 - no longer needs pyzipper: extractors/_winzip_aes.py reads Zepp's
+            # WinZip-AES zip with the standard library (pyzipper is still used when installed).
             try:
                 password = body.get('password', '').strip()
                 if not password:
@@ -867,9 +866,24 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 errors = []
                 for zip_path in zepp_zips:
                     try:
-                        with pyzipper.AESZipFile(zip_path) as zf:
-                            zf.pwd = password.encode('utf-8')
-                            zf.extractall(INBOX_DIR)
+                        if HAS_PYZIPPER:
+                            with pyzipper.AESZipFile(zip_path) as zf:
+                                zf.pwd = password.encode('utf-8')
+                                zf.extractall(INBOX_DIR)
+                        else:
+                            sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extractors'))
+                            import _winzip_aes
+                            with _winzip_aes.open_aes_zip(zip_path, password) as zf:
+                                for member in zf.namelist():
+                                    if member.endswith('/'):
+                                        continue
+                                    norm = os.path.normpath(member)
+                                    if os.path.isabs(norm) or norm.startswith('..'):
+                                        continue   # never write outside the inbox
+                                    dest = os.path.join(INBOX_DIR, norm)
+                                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                                    with open(dest, 'wb') as out:
+                                        out.write(zf.read(member))
                         extracted.append(os.path.basename(zip_path))
                         # Move zip to old
                         old_dir = os.path.join(INBOX_DIR, 'old')

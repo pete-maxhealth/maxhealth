@@ -51,6 +51,16 @@ from datetime import datetime, timezone
 
 def open_zip(path, password=None):
     """Open zip, with or without password. Returns ZipFile object."""
+    # 01/10/26 - Zepp's "Export your data" zip uses WinZip-AES encryption, which Python's own
+    # zipfile cannot read ("That compression method is not supported"), so the password option
+    # never worked on a real export. _winzip_aes.py reads it with the standard library.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import _winzip_aes
+        if _winzip_aes.has_aes(path):
+            return _winzip_aes.open_aes_zip(path, password)
+    except ImportError:
+        pass
     zf = zipfile.ZipFile(path, 'r')
     if password:
         zf.setpassword(password.encode('utf-8'))
@@ -67,7 +77,11 @@ def read_csv_from_zip(zf, filename, password=None):
     except KeyError:
         return []
     except RuntimeError as e:
-        print(f"  [warn] Could not read {filename}: {e}", file=sys.stderr)
+        msg = str(e)
+        if 'Bad password' in msg:
+            print("  [amazfit] The Zepp zip password is wrong - check the one Zepp emailed you", file=sys.stderr)
+        else:
+            print(f"  [warn] Could not read {filename}: {e}", file=sys.stderr)
         return []
 
     text = raw.decode('utf-8-sig')  # strips BOM if present

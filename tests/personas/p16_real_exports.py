@@ -35,4 +35,24 @@ with fresh_server() as root:
                     both += 1; same += abs(float(x) - float(y)) <= max(0.6, abs(float(y)) * 0.02)
             print(f'  {fld}: {same}/{both} agree with the real phone result')
             chk(both == 0 or same / both >= 0.97, f'{fld}: only {same}/{both} agree with the real combined.csv')
+# optional: the encrypted Zepp zip, if the password is supplied for this run (never stored)
+pw = os.environ.get('MH_ZEPP_PASSWORD'); zz = [z for z in zips if os.path.basename(z)[0].isdigit()]
+if pw and zz:
+    with fresh_server() as root:
+        shutil.copy(zz[0], os.path.join(root, 'data', 'inbox'))
+        env = dict(os.environ, ZEPP_PASSWORD=pw)
+        rc = subprocess.run([sys.executable, os.path.join(root, 'app', 'update_health.py'), '--device', 'amazfit'], cwd=os.path.join(root, 'app'), capture_output=True, text=True, timeout=300, env=env)
+        c = read_combined(root); print('zepp rows', len(c))
+        chk(len(c) >= 150, f'real Zepp export gave only {len(c)} days: {(rc.stdout + rc.stderr)[-200:]}')
+    # the in-app route: password typed into the notice -> /extract-zepp -> sync
+    import urllib.request
+    with fresh_server() as root:
+        shutil.copy(zz[0], os.path.join(root, 'data', 'inbox'))
+        bad = urllib.request.Request('http://localhost:5757/extract-zepp', json.dumps({'password': 'definitely-wrong'}).encode(), {'Content-Type': 'application/json'})
+        try: urllib.request.urlopen(bad, timeout=120); f.add('BUG', 'wrong Zepp password accepted by /extract-zepp')
+        except urllib.error.HTTPError as e: chk(e.code == 400, f'wrong password gave HTTP {e.code}')
+        good = urllib.request.Request('http://localhost:5757/extract-zepp', json.dumps({'password': pw}).encode(), {'Content-Type': 'application/json'})
+        r = json.loads(urllib.request.urlopen(good, timeout=300).read()); chk(r.get('status') == 'ok', f'/extract-zepp: {r}')
+        rc, out = run_pipeline(root); c = read_combined(root); print('zepp via app flow rows', len(c))
+        chk(len(c) >= 150, f'Zepp via the app flow gave {len(c)} days: {out[-200:]}')
 print('findings', len(f)); sys.exit(1 if f else 0)

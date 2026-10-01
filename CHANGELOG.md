@@ -12,6 +12,16 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.855 — Zepp/Amazfit Export Now Opens Without ZArchiver Or pyzipper
+
+Found by replaying Pete's real exports (private test `p16_real_exports.py`).
+
+- Zepp's "Export your data" zip uses WinZip-AES encryption. Python's own zip reader cannot open it ("That compression method is not supported"), so the extractor's `--password` / `ZEPP_PASSWORD` option never worked on a real export, and the in-app password box (`/extract-zepp`) needed the optional `pyzipper` package, which `setup.sh` installs with its errors hidden - a silent failure on any phone where that install fails.
+- New `extractors/_winzip_aes.py` reads these zips with the standard library only (uses `cryptography` if present for speed, otherwise a built-in AES). The Zepp extractor uses it, and `/extract-zepp` falls back to it when `pyzipper` is missing. Wrong password -> clear "password is wrong" message; tampered/corrupt data is refused; extraction never writes outside the inbox.
+- Verified on the real Zepp export: 202 days (activity, sleep, heart rate, body), both direct and through the in-app password flow.
+- New `p17_winzip_aes.py` (public AES test vectors, round trip, wrong password, tamper check) runs everywhere. `p16` also replays real Withings/RingConn (826 days; weight, HRV, SpO2 and body-fat agree 100% with the phone's own result) and, when `MH_ZEPP_PASSWORD` is supplied for a run, the Zepp zip.
+- Observation, unchanged: RingConn days with two sleep sessions keep only the longest (by design), so a nap or split night is dropped.
+
 ## v3.10.854 — Self-Check And Error Log (Stage One Of Self-Monitoring)
 
 - **Error capture:** the app records uncaught JavaScript errors and unhandled promise rejections, de-duplicated with counts, first/last seen and app version. They are reported to `data/error_log.json` on the phone. Messages are truncated and long digit runs removed, so no health values are kept.
