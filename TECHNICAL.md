@@ -954,6 +954,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p13_reports.py` — Reports/Insights screens and treatment report for no-data, 45-day and GBM users.
 - `p14_stack_themes_settings.py` — supplements, routines, strength log (restore after wipe), every theme combination (contrast), settings controls.
 - `p15_selfcheck.py` — self-check: healthy = green, seeded corruption = red, JS errors recorded once with a count and shown in Settings.
+- `p16_real_exports.py` — PRIVATE: replays real Withings/RingConn/Zepp exports from `MH_FIXTURES` (default `/root/maxhealth_fixtures`, never committed) and compares against the real phone result. Skips (passes) when the files are absent, e.g. the nightly cloud run.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
