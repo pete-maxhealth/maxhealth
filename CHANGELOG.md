@@ -12,6 +12,13 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## Launcher v1.5 (versionCode 14) — Battery / Background-Running Guidance
+
+- New orange banner on the launcher screen when MaxedHealth Sync or Termux is battery-restricted. Tap for a plain explanation, manufacturer-specific tips (Xiaomi/Redmi/POCO, Samsung, other) and buttons to allow background running or open the battery list.
+- Auto-open of MaxedHealth is held while the explanation is showing; the check re-runs on return from settings.
+- Onboarding battery step now explains what the Android prompt is for.
+- Why: on 1 Oct Health Connect returned no data 02:01-12:00 until the launcher was opened, consistent with background killing. Built but not yet tested on-device.
+
 ## Launcher v1.4.1 (versionCode 13) — Grant Screen Now Actually Offers The New Permissions
 
 Pete: "Health connect never offered anything." Cause (mine): v1.4 made `hasAllPermissions()` check only the original seven so an upgrade could never stop a working sync, but the "Grant permission & sync now" screen used that same check to decide whether to open Health Connect's permission screen at all. It saw the seven granted, said "already granted", and never asked for the three new ones. Fix: new `hasEveryPermission()` (core + extras) for that screen only; the background service still gates on core. The screen also now syncs as soon as the core seven are granted rather than demanding every optional one. Workaround on v1.4: Android Settings → Apps → Health Connect → App permissions → MaxedHealth Sync.

@@ -22,7 +22,7 @@ everyone already running the app.
 
 ## Updating from v1.3 to v1.4
 
-Install the new APK over the old one (v1.4.1 or later; v1.4's grant screen never offered the new permissions). Then open MaxedHealth Sync and use
+Install the new APK over the old one (v1.5 adds battery guidance; v1.4.1 or later; v1.4's grant screen never offered the new permissions). Then open MaxedHealth Sync and use
 "Grant permission & sync now" once so Health Connect can offer the three new
 permissions (distance, resting heart rate, total calories). Syncing keeps
 working in the meantime.

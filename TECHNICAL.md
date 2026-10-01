@@ -934,3 +934,6 @@ Deliberately distinct from `_extractGramsFromAmount(str)`, which searches for a 
 ---
 
 *Built with Claude by Anthropic*
+
+## Launcher v1.5 — background-running check
+MainActivity.checkBackgroundReliability() runs 1.5s after open and on return from settings. It uses PowerManager.isIgnoringBatteryOptimizations for this app and, if installed, com.termux. If either is restricted it shows an orange bottom banner opening an explainer dialog (nudgeShowing holds the auto-open). A stall otherwise shows in pipeline.log as "health_connect | extract | warn | No data returned".
