@@ -21,6 +21,7 @@ import csv
 import glob
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import datetime, timedelta
@@ -37,6 +38,12 @@ LOG_FILE   = os.path.join(BASE, 'logs', 'pipeline.log')
 COMBINED   = os.path.join(TABLES, 'combined.csv')
 NUTRITION  = os.path.join(TABLES, 'nutrition.csv')
 PREFS_FILE = os.path.join(BASE, 'data', 'pipeline_prefs.json')
+# 01/10/26 — user-added devices (names, retired list, file-name patterns) now live
+# SERVER-side in data/devices.json (they used to be browser localStorage only, so a
+# cleared browser or a new phone lost them). User-written extractors live in
+# data/extractors/ - inside the data area so they are backed up with everything else.
+DEVICES_FILE   = os.path.join(BASE, 'data', 'devices.json')
+USER_EXTRACTORS_DIR = os.path.join(BASE, 'data', 'extractors')
 # Tracks exactly which source last set each field, per date - {date: {field: source}}.
 # Exists because combined.csv only has ONE 'source' string per ROW (a union across
 # every metric that contributed anything that day), which makes it genuinely
@@ -234,7 +241,12 @@ def get_precedence(prefs):
     # pipeline_prefs.json, which would have made a typed-in correction lose to
     # every device. A manual entry is the person overruling the machines; it is
     # not a rankable source.
+    # 01/10/26 — user extractors for devices that aren't built in take part too: they
+    # are appended after everything the order already lists (lowest priority, so a
+    # new device can only fill gaps until the person ranks it higher).
+    extra = [k for k in user_extractor_keys() if k not in BUILTIN_DEVICES]
     for metric, order in prec.items():
+        order = list(order) + [k for k in extra if k not in order]
         prec[metric] = ['manual'] + [src for src in order if src != 'manual']
     return prec
 
@@ -292,6 +304,8 @@ def backup_files():
         (ROUTINES_CSV,   'routines',     'csv'),
         (STRENGTH_CSV,   'strength',     'csv'),
         (FIELD_SOURCES_FILE, 'field_sources', 'json'),
+        (PREFS_FILE,     'pipeline_prefs', 'json'),
+        (DEVICES_FILE,   'devices',      'json'),
     ]:
         if os.path.exists(src_path):
             dst = os.path.join(BACKUP_DIR, f"{name}_{ts}.{ext}")
@@ -300,11 +314,30 @@ def backup_files():
 
     # Trim backups older than 7 days per file type
     cutoff = datetime.now().timestamp() - (7 * 24 * 3600)
-    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json')]:
+    for prefix, ext in [('combined','csv'),('nutrition','csv'),('master','csv'),('library','csv'),('supplements','csv'),('recipes','csv'),('routines','csv'),('strength','csv'),('field_sources','json'),('pipeline_prefs','json'),('devices','json'),('extractors','zip')]:
         pattern = os.path.join(BACKUP_DIR, f"{prefix}_*.{ext}")
         for f in glob.glob(pattern):
             if os.path.getmtime(f) < cutoff:
                 os.remove(f)
+
+    # User-written extractors (data/extractors/*.py plus any legacy app/extractors/*.py
+    # that isn't one of the repo's own) go into one small zip.
+    try:
+        import zipfile
+        files = []
+        for d, tag in ((USER_EXTRACTORS_DIR, 'data'), (os.path.join(BASE, 'extractors'), 'legacy')):
+            if os.path.isdir(d):
+                for fn in os.listdir(d):
+                    if fn.endswith('.py'):
+                        files.append((os.path.join(d, fn), f'{tag}/{fn}'))
+        if files:
+            dst = os.path.join(BACKUP_DIR, f"extractors_{ts}.zip")
+            with zipfile.ZipFile(dst, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for full, arc in files:
+                    zf.write(full, arc)
+            backed_up.append(dst)
+    except Exception as e:
+        log('pipeline', 'backup', 'warn', f"Could not back up extractors: {e}")
 
     if backed_up:
         log('pipeline', 'backup', 'ok', f"Backed up {len(backed_up)} file(s) to {BACKUP_DIR}")
@@ -329,6 +362,22 @@ def restore_backup(backup_path):
         'routines_':     os.path.join(TABLES, 'routines.csv'),
         'strength_':     os.path.join(TABLES, 'strength.csv'),
     }
+    if fname.startswith('extractors_') and fname.endswith('.zip'):
+        import zipfile
+        os.makedirs(USER_EXTRACTORS_DIR, exist_ok=True)
+        with zipfile.ZipFile(backup_path) as zf:
+            for arc in zf.namelist():
+                tag, _, fn = arc.partition('/')
+                if fn.endswith('.py') and '/' not in fn and '..' not in fn:
+                    target = USER_EXTRACTORS_DIR if tag == 'data' else os.path.join(BASE, 'extractors')
+                    os.makedirs(target, exist_ok=True)
+                    with open(os.path.join(target, fn), 'wb') as out:
+                        out.write(zf.read(arc))
+        log('pipeline', 'restore', 'ok', f"Restored extractors from {fname}")
+        flush_log()
+        print("\nRestored user extractors")
+        return
+    prefix_map.update({'pipeline_prefs_': PREFS_FILE, 'devices_': DEVICES_FILE})
     dest = None
     for prefix, path in prefix_map.items():
         if fname.startswith(prefix):
@@ -549,6 +598,32 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
 # ── Device extractors ─────────────────────────────────────────────────────────
 
 REPO_PREFERRED_EXTRACTORS = {'health_connect', 'manual'}
+BUILTIN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit', 'health_connect', 'manual']
+
+
+def load_devices_file():
+    """data/devices.json -> {'custom': [names], 'retired': [names], 'patterns': [...]}."""
+    try:
+        with open(DEVICES_FILE, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def device_key(name):
+    """'My Oura Ring' -> 'my_oura_ring' (the extractor file / source key)."""
+    return re.sub(r'[^a-z0-9]+', '_', str(name).lower()).strip('_')
+
+
+def user_extractor_keys():
+    """Device keys with a .py in data/extractors/ (built-in or custom)."""
+    try:
+        return sorted(f[:-3] for f in os.listdir(USER_EXTRACTORS_DIR)
+                      if f.endswith('.py') and not f.startswith('_'))
+    except Exception:
+        return []
+
 
 def run_extractor(device, inbox, password=None, dry_run=False):
     """
@@ -571,6 +646,14 @@ def run_extractor(device, inbox, password=None, dry_run=False):
     # charge so a working install never changes behaviour on `git pull`.
     if os.path.exists(repo_extractor) and (device in REPO_PREFERRED_EXTRACTORS or not os.path.exists(extractor_path)):
         extractor_path = repo_extractor
+    # 01/10/26 — a user's own extractor in data/extractors/ beats everything (it is the
+    # one place a person's own work lives, and it is backed up). It is logged every run
+    # when it overrides a built-in so a stale copy can't silently hide a good one.
+    user_extractor = os.path.join(USER_EXTRACTORS_DIR, f'{device}.py')
+    if os.path.exists(user_extractor):
+        if device in BUILTIN_DEVICES:
+            log(device, 'extract', 'warn', f"Using YOUR extractor data/extractors/{device}.py instead of the built-in one")
+        extractor_path = user_extractor
 
     if not os.path.exists(extractor_path):
         # 01/10/26 - manual entries go through manual.py / /save-manual-entry and
@@ -707,6 +790,10 @@ def main():
             inbox_files = os.listdir(INBOX) if os.path.exists(INBOX) else []
             # Always try all known devices — extractors handle missing files gracefully
             devices.append(device)
+        # user-written extractors for non-built-in devices
+        for key in user_extractor_keys():
+            if key not in devices:
+                devices.append(key)
 
     if not devices:
         print("No devices to process.")

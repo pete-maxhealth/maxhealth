@@ -12,6 +12,17 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.850 — Device Setup Now Survives A Lost Browser Or Phone
+
+Raised by Pete: where does extra device/extractor setup live, and is it backed up? It was not.
+
+- **Custom devices, the retired list and file patterns** used to live only in browser localStorage. They now live on the server in `data/devices.json` (browser copy is just a cache). Existing browser-only setups are uploaded automatically the first time Settings opens.
+- **Device precedence** is restored from `pipeline_prefs.json` when a browser has none stored, so a wiped browser no longer shows defaults (and then overwrites the real order on the next reorder).
+- **Backups** now also take `pipeline_prefs.json`, `devices.json` and a zip of any user-written extractors; `update_health.py --restore <file>` restores each.
+- **User extractors**: drop `<device>.py` in `data/extractors/` (inside the backed-up data area). It is run for that device, beats a built-in of the same name (logged as a warning and flagged in Settings), and a non-built-in device is added to every precedence list at lowest priority.
+- **File patterns** (Settings → Device Precedence → 📁): "file name contains X (and ends .ext)" teaches the Downloads sweep which files belong to a device, e.g. when a maker renames its exports. Built-in rules are unchanged and are checked first.
+- New persona test `p10_devices.py`.
+
 ## v3.10.849 — Typing A Plain Meal Now Logs It
 
 Found by persona p09 (meal logging, AI stubbed):

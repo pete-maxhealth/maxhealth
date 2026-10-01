@@ -4902,7 +4902,7 @@
       </div>
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.849</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.850</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5943,7 +5943,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.849'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.850'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -11655,6 +11655,7 @@ async function updateSyncAgeDisplay() {
 
 function initSettings() {
   updateSyncAgeDisplay();
+  pullDevicesFromServer();
   applyOrgBranding();
   const verEl = document.getElementById('settingsVersionDisplay');
   if (verEl) verEl.textContent = 'MaxedHealth ' + APP_VERSION;
@@ -35932,6 +35933,62 @@ const DEVICE_TO_PIPELINE_KEY = {
 // outright delete, since getting the wrong one is an easy mistake to make
 // when Withings/RingConn/etc. all read similarly in a list.
 const RETIRED_DEVICES_KEY = 'mh_retired_devices';
+// 01/10/26 — custom devices, the retired list and file-name patterns now live on the
+// SERVER (data/devices.json, which is in the backup rotation). localStorage stays as a
+// fast local copy only. Before this, clearing browser data or switching phones silently
+// lost every added device.
+const DEVICE_PATTERNS_KEY = 'mh_device_patterns';
+let _userExtractors = [];
+function getDevicePatterns() {
+  try { const r = JSON.parse(localStorage.getItem(DEVICE_PATTERNS_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch(e) { return []; }
+}
+function _deviceSlug(name) { return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
+function pipelineKeyForDevice(d) {
+  if (DEVICE_TO_PIPELINE_KEY[d]) return DEVICE_TO_PIPELINE_KEY[d];
+  const k = _deviceSlug(d);
+  return _userExtractors.some(x => x.key === k) ? k : null;
+}
+function pushDevicesToServer() {
+  let custom = [];
+  try { custom = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
+  return fetch(`${MH_SERVER}/save-devices`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ custom, retired: getRetiredDevices(), patterns: getDevicePatterns() })
+  }).then(r => r.json()).catch(() => null);
+}
+// Server is the source of truth once it has a devices.json. If it has none yet but this
+// browser already holds custom devices / retired / patterns, upload them (migration).
+// Precedence is hydrated the same way when this browser has none stored.
+async function pullDevicesFromServer() {
+  try {
+    const r = await fetch(`${MH_SERVER}/devices`);
+    if (!r.ok) return;
+    const d = await r.json();
+    _userExtractors = d.user_extractors || [];
+    let changed = false;
+    if (d.exists) {
+      localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(d.custom || []));
+      localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(d.retired || []));
+      localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(d.patterns || []));
+      changed = true;
+    } else {
+      let c = []; try { c = JSON.parse(localStorage.getItem(CUSTOM_DEVICES_KEY) || '[]'); } catch(e) {}
+      if (c.length || getRetiredDevices().length || getDevicePatterns().length) await pushDevicesToServer();
+    }
+    if (d.source_precedence && !localStorage.getItem(PRECEDENCE_KEY)) {
+      const inv = {}; getAllDevices().forEach(n => { const k = pipelineKeyForDevice(n); if (k) inv[k] = n; });
+      const back = {}; Object.keys(PRECEDENCE_KEY_TO_PIPELINE_METRIC).forEach(k => back[PRECEDENCE_KEY_TO_PIPELINE_METRIC[k]] = k);
+      const out = {};
+      Object.keys(d.source_precedence).forEach(pm => {
+        if (!back[pm] || !Array.isArray(d.source_precedence[pm])) return;
+        out[back[pm]] = d.source_precedence[pm].map(k => inv[k]).filter(Boolean);
+      });
+      if (Object.keys(out).length) { localStorage.setItem(PRECEDENCE_KEY, JSON.stringify(out)); changed = true; }
+    }
+    if (changed || _userExtractors.length) renderPrecedenceEditor();
+  } catch(e) {}
+}
+
 function getRetiredDevices() {
   try { const r = JSON.parse(localStorage.getItem(RETIRED_DEVICES_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch(e) { return []; }
 }
@@ -35967,6 +36024,7 @@ function registerDevice(trimmed) {
     custom.push(trimmed);
     localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(custom));
   }
+  pushDevicesToServer();
   return true;
 }
 function addCustomDevice() {
@@ -35989,6 +36047,7 @@ function retireDevice(device) {
     const retired = getRetiredDevices();
     if (!retired.includes(device)) retired.push(device);
     localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired));
+    pushDevicesToServer();
     renderPrecedenceEditor();
     savePrecedence();
     showToast(`"${device}" retired ✓`);
@@ -35997,6 +36056,7 @@ function retireDevice(device) {
 function restoreDevice(device) {
   const retired = getRetiredDevices().filter(d => d !== device);
   localStorage.setItem(RETIRED_DEVICES_KEY, JSON.stringify(retired));
+  pushDevicesToServer();
   renderPrecedenceEditor();
   showToast(`"${device}" restored — add it back into any metric's order above`);
 }
@@ -36058,13 +36118,46 @@ function renderPrecedenceEditor() {
 // the per-metric orderers above so "stop using this device entirely" reads
 // as a clearly distinct, occasional action from "reorder this metric",
 // which is the thing actually being done most of the time here.
+
+function renderDevicePatternChips(device) {
+  const mine = getDevicePatterns().map((p, i) => ({ p, i })).filter(x => x.p.device === device);
+  if (!mine.length) return '';
+  return '<div style="margin-top:3px;">' + mine.map(x => `<span style="display:inline-block;margin:2px 4px 0 0;padding:1px 8px;border:1px solid var(--border);border-radius:10px;font-size:10px;color:var(--text3);">name has “${String(x.p.contains).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';')}”${x.p.ext ? ' ' + String(x.p.ext).replace(/[&<>"']/g, c => '&#' + c.charCodeAt(0) + ';') : ''} <span onclick="removeDevicePattern(${x.i})" style="cursor:pointer;">✕</span></span>`).join('') + '</div>';
+}
+// File patterns: tells the phone's Downloads sweep "a file whose name contains X (and
+// ends .zip, say) belongs to this device". For when a maker changes how it names its
+// exports, or for a device you've added yourself.
+function editDevicePattern(device) {
+  appPrompt(`File name pattern for ${device}`, 'Part of the file name, e.g. oura  (add an extension after a space, e.g. oura .zip)', (txt) => {
+    if (!txt || !txt.trim()) return;
+    const parts = txt.trim().split(/\s+/);
+    const ext = parts.length > 1 && parts[parts.length - 1].startsWith('.') ? parts.pop() : '';
+    const contains = parts.join(' ').toLowerCase();
+    if (!contains) return;
+    const pats = getDevicePatterns();
+    pats.push({ device, contains, ext });
+    localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(pats));
+    pushDevicesToServer();
+    renderPrecedenceEditor();
+    showToast(`Files with “${contains}” in the name will now be picked up for ${device} ✓`);
+  });
+}
+function removeDevicePattern(i) {
+  const pats = getDevicePatterns();
+  pats.splice(i, 1);
+  localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(pats));
+  pushDevicesToServer();
+  renderPrecedenceEditor();
+}
 function renderDeviceManageList() {
   const devices = getAllDevices();
   const retired = getRetiredDevices();
-  return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+  const overrides = _userExtractors.filter(x => x.overrides_builtin);
+  return (overrides.length ? `<div style="margin-top:12px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text2);">⚠️ Using your own extractor instead of the built-in one for: ${overrides.map(x => x.key).join(', ')}. Delete it from data/extractors/ to go back to the built-in.</div>` : '') + `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
       <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;">MANAGE DEVICES</div>
       ${devices.filter(d => d !== 'Manual').map(d => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-        <span style="flex:1;font-size:12px;color:var(--text2);">${d}</span>
+        <span style="flex:1;font-size:12px;color:var(--text2);">${d}${renderDevicePatternChips(d)}</span>
+        <span onclick="editDevicePattern(${JSON.stringify(d).replace(/"/g,'&quot;')})" title="Teach the phone which downloaded files belong to ${d}" style="cursor:pointer;font-size:13px;padding:0 4px;">📁</span>
         <span onclick="retireDevice('${d}')" title="Stop using ${d} for precedence — history is kept" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>
       </div>`).join('')}
       ${retired.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;">
@@ -36104,7 +36197,7 @@ function savePrecedence() {
     const order = getMetricOrder(m.key, stored);
     const pipelineKey = PRECEDENCE_KEY_TO_PIPELINE_METRIC[m.key];
     if (!pipelineKey) return; // shouldn't happen — every PRECEDENCE_METRICS entry has a mapping above
-    pipelineOrder[pipelineKey] = order.map(d => DEVICE_TO_PIPELINE_KEY[d]).filter(Boolean);
+    pipelineOrder[pipelineKey] = order.map(d => pipelineKeyForDevice(d)).filter(Boolean);
   });
   fetch(`${MH_SERVER}/save-precedence`, {
     method: 'POST',

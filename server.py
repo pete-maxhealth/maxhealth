@@ -95,6 +95,8 @@ STRENGTH_CSV    = os.path.join(TABLES_DIR, 'strength.csv')
 # is deliberately not re-derived independently; a change to either path
 # scheme needs both updated together or they'll silently diverge.
 PREFS_JSON      = os.path.join(DATA_DIR, 'pipeline_prefs.json')
+DEVICES_JSON    = os.path.join(DATA_DIR, 'devices.json')
+USER_EXT_DIR    = os.path.join(DATA_DIR, 'extractors')
 # Written by the native launcher's HealthConnectBridge.kt (Kotlin, not this
 # repo) when it detects two sleep sources genuinely overlapping for the same
 # night and can't resolve it algorithmically — see that file's
@@ -176,6 +178,46 @@ def _log(msg):
         pass
 
 
+def _load_devices():
+    try:
+        with open(DEVICES_JSON, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _clean_devices(d):
+    """Validate/normalise a devices.json body. Only plain strings, bounded sizes."""
+    def names(v):
+        out = []
+        for x in (v if isinstance(v, list) else []):
+            if isinstance(x, str) and x.strip() and len(x) <= 60 and x.strip() not in out:
+                out.append(x.strip())
+        return out[:50]
+    pats = []
+    for p in (d.get('patterns') if isinstance(d.get('patterns'), list) else []):
+        if not isinstance(p, dict):
+            continue
+        dev = str(p.get('device', '')).strip()[:60]
+        text = str(p.get('contains', '')).strip().lower()[:80]
+        ext = str(p.get('ext', '')).strip().lower()[:10]
+        if ext and not ext.startswith('.'):
+            ext = '.' + ext
+        if dev and text and len(pats) < 100:
+            pats.append({'device': dev, 'contains': text, 'ext': ext})
+    return {'custom': names(d.get('custom')), 'retired': names(d.get('retired')), 'patterns': pats}
+
+
+def _matches_user_pattern(lower):
+    for p in _load_devices().get('patterns', []):
+        t = p.get('contains', '')
+        e = p.get('ext', '')
+        if t and t in lower and (not e or lower.endswith(e)):
+            return p.get('device')
+    return None
+
+
 def move_exports_to_inbox():
     """
     Scan Download folder for wearable exports and move to inbox.
@@ -234,6 +276,12 @@ def move_exports_to_inbox():
         # export format completely, unlike the other devices' proprietary
         # export tools).
         elif re.match(r'^health_connect_export_.*\.json$', lower):
+            is_export = True
+
+        # 01/10/26 — user-defined file patterns (Settings -> device precedence -> File pattern).
+        # Lets a person teach the sweep a new device, or a changed export filename,
+        # without a code change. Checked last so built-in rules keep their meaning.
+        if not is_export and _matches_user_pattern(lower):
             is_export = True
 
         if is_export:
@@ -486,6 +534,18 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 with open(PREFS_JSON, 'w', encoding='utf-8') as f:
                     json.dump(prefs, f, indent=2)
                 self.send_json({'status': 'ok', 'source_precedence': existing_prec})
+            except Exception as e:
+                self.send_json({'error': str(e)}, 400)
+            return
+
+        # ── POST /save-devices — custom devices, retired list, file patterns ──
+        if path == '/save-devices':
+            try:
+                clean = _clean_devices(body if isinstance(body, dict) else {})
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(DEVICES_JSON, 'w', encoding='utf-8') as f:
+                    json.dump(clean, f, indent=2)
+                self.send_json({'status': 'ok', **clean})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
             return
@@ -964,6 +1024,25 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         # Newest health_connect_export*.json the launcher has written, whether
         # still in inbox/ or already archived to inbox/old/. Lets the app say
         # "last data 3h ago" so a silently stalled background sync is visible.
+        elif path == '/devices':
+            d = _load_devices()
+            clean = _clean_devices(d)
+            clean['exists'] = os.path.exists(DEVICES_JSON)
+            builtin = {'withings', 'ringconn', 'garmin', 'amazfit', 'health_connect', 'manual'}
+            try:
+                keys = sorted(f[:-3] for f in os.listdir(USER_EXT_DIR) if f.endswith('.py') and not f.startswith('_'))
+            except Exception:
+                keys = []
+            try:
+                with open(PREFS_JSON, 'r', encoding='utf-8') as f:
+                    sp = json.load(f).get('source_precedence')
+                if isinstance(sp, dict):
+                    clean['source_precedence'] = sp
+            except Exception:
+                pass
+            clean['user_extractors'] = [{'key': k, 'overrides_builtin': k in builtin} for k in keys]
+            self.send_json(clean)
+
         elif path == '/sync-status':
             newest = None
             for d in (INBOX_DIR, os.path.join(INBOX_DIR, 'old')):
