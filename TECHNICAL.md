@@ -951,6 +951,8 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p10_devices.py` — custom devices/patterns/precedence survive a browser wipe; user extractors (`data/extractors/`) and patterns work end to end; backup + restore of prefs, devices and extractors.
 - `p11_library.py` — add/edit/search/log-a-portion/delete in the food library, and a full restore from the server copy after a browser wipe.
 - `p12_manual_entry.py` — typed manual entry (units, out-of-range, future date) and CSV upload in Excel/UK/EU styles, plus a 500-row history.
+- `p13_reports.py` — Reports/Insights screens and treatment report for no-data, 45-day and GBM users.
+- `p14_stack_themes_settings.py` — supplements, routines, strength log (restore after wipe), every theme combination (contrast), settings controls.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety

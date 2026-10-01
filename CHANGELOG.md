@@ -12,6 +12,15 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.853 — Supplements Fixed; Reports, Themes, Routines Verified
+
+Found by the new persona tests `p13_reports.py` and `p14_stack_themes_settings.py`.
+
+- **Supplement periods:** the Add/Edit supplement form stored its selected periods in a hidden field whose value was broken by its own quote marks. Adding a supplement and pressing Save without tapping a period button, or opening Edit and pressing Save, stored the period as `[` — the supplement then vanished from every checklist. Fixed (and the name/dose/tablets fields are now quote-safe too).
+- **Supplement restore:** the app wrote supplements to the phone with 6 columns (including tablets) but restored them expecting 5, so after a browser wipe every supplement came back in the wrong period and inactive ones came back active. Both sides now agree; old 5-column files still load. A `|` in a name is saved as `/`.
+- Removed a leftover hard-coded "target 92-93kg" from an unused assistant helper.
+- Verified, no change needed: every Reports range and builder for no-data / 45-day / GBM users (no NaN, no one else's personal text, no GBM-only sections for other conditions), the treatment progress report file, all 5 base × 4 visual themes (readable text), routines and strength log restore after a wipe, and poking every Settings dropdown/toggle.
+
 ## v3.10.852 — Manual Entry And CSV Import Tell The Truth
 
 Found by the new manual-entry persona test (`p12_manual_entry.py`).
