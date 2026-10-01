@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.848 — GBM-Only Content No Longer Shown To Everyone
+
+Found by persona p08 (one user per condition, tapping real tabs):
+- **GBM Monthly Summary and GBM Research Digest were visible on Reports for every non-GBM user.** The app hid them correctly, then the Reports layout-reorder code (`applyGenericOrder`) un-hid every section the user hadn't manually hidden, undoing it each time. It never showed for GBM users, which is why it went unnoticed. The condition gating is now re-applied after every reorder pass.
+- **"GBM Protocol" patient-guide links** (dashboard guides row, first-run welcome box) now show for GBM only.
+- Checked the other conditions: ketosis tiles / "Ketosis check" appear only for the keto-based conditions (GBM, epilepsy, strict keto, migraine, cluster headache); diabetes and recomp users get their own guidance note; no "seizure", "metformin" or developer-name leakage outside Settings.
+- Unexplained, not reproducible: the weight tile once showed 69.8/69.9 for a typed 70 kg. Stored value was exactly 70.
+
 ## Garmin Extractor (server/pipeline only; UNVERIFIED against a real Garmin export)
 
 - New `extractors/garmin.py`. Reads (a) a Garmin Connect "Export Your Data" zip (recognised by looking inside for `DI_CONNECT/`; hash-named zips are no longer mistaken for Zepp exports) - daily summaries (`UDSFile*.json`: steps, distance, active kcal, resting/min/max HR) and nightly sleep (`*sleepData.json`: deep/light/REM/awake; sleep_duration = time asleep); and (b) `garmin*.json` wellness files in the existing parser's two schemas.

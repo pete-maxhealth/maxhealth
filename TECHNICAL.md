@@ -946,5 +946,6 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - p05 two devices disagree about sleep; manual entry precedence; self-correcting same source
 - p06 corrupt/impossible/future data and a 45-day gap
 - p07 Garmin-only (hash-named export zip via the Downloads sweep, plain JSON, garbage zip)
+- p08 one user per condition (9 conditions), real taps through every tab/sub-tab: right tiles for right condition, no GBM/seizure/metformin leakage
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
 When a real user hits a bug, add the person who hit it as a new persona so it can't return. Needs Playwright + Chromium (cloud workspace; not available in Termux).
