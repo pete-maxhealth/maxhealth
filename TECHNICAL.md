@@ -480,22 +480,27 @@ Connect native shape):
 `sleep_duration` is in minutes, matching every other device's convention.
 Any field can be absent for a day — genuinely missing, not zero.
 
-**Sleep attribution and double-counting — two separate bugs, both fixed, full
-detail in the launcher's own `CHANGELOG.md` (30/09/26 and 01/10/26 entries):**
-Health Connect is a shared hub, not a deduplicated single truth — two
-different sources (e.g. Zepp, RingConn) can each write their own session for
-the same night, and summing them blindly double-counts a real night's sleep
-as two. `resolveSleepHours()` in `HealthConnectBridge.kt` handles that case
-(merges one source's own fragments first, then only treats a genuine
-cross-source overlap as unresolvable, queuing it for the person rather than
-guessing). Separately, and not that function's fault: the query window used
-for "today" (`TimeRangeFilter.between(todayMidnight, now)`) matches any
-session *overlapping* that window, so last night's real session — started
-before midnight, ended this morning — was being pulled into today's query
-on top of anything else and summed as if it were a second, genuinely
-separate period. Sleep now gets its own backward-extended query window,
-filtered down to sessions that actually *ended* today (attribution by
-wake-up day, not by query-window overlap).
+**Sleep attribution and double-counting — full history in the launcher's own
+`CHANGELOG.md` (30/09/26 and 01/10/26 entries).** Health Connect is a shared
+hub, not a deduplicated truth: Zepp and RingConn each write their own
+sessions for the same night. The current rules (`resolveSleep()` in
+`HealthConnectBridge.kt`, v11):
+1. Everything is measured in **asleep time** (union of the record's non-awake
+   stage intervals; whole span only if a record has no stages) — never raw
+   start→end spans, which include awake time (Zepp 01:56–09:16 is a 7h20 span
+   but 5h17 asleep).
+2. One total **per source** (a device's nap + main sleep are one device).
+3. One source → its total. Several sources not overlapping in time → sum.
+4. Several sources overlapping (same night) → compare totals; within 20 min
+   they agree and the preferred device (RingConn, then Zepp) is used with no
+   prompt. Only a real disagreement is queued for the comparison card, one
+   line per source, with asleep minutes. The card has no "add them" option —
+   that could only ever double-count a night.
+Also (v10): sleep is queried over its own window (yesterday noon → now) and
+kept only if the session *ended* today, so a session straddling midnight is
+attributed to the day you woke up. That was a real edge case but **not** the
+cause of Pete's 13h32m — his 02:00 bedtime proved that; his screenshots of
+both devices (each 5h17 asleep, raw spans summing to 13h18m) did.
 
 **Precedence:** deliberately last in every field's precedence list it
 appears in (`weight`, `sleep`, `steps`, and `hr` — **not `hrv`**, matching

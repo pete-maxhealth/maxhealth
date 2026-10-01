@@ -1,6 +1,12 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.840, HEAD v3.10.840)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.841, HEAD v3.10.841)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
+
+## v3.10.841 — Sleep Conflict Card No Longer Offers To "Add" Two Devices' Sleep Together
+
+Pete: "Looks like the sleeping health connect issue is still apparent" — Trends showed 13h32m total sleep at 11:15am. Screenshots of both apps settled it: RingConn and Zepp each said he'd been asleep **5h17m**, but the raw Health Connect sessions (RingConn 01:23–06:13, RingConn nap 08:03–09:11, Zepp 01:56–09:16) add up to 13h18m — spans include awake time, and two devices were recording the same night.
+
+Web side: the sleep-conflict comparison card had a "Both genuinely happened — add them" button that summed every queued session. That only makes sense for separate periods, which the launcher already sums automatically; the card only ever appears for two devices overlapping in time, where "add them" can only double-count. Removed. The real fix is on the launcher side (v11 — see the launcher's CHANGELOG and TECHNICAL.md's Health Connect section): sleep is now measured in asleep time per source, and two devices that agree within 20 minutes resolve silently without a card at all.
 
 ## v3.10.840 — Device Precedence Reorder Bug Fixed (Real Root Cause), Manual Update-Check Button, Launcher Distribution Overhaul
 
