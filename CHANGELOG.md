@@ -8,6 +8,10 @@ Pete: "Looks like the sleeping health connect issue is still apparent" — Trend
 
 Web side: the sleep-conflict comparison card had a "Both genuinely happened — add them" button that summed every queued session. That only makes sense for separate periods, which the launcher already sums automatically; the card only ever appears for two devices overlapping in time, where "add them" can only double-count. Removed. The real fix is on the launcher side (v11 — see the launcher's CHANGELOG and TECHNICAL.md's Health Connect section): sleep is now measured in asleep time per source, and two devices that agree within 20 minutes resolve silently without a card at all.
 
+## Launcher v1.4.1 (versionCode 13) — Grant Screen Now Actually Offers The New Permissions
+
+Pete: "Health connect never offered anything." Cause (mine): v1.4 made `hasAllPermissions()` check only the original seven so an upgrade could never stop a working sync, but the "Grant permission & sync now" screen used that same check to decide whether to open Health Connect's permission screen at all. It saw the seven granted, said "already granted", and never asked for the three new ones. Fix: new `hasEveryPermission()` (core + extras) for that screen only; the background service still gates on core. The screen also now syncs as soon as the core seven are granted rather than demanding every optional one. Workaround on v1.4: Android Settings → Apps → Health Connect → App permissions → MaxedHealth Sync.
+
 ## v3.10.843 — Launcher v1.4: Far More Health Connect Data, Resting HR Column, Pass-Through Extractor
 
 Pete asked whether we use every metric Health Connect offers ("Health Connect users only would want as much information as possible"). We used seven; this adds the rest that make sense, in one batch.
