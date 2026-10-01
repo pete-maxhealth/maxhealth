@@ -18,6 +18,13 @@ Pete asked whether all of this is smooth for new users. It wasn't: `app/extracto
 - Settings → About now shows "Health Connect sync: ✅ 12 min ago", or a ⚠️ with plain advice if nothing has arrived for over 6 hours. Catches a silently stalled background sync (e.g. 1 Oct, 02:01–12:00) without guessing at battery settings.
 - Fixed: server.py was missing `import time`.
 
+## Launcher v1.5.1 (versionCode 15) — Battery Notice Softened
+
+- Banner now reads "Sync may be limited by battery settings" and the dialog says Android reports an app *may* be limited, and that it can be ignored if already allowed in the phone's own battery settings (HyperOS can disagree with Android's exemption list).
+- New "Don't remind me again" button (stored in launcher prefs).
+- Removed Xiaomi Autostart advice (not every phone has it); generic tip now points to Settings > Apps > Battery usage > Allow background usage.
+- Removed the "Battery list / Termux" button (dialog has three button slots).
+
 ## Launcher v1.5 (versionCode 14) — Battery / Background-Running Guidance
 
 - New orange banner on the launcher screen when MaxedHealth Sync or Termux is battery-restricted. Tap for a plain explanation, manufacturer-specific tips (Xiaomi/Redmi/POCO, Samsung, other) and buttons to allow background running or open the battery list.
