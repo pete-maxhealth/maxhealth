@@ -480,6 +480,23 @@ Connect native shape):
 `sleep_duration` is in minutes, matching every other device's convention.
 Any field can be absent for a day — genuinely missing, not zero.
 
+**Sleep attribution and double-counting — two separate bugs, both fixed, full
+detail in the launcher's own `CHANGELOG.md` (30/09/26 and 01/10/26 entries):**
+Health Connect is a shared hub, not a deduplicated single truth — two
+different sources (e.g. Zepp, RingConn) can each write their own session for
+the same night, and summing them blindly double-counts a real night's sleep
+as two. `resolveSleepHours()` in `HealthConnectBridge.kt` handles that case
+(merges one source's own fragments first, then only treats a genuine
+cross-source overlap as unresolvable, queuing it for the person rather than
+guessing). Separately, and not that function's fault: the query window used
+for "today" (`TimeRangeFilter.between(todayMidnight, now)`) matches any
+session *overlapping* that window, so last night's real session — started
+before midnight, ended this morning — was being pulled into today's query
+on top of anything else and summed as if it were a second, genuinely
+separate period. Sleep now gets its own backward-extended query window,
+filtered down to sessions that actually *ended* today (attribution by
+wake-up day, not by query-window overlap).
+
 **Precedence:** deliberately last in every field's precedence list it
 appears in (`weight`, `sleep`, `steps`, and `hr` — **not `hrv`**, matching
 what's actually read) in `update_health.py`'s `DEFAULT_PRECEDENCE` — Health
