@@ -1,4 +1,4 @@
-# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.843, HEAD v3.10.843)
+# MaxedHealth Changelog — Phase 23 (v3.10.744 – v3.10.844, HEAD v3.10.844)
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
@@ -7,6 +7,10 @@
 Pete: "Looks like the sleeping health connect issue is still apparent" — Trends showed 13h32m total sleep at 11:15am. Screenshots of both apps settled it: RingConn and Zepp each said he'd been asleep **5h17m**, but the raw Health Connect sessions (RingConn 01:23–06:13, RingConn nap 08:03–09:11, Zepp 01:56–09:16) add up to 13h18m — spans include awake time, and two devices were recording the same night.
 
 Web side: the sleep-conflict comparison card had a "Both genuinely happened — add them" button that summed every queued session. That only makes sense for separate periods, which the launcher already sums automatically; the card only ever appears for two devices overlapping in time, where "add them" can only double-count. Removed. The real fix is on the launcher side (v11 — see the launcher's CHANGELOG and TECHNICAL.md's Health Connect section): sleep is now measured in asleep time per source, and two devices that agree within 20 minutes resolve silently without a card at all.
+
+## v3.10.844 — Extractors Ship In The Repo (No Hand-Copy, New Installs Work)
+
+Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
 ## Launcher v1.4.1 (versionCode 13) — Grant Screen Now Actually Offers The New Permissions
 
@@ -20,7 +24,7 @@ Pete asked whether we use every metric Health Connect offers ("Health Connect us
 
 **Safe upgrade:** the three new permissions are optional. The background sync's gate (`hasAllPermissions`) still requires only the original seven, and each new read is skipped unless granted and wrapped in try/catch, so installing over v1.3 cannot stop a working sync. The new ones appear the next time the Health Connect permission screen is opened ("Grant permission & sync now").
 
-**Phone-side extractor (needs a one-off copy):** `extractors/health_connect.py` lives outside the git repo on the phone (`app/extractors/`). As of the 27 Sep backup it hand-listed four fields and dropped everything else, so HRV, SpO2 and active calories added on 30 Sep may never have reached combined.csv. The repo now holds a pass-through version (`extractors/health_connect.py`); copy it over the phone's one. See apk/README or the release note.
+**Phone-side extractor (superseded by v3.10.844 — no copy needed any more):** `extractors/health_connect.py` lives outside the git repo on the phone (`app/extractors/`). As of the 27 Sep backup it hand-listed four fields and dropped everything else, so HRV, SpO2 and active calories added on 30 Sep may never have reached combined.csv. The repo now holds a pass-through version (`extractors/health_connect.py`); copy it over the phone's one. See apk/README or the release note.
 
 **Pipeline:** new `hr_resting` column (ALL_FIELDS, METRIC_FIELDS['hr'], validation 20–200, manual entry list, server FIELD_NAMES); `SOURCE_FIELDS['health_connect']` widened; validation ranges added for `distance_m` and `calories_passive`. Web app: Resting HR row in Activity & Vitals, import/parse and manual-entry registry.
 

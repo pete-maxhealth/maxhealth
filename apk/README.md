@@ -27,6 +27,5 @@ Install the new APK over the old one (v1.4.1 or later; v1.4's grant screen never
 permissions (distance, resting heart rate, total calories). Syncing keeps
 working in the meantime.
 
-The phone's `extractors/health_connect.py` must also be replaced (it lives
-outside the git repo): from the maxhealth folder run
-`cp extractors/health_connect.py ../extractors/health_connect.py` after a `git pull`.
+The Health Connect extractor now ships inside the repo (`extractors/health_connect.py`)
+and the pipeline prefers it, so a plain `git pull` is all that's needed. No hand-copy.

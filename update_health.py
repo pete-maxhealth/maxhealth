@@ -548,6 +548,15 @@ def run_extractor(device, inbox, password=None, dry_run=False):
     Extractors live in extractors/ subdirectory.
     """
     extractor_path = os.path.join(BASE, 'extractors', f'{device}.py')
+    # 01/10/26 — the repo's own extractors/ folder wins when it has one for this
+    # device. app/extractors/ (BASE) sits OUTSIDE the git repo, so nothing ever
+    # updated it and nothing ever created the files in it for a new user (the
+    # launcher's provision.sh only makes the empty folder). Shipping health_connect.py
+    # in the repo and preferring it means a plain `git pull` is enough, for Pete
+    # and for every new install, with no hand-copy step.
+    repo_extractor = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extractors', f'{device}.py')
+    if os.path.exists(repo_extractor):
+        extractor_path = repo_extractor
 
     if not os.path.exists(extractor_path):
         log(device, 'extract', 'warn',  f"No extractor found at {extractor_path}")
