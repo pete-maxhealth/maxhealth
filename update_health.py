@@ -105,7 +105,7 @@ SOURCE_FIELDS = {
                  'sleep_onset', 'sleep_efficiency', 'bedtime', 'wake_time',
                  'steps', 'distance_m', 'calories_active',
                  'hr_avg', 'hr_min', 'hr_max'],
-    'garmin':   ['steps', 'distance_m', 'calories_active', 'elevation_m',
+    'garmin':   ['steps', 'distance_m', 'calories_active', 'elevation_m', 'hr_resting',
                  'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
                  'hr_avg', 'hr_min', 'hr_max', 'hrv'],
     'amazfit':  ['steps', 'distance_m', 'calories_active',
@@ -577,9 +577,6 @@ def run_extractor(device, inbox, password=None, dry_run=False):
         # Garmin has no pipeline extractor (parser library only; use the in-app CSV
         # import). Both used to log a 'warn' "No extractor found" on EVERY sync for
         # EVERY user, which read like a broken install in the Sync log.
-        if device == 'garmin':
-            log(device, 'extract', 'info', 'No Garmin pipeline extractor - import Garmin CSVs from the app (Import > Add New Device)')
-            return {}
         log(device, 'extract', 'warn',  f"No extractor found at {extractor_path}")
         return {}
 

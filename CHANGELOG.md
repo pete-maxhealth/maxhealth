@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## Garmin Extractor (server/pipeline only; UNVERIFIED against a real Garmin export)
+
+- New `extractors/garmin.py`. Reads (a) a Garmin Connect "Export Your Data" zip (recognised by looking inside for `DI_CONNECT/`; hash-named zips are no longer mistaken for Zepp exports) - daily summaries (`UDSFile*.json`: steps, distance, active kcal, resting/min/max HR) and nightly sleep (`*sleepData.json`: deep/light/REM/awake; sleep_duration = time asleep); and (b) `garmin*.json` wellness files in the existing parser's two schemas.
+- `server.py` sweep moves those into the inbox; the Garmin check runs before the Zepp numeric-prefix check on purpose.
+- `hr_resting` added to the Garmin source fields. The "No Garmin pipeline extractor" info line is gone.
+- Written from known schemas, not a real export: every lookup is tolerant (missing/odd keys leave that metric blank, never crash). Drop the first real Garmin export into the personas fixtures and adjust aliases.
+- Persona p07 (hash-named zip in Downloads, plain JSON, garbage zip). Real 830-day history re-verified unchanged.
+
 ## Pipeline Fixes From Persona Testing (no app version bump; server/pipeline only)
 
 Found by running fake single-device, two-device and messy-data users through a fresh install:

@@ -144,6 +144,16 @@ pipeline_log     = []
 pipeline_result  = None   # 'ok' | 'error' | None
 
 
+def _is_garmin_zip(path):
+    """Looks inside a zip for Garmin Connect's DI_CONNECT folder (extractors/garmin.py)."""
+    try:
+        import zipfile as _zf
+        with _zf.ZipFile(path) as z:
+            return any('di_connect' in n.lower() or 'di-connect' in n.lower() for n in z.namelist())
+    except Exception:
+        return False
+
+
 def _log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
     line = f'[{ts}] {msg}\n'
@@ -191,8 +201,14 @@ def move_exports_to_inbox():
 
         is_export = False
 
+        # Garmin Connect "Export Your Data" bundle (a zip containing DI_CONNECT/...) or a
+        # garmin*.json wellness file (01/10/26). The zip's own name is just a hash, so it
+        # is recognised by LOOKING INSIDE it, not by filename.
+        if (lower.endswith('.zip') and _is_garmin_zip(src)) or (lower.endswith('.json') and 'garmin' in lower):
+            is_export = True
+
         # Zepp/Amazfit — numeric prefix zip
-        if name[0].isdigit() and lower.endswith('.zip'):
+        elif name[0].isdigit() and lower.endswith('.zip'):
             is_export = True
             needs_zarchiver = True
 
