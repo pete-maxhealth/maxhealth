@@ -23,12 +23,11 @@ and update_health.py's own VALIDATION_RANGES - the form itself may show
 some of these in friendlier units to the person, but converts before this
 file is ever written (see saveManualEntry() in maxhealth.html).
 
-Deploy note: like amazfit.py/garmin.py/garmin_merge.py elsewhere in this
-repo, this file's real home is app/extractors/manual.py on the device — a
-folder OUTSIDE app/maxhealth/ (this git repo's checkout), per README.md's
-own directory tree. mh_autoupdate.sh only resets app/maxhealth/ via git,
-so it never reaches app/extractors/ — this file needs copying there by
-hand once, the same way the other extractor files presumably were.
+Deploy note (updated 01/10/26): this file now lives in the repo's extractors/ folder
+and update_health.py prefers it over any copy in app/extractors/ (see
+REPO_PREFERRED_EXTRACTORS), so a plain `git pull` is enough. Before this, the file's
+real home was app/extractors/ OUTSIDE git, so a brand-new install silently ignored
+every manual entry, and an updated field list (like hr_resting) never reached the phone.
 """
 
 import json

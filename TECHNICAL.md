@@ -942,5 +942,8 @@ MainActivity.checkBackgroundReliability() runs 1.5s after open and on return fro
 Fresh server + empty data folder + headless Chromium, one script per kind of user. Run everything with `python3 tests/personas/run_all.py` (exit 1 if any fail); run it before every push. Each `pNN_*.py` must exit non-zero on failure.
 - p01 new user walks the setup wizard (6 profiles: units, goals, conditions, skip-everything)
 - p02 height/weight typing (5.6 = 5ft 6in, 12.10 = 12st 10lb, lb/kg)
+- p04 single-device users (Health Connect-only, RingConn-only on a fresh install)
+- p05 two devices disagree about sleep; manual entry precedence; self-correcting same source
+- p06 corrupt/impossible/future data and a 45-day gap
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
 When a real user hits a bug, add the person who hit it as a new persona so it can't return. Needs Playwright + Chromium (cloud workspace; not available in Termux).

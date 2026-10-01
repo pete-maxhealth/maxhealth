@@ -52,6 +52,8 @@ def run(inbox, password=None, dry_run=False):
 
     rows = []
     for entry in entries:
+        if not isinstance(entry, dict):
+            continue  # a stray null/number/string in the list - skip it, keep the rest
         date = entry.get('date')
         if not date:
             continue  # validate_row() rejects rows with no valid date anyway

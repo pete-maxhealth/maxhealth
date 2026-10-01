@@ -23,7 +23,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ── Path constants ────────────────────────────────────────────────────────────
 # Derive BASE from script location — update_health.py lives in app/
@@ -424,9 +424,15 @@ def validate_row(row, device):
     # Date format — only hard failure
     date = row.get('date', '')
     try:
-        datetime.strptime(date, '%Y-%m-%d')
-    except ValueError:
+        parsed_date = datetime.strptime(date, '%Y-%m-%d')
+    except (ValueError, TypeError):
         warnings.append(f"Invalid date format: '{date}' — skipping row")
+        return None, warnings
+    # 01/10/26 - a far-future date (bad export, wrong phone clock) used to be stored
+    # as a real row and then sit at the end of every chart. One day of slack covers
+    # timezone differences between the phone and this server.
+    if parsed_date.date() > (datetime.now() + timedelta(days=1)).date():
+        warnings.append(f"Date {date} is in the future — skipping row")
         return None, warnings
 
     # Value ranges — clear bad values but keep the row
@@ -542,6 +548,8 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
 
 # ── Device extractors ─────────────────────────────────────────────────────────
 
+REPO_PREFERRED_EXTRACTORS = {'health_connect', 'manual'}
+
 def run_extractor(device, inbox, password=None, dry_run=False):
     """
     Run a device extractor. Returns {date: row_dict} or {} on failure.
@@ -555,10 +563,23 @@ def run_extractor(device, inbox, password=None, dry_run=False):
     # in the repo and preferring it means a plain `git pull` is enough, for Pete
     # and for every new install, with no hand-copy step.
     repo_extractor = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extractors', f'{device}.py')
-    if os.path.exists(repo_extractor):
+    # Which copy wins (01/10/26): health_connect and manual always use the repo's (the phone's
+    # older hand-copied one dropped fields). For withings/ringconn/amazfit the
+    # extractors only ever lived in app/extractors/, OUTSIDE git, so a brand-new
+    # install had none and silently got "No extractor found". They now ship in the
+    # repo as a FALLBACK ONLY: an existing app/extractors/<device>.py is left in
+    # charge so a working install never changes behaviour on `git pull`.
+    if os.path.exists(repo_extractor) and (device in REPO_PREFERRED_EXTRACTORS or not os.path.exists(extractor_path)):
         extractor_path = repo_extractor
 
     if not os.path.exists(extractor_path):
+        # 01/10/26 - manual entries go through manual.py / /save-manual-entry and
+        # Garmin has no pipeline extractor (parser library only; use the in-app CSV
+        # import). Both used to log a 'warn' "No extractor found" on EVERY sync for
+        # EVERY user, which read like a broken install in the Sync log.
+        if device == 'garmin':
+            log(device, 'extract', 'info', 'No Garmin pipeline extractor - import Garmin CSVs from the app (Import > Add New Device)')
+            return {}
         log(device, 'extract', 'warn',  f"No extractor found at {extractor_path}")
         return {}
 

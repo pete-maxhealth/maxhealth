@@ -12,6 +12,18 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## Pipeline Fixes From Persona Testing (no app version bump; server/pipeline only)
+
+Found by running fake single-device, two-device and messy-data users through a fresh install:
+- **Manual entries were silently ignored on any new install.** `manual.py` lived only in `app/extractors/` outside git ("copy it there by hand"). Moved into the repo's `extractors/` and always preferred, so `git pull` is enough and field-list updates (like `hr_resting`) actually reach the phone.
+- **Withings, RingConn and Amazfit extractors now ship in the repo** as a fallback. An existing `app/extractors/<device>.py` still wins, so a working install never changes on `git pull`. Health Connect and Manual always use the repo copy.
+- **Garmin / Manual no longer log a scary "No extractor found" warning on every sync** (Garmin logs an info line pointing to CSV import; it has no pipeline extractor).
+- **Future-dated rows (e.g. year 2999) are rejected** instead of being stored at the end of every chart.
+- **A stray null/number inside a Health Connect export crashed the extractor**; non-dict entries are now skipped.
+- Verified against the 27 Sep backup (830 days): pipeline output unchanged.
+- Known quirk, left as is: clearing a manual value does not release that day back to device data.
+- New personas p04 (single-device), p05 (sleep conflict/manual precedence), p06 (messy data, 45-day gap).
+
 ## v3.10.847 — Chart.js Ships With The App
 
 - Chart.js 4.4.1 now bundled in `lib/chart.umd.js` and served by a new `/lib/` route in server.py, so charts work offline and on a brand-new install with no internet. CDN kept only as a second chance.
