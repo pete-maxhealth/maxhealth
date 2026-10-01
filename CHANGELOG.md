@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.851 — Library Restore No Longer Loses Detail
+
+Found by the new library persona test (`p11_library.py`).
+
+- The library copy kept on the phone (`library.csv`) only held 10 columns. After a browser wipe, every restored food lost its fibre, polyols, categories, use count, sat fat, sugars, salt and other extras.
+- A food whose name contained a `|` split into extra columns and vanished on restore.
+- Names are now escaped, and all other fields travel in an 11th `extra` column. Old files still load.
+
 ## v3.10.850 — Device Setup Now Survives A Lost Browser Or Phone
 
 Raised by Pete: where does extra device/extractor setup live, and is it backed up? It was not.

@@ -4902,7 +4902,7 @@
       </div>
       <div class="settings-row">
         <div class="settings-label">Version</div>
-        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.850</div>
+        <div class="settings-value" id="settingsVersionDisplay">MaxedHealth v3.10.851</div>
       </div>
       <div class="settings-row">
         <div class="settings-label">Developed by</div>
@@ -5943,7 +5943,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.850'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.851'; // single source of truth — bump here each release
 // Debug-log scaffolding used to investigate the library reorder feature has
 // been removed - both reorder systems (top-level Library sections, and the
 // nested Meals/Ingredients ordering) were proven correct across four full
@@ -6614,14 +6614,23 @@ function saveLibrary(lib) {
   _saveLibraryCSV(lib);
 }
 
+// 01/10/26 — the server CSV used to keep only 10 columns, so after a browser wipe every
+// restored item lost its fibre, polyols, categories, use count, sat fat, sugars, salt etc.,
+// and any name containing a "|" split into extra columns and was lost. Now: names are
+// escaped, and every field not in the 10 fixed columns rides along in an 11th "extra"
+// column (URI-encoded JSON, so it can never contain a pipe or newline).
+const _LIB_CSV_FIXED = ['id','name','kcal','protein','carbs','fat','portion','per100g','locked','source'];
+function _libEsc(v) { return String(v == null ? '' : v).replace(/%/g, '%25').replace(/\|/g, '%7C').replace(/\r?\n/g, '%0A'); }
+function _libUnesc(v) { return String(v || '').replace(/%7C/g, '|').replace(/%0A/g, '\n').replace(/%25/g, '%'); }
 function _saveLibraryCSV(lib) {
-  // Write library as pipe-delimited CSV to server
-  const rows = lib.map(f =>
-    [f.id||'', f.name||'', f.kcal||0, f.protein||0, f.carbs||0,
-     f.fat||0, f.portion||'', f.per100g?'1':'0',
-     f.locked?'1':'0', f.source||''].join('|')
-  );
-  const csv = 'id|name|kcal|protein|carbs|fat|portion|per100g|locked|source\n' + rows.join('\n');
+  const rows = lib.map(f => {
+    const extra = {};
+    Object.keys(f).forEach(k => { if (!_LIB_CSV_FIXED.includes(k) && f[k] !== null && f[k] !== undefined && f[k] !== '') extra[k] = f[k]; });
+    return [_libEsc(f.id), _libEsc(f.name), f.kcal||0, f.protein||0, f.carbs||0,
+     f.fat||0, _libEsc(f.portion), f.per100g?'1':'0',
+     f.locked?'1':'0', _libEsc(f.source), Object.keys(extra).length ? encodeURIComponent(JSON.stringify(extra)) : ''].join('|');
+  });
+  const csv = 'id|name|kcal|protein|carbs|fat|portion|per100g|locked|source|extra\n' + rows.join('\n');
   fetch(`${MH_SERVER}/save-library-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
@@ -6645,18 +6654,20 @@ async function loadLibraryFromServer() {
       const parts = line.split('|');
       const row = {};
       headers.forEach((h, i) => row[h.trim()] = (parts[i]||'').trim());
-      return {
-        id:      row.id || 'lib_' + Date.now(),
-        name:    row.name,
+      let extra = {};
+      try { if (row.extra) extra = JSON.parse(decodeURIComponent(row.extra)) || {}; } catch(e) {}
+      return Object.assign({}, extra, {
+        id:      _libUnesc(row.id) || 'lib_' + Date.now(),
+        name:    _libUnesc(row.name),
         kcal:    parseFloat(row.kcal) || 0,
         protein: parseFloat(row.protein) || 0,
         carbs:   parseFloat(row.carbs) || 0,
         fat:     parseFloat(row.fat) || 0,
-        portion: row.portion || null,
+        portion: _libUnesc(row.portion) || null,
         per100g: row.per100g === '1',
         locked:  row.locked === '1',
-        source:  row.source || 'server',
-      };
+        source:  _libUnesc(row.source) || 'server',
+      });
     }).filter(f => f.name);
 
     if (lib.length === 0) return;
