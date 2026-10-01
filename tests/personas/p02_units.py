@@ -21,4 +21,4 @@ with fresh_server() as root, sync_playwright() as pw:
         bad += not ok
         print(('ok  ' if ok else 'FAIL'), unit, typed, '->', got, 'expected ~', exp)
     b.close()
-print('FAILURES:', bad)
+print('FAILURES:', bad); sys.exit(1 if bad else 0)

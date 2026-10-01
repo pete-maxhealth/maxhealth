@@ -45,4 +45,4 @@ total = 0
 with fresh_server() as root, sync_playwright() as pw:
     for v in VARIANTS:
         print('variant', v['name'], v['hu'], v['wu'], v['cond']); total += len(run(v, pw))
-print('TOTAL findings:', total)
+print('TOTAL findings:', total); sys.exit(1 if total else 0)
