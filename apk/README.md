@@ -19,3 +19,14 @@ This folder always holds the single current build (the old one is replaced,
 not kept) — version.json's `versionCode` is what the app compares against,
 so bumping it is what actually triggers the in-app update banner for
 everyone already running the app.
+
+## Updating from v1.3 to v1.4
+
+Install the new APK over the old one. Then open MaxedHealth Sync and use
+"Grant permission & sync now" once so Health Connect can offer the three new
+permissions (distance, resting heart rate, total calories). Syncing keeps
+working in the meantime.
+
+The phone's `extractors/health_connect.py` must also be replaced (it lives
+outside the git repo): from the maxhealth folder run
+`cp extractors/health_connect.py ../extractors/health_connect.py` after a `git pull`.

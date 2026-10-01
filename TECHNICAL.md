@@ -480,6 +480,8 @@ Connect native shape):
 `sleep_duration` is in minutes, matching every other device's convention.
 Any field can be absent for a day — genuinely missing, not zero.
 
+**Launcher v1.4 export fields (01/10/26).** Besides steps, hr_avg, weight, sleep_duration, hrv, spo2 and calories_active, the export can carry: `distance_m`, `hr_resting`, `hr_min`, `hr_max`, `hrv_min`, `hrv_max`, `spo2_min`, `spo2_max`, `calories_passive` (total − active), and, only when the night resolved to one sleep figure, `sleep_deep`, `sleep_light`, `sleep_rem`, `sleep_wake` (minutes), `bedtime`/`wake_time` ("HH:MM" local) and `sleep_efficiency` (%). All are in `SOURCE_FIELDS['health_connect']`. The extractor (`extractors/health_connect.py`, installed on the phone at `app/extractors/`, NOT inside the git repo root) is now a pass-through of those fields; the repo keeps the canonical copy in `extractors/health_connect.py`. Permissions: `corePermissions` (the original seven) gate the background sync; `READ_DISTANCE`, `READ_RESTING_HEART_RATE`, `READ_TOTAL_CALORIES_BURNED` are optional.
+
 **Sleep attribution and double-counting — full history in the launcher's own
 `CHANGELOG.md` (30/09/26 and 01/10/26 entries).** Health Connect is a shared
 hub, not a deduplicated truth: Zepp and RingConn each write their own

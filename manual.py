@@ -50,7 +50,7 @@ MANUAL_FIELDS = (
     'sleep_onset', 'sleep_efficiency', 'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max',
     'snoring_min', 'bedtime', 'wake_time',
     'steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m',
-    'hr_avg', 'hr_min', 'hr_max',
+    'hr_avg', 'hr_min', 'hr_max', 'hr_resting',
 )
 
 

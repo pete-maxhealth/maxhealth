@@ -120,7 +120,14 @@ SOURCE_FIELDS = {
     # whitelist would have dropped them even if it had). Same lowest-precedence
     # position as before in every field's source list above: health_connect can
     # never override a real device's own reading, only fill a genuine gap.
-    'health_connect': ['steps', 'sleep_duration', 'hr_avg', 'weight', 'hrv', 'spo2', 'calories_active'],
+    # 01/10/26 (v1.4) — widened again: distance, passive calories, resting HR,
+    # per-day min/max for HR/HRV/SpO2, and the sleep stage/time fields. Still
+    # last in every precedence list, so it only ever fills gaps.
+    'health_connect': ['steps', 'distance_m', 'calories_active', 'calories_passive',
+                       'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
+                       'sleep_efficiency', 'bedtime', 'wake_time',
+                       'hr_avg', 'hr_min', 'hr_max', 'hr_resting',
+                       'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max', 'weight'],
     # Widened (28/09/26) from the original 6 headline fields to every real
     # combined.csv column (everything in ALL_FIELDS except 'date' and
     # 'source', which aren't metric values). The Manual Entry screen itself
@@ -140,7 +147,7 @@ SOURCE_FIELDS = {
                'sleep_onset', 'sleep_efficiency', 'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max',
                'snoring_min', 'bedtime', 'wake_time',
                'steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m',
-               'hr_avg', 'hr_min', 'hr_max'],
+               'hr_avg', 'hr_min', 'hr_max', 'hr_resting'],
 }
 
 # Map metric category → combined.csv fields
@@ -153,7 +160,7 @@ METRIC_FIELDS = {
                'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max', 'snoring_min'],
     'steps':  ['steps', 'distance_m', 'calories_active', 'calories_passive', 'elevation_m'],
     'spo2':   ['spo2', 'spo2_min', 'spo2_max'],
-    'hr':     ['hr_avg', 'hr_min', 'hr_max'],
+    'hr':     ['hr_avg', 'hr_min', 'hr_max', 'hr_resting'],
 }
 
 ALL_FIELDS = [
@@ -162,7 +169,7 @@ ALL_FIELDS = [
     'sleep_duration', 'sleep_deep', 'sleep_light', 'sleep_rem', 'sleep_wake',
     'sleep_onset', 'sleep_efficiency', 'bedtime', 'wake_time',
     'sleep_hr_avg', 'sleep_hr_min', 'sleep_hr_max', 'snoring_min',
-    'hr_avg', 'hr_min', 'hr_max',
+    'hr_avg', 'hr_min', 'hr_max', 'hr_resting',
     'hrv', 'hrv_min', 'hrv_max',
     'spo2', 'spo2_min', 'spo2_max',
     'weight', 'bmi',
@@ -397,6 +404,9 @@ VALIDATION_RANGES = {
     'hr_avg':         (20, 250),
     'hr_min':         (20, 250),
     'hr_max':         (20, 300),
+    'hr_resting':     (20, 200),
+    'distance_m':     (0, 200000),
+    'calories_passive': (0, 10000),
     'hrv':            (0, 300),
     'spo2':           (50, 100),
     'bmi':            (10, 70),
