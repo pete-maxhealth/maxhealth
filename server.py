@@ -445,6 +445,52 @@ def run_pipeline(device=None, dry_run=False, auto_sync=False):
     return True
 
 
+# ── Health Connect auto-merge (01/10/26) ──────────────────────────────────────
+# The launcher drops health_connect_export.json into the inbox every 30 minutes, but
+# merging it into combined.csv depended on a separate cron job that a new install does
+# not necessarily have. The server now notices a new/changed export itself and merges
+# it, so a new user gets data flowing with no cron setup at all. Only the Health
+# Connect extractor runs here (a single-device run never sweeps the rest of the inbox).
+HC_WATCH_SECONDS = int(os.environ.get('MH_HC_WATCH_SECONDS', '60'))
+_hc_last_seen = None
+
+def _newest_hc_export_mtime():
+    newest = None
+    try:
+        for n in os.listdir(INBOX_DIR):
+            if n.lower().startswith('health_connect_export') and n.lower().endswith('.json'):
+                m = os.path.getmtime(os.path.join(INBOX_DIR, n))
+                if newest is None or m > newest:
+                    newest = m
+    except Exception:
+        pass
+    return newest
+
+def hc_watch_once():
+    """One check: merge if a Health Connect export is newer than the last one handled.
+    Returns True if a merge was started."""
+    global _hc_last_seen
+    m = _newest_hc_export_mtime()
+    if m is None or m == _hc_last_seen:
+        return False
+    if pipeline_running:
+        return False            # try again next tick; do not mark as seen
+    if run_pipeline(device='health_connect'):
+        _hc_last_seen = m
+        return True
+    return False
+
+def _hc_watch_loop():
+    global _hc_last_seen
+    time.sleep(5)
+    while True:
+        try:
+            hc_watch_once()
+        except Exception as e:
+            print('  [hc-watch]', e)
+        time.sleep(HC_WATCH_SECONDS)
+
+
 def run_manual_pipeline():
     """Apply manual entries now, or queue it to run the moment the current run ends.
     Returns True if started immediately. (01/10/26: a correction saved during a sync was
@@ -1776,6 +1822,7 @@ def main():
 ''')
 
     server = http.server.HTTPServer(('127.0.0.1', PORT), MaxHealthHandler)
+    threading.Thread(target=_hc_watch_loop, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

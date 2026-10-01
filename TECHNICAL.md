@@ -958,6 +958,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p17_winzip_aes.py` — WinZip-AES reader (Zepp export): FIPS test vectors, round trip, wrong password, tamper detection.
 - `p18_midnight.py` — midnight rollover: closed-app gaps (1/5/40 days), no duplicates, empty day, app left open across midnight.
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
+- `p20_hc_automerge.py` — server merges a launcher-written Health Connect export on its own (no cron).
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
