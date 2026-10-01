@@ -1143,6 +1143,24 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+        # Bundled third-party libraries (01/10/26) - Chart.js ships with the app so
+        # charts work offline / on first run with no internet. Only exact filenames
+        # that exist in lib/ are served (basename, so no path traversal).
+        elif path.startswith('/lib/'):
+            lib_name = os.path.basename(path)
+            lib_path = os.path.join(APP_DIR, 'lib', lib_name)
+            if lib_name.endswith('.js') and os.path.isfile(lib_path):
+                with open(lib_path, 'rb') as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'public, max-age=86400')
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_json({'error': 'Library not found'}, 404)
+
         elif path.startswith('/icons/'):
             # Serve icon files from the maxhealth app directory
             icon_name = os.path.basename(path)
