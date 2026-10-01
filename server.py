@@ -41,6 +41,7 @@ import glob
 import shutil
 import subprocess
 import threading
+import time
 import http.server
 import urllib.parse
 import zipfile
@@ -941,6 +942,26 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 'running': pipeline_running,
                 'result':  pipeline_result,
                 'log':     ''.join(pipeline_log[-100:]),
+            })
+
+        # ── Health Connect sync age (01/10/26) ────────────────────────────
+        # Newest health_connect_export*.json the launcher has written, whether
+        # still in inbox/ or already archived to inbox/old/. Lets the app say
+        # "last data 3h ago" so a silently stalled background sync is visible.
+        elif path == '/sync-status':
+            newest = None
+            for d in (INBOX_DIR, os.path.join(INBOX_DIR, 'old')):
+                try:
+                    for n in os.listdir(d):
+                        if n.lower().startswith('health_connect_export') and n.lower().endswith('.json'):
+                            m = os.path.getmtime(os.path.join(d, n))
+                            if newest is None or m > newest:
+                                newest = m
+                except OSError:
+                    pass
+            self.send_json({
+                'health_connect_last': newest,
+                'age_minutes': None if newest is None else int((time.time() - newest) / 60),
             })
 
         # ── Serve combined.csv ────────────────────────────────────────────
