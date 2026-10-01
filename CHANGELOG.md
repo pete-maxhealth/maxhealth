@@ -12,6 +12,13 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.860 — Symptom Scores Reach History, And "Today" No Longer Slips A Day After Midnight In BST
+
+Found by the new symptoms/strength/history test (p23) and clock-change test (p24).
+- **Symptom scores never reached history.** They were only copied across while today's entry already sat at the top of history, which is almost never true because history is written at rollover. So Patterns, symptom trends and reports never saw a single score. The rollover now carries the day's scores into that day's history entry (and into an existing entry if there is one).
+- **Wrong day between 00:00 and 01:00 in British Summer Time.** 16 places built "today" with `toISOString()`, which is UTC and so gives yesterday for that hour: phase and condition history entries, the export reminder, manual-entry template dates, report date ranges, notification keys, the calendar heatmap. They now use a local-date helper (`localISODate`). p24 checks both clock changes (25/10/26 and 28/03/27) and the BST hour.
+- Covered with no bugs found: treatments (log, note, delete), routine → strength log → server CSV → restore, Resistance activity credit, History screen.
+
 ## v3.10.859 — Recipes: Hand-Typed Ingredients Log Correctly, Steps Survive A Restore
 
 Found by the new recipes persona test (p22).

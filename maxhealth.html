@@ -5947,7 +5947,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.859'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.860'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -6399,6 +6399,13 @@ function ddmmyySortKey(dateStr) {
   if (parts.length !== 3) return dateStr || ''; // malformed - fall back to raw string rather than throw
   const [dd, mm, yy] = parts;
   return `20${yy}-${mm}-${dd}`;
+}
+
+// Local calendar date as YYYY-MM-DD. new Date().toISOString() is UTC, so in British Summer Time
+// it returns YESTERDAY between 00:00 and 01:00 local; use this wherever "today" is meant.
+function localISODate(d) {
+  d = d || new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 function todayStr() {
@@ -11347,7 +11354,7 @@ function buildConditionPeriodsBlock() {
   const distinct = new Set(periods.map(p => p.condition));
   if (distinct.size < 2) return '';
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISODate(new Date());
   const lines = periods.map((p, i) => {
     const endDate = periods[i + 1] ? periods[i + 1].date : today;
     const meta = CONDITION_META[p.condition] || CONDITION_META.general;
@@ -11379,7 +11386,7 @@ function appendConditionHistory(newCond) {
   const periods = getConditionHistory();
   const last = periods[periods.length - 1];
   if (last && last.condition === newCond) return; // no genuine change
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISODate(new Date());
   const raw = getConditionHistoryRaw();
   const lines = raw ? raw.split('\n') : [];
   // If the most recent entry is from earlier TODAY, this is a same-day
@@ -11425,7 +11432,7 @@ function appendActivityLevelHistory(newLevel) {
   const periods = getActivityLevelHistory();
   const last = periods[periods.length - 1];
   if (last && last.level === newLevel) return; // no genuine change
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISODate(new Date());
   const raw = getActivityLevelHistoryRaw();
   const lines = raw ? raw.split('\n') : [];
   if (last && last.date === today) {
@@ -11916,7 +11923,7 @@ function setGoal(goal) {
 
   // Auto-append to phase history so AI reports know when this phase started.
   // Only appends if the goal actually changed from what was previously stored.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localISODate(new Date());
   const existing = getPhaseHistoryRaw();
   const lines = existing.split('\n').map(l => l.trim()).filter(Boolean);
   const lastLine = lines[lines.length - 1] || '';
@@ -12798,7 +12805,7 @@ async function exportAll() {
       a.href = url; a.download = `maxhealth_backup_${dateStr}.zip`; a.click();
       URL.revokeObjectURL(url);
       showToast('Backup zip saved to Downloads ✓');
-      localStorage.setItem('mh_last_export_nudge', new Date().toISOString().slice(0,10));
+      localStorage.setItem('mh_last_export_nudge', localISODate(new Date()));
       return;
     } catch (e) {
       // Fall through to the separate-files fallback below - a failed zip
@@ -12823,7 +12830,7 @@ async function exportAll() {
   if (nutritionRows) download(nutritionRows, `master_${dateStr}.csv`, 'text/csv');
   if (combinedCsv) download(combinedCsv, `combined_${dateStr}.csv`, 'text/csv');
   showToast(`Exporting ${count} file${count > 1 ? 's' : ''}… check Downloads`);
-  localStorage.setItem('mh_last_export_nudge', new Date().toISOString().slice(0,10));
+  localStorage.setItem('mh_last_export_nudge', localISODate(new Date()));
 }
 
 // ─── PHOTO HANDLING ──────────────────────────────────────
@@ -21519,7 +21526,7 @@ function showEODSummary(message, csvLine) {
 
   // Check if we should show export reminder (every 7 days)
   const lastExport = localStorage.getItem('mh_last_export_nudge');
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISODate(new Date());
   const daysSince = lastExport
     ? Math.floor((new Date(today) - new Date(lastExport)) / 86400000)
     : 999;
@@ -21953,7 +21960,7 @@ function checkBackupReminder() {
   if (!el) return;
 
   const lastExport = localStorage.getItem('mh_last_export_nudge');
-  const today = new Date().toISOString().slice(0,10);
+  const today = localISODate(new Date());
   const daysSince = lastExport
     ? Math.floor((new Date(today) - new Date(lastExport)) / 86400000)
     : 999;
@@ -22785,7 +22792,7 @@ function checkWeightPhaseAutoSwitch() {
   // Append to Weight Phase History in the same format savePhaseHistory()
   // itself uses - "loss" (not "lose") is the word that system expects.
   const phaseWord = newGoal === 'lose' ? 'loss' : newGoal;
-  const isoToday = new Date().toISOString().slice(0,10);
+  const isoToday = localISODate(new Date());
   const existing = getPhaseHistoryRaw().trim();
   const newLine = `${isoToday} ${phaseWord}`;
   if (!existing.endsWith(newLine)) { // avoid a duplicate line if this somehow runs twice for the same day
@@ -22945,7 +22952,19 @@ function updateDashboard(skipActivityRender) {
       type: a.type, name: a.name, duration: a.duration, effort: a.effort || 'Moderate',
       kcal: calcActivityKcal(a)
     }));
+    // Symptom scores live in their own daily-reset log. They were only ever copied to history while
+    // today's entry already sat at the top of it, which is almost never true (history is written at
+    // rollover), so Patterns, symptom trends and reports never saw a single score. Capture them here.
+    let _capturedSymptoms = null;
+    try {
+      const _sl = JSON.parse(localStorage.getItem('mh_symptom_log') || 'null');
+      if (_sl && _sl.date === _rolloverDate) {
+        const _o = Object.assign({}, _sl); delete _o.date;
+        if (Object.keys(_o).length) _capturedSymptoms = _o;
+      }
+    } catch(e) {}
     const _existingEntry = (state.history||[]).find(h => h.date === _rolloverDate);
+    if (_existingEntry && _capturedSymptoms && !_existingEntry.symptoms) _existingEntry.symptoms = _capturedSymptoms;
     const _hasLog = _capturedLog.length > 0;
     const _rt = calcTotals(_capturedLog);
     // Only treat as "already in history" if the existing entry's totals actually MATCH
@@ -22998,6 +23017,7 @@ function updateDashboard(skipActivityRender) {
         mode: _capturedMode, notes: _capturedNotes, tagNotes: _capturedTagNotes,
         weight: _capturedWeight, water_ml: _capturedWater,
         steps: _capturedSteps, exercises: _capturedExercises,
+        ...(_capturedSymptoms ? { symptoms: _capturedSymptoms } : {}),
         // Freezes the ACTUAL targets in effect on this specific day, rather
         // than relying on TARGETS[mode] at render time - that's a live Proxy
         // that always reads CURRENT settings, meaning every past day was
@@ -31722,7 +31742,7 @@ function renderCalendarHeatmap(containerId, points, colorFn, legendItems) {
   const start = new Date(first);
   const dow = (start.getDay() + 6) % 7; // 0=Mon..6=Sun
   start.setDate(start.getDate() - dow);
-  const byIso = {}; parsed.forEach(p => { byIso[p.date.toISOString().slice(0, 10)] = p.val; });
+  const byIso = {}; parsed.forEach(p => { byIso[localISODate(p.date)] = p.val; });
   const totalDays = Math.round((last - start) / 86400000) + 1;
   const totalWeeks = Math.ceil(totalDays / 7);
   const cellSize = 11, gap = 3;
@@ -31731,7 +31751,7 @@ function renderCalendarHeatmap(containerId, points, colorFn, legendItems) {
     for (let d = 0; d < 7; d++) {
       const cellDate = new Date(start); cellDate.setDate(cellDate.getDate() + w * 7 + d);
       if (cellDate > last) continue;
-      const iso = cellDate.toISOString().slice(0, 10);
+      const iso = localISODate(cellDate);
       const val = byIso[iso];
       const color = colorFn(val);
       const x = w * (cellSize + gap), y = d * (cellSize + gap);
@@ -37494,13 +37514,13 @@ function downloadManualEntryCsvTemplate() {
   for (let i = 0; i < daysBack; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const iso = d.toISOString().slice(0, 10);
+    const iso = localISODate(d);
     rows.push([iso, ...fields.map(() => '')].join(','));
   }
   const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `maxedhealth_manual_template_${today.toISOString().slice(0,10)}.csv`;
+  a.download = `maxedhealth_manual_template_${localISODate(today)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -37814,8 +37834,8 @@ function setReportRange(days, btn) {
       from.setDate(from.getDate() + 1);
       const fromEl = document.getElementById('rptDateFrom');
       const toEl   = document.getElementById('rptDateTo');
-      if (fromEl && !fromEl.value) fromEl.value = from.toISOString().slice(0,10);
-      if (toEl   && !toEl.value)   toEl.value   = today.toISOString().slice(0,10);
+      if (fromEl && !fromEl.value) fromEl.value = localISODate(from);
+      if (toEl   && !toEl.value)   toEl.value   = localISODate(today);
     }
   }
   renderReportSummary();
@@ -41276,7 +41296,7 @@ function checkNotifications() {
   if (!('Notification' in window)||Notification.permission!=='granted') return;
   const prefs=getNotifPrefs();
   const now=new Date(); const hour=now.getHours(); const day=now.getDay();
-  const todayKey=now.toISOString().slice(0,10);
+  const todayKey=localISODate(now);
   if (prefs.eod && hour>=21) {
     const eodKey=`mh_notif_eod_${todayKey}`;
     if (!localStorage.getItem(eodKey)) {
@@ -41422,7 +41442,7 @@ function testSupplementReminder() {
 
   const now = new Date();
   const hour = now.getHours();
-  const todayKey = now.toISOString().slice(0, 10);
+  const todayKey = localISODate(now);
   const times = loadSupplementCheckpointTimes();
   lines.push(`Current time: ${now.toLocaleTimeString()} (hour ${hour})`);
   lines.push(`Checkpoint times configured: morning=${times.morning || '(blank — skipped)'}, midday=${times.midday || '(blank — skipped)'}, evening=${times.evening || '(blank — skipped)'}, bedtime=${times.bedtime || '(blank — skipped)'}`);
@@ -41521,7 +41541,7 @@ function checkCarbCeilingNotif(currentCarbs) {
   if (!getNotifPrefs().carb) return;
   const t=getTargets(); if (!t.carbs) return;
   const threshold=t.carbs*0.8;
-  const sentKey=`mh_carb_notif_${new Date().toISOString().slice(0,10)}`;
+  const sentKey=`mh_carb_notif_${localISODate(new Date())}`;
   if (currentCarbs>=threshold && !localStorage.getItem(sentKey)) {
     // Same fix as the other three notification types - "fired" only once
     // genuinely delivered, not the moment a send was attempted.

@@ -961,6 +961,8 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p20_hc_automerge.py` — server merges a launcher-written Health Connect export on its own (no cron).
 - `p21_cron_setup.py` — server adds missing cron jobs (update_health every 30 min, auto-update) on a fresh install; never alters an existing crontab.
 - `p22_recipes.py` — recipes: build with the real builder, survive a browser wipe via the server CSV (steps, fibre, polyols), log a serving with honest amounts.
+- `p23_symptoms_strength_history.py` — symptoms into history at rollover, treatments, routine workout through to the server and back, History screen.
+- `p24_clock_changes.py` — UK clock changes and the 00:00-01:00 BST window.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
