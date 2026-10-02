@@ -4,7 +4,7 @@ LOG="$HOME/mh_autoupdate.log"
 
 cd "$APP_DIR" || { echo "$(date): FAILED — could not cd to $APP_DIR" >> "$LOG"; exit 1; }
 
-git fetch origin main --quiet 2>>"$LOG"
+timeout 60 git fetch origin main --quiet 2>>"$LOG"
 if [ $? -ne 0 ]; then
   echo "$(date): git fetch failed (offline, or network unavailable) — skipping this check" >> "$LOG"
   exit 0

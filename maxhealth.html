@@ -18,7 +18,11 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- 03/10/26 - fonts load WITHOUT blocking the page (media=print swapped to all on load). A plain
+     stylesheet link here froze the whole app whenever the connection was dead-but-not-off (roaming,
+     no signal): the browser waited on Google Fonts before showing anything. Now the app shows at once
+     in the system font and picks the web fonts up later if they arrive. -->
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <!-- 01/10/26 — the fallback stub below was missing a static .register, so a
      blocked/failed CDN load didn't actually degrade gracefully: it threw
      straight out of Chart.register(...) further down the page (a top-level
@@ -36,15 +40,18 @@
      no internet. The CDN is only a second chance if the local file is somehow
      missing, then the same no-op stub as before. -->
 <script src="lib/chart.umd.js" onerror="document.write('<script src=&quot;https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js&quot; onerror=&quot;window.Chart=function(){this.destroy=function(){}};window.Chart.register=function(){}&quot;><\/script>')"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<!-- 03/10/26 - jsPDF, its table plugin and JSZip now ship WITH the app (lib/, same as Chart.js).
+     They were blocking CDN scripts: with no internet the page never finished loading. The CDN is
+     only a non-blocking second chance if a local file is somehow missing. -->
+<script src="lib/jspdf.umd.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';document.head.appendChild(s)"></script>
+<script src="lib/jspdf.plugin.autotable.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';document.head.appendChild(s)"></script>
 <!-- JSZip - bundles Export All Data into one .zip instead of 3 separate staggered
      downloads (28/09/26, raised directly: "1 button zip backup of all data").
      onerror leaves window.JSZip undefined rather than throwing - exportAll()
      checks for that and falls back to the old separate-files behaviour, same
      graceful-degradation pattern Chart.js already uses above, so a blocked CDN
      never breaks backing up entirely, just loses the single-zip convenience. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="window.JSZip=undefined"></script>
+<script src="lib/jszip.min.js" onerror="window.JSZip=undefined"></script>
 <style>
   /* ── THEME SYSTEM ───────────────────────────────────────── */
   :root {
@@ -2076,7 +2083,7 @@
 .mh-zoom-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
 .mh-zoom-btn:disabled { opacity:0.35; cursor:default; }
 
-  /* ── OFFLINE MODE (v3.10.862) ───────────────────────────── */
+  /* ── OFFLINE MODE (v3.10.863) ───────────────────────────── */
   #mhNetBar{display:none;position:fixed;top:0;left:0;right:0;z-index:99990;padding:calc(env(safe-area-inset-top,0px) + 6px) 12px 6px;font-size:12px;line-height:1.4;text-align:center;font-family:'DM Sans',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);}
   #mhNetBar.off{display:block;background:#3a2f0b;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.5);}
   #mhNetBar.back{display:block;background:#0e2e22;color:#4ade80;border-bottom:1px solid rgba(74,222,128,.5);}
@@ -5965,7 +5972,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.862'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.863'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -18591,7 +18598,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
       showMealPreview(sanitiseFatValues(applyLibraryMatches(foods)), text, 'Long meal — processed in two parts');
       return;
     }
-    if (typeof mhIsOffline === 'function' && mhIsOffline()) { mhOfflineChoice(text, imageBase64, imageMime); return; }
+    if (typeof mhCheckOnline === 'function' && !(await mhCheckOnline())) { mhOfflineChoice(text, imageBase64, imageMime); return; }
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system', 'thinking');
     result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
@@ -45278,7 +45285,7 @@ function dismissInsight() {
 
 
 <script>
-// ─── OFFLINE MODE (v3.10.862) ───────────────────────────────────────────────
+// ─── OFFLINE MODE (v3.10.863) ───────────────────────────────────────────────
 // The app itself runs from the phone's own server, so "offline" here means no INTERNET:
 // the AI, the food database and barcode lookup stop, everything local keeps working.
 // - Banner for as long as the connection is down.
@@ -45303,14 +45310,31 @@ function dismissInsight() {
   function toast(m) { try { showToast(m, undefined, undefined, 4500); } catch (e) {} }
   function esc(t) { var d = document.createElement('div'); d.textContent = String(t == null ? '' : t); return d.innerHTML; }
 
-  function probe() {
+  // Resolves true (reachable), false (failed or timed out). probeKind() tells hang from fast failure.
+  function probeKind(ms) {
     return new Promise(function (resolve) {
       var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-      var t = setTimeout(function () { if (ac) ac.abort(); resolve(false); }, 5000);
+      var timedOut = false;
+      var t = setTimeout(function () { timedOut = true; if (ac) ac.abort(); resolve('timeout'); }, ms);
       _fetch(PROBE_URL, { mode: 'no-cors', cache: 'no-store', signal: ac ? ac.signal : undefined })
-        .then(function () { clearTimeout(t); resolve(true); }, function () { clearTimeout(t); resolve(false); });
+        .then(function () { clearTimeout(t); resolve('ok'); }, function () { clearTimeout(t); if (!timedOut) resolve('fail'); });
     });
   }
+  function probe() { return probeKind(5000).then(function (k) { return k === 'ok'; }); }
+  // A connection that is on but silent (roaming, no signal) makes a request hang for the full AI
+  // timeout. Before an AI call, check for a hang (3 s); a quick failure is left to the real call,
+  // which already handles it. Result is trusted for 60 s.
+  var lastOk = 0;
+  window.mhCheckOnline = function () {
+    if (net.off) return Promise.resolve(false);
+    if (Date.now() - lastOk < 60000) return Promise.resolve(true);
+    if (!navigator.onLine) { setOff(true); return Promise.resolve(false); }
+    return probeKind(3000).then(function (k) {
+      if (k === 'timeout') { setOff(true); return false; }
+      if (k === 'ok') lastOk = Date.now();
+      return true;
+    });
+  };
   function verify() {
     if (net.checking) return;
     if (!navigator.onLine) { setOff(true); return; }
@@ -45335,7 +45359,7 @@ function dismissInsight() {
     var url = typeof input === 'string' ? input : (input && input.url) || '';
     var p = _fetch(input, init);
     if (!isExternal(url)) return p;
-    return p.then(function (r) { if (net.off) setOff(false); return r; },
+    return p.then(function (r) { lastOk = Date.now(); if (net.off) setOff(false); return r; },
       function (e) { if (!(e && e.name === 'AbortError')) verify(); throw e; });
   };
   window.addEventListener('offline', function () { setOff(true); });
@@ -45419,9 +45443,10 @@ function dismissInsight() {
   function guard(name, label) {
     var f = window[name];
     if (typeof f !== 'function' || f._mhGuard) return;
-    var w = function () {
-      if (net.off) { toast(label + ' needs internet, so it\'s paused while you\'re offline. It works again when you\'re back online.'); return; }
-      return f.apply(this, arguments);
+    var w = async function () {
+      var self = this, args = arguments;
+      if (!(await window.mhCheckOnline())) { toast(label + ' needs internet, so it\'s paused while you\'re offline. It works again when you\'re back online.'); return; }
+      return f.apply(self, args);
     };
     w._mhGuard = true; window[name] = w;
   }

@@ -78,7 +78,13 @@ for label, cond, ndays in (('no-data', 'general', 0), ('45-days', 'general', 45)
                 except Exception as e: f.add('BUG', f'{label}: generateProfileReport threw: {str(e)[:120]}')
                 print('   report downloads:', dl)
                 chk(bool(dl), 'treatment report produced no file')
-                if dlp:
+                # PDF libs are bundled now, so a real PDF is produced alongside the CSV (v3.10.863)
+                pdfs = [p for n, p in zip(dl, dlp) if n.endswith('.pdf')]
+                if pdfs:
+                    head = open(pdfs[0], 'rb').read(); chk(head[:5] == b'%PDF-' and len(head) > 3000, f'report PDF is not a real PDF ({len(head)} bytes)')
+                csvs = [p for n, p in zip(dl, dlp) if n.endswith('.csv')]
+                if csvs:
+                    dlp = csvs
                     txt = open(dlp[0], encoding='utf-8').read(); print('   ', txt.replace(chr(10), ' | ')[:200])
                     chk(not BAD.search(txt) and txt.count(chr(10)) >= 2, f'report CSV has bad/empty content: {txt[:150]!r}')
         screens['final'] = pg.evaluate(VISIBLE)

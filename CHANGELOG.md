@@ -12,6 +12,15 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.863 — The App No Longer Freezes On A Dead Connection (Offline Mode Actually Works)
+
+Pete, abroad: offline mode "obviously doesn't work... the local service seems to want external network access." He was right, and my v3.10.862 test had missed it: it made internet requests fail *instantly*, but a phone with no signal or roaming data makes them *hang*, and the page head loaded four things from the internet as **blocking** resources (Google Fonts, jsPDF, jsPDF-AutoTable, JSZip). The browser waited on them before showing anything, so the app sat there. Reproduced (page never finished loading with hung requests), then fixed:
+- **jsPDF, its table plugin and JSZip now ship with the app** in `lib/` (pinned to the versions used before: 2.5.1, 3.8.2, 3.10.1), like Chart.js. PDF reports and the one-file zip backup now work with no internet at all. The CDN is only a non-blocking fallback if a local file is missing.
+- **Fonts load without blocking.** The app appears immediately in the system font and swaps to the web fonts if they ever arrive.
+- **Hang check before AI calls.** If the connection is on but silent, the first AI use now spots it in 3 seconds (a small request to gstatic.com, result trusted for 60 s) and goes straight to the offline choices, instead of waiting out the long AI timeout. A quick failure is left to the existing handling.
+- Page load with a dead connection: never finished, now 0.5 s. Test: p28 (hung requests; onboarding, tabs, common-food logging, offline banner, save-for-later, real PDF and zip from the bundled libraries).
+- Also found: logging a common food ("two boiled eggs") works with no internet (local database), as intended.
+
 ## v3.10.862 — Offline Mode: Banner, "Needs Internet" Notes, And Save-For-Later Meals
 
 Pete (travelling, 2 Oct): "I desperately need offline mode. We need to show an offline banner throughout time spent there. Non working items such as AI compare need a note... another function similar to manual / health connect that updates via sync when it comes back online."
