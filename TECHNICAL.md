@@ -965,7 +965,13 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p24_clock_changes.py` — UK clock changes and the 00:00-01:00 BST window.
 - `p25_backup_restore.py` — full backup incl. settings, wipe and restore, same-day empty-overwrite guard.
 - `p26_more_screens.py` — missed day, labs, Insights, chat logging, demo mode, carer.html.
+- `p27_offline.py` — offline banner, internet-only guards, save-for-later queue, review on reconnect.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
 When a real user hits a bug, add the person who hit it as a new persona so it can't return. Needs Playwright + Chromium (cloud workspace; not available in Termux).
+
+
+## Offline mode (v3.10.862)
+
+A self-contained `<script>` block at the end of `maxhealth.html`. `window.fetch` is wrapped: a failed request to a non-local origin triggers `verify()` (navigator.onLine, then a no-cors probe of `gstatic.com/generate_204`, 5 s timeout), repeated every 15 s while offline. State drives `#mhNetBar` and `body.mh-offline` (CSS dims and annotates internet-only buttons by `onclick` fragment). `NET_FEATURES` entry points are wrapped to toast instead of running. `processMessage` calls `mhOfflineChoice` (pre-check and on an `offline` AI result); `mhOfflineSave` writes `mh_offline_queue` (max 50). `mhReviewQueue` pops one entry, sets `window._mhQueuedOverride`, and runs the normal `processMessage`; `finishMealLog` applies the override (time via `window._pendingMealTimeOverride`, past day via `_logTargetDate`) only if the text matches and it is under 30 minutes old.

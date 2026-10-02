@@ -12,6 +12,18 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.862 — Offline Mode: Banner, "Needs Internet" Notes, And Save-For-Later Meals
+
+Pete (travelling, 2 Oct): "I desperately need offline mode. We need to show an offline banner throughout time spent there. Non working items such as AI compare need a note... another function similar to manual / health connect that updates via sync when it comes back online."
+
+The app already runs from the phone's own server, so offline here means **no internet**: logging, your library, history and charts keep working; the AI, food database and barcode lookup stop. What's new:
+- **Offline banner** across the top of every screen for as long as there's no connection ("Offline — logging, your library and history still work. AI, food search and barcode need internet."), with a count of saved entries. Detection is not just the phone's Wi-Fi flag: when any request to the internet fails, the app checks for real, then re-checks every 15 seconds until it's back.
+- **Internet-only features say so.** Verify across 3 AIs (all five places), the 3-AI estimate, AI brief and summaries, Ask AI, barcode scanning, AI ingredient search and AI recipe suggestions go grey with "· needs internet", and tapping one explains itself instead of failing. Food-database search still opens (recent scans and your library work) with a note.
+- **Save for later.** A meal the local database can't recognise (common foods like "two boiled eggs" already log offline) offers "Save it for when I'm back online" or "Enter the macros myself now". Saved entries (text, and a photo up to ~900 KB) live in `mh_offline_queue`, so they are included in backups.
+- **Sync on reconnect, with you in control.** When the connection returns the banner turns green with a **Review** button. Each saved entry goes through the normal AI preview and is logged only when you confirm it, on the **day and time you saved it** (a past day goes into that day's history). Cancelling logs nothing and leaves nothing behind. Nothing is ever logged unseen, in keeping with the strict-tracking rules.
+- Not covered: PDF reports still need the PDF library from the internet the first time (CSV fallback exists), and Google Fonts fall back to the system font offline. A stopped local server is a separate, existing notice.
+- Test: p27 (banner on every tab, guards, no AI calls offline, queue survives reload, reconnect, confirm keeps the saved time, past-day logging, cancel leaves no residue).
+
 ## v3.10.861 — Backups Carry Settings, An Empty Backup Can No Longer Replace A Good One, Missed-Day Dates Validated
 
 Found by the new backup/restore test (p25) and the screens test (p26).

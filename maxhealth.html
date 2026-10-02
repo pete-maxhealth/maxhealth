@@ -2075,9 +2075,27 @@
   font-family:'Space Mono',monospace; font-size:12px; min-width:34px; padding:3px 8px; cursor:pointer; touch-action:manipulation; }
 .mh-zoom-btn.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
 .mh-zoom-btn:disabled { opacity:0.35; cursor:default; }
+
+  /* ── OFFLINE MODE (v3.10.862) ───────────────────────────── */
+  #mhNetBar{display:none;position:fixed;top:0;left:0;right:0;z-index:99990;padding:calc(env(safe-area-inset-top,0px) + 6px) 12px 6px;font-size:12px;line-height:1.4;text-align:center;font-family:'DM Sans',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);}
+  #mhNetBar.off{display:block;background:#3a2f0b;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.5);}
+  #mhNetBar.back{display:block;background:#0e2e22;color:#4ade80;border-bottom:1px solid rgba(74,222,128,.5);}
+  #mhNetBar button{margin-left:8px;padding:3px 10px;border-radius:12px;border:1px solid currentColor;background:transparent;color:inherit;font-size:11px;font-weight:600;}
+  body.mh-offline{padding-top:calc(env(safe-area-inset-top,0px) + 40px);}
+  body.mh-offline [data-needs-net],
+  body.mh-offline [onclick*="runMultiAICheck"],body.mh-offline [onclick*="TripleAI"],
+  body.mh-offline [onclick*="generateOncologyAINarrative"],body.mh-offline [onclick*="askReportsAI"],
+  body.mh-offline [onclick*="tryAISearchForIngredient"],body.mh-offline [onclick*="createRecipeFromAISuggestion"],
+  body.mh-offline [onclick*="openLiveBarcodeScanner"],body.mh-offline [onclick*="generateAIBrief"]{opacity:.55;}
+  body.mh-offline [data-needs-net]::after,
+  body.mh-offline [onclick*="runMultiAICheck"]::after,body.mh-offline [onclick*="TripleAI"]::after,
+  body.mh-offline [onclick*="generateOncologyAINarrative"]::after,body.mh-offline [onclick*="askReportsAI"]::after,
+  body.mh-offline [onclick*="tryAISearchForIngredient"]::after,body.mh-offline [onclick*="createRecipeFromAISuggestion"]::after,
+  body.mh-offline [onclick*="openLiveBarcodeScanner"]::after,body.mh-offline [onclick*="generateAIBrief"]::after{content:" · needs internet";font-size:10px;font-weight:400;opacity:.9;}
 </style>
 </head>
 <body>
+<div id="mhNetBar" role="status" aria-live="polite"></div>
 
 <!-- ONBOARDING WIZARD -->
 <div id="onboardingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:500;overflow-y:auto;box-sizing:border-box;">
@@ -5947,7 +5965,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.861'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.862'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -18573,6 +18591,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
       showMealPreview(sanitiseFatValues(applyLibraryMatches(foods)), text, 'Long meal — processed in two parts');
       return;
     }
+    if (typeof mhIsOffline === 'function' && mhIsOffline()) { mhOfflineChoice(text, imageBase64, imageMime); return; }
     const thinkingBubble = addBubble(imageBase64 ? 'Analysing photo…' : 'Thinking…', 'system', 'thinking');
     result = await parseWithAI(text, imageBase64, imageMime);
     thinkingBubble.remove();
@@ -18630,7 +18649,8 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     if (result.type === 'error') { addBubble(`⚠ ${result.message}`, 'system', 'warn'); return; }
     if (result.type === 'offline') {
       thinkingBubble?.remove();
-      showManualEntryForm(text);
+      if (typeof mhNoteNetFailure === 'function') mhNoteNetFailure();
+      mhOfflineChoice(text, imageBase64, imageMime);
       return;
     }
     if (result.type === 'water') {
@@ -20538,7 +20558,12 @@ function confirmMealLog() {
 function finishMealLog(foods) {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
-  logFoods(foods, window._pendingMealText, window._pendingMealMessage);
+  // Offline-queue entries keep the day/time they were originally saved (see mhReviewQueue);
+  // applied only when this log is for that same text, and never left lying around.
+  const _qov = (window.mhApplyQueuedOverride && window.mhApplyQueuedOverride(window._pendingMealText)) || null;
+  if (_qov) { window._pendingMealTimeOverride = _qov.time || null; if (_qov.date) window._logTargetDate = _qov.date; }
+  try { logFoods(foods, window._pendingMealText, window._pendingMealMessage); }
+  finally { window._pendingMealTimeOverride = null; }
   window._pendingMealFoods = null;
   // If this log came from the library multi-match picker, retire it now that
   // its job is done — otherwise it'd sit there fully clickable indefinitely,
@@ -20555,6 +20580,7 @@ function cancelMealPreview() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   window._pendingMealFoods = null;
+  window._mhQueuedOverride = null;
   addBubble('Cancelled — nothing logged.', 'system');
 }
 
@@ -21282,7 +21308,7 @@ function logFoods(foods, originalText, aiMessage = null) {
       kcal: a.kcal + (f.kcal || 0), protein: a.protein + (f.protein || 0), fat: a.fat + (f.fat || 0), carbs: a.carbs + (f.carbs || 0), fibre: (a.fibre||0) + (f.fibre||0), polyols: (a.polyols||0) + (f.polyols||0)
     }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
     const entry = {
-      id: Date.now(), time: nowTime(),
+      id: Date.now(), time: window._pendingMealTimeOverride || nowTime(),
       description: (() => {
         if (foods.length > 1) {
           const names = foods.slice(0,2).map(f=>f.name).join(' + ');
@@ -21342,7 +21368,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   _tracePolyolsPipeline('5_mealTotals_computed', { name: '(aggregate)', amount: null, carbs: mealTotals.carbs, fibre: mealTotals.fibre, polyols: mealTotals.polyols });
 
   const entry = {
-    id: Date.now(), time: nowTime(),
+    id: Date.now(), time: window._pendingMealTimeOverride || nowTime(),
     description: (() => {
       // For multi-item meals, use first 2 ingredient names as description rather than full ingredient list
       if (foods.length > 1) {
@@ -45250,5 +45276,171 @@ function dismissInsight() {
   <button onclick="resumeFromIdle()" style="padding:12px 28px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;">Resume</button>
 </div>
 
+
+<script>
+// ─── OFFLINE MODE (v3.10.862) ───────────────────────────────────────────────
+// The app itself runs from the phone's own server, so "offline" here means no INTERNET:
+// the AI, the food database and barcode lookup stop, everything local keeps working.
+// - Banner for as long as the connection is down.
+// - Internet-only features say so (greyed, "needs internet") and explain themselves when tapped.
+// - A meal typed while offline can be saved for later; when the connection returns, each saved
+//   entry goes through the normal AI preview and is logged ONLY when you confirm it, on its
+//   original day and time. Nothing is ever logged unseen.
+(function () {
+  'use strict';
+  var PROBE_URL = 'https://www.gstatic.com/generate_204';
+  var QKEY = 'mh_offline_queue';
+  var MAX_Q = 50, MAX_IMG = 900000;
+  var net = { off: !navigator.onLine, timer: null, pending: null, checking: false };
+  var _fetch = window.fetch.bind(window);
+
+  function isExternal(u) {
+    try { var x = new URL(u, location.href); return x.origin !== location.origin && !/^(localhost|127\.0\.0\.1)$/.test(x.hostname); }
+    catch (e) { return false; }
+  }
+  function qGet() { try { var a = JSON.parse(localStorage.getItem(QKEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function qSet(a) { try { localStorage.setItem(QKEY, JSON.stringify(a)); return true; } catch (e) { return false; } }
+  function toast(m) { try { showToast(m, undefined, undefined, 4500); } catch (e) {} }
+  function esc(t) { var d = document.createElement('div'); d.textContent = String(t == null ? '' : t); return d.innerHTML; }
+
+  function probe() {
+    return new Promise(function (resolve) {
+      var ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var t = setTimeout(function () { if (ac) ac.abort(); resolve(false); }, 5000);
+      _fetch(PROBE_URL, { mode: 'no-cors', cache: 'no-store', signal: ac ? ac.signal : undefined })
+        .then(function () { clearTimeout(t); resolve(true); }, function () { clearTimeout(t); resolve(false); });
+    });
+  }
+  function verify() {
+    if (net.checking) return;
+    if (!navigator.onLine) { setOff(true); return; }
+    net.checking = true;
+    probe().then(function (ok) { net.checking = false; setOff(!ok); });
+  }
+  function setOff(v) {
+    if (net.off === v) { render(); return; }
+    net.off = v;
+    if (v) { if (!net.timer) net.timer = setInterval(verify, 15000); }
+    else {
+      if (net.timer) { clearInterval(net.timer); net.timer = null; }
+      var n = qGet().length;
+      if (n) toast('Back online — ' + n + ' saved entr' + (n > 1 ? 'ies are' : 'y is') + ' ready to review.');
+      else toast('Back online ✓');
+    }
+    render();
+  }
+
+  // Watch every request that leaves the phone for the internet; a failure triggers a real check.
+  window.fetch = function (input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    var p = _fetch(input, init);
+    if (!isExternal(url)) return p;
+    return p.then(function (r) { if (net.off) setOff(false); return r; },
+      function (e) { if (!(e && e.name === 'AbortError')) verify(); throw e; });
+  };
+  window.addEventListener('offline', function () { setOff(true); });
+  window.addEventListener('online', function () { verify(); });
+  window.mhIsOffline = function () { return net.off; };
+  window.mhNoteNetFailure = function () { verify(); };
+
+  function render() {
+    var bar = document.getElementById('mhNetBar');
+    if (!bar) return;
+    var n = qGet().length;
+    if (net.off) {
+      bar.className = 'off';
+      bar.innerHTML = '📴 <b>Offline</b> — logging, your library and history still work. AI, food search and barcode need internet.' +
+        (n ? ' <b>' + n + ' saved entr' + (n > 1 ? 'ies' : 'y') + ' waiting.</b>' : '');
+      document.body.classList.add('mh-offline');
+    } else if (n) {
+      bar.className = 'back';
+      bar.innerHTML = '✅ Back online — ' + n + ' saved entr' + (n > 1 ? 'ies' : 'y') + ' to review <button onclick="mhReviewQueue()">Review</button>';
+      document.body.classList.remove('mh-offline');
+    } else {
+      bar.className = ''; bar.innerHTML = '';
+      document.body.classList.remove('mh-offline');
+    }
+  }
+
+  // ── Offline choice when a meal can't go to the AI ──
+  window.mhOfflineChoice = function (text, img, mime) {
+    net.pending = { text: text || '', img: img || null, mime: mime || null };
+    var b = addBubble('', 'system', 'warn');
+    var shown = net.pending.text ? '“' + esc(net.pending.text) + '”' : 'your photo';
+    b.innerHTML = '<div style="margin-bottom:10px;">📴 No internet, so the AI can\'t read ' + shown + ' right now.</div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;">' +
+      '<button class="run-btn" style="padding:9px 10px;font-size:13px;" onclick="mhOfflineSave()">💾 Save it for when I\'m back online</button>' +
+      '<button class="copy-btn" style="padding:9px 10px;font-size:13px;" onclick="mhOfflineManual()">✍️ Enter the macros myself now</button></div>';
+    if (typeof render === 'function') render();
+  };
+  window.mhOfflineManual = function () { showManualEntryForm(net.pending ? net.pending.text : ''); };
+  window.mhOfflineSave = function () {
+    var p = net.pending; if (!p) return;
+    var q = qGet();
+    if (q.length >= MAX_Q) { addBubble('Saved list is full (' + MAX_Q + '). Review or clear some first.', 'system', 'warn'); return; }
+    var img = p.img, note = '';
+    if (img && String(img).length > MAX_IMG) { img = null; note = ' (the photo was too large to keep, so only your text was saved)'; }
+    if (!p.text && !img) { addBubble('Nothing to save — the photo is too large and there was no text. Add a short description and try again.', 'system', 'warn'); return; }
+    q.push({ id: Date.now(), text: p.text, img: img || null, mime: img ? p.mime : null, date: todayStr(), time: nowTime(), savedAt: new Date().toISOString() });
+    if (!qSet(q)) { addBubble('Couldn\'t save (phone storage full?).', 'system', 'warn'); return; }
+    net.pending = null;
+    addBubble('💾 Saved' + note + '. ' + q.length + ' waiting. When you\'re back online, tap Review in the banner — you\'ll check and confirm each one before it\'s logged, on the day and time you saved it.', 'system', 'success');
+    render();
+  };
+  window.mhApplyQueuedOverride = function (text) {
+    var o = window._mhQueuedOverride; window._mhQueuedOverride = null;
+    if (!o || Date.now() - o.at > 30 * 60 * 1000 || o.text !== text) return null;
+    return o;
+  };
+  window.mhReviewQueue = async function () {
+    if (net.off) { toast('Still offline — saved entries will be here when the connection is back.'); return; }
+    var q = qGet(); if (!q.length) { render(); return; }
+    var it = q.shift(); qSet(q);
+    try { switchTab('log', document.getElementById('maintab-log')); } catch (e) {}
+    var today = todayStr(), same = it.date === today;
+    var onPast = !same && !!(state.history || []).find(function (h) { return h.date === it.date; });
+    var when = same ? 'today at ' + it.time : it.date + ' at ' + it.time;
+    var tail = (!same && !onPast) ? ' That day isn\'t in your history any more, so if you confirm it will log to today.' : '';
+    addBubble('📥 Saved offline (' + when + '): “' + esc(it.text || 'photo') + '”.' + tail + (q.length ? ' ' + q.length + ' more after this.' : ''), 'system');
+    window._mhQueuedOverride = { text: it.text, date: onPast ? it.date : null, time: (same || onPast) ? it.time : null, at: Date.now() };
+    render();
+    await processMessage(it.text, it.img, it.mime);
+  };
+  window.mhQueueCount = function () { return qGet().length; };
+
+  // ── Internet-only features: explain instead of failing ──
+  var NET_FEATURES = {
+    runMultiAICheck: 'Verify across 3 AIs', runLibraryEditTripleAI: 'Verify across 3 AIs', runLogEditTripleAI: 'Verify across 3 AIs',
+    runHistEditTripleAI: 'Verify across 3 AIs', runRecipeAddTripleAI: 'Verify across 3 AIs', estimateNutritionViaTripleAI: 'The 3-AI estimate',
+    generateAIBrief: 'The AI brief', generateOncologyAINarrative: 'The AI summary', askReportsAI: 'Ask AI',
+    lookupBarcodeViaAI: 'Barcode lookup', openLiveBarcodeScanner: 'Barcode scanning', tryAISearchForIngredient: 'AI ingredient search',
+    createRecipeFromAISuggestion: 'AI recipe suggestions'
+  };
+  function guard(name, label) {
+    var f = window[name];
+    if (typeof f !== 'function' || f._mhGuard) return;
+    var w = function () {
+      if (net.off) { toast(label + ' needs internet, so it\'s paused while you\'re offline. It works again when you\'re back online.'); return; }
+      return f.apply(this, arguments);
+    };
+    w._mhGuard = true; window[name] = w;
+  }
+  function installGuards() {
+    Object.keys(NET_FEATURES).forEach(function (n) { guard(n, NET_FEATURES[n]); });
+    var fs = window.openFoodSearch;
+    if (typeof fs === 'function' && !fs._mhGuard) {
+      var w = function () {
+        if (net.off) toast('Food database search needs internet. Recent scans and your own library still work offline.');
+        return fs.apply(this, arguments);
+      };
+      w._mhGuard = true; window.openFoodSearch = w;
+    }
+  }
+  installGuards();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
+  if (net.off) { net.timer = setInterval(verify, 15000); }
+  else if (qGet().length) { setTimeout(verify, 1500); }   // saved entries exist: confirm the connection once on load
+})();
+</script>
 </body>
 </html>
