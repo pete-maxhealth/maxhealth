@@ -1005,8 +1005,19 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 os.makedirs(BACKUP_DIR, exist_ok=True)
                 date_str = datetime.now().strftime('%Y-%m-%d')
                 backup_path = os.path.join(BACKUP_DIR, f'maxhealth_backup_{date_str}.json')
+                # 01/10/26 - one file per day meant a browser wipe followed by opening the app
+                # (which backs up "today") replaced the day's good backup with an EMPTY one,
+                # destroying the very copy the restore screen exists to bring back. A new
+                # backup that is far smaller than the one already saved today is refused.
+                new_json = json.dumps(body, ensure_ascii=False)
+                if os.path.exists(backup_path):
+                    old_size = os.path.getsize(backup_path)
+                    if old_size > 2000 and len(new_json.encode('utf-8')) < old_size * 0.5:
+                        self.send_json({'status': 'kept-existing', 'file': os.path.basename(backup_path),
+                                        'reason': 'new backup is under half the size of today\'s existing one - not replaced'})
+                        return
                 with open(backup_path, 'w', encoding='utf-8') as f:
-                    json.dump(body, f, ensure_ascii=False)
+                    f.write(new_json)
 
                 # 7-day rotation - same principle as the Settings Change Log
                 # (keep the last week, not unbounded growth from routine use).

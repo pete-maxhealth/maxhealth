@@ -12,6 +12,14 @@ Web side: the sleep-conflict comparison card had a "Both genuinely happened — 
 
 Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
+## v3.10.861 — Backups Carry Settings, An Empty Backup Can No Longer Replace A Good One, Missed-Day Dates Validated
+
+Found by the new backup/restore test (p25) and the screens test (p26).
+- **Same-day empty backup overwrote a good one.** After a browser wipe the app saved an empty-state backup over that day's good one, so the restore had nothing to restore. The server now refuses to replace today's backup with one under half its size (`kept-existing`).
+- **Settings weren't in the backup.** The full backup now includes your `mh_*` settings (excluding caches, logs, debug and anything key/token/secret/password-like) and a restore applies them.
+- **Missed-day logging accepted nonsense dates** (not a real date, future, or today). It now checks format, real calendar date, not future, not today.
+- Covered with no bugs found: labs, Insights, chat logging, demo mode, carer.html. Not testable here: PDF output (jsPDF loads from a CDN the sandbox can't reach), camera, voice, iOS, real notifications.
+
 ## v3.10.860 — Symptom Scores Reach History, And "Today" No Longer Slips A Day After Midnight In BST
 
 Found by the new symptoms/strength/history test (p23) and clock-change test (p24).

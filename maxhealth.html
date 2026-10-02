@@ -5947,7 +5947,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.860'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.861'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -12705,8 +12705,26 @@ function buildFullBackupPayload() {
     treatmentDefs: localStorage.getItem('mh_treatment_defs'),
     treatmentLog: localStorage.getItem('mh_treatment_log'),
     labResults: localStorage.getItem('mh_lab_results'),
+    // Everything else the person chose (name, age, height, sex, condition, targets, units, theme,
+    // AI provider, report profiles, reminders...). These were never in the backup, so a restore
+    // brought back the food history but left the app with no profile, targets or condition.
+    settings: _collectBackupSettings(),
     exportedAt: new Date().toISOString(),
   };
+}
+
+const _BACKUP_SETTINGS_SKIP = /(^mh_(combined_csv|error_log|rollover_debug|last_full_backup|debug|firstlog_nudge|notif_(eod|carb|sent)|last_export_nudge|server_|cache|temp))|key|token|secret|password/i;
+function _collectBackupSettings() {
+  const out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith('mh_') || _BACKUP_SETTINGS_SKIP.test(k)) continue;
+      const v = localStorage.getItem(k);
+      if (v != null && v.length <= 200000) out[k] = v;
+    }
+  } catch (e) {}
+  return out;
 }
 
 // Posts the full backup to the local server's /save-full-backup endpoint
@@ -19203,6 +19221,11 @@ async function executeRestoreFromBackup(dateStr) {
     if (backup.treatmentDefs != null) localStorage.setItem('mh_treatment_defs', backup.treatmentDefs);
     if (backup.treatmentLog != null) localStorage.setItem('mh_treatment_log', backup.treatmentLog);
     if (backup.labResults != null) localStorage.setItem('mh_lab_results', backup.labResults);
+    if (backup.settings && typeof backup.settings === 'object') {
+      Object.entries(backup.settings).forEach(([k, v]) => {
+        if (k.startsWith('mh_') && !_BACKUP_SETTINGS_SKIP.test(k) && typeof v === 'string') localStorage.setItem(k, v);
+      });
+    }
     saveState();
 
     if (modal) modal.remove();
@@ -29680,7 +29703,24 @@ function formatMissedDateInput(el) {
   el.value = v.slice(0,8);
 }
 
+// A missed-day date must be a real calendar date, in the past (today has its own live log).
+// Returns '' when fine, otherwise the reason. Format-only checks used to let 31/02/26, future
+// dates and today through; today's date then ended up in history alongside the live log.
+function _missedDateProblem(dateStr) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(String(dateStr || '').trim());
+  if (!m) return 'Enter date as DD/MM/YY';
+  const d = +m[1], mo = +m[2], y = 2000 + +m[3];
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return `${dateStr} isn't a real date`;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (dt.getTime() > today.getTime()) return "That date is in the future";
+  if (dt.getTime() === today.getTime()) return "That's today - log it from the Log tab instead";
+  return '';
+}
+
 function selectMissedDate(dateStr) {
+  const _prob = _missedDateProblem(dateStr);
+  if (_prob) { showToast(_prob); return; }
   _missedDayConvDate = dateStr;
   const bubble = document.getElementById('missedDayConvBubble');
   if (bubble) bubble.remove();
@@ -29690,9 +29730,8 @@ function selectMissedDate(dateStr) {
 
 function selectMissedDateCustom() {
   const val = document.getElementById('missedDateCustom')?.value.trim();
-  if (!val || !/^\d{2}\/\d{2}\/\d{2}$/.test(val)) {
-    showToast('Enter date as DD/MM/YY'); return;
-  }
+  const _prob = _missedDateProblem(val);
+  if (_prob) { showToast(_prob); return; }
   selectMissedDate(val);
 }
 
@@ -30169,9 +30208,8 @@ Respond ONLY with a JSON object (no markdown):
 
 function saveMissedDay() {
   const dateVal = document.getElementById('missedDayDate').value.trim();
-  if (!dateVal || !/^\d{2}\/\d{2}\/\d{2}$/.test(dateVal)) {
-    showToast('Enter date as DD/MM/YY'); return;
-  }
+  const _dateProb = _missedDateProblem(dateVal);
+  if (_dateProb) { showToast(_dateProb); return; }
   const notes = document.getElementById('missedNotes').value.trim() || 'missed day entry';
 
   let kcal, protein, carbs, fat, polyols, fibre;

@@ -963,6 +963,8 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p22_recipes.py` — recipes: build with the real builder, survive a browser wipe via the server CSV (steps, fibre, polyols), log a serving with honest amounts.
 - `p23_symptoms_strength_history.py` — symptoms into history at rollover, treatments, routine workout through to the server and back, History screen.
 - `p24_clock_changes.py` — UK clock changes and the 00:00-01:00 BST window.
+- `p25_backup_restore.py` — full backup incl. settings, wipe and restore, same-day empty-overwrite guard.
+- `p26_more_screens.py` — missed day, labs, Insights, chat logging, demo mode, carer.html.
 
 **Where device setup lives:** `data/devices.json` (custom/retired/patterns), `data/pipeline_prefs.json` (precedence), `data/extractors/*.py` (user extractors). All three are in the backup rotation (`data/backup/`, 7 days).
 - p03 offline chart check across all 11 demo profiles + `/lib/` route safety
