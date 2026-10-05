@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.870 — Logging No Longer Crashes When The AI Sends Numbers As Text
+
+Pete, 5 Oct evening, logging "Duck, beef, beef slices, broccoli, carrots": "Something broke processing that response: after.toFixed is not a function." The AI had replied fine, but one or more numbers came back as text (e.g. "72", "12g", "<1") rather than numbers. Text in the totals turns addition into joining ("0" + "650" = "0650"), and the preview then crashed. Reproduced exactly, then fixed: every nutrition number from the AI is now converted to a real number before anything uses it ("12g" -> 12, "<1" -> 0.5, "trace"/blank -> 0). Test: p33.
+
 ## v3.10.869 — Portion Guesses Are Now Visible Per AI (And Work For Whole Meals)
 
 Pete pasted a whole-meal check (omelette, poached egg, halloumi, mushrooms) that showed no portion information. The v3.10.864 change was in, but it only showed portions in a summary line at the bottom, and its comparison used just the first weight in the list (200g), which is wrong for a multi-item meal. Now: each AI's row shows "its own portion guess: ~Xg (kcal)" or says it gave none; for several foods the AIs are asked for the combined weight and it is compared against the sum of all stated weights (480g here). Test: p29 now runs a four-item meal.

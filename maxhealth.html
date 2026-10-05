@@ -5974,7 +5974,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.869'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.870'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19639,9 +19639,27 @@ function applyLibraryMatches(foods) {
 }
 
 // ─── MEAL PREVIEW ────────────────────────────────────────
+// AIs sometimes return numbers as text ("72", "12g", "<1", "trace"). A string in the
+// totals turns a sum into text concatenation and crashes the preview ("after.toFixed is
+// not a function", 5 Oct). Coerce every numeric field to a real number first.
+const MH_FOOD_NUM_FIELDS = ['kcal', 'protein', 'fat', 'carbs', 'fibre', 'polyols', 'sugar', 'sodium', 'salt', 'satfat'];
+function mhNum(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  if (typeof v !== 'string') return 0;
+  const m = v.replace(',', '.').match(/(\d+(?:\.\d+)?)/);
+  if (!m) return 0;                       // "trace", "n/a", ""
+  const n = parseFloat(m[1]);
+  return /^\s*[<~]/.test(v) && /^\s*</.test(v) ? n / 2 : n;   // "<1" -> 0.5
+}
+function mhNormaliseFoodNumbers(f) {
+  if (!f || typeof f !== 'object') return f;
+  MH_FOOD_NUM_FIELDS.forEach(k => { if (f[k] !== undefined && f[k] !== null && typeof f[k] !== 'number') f[k] = mhNum(f[k]); });
+  return f;
+}
 function showMealPreview(foods, originalText, aiMessage) {
   const existing = document.getElementById('mealPreviewBubble');
   if (existing) existing.remove();
+  foods = (foods || []).map(f => mhNormaliseFoodNumbers({...f}));
 
   // Deduplicate: merge only exact name matches or direct singular/plural pairs
   // e.g. "mushroom" + "mushrooms" → merge. But "onion" + "onions" → merge only if both present.
