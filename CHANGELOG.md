@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.869 — Portion Guesses Are Now Visible Per AI (And Work For Whole Meals)
+
+Pete pasted a whole-meal check (omelette, poached egg, halloumi, mushrooms) that showed no portion information. The v3.10.864 change was in, but it only showed portions in a summary line at the bottom, and its comparison used just the first weight in the list (200g), which is wrong for a multi-item meal. Now: each AI's row shows "its own portion guess: ~Xg (kcal)" or says it gave none; for several foods the AIs are asked for the combined weight and it is compared against the sum of all stated weights (480g here). Test: p29 now runs a four-item meal.
+
 ## v3.10.868 — GBM Reports Can Now Actually Be Hidden
 
 Pete: the GBM cards weren't hiding. The two GBM-only reports on Insights (GBM Monthly Summary, GBM Research Digest) have the 👁 hide button, but a routine that shows them for GBM users ran after every render and forced them back on, undoing the hide. It now respects your hide choice (non-GBM users still never see them). Also re-checked right after each hide/show tap. Test: p32 (fails without the fix, passes with it).

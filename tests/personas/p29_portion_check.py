@@ -31,6 +31,11 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'PORTION_G' not in (bodies[0] if bodies else ''): f.add('BUG', 'prompt does not ask for an independent portion')
     if 'Portion size is the shaky part' not in r: f.add('BUG', 'portion disagreement not flagged: ' + r[:200])
     if '~450g' not in r: f.add('BUG', 'per-provider portion not shown')
+    # whole multi-item meal through runMultiAICheck: portions shown per AI, compared against the SUM of stated weights
+    page.evaluate("window._pendingMealFoods=[{name:'omelette',amount:'200g',kcal:500,protein:30,fat:40,carbs:3},{name:'poached egg',amount:'100g',kcal:150,protein:12,fat:10,carbs:1},{name:'halloumi',amount:'80g',kcal:260,protein:18,fat:20,carbs:1},{name:'mushrooms',amount:'100g',kcal:90,protein:3,fat:7,carbs:3}]; runMultiAICheck()"); page.wait_for_timeout(1200)
+    bub = page.evaluate("[...document.querySelectorAll('.chat-bubble')].map(b=>b.innerText).join('\\n')")
+    if 'its own portion guess' not in bub: f.add('BUG', 'portion not shown per AI in whole-meal check: ' + bub[-300:])
+    if 'the logged amount is 480g' not in bub: f.add('BUG', 'whole meal not compared to 480g total: ' + bub[-300:])
     page.evaluate("document.body.insertAdjacentHTML('beforeend','<div id=sp></div>');renderSavedPromptPills('sp','quickPrompt')")
     box = page.evaluate("(()=>{const e=document.querySelector('#sp .quick-btn').getBoundingClientRect();const p=document.getElementById('sp').getBoundingClientRect();return [e.left-p.left,p.right-e.right]})()")
     if abs(box[0]-box[1]) > 2: f.add('BUG', f'Browse saved prompts not centred {box}')
