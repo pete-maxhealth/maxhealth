@@ -2,6 +2,17 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.866 — Local Weather: Water And Exercise Tips, With Your Override
+
+Pete: environmental factors for exercise: a quick look at location and a reliable weather source, which can be overridden because forecasts are often wrong, affecting water intake and exercise difficulty.
+- New card above Water on Today: "Add local weather". Pick a place by typing a town (free Open-Meteo geocoding) or "Use my location". Only the rounded coordinates leave the phone, and only to Open-Meteo (free, no account or key).
+- Shows now / high / feels-like max / rain chance / UV, with exercise tips: very hot (35°+), hot (30°+), warm, freezing, cold, wet, high UV. These are rule-of-thumb guidance, not measured.
+- **Water target rises on hot days** on top of the exercise allowance: +250ml from 25°, +500ml from 30°, +750ml from 35° (feels-like high). Shown as "+500ml heat".
+- **Your override wins:** "Not right? Adjust" lets you set what it actually feels like today and dry/wet; it applies for that day only and "Back to forecast" undoes it. The water target and tips follow your figure.
+- Offline: the last forecast for today is kept and used; with none, the card says so and nothing changes. Location and cache are included in backups.
+- Not yet wired: exercise "difficulty" scoring in logged workouts and the AI brief reading the weather. Candidates for next.
+- Test: p31.
+
 ## v3.10.865 — The Server Now Keeps Its Own Scheduler Alive (Why The App Kept Dropping Offline)
 
 Pete's phone logs (5 Oct): `pgrep crond` returned nothing, and the auto-update log stops dead on 2 Oct 14:05. **crond had silently died.** crond runs the watchdog that restarts this server, so when Android later killed the server nothing brought it back: "Site cannot be reached", and the old May screen was whatever else the home-screen icon could open. (The watchdog log also shows the server being found down about hourly for days, so Android is killing it regularly.)

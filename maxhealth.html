@@ -2661,6 +2661,8 @@
       </div>
     </div>
 
+    <div id="mhWxCard"></div>
+
     <div class="water-card" id="dashSection-water">
       <div class="water-header">
         <div class="water-title">💧 Water</div>
@@ -5972,7 +5974,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.865'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.866'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -12437,7 +12439,7 @@ function _addWaterAndCelebrate(ml, toastPrefix) {
   updateDashboard();
   const baseTarget = parseInt(localStorage.getItem('mh_target_water') || '2000') || 2000;
   const actHrs = getActivities().filter(a=>a.enabled&&a.duration).reduce((s,a)=>s+(parseFloat(a.duration)||0)/60,0);
-  const target = baseTarget + Math.round(actHrs * 500);
+  const target = baseTarget + Math.round(actHrs * 500) + ((typeof mhWeatherWaterExtra === 'function') ? mhWeatherWaterExtra().ml : 0);
   const total = state.waterToday;
   showToast(toastPrefix);
   if (total >= target) {
@@ -23165,7 +23167,8 @@ function updateDashboard(skipActivityRender) {
   const waterTarget = parseInt(localStorage.getItem('mh_target_water')) || 2000;
   const waterMl = state.waterToday || 0;
   const _actHrsW = getActivities().filter(a=>a.enabled && a.duration).reduce((s,a)=>s+(parseFloat(a.duration)||0)/60, 0);
-  const _adjWater = waterTarget + Math.round(_actHrsW * 500);
+  const _wxW = (typeof mhWeatherWaterExtra === 'function') ? mhWeatherWaterExtra() : {ml:0,reason:''};
+  const _adjWater = waterTarget + Math.round(_actHrsW * 500) + _wxW.ml;
   const waterPct = Math.min(100, Math.round(waterMl / _adjWater * 100));
   const waterAmountEl = document.getElementById('waterAmount');
   const waterBarEl = document.getElementById('waterBar');
@@ -23183,7 +23186,7 @@ function updateDashboard(skipActivityRender) {
       if (waterCardEl) waterCardEl.classList.remove('water-done');
     }
   }
-  if (waterTargetEl) waterTargetEl.textContent = _actHrsW > 0 ? `/ ${_adjWater}ml (+${Math.round(_actHrsW*500)}ml exercise)` : `/ ${waterTarget}ml`;
+  if (waterTargetEl) waterTargetEl.textContent = (_actHrsW > 0 || _wxW.ml) ? `/ ${_adjWater}ml (${[_actHrsW > 0 ? '+' + Math.round(_actHrsW*500) + 'ml exercise' : '', _wxW.ml ? '+' + _wxW.ml + 'ml heat' : ''].filter(Boolean).join(', ')})` : `/ ${waterTarget}ml`;
   if (remWaterEl) remWaterEl.textContent = `${waterMl}ml / ${_adjWater}ml`;
 
   // Fat tile and remaining
@@ -45502,5 +45505,128 @@ function dismissInsight() {
   else if (qGet().length) { setTimeout(verify, 1500); }   // saved entries exist: confirm the connection once on load
 })();
 </script>
+<!-- LOCAL WEATHER (v3.10.866): location + Open-Meteo forecast, user-overridable; adjusts water target and gives exercise tips -->
+<script>
+(function(){
+  const K_LOC='mh_wx_loc', K_CACHE='mh_wx_cache', K_OVR='mh_wx_override';
+  const J=(k)=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;}};
+  const W=(k,v)=>{try{if(v==null)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+  const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const today=()=>{try{return todayStr();}catch(e){return new Date().toISOString().slice(0,10);}};
+  const WET_CODES=[51,53,55,56,57,61,63,65,66,67,80,81,82,95,96,99];
+  const SNOW_CODES=[71,73,75,77,85,86];
+  const ICON=(c)=>c===0?'☀️':c<=2?'🌤':c===3?'☁️':(c>=45&&c<=48)?'🌫':SNOW_CODES.includes(c)?'🌨':c>=95?'⛈':WET_CODES.includes(c)?'🌧':'🌡';
+
+  // What the app should treat as today's conditions: forecast, with any same-day user override on top.
+  function current(){
+    const loc=J(K_LOC); if(!loc) return null;
+    const c=J(K_CACHE); const o=J(K_OVR);
+    const fresh=c && c.date===today() && c.lat===loc.lat && c.lon===loc.lon;
+    const ovr=(o && o.date===today())?o:null;
+    if(!fresh && !ovr) return {loc,stale:true,cache:c};
+    const feels = (ovr && ovr.feels!=null) ? ovr.feels : (fresh?c.feelsMax:null);
+    let wet = fresh ? (WET_CODES.includes(c.code) || (c.rainPct||0)>=60) : false;
+    if(ovr && ovr.wet==='dry') wet=false; if(ovr && ovr.wet==='wet') wet=true;
+    return {loc,stale:!fresh,fresh,cache:fresh?c:null,feels,wet,uv:fresh?c.uv:null,overridden:!!ovr,ovr};
+  }
+  // Water: rule of thumb, extra on hot days (on top of the exercise allowance).
+  window.mhWeatherWaterExtra=function(){
+    try{
+      const w=current(); if(!w||w.feels==null) return {ml:0,reason:''};
+      const f=w.feels; const ml=f>=35?750:f>=30?500:f>=25?250:0;
+      return {ml,reason:ml?`${w.overridden?'your ':''}${Math.round(f)}° day`:''};
+    }catch(e){return {ml:0,reason:''};}
+  };
+  function advice(w){
+    const out=[]; const f=w.feels;
+    if(f!=null){
+      if(f>=35) out.push('🥵 Very hot: keep outdoor exercise to early morning or go indoors, and drop the intensity or length by about a fifth. Heart rate runs higher in heat.');
+      else if(f>=30) out.push('☀️ Hot: do outdoor exercise early or late, take water with you, and ease the pace a notch.');
+      else if(f>=25) out.push('🌤 Warm: carry water and pick shade for walks.');
+      else if(f<=0) out.push('🧊 Freezing: watch for ice outdoors; warm up longer or choose an indoor session.');
+      else if(f<=5) out.push('🧥 Cold: layer up and warm up a little longer.');
+    }
+    if(w.wet) out.push('🌧 Wet: have an indoor option ready (strength, stairs, treadmill).');
+    if(w.uv!=null && w.uv>=7) out.push(`🧴 UV ${Math.round(w.uv)}: strong sun, so cover up or avoid midday.`);
+    return out;
+  }
+  function openSetup(){
+    const el=document.getElementById('mhWxCard'); if(!el) return;
+    el.innerHTML=`<div class="mhwx-box"><div style="font-size:13px;font-weight:600;margin-bottom:6px;">🌤 Local weather</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Used for water and exercise tips only. Only the rounded coordinates go to the free Open-Meteo weather service; nothing else leaves your phone.</div>
+      <button class="copy-btn" style="width:100%;padding:8px;font-size:12px;margin-bottom:8px;" onclick="mhWxUseGPS()">📍 Use my location</button>
+      <div style="display:flex;gap:6px;"><input id="mhWxCity" placeholder="or type a town / city" style="flex:1;min-width:0;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg2,transparent);color:var(--text);font-size:13px;" onkeydown="if(event.key==='Enter')mhWxSearch()"><button class="copy-btn" style="padding:8px 12px;font-size:12px;" onclick="mhWxSearch()">Search</button></div>
+      <div id="mhWxResults" style="margin-top:6px;"></div>
+      <div style="text-align:right;margin-top:6px;"><span onclick="mhWxRender()" style="font-size:11px;color:var(--text3);text-decoration:underline;cursor:pointer;">cancel</span></div></div>`;
+  }
+  window.mhWxOpenSetup=openSetup;
+  window.mhWxUseGPS=function(){
+    if(!navigator.geolocation){ showToast('This browser cannot share a location - search for your town instead'); return; }
+    showToast('Finding your location…');
+    navigator.geolocation.getCurrentPosition(p=>{
+      setLoc(Math.round(p.coords.latitude*100)/100, Math.round(p.coords.longitude*100)/100, 'Your location');
+    },()=>showToast('Location not shared - search for your town instead'),{timeout:10000,maximumAge:3600000});
+  };
+  window.mhWxSearch=async function(){
+    const q=(document.getElementById('mhWxCity')||{}).value||''; const box=document.getElementById('mhWxResults'); if(!q.trim()||!box) return;
+    box.innerHTML='<div style="font-size:11px;color:var(--text3);">Searching…</div>';
+    try{
+      const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?count=5&language=en&name='+encodeURIComponent(q.trim()),{signal:AbortSignal.timeout(8000)});
+      const d=await r.json(); const res=d.results||[];
+      if(!res.length){ box.innerHTML='<div style="font-size:11px;color:var(--yellow);">No match - try another spelling.</div>'; return; }
+      window._mhWxHits=res;
+      box.innerHTML=res.map((x,i)=>`<div class="quick-btn" style="display:block;margin:4px 0;" onclick="mhWxPick(${i})">${esc(x.name)}${x.admin1?', '+esc(x.admin1):''}, ${esc(x.country||'')}</div>`).join('');
+    }catch(e){ box.innerHTML='<div style="font-size:11px;color:var(--yellow);">Needs internet to search. Try again when you are back online.</div>'; }
+  };
+  window.mhWxPick=function(i){ const x=(window._mhWxHits||[])[i]; if(x) setLoc(Math.round(x.latitude*100)/100, Math.round(x.longitude*100)/100, x.name); };
+  function setLoc(lat,lon,name){ W(K_LOC,{lat,lon,name}); W(K_CACHE,null); W(K_OVR,null); mhWxRefresh(true); }
+  window.mhWxRemove=function(){ W(K_LOC,null); W(K_CACHE,null); W(K_OVR,null); mhWxRender(); try{updateDashboard(true);}catch(e){} };
+  window.mhWxRefresh=async function(force){
+    const loc=J(K_LOC); if(!loc){ mhWxRender(); return; }
+    const c=J(K_CACHE);
+    if(!force && c && c.date===today() && c.lat===loc.lat && c.lon===loc.lon && Date.now()-c.at<3600e3){ mhWxRender(); return; }
+    try{
+      const u='https://api.open-meteo.com/v1/forecast?latitude='+loc.lat+'&longitude='+loc.lon+'&current=temperature_2m,apparent_temperature,weather_code&daily=apparent_temperature_max,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&timezone=auto&forecast_days=1';
+      const r=await fetch(u,{signal:AbortSignal.timeout(8000)}); const d=await r.json();
+      if(!d||!d.daily||!d.current) throw new Error('bad');
+      W(K_CACHE,{lat:loc.lat,lon:loc.lon,at:Date.now(),date:today(),temp:d.current.temperature_2m,feelsNow:d.current.apparent_temperature,code:d.current.weather_code,
+        feelsMax:d.daily.apparent_temperature_max[0],hi:d.daily.temperature_2m_max[0],lo:d.daily.temperature_2m_min[0],uv:d.daily.uv_index_max[0],rainPct:d.daily.precipitation_probability_max[0]});
+    }catch(e){ /* offline or service down: keep whatever is cached */ }
+    mhWxRender(); try{updateDashboard(true);}catch(e){}
+  };
+  window.mhWxOpenOverride=function(){
+    const el=document.getElementById('mhWxCard'); const w=current(); if(!el||!w) return;
+    const o=w.ovr||{}; const shown=(o.feels!=null)?o.feels:(w.feels!=null?Math.round(w.feels):'');
+    el.innerHTML=`<div class="mhwx-box"><div style="font-size:13px;font-weight:600;margin-bottom:6px;">Forecast not right? Tell me what it is really like</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;"><label>Feels like today (°C)</label><input id="mhWxFeels" type="number" inputmode="decimal" value="${esc(shown)}" style="width:80px;padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg2,transparent);color:var(--text);font-size:13px;"></div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;"><label>Rain</label><select id="mhWxWet" style="padding:6px;border-radius:8px;border:1px solid var(--border);background:var(--bg2,transparent);color:var(--text);font-size:13px;"><option value="">As forecast</option><option value="dry"${o.wet==='dry'?' selected':''}>Dry</option><option value="wet"${o.wet==='wet'?' selected':''}>Wet</option></select></div>
+      <div style="display:flex;gap:8px;"><button class="copy-btn" style="flex:1;padding:8px;font-size:12px;" onclick="mhWxSaveOverride()">Save for today</button><button class="copy-btn" style="flex:1;padding:8px;font-size:12px;" onclick="mhWxClearOverride()">Back to forecast</button></div></div>`;
+  };
+  window.mhWxSaveOverride=function(){
+    const v=parseFloat((document.getElementById('mhWxFeels')||{}).value); const wet=(document.getElementById('mhWxWet')||{}).value||null;
+    W(K_OVR,{date:today(),feels:isNaN(v)?null:v,wet}); mhWxRender(); try{updateDashboard(true);}catch(e){}
+  };
+  window.mhWxClearOverride=function(){ W(K_OVR,null); mhWxRender(); try{updateDashboard(true);}catch(e){} };
+  window.mhWxRender=function(){
+    const el=document.getElementById('mhWxCard'); if(!el) return;
+    const w=current();
+    if(!w){ el.innerHTML='<div class="mhwx-add" onclick="mhWxOpenSetup()" style="font-size:12px;color:var(--text3);border:1px dashed var(--border);border-radius:10px;padding:8px 12px;margin:8px 0;cursor:pointer;text-align:center;">🌤 Add local weather (water &amp; exercise tips)</div>'; return; }
+    const c=w.cache; let head;
+    if(c){ head=`${ICON(c.code)} <strong>${esc(w.loc.name||'Local')}</strong> · ${Math.round(c.temp)}° now · high ${Math.round(c.hi)}° · feels up to ${Math.round(c.feelsMax)}° · rain ${Math.round(c.rainPct||0)}%${c.uv!=null?' · UV '+Math.round(c.uv):''}`; }
+    else head=`🌤 <strong>${esc(w.loc.name||'Local')}</strong> · no forecast for today yet (needs internet)`;
+    const ovr=w.overridden?`<div style="font-size:11px;color:var(--accent);margin-top:2px;">Using your adjustment${w.ovr.feels!=null?': feels like '+Math.round(w.ovr.feels)+'°':''}${w.ovr.wet?', '+w.ovr.wet:''} instead of the forecast.</div>`:'';
+    const tips=(w.feels!=null||w.wet)?advice(w).map(t=>`<div style="font-size:12px;margin-top:4px;">${t}</div>`).join(''):'';
+    const extra=window.mhWeatherWaterExtra().ml;
+    const wl=extra?`<div style="font-size:12px;margin-top:4px;">💧 Water target +${extra}ml for the heat (rule of thumb).</div>`:'';
+    el.innerHTML=`<div class="mhwx-box"><div style="font-size:12px;">${head}</div>${ovr}${tips}${wl}
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text3);"><span onclick="mhWxOpenOverride()" style="text-decoration:underline;cursor:pointer;">Not right? Adjust</span><span onclick="mhWxRefresh(true)" style="text-decoration:underline;cursor:pointer;">Refresh</span><span onclick="mhWxOpenSetup()" style="text-decoration:underline;cursor:pointer;">Change place</span><span onclick="mhWxRemove()" style="text-decoration:underline;cursor:pointer;">Remove</span></div></div>`;
+  };
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && J(K_LOC)) mhWxRefresh(false); });
+  window.addEventListener('load',()=>{ mhWxRender(); if(J(K_LOC)) setTimeout(()=>mhWxRefresh(false),1500); });
+})();
+</script>
+<style>
+.mhwx-box{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--card,transparent);}
+</style>
 </body>
 </html>
