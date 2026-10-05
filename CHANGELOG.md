@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.868 — GBM Reports Can Now Actually Be Hidden
+
+Pete: the GBM cards weren't hiding. The two GBM-only reports on Insights (GBM Monthly Summary, GBM Research Digest) have the 👁 hide button, but a routine that shows them for GBM users ran after every render and forced them back on, undoing the hide. It now respects your hide choice (non-GBM users still never see them). Also re-checked right after each hide/show tap. Test: p32 (fails without the fix, passes with it).
+
 ## v3.10.867 — Weather Card Suggests Today's Exercise Effort
 
 The weather card now says "Suggested effort today": normal, ease about 5% (25°+), 10-15% (30°+), 20% or go indoors (35°+), indoors or ease 10% (-5° or colder), always following your override. Rule of thumb, not measured. Test: p31.

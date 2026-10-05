@@ -5974,7 +5974,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.867'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.868'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7843,6 +7843,9 @@ function toggleGenericSectionHidden(scopeKey, key) {
   if (idx > -1) hidden.splice(idx, 1); else hidden.push(key);
   saveGenericHidden(scopeKey, hidden);
   applyGenericOrder(scopeKey);
+  // The GBM reports are also gated by condition; make sure that gate re-reads the
+  // hide list even if applyGenericOrder returned early.
+  if (scopeKey === 'reports' && typeof updateGBMSectionVisibility === 'function') updateGBMSectionVisibility();
 }
 
 function genericSectionLabel(scopeKey, key) {
@@ -37962,11 +37965,18 @@ function setReportRange(days, btn) {
 // calculated stats, unless the condition is actually set to gbm.
 function updateGBMSectionVisibility() {
   const isGBM = (localStorage.getItem('mh_condition') || 'general') === 'gbm';
+  // 05/10/26 - a GBM user's own "hide this report" choice (the 👁 button) was being
+  // overwritten here: this ran after every render and forced display '' on both
+  // sections, so the GBM Monthly Summary and Research Digest never stayed hidden.
+  // Condition still wins for non-GBM; for GBM, the saved hide choice is respected.
+  let userHidden = [];
+  try { userHidden = getGenericHidden('reports'); } catch (e) {}
   ['rpt-gbm', 'rpt-research'].forEach(prefix => {
     const title = document.getElementById(`${prefix}-title`);
     const wrap = document.getElementById(`${prefix}-wrap`);
-    if (title) title.style.display = isGBM ? '' : 'none';
-    if (wrap) wrap.style.display = isGBM ? '' : 'none';
+    const show = isGBM && !userHidden.includes(prefix);
+    if (title) title.style.display = show ? '' : 'none';
+    if (wrap) wrap.style.display = show ? '' : 'none';
   });
   // GBM patient-guide links elsewhere (dashboard guides row, welcome box) - GBM only
   ['dashGbmGuideLink', 'welcomeGbmLink'].forEach(id => {
