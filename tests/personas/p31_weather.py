@@ -39,6 +39,7 @@ with fresh_server() as root, sync_playwright() as pw:
     t = txt()
     if 'Izmir' not in t or 'high 31' not in t: f.add('BUG', 'forecast not shown: ' + t[:200])
     if 'Hot' not in t and 'hot' not in t: f.add('BUG', 'no hot-day exercise tip: ' + t[:300])
+    if 'Ease about 10-15%' not in t: f.add('BUG', 'no effort suggestion for 33 deg: ' + t[:300])
     if 'UV 8' not in t: f.add('BUG', 'UV missing')
     if '+500ml heat' not in wt(): f.add('BUG', 'water target not raised for 33° day: ' + wt())
     # override to a cool day wins

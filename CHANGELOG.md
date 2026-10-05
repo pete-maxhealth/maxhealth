@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.867 — Weather Card Suggests Today's Exercise Effort
+
+The weather card now says "Suggested effort today": normal, ease about 5% (25°+), 10-15% (30°+), 20% or go indoors (35°+), indoors or ease 10% (-5° or colder), always following your override. Rule of thumb, not measured. Test: p31.
+
 ## v3.10.866 — Local Weather: Water And Exercise Tips, With Your Override
 
 Pete: environmental factors for exercise: a quick look at location and a reliable weather source, which can be overridden because forecasts are often wrong, affecting water intake and exercise difficulty.
