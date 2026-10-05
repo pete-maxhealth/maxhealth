@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.864 — The 3-AI Check Now Judges Portion Size Independently
+
+Pete: "Why doesn't each AI try to work out the portion sizes as well as the whole dish? What if the original AI (you) have not guessed the portion sizes correctly in the first place?" Fair: the checkers were handed my guessed amount ("300g") as fact and only asked for macros, so a bad portion guess was simply confirmed three times.
+- Each of Claude, Gemini and ChatGPT is now also given your original words and asked for its **own portion estimate** (grams) and the calories for that portion, alongside the macros for the logged amount. Applies to the meal check, the 3-AI estimate and all the edit forms that use it.
+- The card shows each AI's portion guess and warns when they disagree by 25%+ (or two of them are well off the logged amount): "Portion size is the shaky part... weigh it if you can". Averaging still uses the logged amount, so nothing changes silently.
+- "Browse saved prompts" on the Log tab is now centred.
+- Test: p29.
+
 ## v3.10.841 — Sleep Conflict Card No Longer Offers To "Add" Two Devices' Sleep Together
 
 Pete: "Looks like the sleeping health connect issue is still apparent" — Trends showed 13h32m total sleep at 11:15am. Screenshots of both apps settled it: RingConn and Zepp each said he'd been asleep **5h17m**, but the raw Health Connect sessions (RingConn 01:23–06:13, RingConn nap 08:03–09:11, Zepp 01:56–09:16) add up to 13h18m — spans include awake time, and two devices were recording the same night.
