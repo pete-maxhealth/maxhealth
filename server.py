@@ -469,6 +469,8 @@ def ensure_scheduled_jobs(force=False):
             ('update_health.py', '*/30 * * * * cd %s && python3 update_health.py >> %s 2>&1' % (APP_DIR, os.path.join(LOGS_DIR, 'cron_pipeline.log'))),
             ('mh_autoupdate', '5,35 * * * * ~/mh_autoupdate.sh'),
         ]
+        if os.path.exists(os.path.join(home, 'mh_watchdog.sh')):
+            want.append(('mh_watchdog', '* * * * * ~/mh_watchdog.sh'))
         for marker, line in want:
             if not any(marker in l and not l.lstrip().startswith('#') for l in lines):
                 lines.append(line); added.append(marker)
@@ -480,6 +482,41 @@ def ensure_scheduled_jobs(force=False):
     except Exception as e:
         print('  [setup] could not check scheduled jobs:', e)
     return added
+
+
+# ── crond keep-alive (05/10/26) ───────────────────────────────────────────────
+# Pete's phone: crond had silently died (auto-update log stopped dead on 2 Oct), so the
+# watchdog that restarts this server and the update/merge jobs never ran again - the
+# server then died and the app showed 'Site cannot be reached'. While this server is
+# alive it now checks every minute that crond is running and restarts it if not, and
+# re-takes the wake-lock once at startup. Termux only.
+def crond_check_once():
+    """Returns 'running', 'started', or 'skipped'."""
+    pg = shutil.which('pgrep'); cd = shutil.which('crond')
+    if not (pg and cd):
+        return 'skipped'
+    try:
+        r = subprocess.run([pg, '-x', 'crond'], capture_output=True, text=True, timeout=5)
+        if r.stdout.strip():
+            return 'running'
+        subprocess.Popen([cd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            with open(os.path.join(os.path.expanduser('~'), 'mh_watchdog.log'), 'a') as f:
+                f.write('%s: crond was not running - started by server\n' % time.strftime('%a %b %d %H:%M:%S %Z %Y'))
+        except Exception:
+            pass
+        return 'started'
+    except Exception:
+        return 'skipped'
+
+def _crond_loop():
+    wl = shutil.which('termux-wake-lock')
+    if wl:
+        try: subprocess.Popen([wl], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception: pass
+    while True:
+        crond_check_once()
+        time.sleep(60)
 
 
 # ── Health Connect auto-merge (01/10/26) ──────────────────────────────────────
@@ -1872,6 +1909,8 @@ def main():
     server = http.server.HTTPServer(('127.0.0.1', PORT), MaxHealthHandler)
     threading.Thread(target=_hc_watch_loop, daemon=True).start()
     ensure_scheduled_jobs()
+    if '/com.termux/' in os.path.expanduser('~') or os.environ.get('MH_FORCE_CROND_CHECK'):
+        threading.Thread(target=_crond_loop, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
