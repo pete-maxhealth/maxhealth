@@ -5997,7 +5997,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.873'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.874'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -15009,14 +15009,60 @@ async function openLiveBarcodeScanner() {
   }
 }
 
+// Only genuine product barcodes (EAN/UPC digits) are worth an Open Food Facts lookup.
+// A QR code (an Instagram link on the pack, a website) or a stray Code 128 is not a
+// product, and looking one up just ends in a confusing "not found" message.
+function mhProductCode(list) {
+  for (const b of (list || [])) {
+    const v = String(b && b.rawValue || '').replace(/\s+/g, '');
+    if (/^\d{8,14}$/.test(v)) return v;
+  }
+  return null;
+}
+
+// Keeps a small copy of what the camera saw, so that if the barcode is not in the
+// database the label itself can be handed to the normal photo AI instead of dead-ending.
+let _lastBarcodeImage = null;
+function mhSnapBarcodeImage(src, w, h) {
+  try {
+    const maxDim = 1600; let cw = w, ch = h;
+    if (cw > maxDim || ch > maxDim) { if (cw > ch) { ch = Math.round(ch * maxDim / cw); cw = maxDim; } else { cw = Math.round(cw * maxDim / ch); ch = maxDim; } }
+    const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    c.getContext('2d').drawImage(src, 0, 0, cw, ch);
+    _lastBarcodeImage = c.toDataURL('image/jpeg', 0.85);
+  } catch(e) { _lastBarcodeImage = null; }
+}
+
+// Adds a "read the label with AI" button to a not-found bubble.
+function mhOfferLabelRead(bubble, text) {
+  if (!bubble) return;
+  settleBubble(bubble, text);
+  if (!_lastBarcodeImage) return;
+  const btn = document.createElement('button');
+  btn.textContent = '📷 Read the label with AI instead';
+  btn.style.cssText = 'display:block;margin-top:8px;padding:8px 12px;border-radius:14px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;';
+  btn.onclick = function() {
+    _pendingPhotoBase64 = _lastBarcodeImage.split(',')[1];
+    _pendingPhotoMime = 'image/jpeg';
+    document.getElementById('photoPreview').src = _lastBarcodeImage;
+    document.getElementById('photoPreviewWrap').style.display = 'block';
+    document.getElementById('photoBtn').style.borderColor = 'var(--green)';
+    const inp = document.getElementById('chatInput');
+    if (inp) { inp.placeholder = 'Name and amount if known (optional)'; inp.focus(); }
+    btn.remove();
+  };
+  bubble.appendChild(btn);
+}
+
 async function _runLiveBarcodeDetectionLoop(video) {
   const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
   const scanFrame = async () => {
     if (!_liveScannerActive) return; // stopped — don't schedule another frame
     try {
       const barcodes = await detector.detect(video);
-      if (barcodes.length > 0) {
-        const barcode = barcodes[0].rawValue;
+      const barcode = mhProductCode(barcodes);
+      if (barcode) {
+        mhSnapBarcodeImage(video, video.videoWidth || 640, video.videoHeight || 480);
         closeLiveBarcodeScanner();
         const thinkingMsg = addBubble(`🔍 Found barcode: ${barcode} — looking up…`, 'system', 'thinking');
         await lookupBarcode(barcode, thinkingMsg);
@@ -15071,6 +15117,7 @@ async function handleBarcodeCapture(input) {
   if (!file) return;
   input.value = '';
 
+  _lastBarcodeImage = null;
   // Show scanning indicator
   const thinkingMsg = addBubble('🔍 Scanning barcode…', 'system', 'thinking');
 
@@ -15080,8 +15127,9 @@ async function handleBarcodeCapture(input) {
       const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'] });
       const img = await createImageBitmap(file);
       const barcodes = await detector.detect(img);
-      if (barcodes.length > 0) {
-        const barcode = barcodes[0].rawValue;
+      mhSnapBarcodeImage(img, img.width, img.height);
+      const barcode = mhProductCode(barcodes);
+      if (barcode) {
         thinkingMsg.textContent = `🔍 Found barcode: ${barcode} — looking up…`;
         await lookupBarcode(barcode, thinkingMsg);
         return;
@@ -15108,7 +15156,7 @@ async function lookupBarcode(barcode, statusBubble) {
     const data = await res.json();
 
     if (data.status !== 1 || !data.product) {
-      settleBubble(statusBubble, `⚠ Barcode ${barcode} not found in database — try searching by name.`);
+      mhOfferLabelRead(statusBubble, `⚠ Barcode ${barcode} not found in database — try searching by name, or let the AI read the label.`);
       return;
     }
 
@@ -15130,7 +15178,7 @@ async function lookupBarcode(barcode, statusBubble) {
     const brand   = p.brands ? p.brands.split(',')[0].trim() : '';
 
     if (!kcal) {
-      settleBubble(statusBubble, `⚠ Found "${name}" but nutrition data is incomplete — try searching by name.`);
+      mhOfferLabelRead(statusBubble, `⚠ Found "${name}" but nutrition data is incomplete — try searching by name, or let the AI read the label.`);
       return;
     }
 
@@ -15168,6 +15216,7 @@ async function lookupBarcode(barcode, statusBubble) {
 
 async function lookupBarcodeViaAI(base64, statusBubble) {
   // Ask AI to read the barcode number from the image, then look it up
+  if (!_lastBarcodeImage) _lastBarcodeImage = 'data:image/jpeg;base64,' + base64;
   try {
     const result = await callHealthAI(
       'Read the barcode number from this image. Reply with ONLY the barcode digits, nothing else. If you cannot read it, reply with "NONE".',
@@ -15179,7 +15228,7 @@ async function lookupBarcodeViaAI(base64, statusBubble) {
     }
     const barcode = result.text.trim().replace(/\D/g, '');
     if (!barcode || result.text.trim() === 'NONE' || barcode.length < 8) {
-      settleBubble(statusBubble, '⚠ Could not read barcode — try holding the camera closer and steadier, or search by name.');
+      mhOfferLabelRead(statusBubble, '⚠ Could not read a barcode — try holding the camera closer and steadier, search by name, or let the AI read the label.');
       return;
     }
     // Still waiting, not a final result — the 'thinking' pulse (if this

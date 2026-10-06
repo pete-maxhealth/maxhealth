@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.874 — Barcode Scan: QR Codes Ignored, Not-Found Offers To Read The Label
+
+Pete (6 Oct, screenshot of a Luvbiltong beef biltong pack): the scan reported "Barcode 5065015932000 not found" and then "Barcode https://www.instagram.com/luvbiltongsnacks/ not found". The scanner had locked onto the QR code printed on the pack and tried to look the web link up as if it were a product.
+- Only real product barcodes (8-14 digits, EAN/UPC) are now looked up. QR codes and other codes are ignored and the scanner keeps looking; a photo with only a QR code falls through to the AI reader.
+- When a barcode is not in Open Food Facts (or has no nutrition data), the message now carries a **"Read the label with AI instead"** button. It attaches the picture you just took to the meal box, so the normal photo AI reads the label (the 44g protein / 85g on that pack) rather than leaving you at a dead end.
+- Test: p38 (fails on the old code).
+
 ## v3.10.873 — Weather Card: Show / Hide / Reorder, Help Tip, And Documented Formulas
 
 Pete: help tip for which environmental factors affect the app; update the Formulas card?; the usual show/hide/reorder.
