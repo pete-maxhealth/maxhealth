@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.871 — Tapping A Notification Opens The App On The Right Screen
+
+Pete: reminders showed up on his phone, but tapping them should open the app where the notification was about. The service worker had no click handler at all, so a tap just opened or focused the app wherever it was. Now (sw.js v2.2): tapping closes the notification, focuses the open app and takes it to the screen the reminder belongs to, or, if the app was closed, opens it with `?tab=<screen>` and the page switches itself (and tidies the address). Supplement reminders now go to the Supplements screen (they went to the dashboard); carb alert and end-of-day go to Log; weekly summary goes to Reports. Test: p34 (fails with the old service worker, passes with the new).
+
+Also found while testing: a test run that gets killed can leave its server running on port 5757 and make later runs test stale code; clear leftovers by process id before re-running.
+
 ## v3.10.870 — Logging No Longer Crashes When The AI Sends Numbers As Text
 
 Pete, 5 Oct evening, logging "Duck, beef, beef slices, broccoli, carrots": "Something broke processing that response: after.toFixed is not a function." The AI had replied fine, but one or more numbers came back as text (e.g. "72", "12g", "<1") rather than numbers. Text in the totals turns addition into joining ("0" + "650" = "0650"), and the preview then crashed. Reproduced exactly, then fixed: every nutrition number from the AI is now converted to a real number before anything uses it ("12g" -> 12, "<1" -> 0.5, "trace"/blank -> 0). Test: p33.
