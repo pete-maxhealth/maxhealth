@@ -1,20 +1,61 @@
-// MaxedHealth Service Worker v2.2 - minimal, no caching, forces network-fresh fetch
-// v2.2: tapping a notification now opens/focuses the app on the screen the reminder was about.
-self.addEventListener('install', e => { self.skipWaiting(); });
+// MaxedHealth Service Worker v2.3
+// v2.2: tapping a notification opens/focuses the app on the screen the reminder was about.
+// v2.3: works with NO connection at all. Android Chrome will not even try the local server
+// (localhost:5757) when the phone has no network of any kind (airplane mode with WiFi and
+// mobile data off) and falls back to something stale it stored months ago. A service worker
+// answers before that happens, so it keeps the LAST GOOD copy of the app page and hands it
+// back only when the server cannot be reached. Whenever the server answers, the page always
+// comes fresh from it (network first, cache: 'no-store'); the saved copy is a fallback only.
+const SHELL_CACHE = 'mh-shell-v1';
+
+function shellKey(url) {
+  const u = new URL(url);
+  return u.origin + u.pathname; // ignore ?tab= and other query strings
+}
+function isAppPage(req) {
+  if (req.mode !== 'navigate') return false;
+  const p = new URL(req.url).pathname;
+  return p === '/' || p === '/maxhealth' || p === '/maxhealth.html' || p === '/maxhealth/maxhealth.html';
+}
+
+self.addEventListener('install', e => {
+  e.waitUntil((async () => {
+    // Save a copy straight away so the very first offline open already works.
+    try {
+      const r = await fetch(self.registration.scope, { cache: 'no-store' });
+      if (r && r.status === 200) (await caches.open(SHELL_CACHE)).put(shellKey(self.registration.scope), r.clone());
+    } catch (_) { /* offline at install time: nothing to save yet, not an error */ }
+    self.skipWaiting();
+  })());
+});
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL_CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 self.addEventListener('fetch', e => {
-  // { cache: 'no-store' } forces a genuine network round-trip every time,
-  // bypassing the browser's own HTTP cache (which otherwise can satisfy
-  // the request before this fetch handler ever runs, serving a stale
-  // maxhealth.html even though this service worker itself caches nothing).
-  e.respondWith(
-    fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(e.request))
-  );
+  if (e.request.method !== 'GET') return;
+  if (isAppPage(e.request)) {
+    e.respondWith((async () => {
+      try {
+        // { cache: 'no-store' } forces a genuine network round-trip every time, bypassing the
+        // browser's own HTTP cache, so a reachable server always wins over any saved copy.
+        const r = await fetch(e.request, { cache: 'no-store' });
+        if (r && r.status === 200 && !r.redirected) {
+          try { (await caches.open(SHELL_CACHE)).put(shellKey(e.request.url), r.clone()); } catch (_) {}
+        }
+        return r;
+      } catch (err) {
+        const c = await caches.open(SHELL_CACHE);
+        return (await c.match(shellKey(e.request.url))) ||
+               (await c.match(shellKey(self.registration.scope))) ||
+               Response.error();
+      }
+    })());
+    return;
+  }
+  e.respondWith(fetch(e.request, { cache: 'no-store' }));
 });
 
 // Tapping a notification: bring the app forward and go to the screen it was sent for

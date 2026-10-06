@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.878 — The App Opens With No Connection At All (service worker v2.3)
+
+Pete (6 Oct, 20:24): with WiFi OR mobile data on, the app opens normally; with BOTH off (or airplane mode with WiFi off) it shows the old May screen instead. `/last-hits` proved Chrome never contacted the server in that state, so Chrome was showing something stale it had stored. Reproduced in the test browser: with no connection at all the old code fails to open the page (net::ERR_INTERNET_DISCONNECTED).
+- **sw.js v2.3:** the service worker now keeps the last good copy of the app page and serves it only when the server cannot be reached. Whenever the server answers, the page always comes fresh from it (network first, no HTTP cache), so nothing can be out of date while you have a connection. A copy is saved when the worker installs, so the first offline open already works. Other requests (data, sync) still go to the network and fail normally offline, as before.
+- **maxhealth.html:** the page used to delete ALL service workers on every load and re-register one. That would remove the worker holding the offline copy, so it now removes only workers that are not its own `sw.js`.
+- Your saved data is untouched (same address, same storage); offline the app shows what is saved on the phone, and the offline banner/wrapper behaves as before.
+- Test: p43 (online fresh, offline serves the last good page, `?tab=` links work offline, one registration after reload, fresh again once back online). It fails on the old code with ERR_INTERNET_DISCONNECTED.
+
 ## Server — Clear-Site-Data Header Withdrawn (no app version change)
 
 The `Clear-Site-Data: "cache"` header added earlier on 6 Oct (to drop Chrome's stale cached copy) is removed again: with it, the app sat on its MH splash screen (20:16, WiFi and mobile data on). Chrome holds the page response until a clear finishes. p42 now checks the header is NOT sent. The /last-hits diagnostic stays.
