@@ -2,9 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
-## Server — Clear-Site-Data "cache" On The App Page (no app version change)
+## Server — Clear-Site-Data Header Withdrawn (no app version change)
 
-Pete (6 Oct, 19:05): fully offline, the old May screen appeared and `/last-hits` showed NO new request at that moment, so Chrome never asked the server and showed something it had stored. The app page response now carries `Clear-Site-Data: "cache"`, which tells Chrome to drop its HTTP-cached copies for this address the next time the app is opened with a connection. Only the cache directive is sent: Pete's saved data (localStorage, IndexedDB) is a different directive and is not touched. Test: p42.
+The `Clear-Site-Data: "cache"` header added earlier on 6 Oct (to drop Chrome's stale cached copy) is removed again: with it, the app sat on its MH splash screen (20:16, WiFi and mobile data on). Chrome holds the page response until a clear finishes. p42 now checks the header is NOT sent. The /last-hits diagnostic stays.
 
 ## Server — /last-hits Diagnostic For The Fully-Offline Stale Screen (no app version change)
 

@@ -1511,13 +1511,9 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
-            # Tells Chrome to throw away any HTTP-cached copies it holds for this address the
-            # next time the app is opened with a connection ("cache" only: the app's own saved
-            # data - localStorage, IndexedDB - is a different directive and is NOT touched).
-            # Fully offline, with no connection at all, the phone was showing an old May copy of
-            # the page without ever contacting this server (see /last-hits); a copy like that can
-            # only be one Chrome kept, so make Chrome drop it.
-            self.send_header('Clear-Site-Data', '"cache"')
+            # (A Clear-Site-Data "cache" header was tried here on 6 Oct and withdrawn the same evening:
+            # right after it shipped the app sat on its splash screen. Chrome holds the page response
+            # until the clear finishes. Do not add it back without testing on the phone.)
             self.send_header('Content-Length', str(len(body)))
             for k, v in CORS.items():
                 self.send_header(k, v)
