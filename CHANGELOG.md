@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.872 — HRV Shows Whole Milliseconds; Weather Search Box Fixed
+
+Pete (6 Oct, two screenshots): the weather card's town search was a tiny oval beside a huge Search button, and the HRV card showed 27.29901960784314 overflowing its tile.
+- **HRV:** the Trends card, its Min/Max/status line and the gauge now show whole milliseconds (27ms). The launcher sends averages as long decimals; the Health Connect importer now also keeps one decimal on HRV, heart rate and SpO2 averages (27.3), so new data is stored tidy. Existing stored rows keep their long values, but they now display rounded.
+- **Weather card:** the setup search box and Search button, and the "Not right? Adjust" fields, are now sensibly sized (the app's global input styling had been squeezing the box).
+- Test: p35 (fails on the old code for both problems).
+
 ## v3.10.871 — Tapping A Notification Opens The App On The Right Screen
 
 Pete: reminders showed up on his phone, but tapping them should open the app where the notification was about. The service worker had no click handler at all, so a tap just opened or focused the app wherever it was. Now (sw.js v2.2): tapping closes the notification, focuses the open app and takes it to the screen the reminder belongs to, or, if the app was closed, opens it with `?tab=<screen>` and the page switches itself (and tidies the address). Supplement reminders now go to the Supplements screen (they went to the dashboard); carb alert and end-of-day go to Log; weekly summary goes to Reports. Test: p34 (fails with the old service worker, passes with the new).

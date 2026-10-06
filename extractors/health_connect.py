@@ -32,6 +32,9 @@ FIELDS = [
     'weight',
 ]
 
+# Fields that are averages/measurements, not exact counts: stored to 1 decimal place.
+ROUND_1DP = {'hr_avg', 'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max', 'sleep_efficiency'}
+
 
 def run(inbox, password=None, dry_run=False):
     export_path = os.path.join(inbox, 'health_connect_export.json')
@@ -61,7 +64,11 @@ def run(inbox, password=None, dry_run=False):
         row = {'date': date}
         for field in FIELDS:
             if entry.get(field) is not None:
-                row[field] = entry[field]
+                v = entry[field]
+                # Averages arrive as long floats (HRV 27.29901960784314); keep 1 decimal.
+                if isinstance(v, float) and field in ROUND_1DP:
+                    v = round(v, 1)
+                row[field] = v
         rows.append(row)
 
     return rows
