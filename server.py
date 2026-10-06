@@ -580,6 +580,16 @@ def run_manual_pipeline():
 
 
 # ─── REQUEST HANDLER ──────────────────────────────────────────────────────────
+# Last few page loads, newest last (in memory only, nothing written to disk).
+import collections as _collections
+PAGE_HITS = _collections.deque(maxlen=15)
+def _note_page_hit(path, ua, dest):
+    try:
+        short = ('Chrome-WebAPK/Tab' if 'Chrome' in ua else (ua[:40] or 'unknown'))
+        PAGE_HITS.append({'t': time.strftime('%H:%M:%S'), 'path': path, 'client': short, 'dest': dest})
+    except Exception:
+        pass
+
 class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
@@ -1484,7 +1494,15 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'error': 'Icon not found'}, 404)
 
+        elif path == '/last-hits':
+            # Diagnostic: the most recent page loads this server answered (time, path, who asked).
+            # Exists to settle "did the phone even reach the server?" when a stale old screen
+            # appears fully offline: if no new entry shows up for the moment the app was opened,
+            # the browser never asked the server and showed its own saved copy.
+            self.send_json({'now': time.strftime('%Y-%m-%d %H:%M:%S'), 'hits': list(PAGE_HITS)})
+
         elif path == '/' or path == '/maxhealth':
+            _note_page_hit(path, self.headers.get('User-Agent', ''), self.headers.get('Sec-Fetch-Dest', ''))
             if not os.path.exists(TRACKER):
                 self.send_json({'error': 'maxhealth.html not found at ' + TRACKER}, 404)
                 return

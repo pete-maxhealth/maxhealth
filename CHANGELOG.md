@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## Server — /last-hits Diagnostic For The Fully-Offline Stale Screen (no app version change)
+
+Pete (6 Oct): with airplane mode on AND WiFi off, the old May screen appears again (with WiFi left on inside airplane mode, the real app opens fine; clearing the launcher's cache did not change the fully-offline case). To tell whether Chrome even reaches the server in that state, the server now remembers its last 15 page loads (time, path, client) in memory and shows them at `localhost:5757/last-hits`. Nothing is written to disk.
+
 ## v3.10.877 — Ketosis Banner: Controls No Longer Cover The Text
 
 Pete (6 Oct, screenshot): the 👁 hide button sat on top of the end of the ketosis banner ("92.2G REMAINING"), hiding part of the number, and the ▲ ▼ were nearly invisible on the light theme (white at 50%). The three controls now sit on their own row above the banner, in the same grey as every other card's controls. Test: p41 (fails on the old layout).
