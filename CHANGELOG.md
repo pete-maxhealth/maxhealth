@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.875 — Swapping A Suggested Item: Online Search Starts From What You Typed
+
+Pete (6 Oct, screenshot): a "Here's what fits" suggestion had Asda Beef Burgers in a Caesar salad with beef bacon. He tapped swap, typed "beef bacon", then went online, and the search box (and Try AI) came up with the old item, "Asda Beef Burger", instead of "beef bacon".
+- The swap picker now hands what you typed to the online search. The old item's name is only the starting point when nothing was typed. Fixed for suggested-meal items, recipe-builder ingredients and flagged-ingredient searches.
+- Test: p39 (fails on the old code).
+
 ## v3.10.874 — Barcode Scan: QR Codes Ignored, Not-Found Offers To Read The Label
 
 Pete (6 Oct, screenshot of a Luvbiltong beef biltong pack): the scan reported "Barcode 5065015932000 not found" and then "Barcode https://www.instagram.com/luvbiltongsnacks/ not found". The scanner had locked onto the QR code printed on the pack and tried to look the web link up as if it were a product.
