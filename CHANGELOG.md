@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.876 — Typing A Dish No Longer Gets Mistaken For A Suggestion Request
+
+Pete (6 Oct, same screenshot): he typed "Ceaser salad with beef bacon" to log it, and instead of logging it the app answered "Here's what fits, using real items from your library" with a beef burger in the salad. The short-phrase check for "meat and 2 veg" style requests split the text on "with", saw the category word "salad" and a food word, and decided it was a request for suggestions.
+- A bare phrase now only counts as a suggestion request when every word in it is category vocabulary (a category, veg/veggies, a food keyword, a number or a filler word). "Ceaser" is a dish name, so that phrase goes down the normal log path. "meat and 2 veg", "protein and pasta", "chicken and 2 veg" and "meat and veg" work as before.
+- Test: p40 (fails on the old code).
+
 ## v3.10.875 — Swapping A Suggested Item: Online Search Starts From What You Typed
 
 Pete (6 Oct, screenshot): a "Here's what fits" suggestion had Asda Beef Burgers in a Caesar salad with beef bacon. He tapped swap, typed "beef bacon", then went online, and the search box (and Try AI) came up with the old item, "Asda Beef Burger", instead of "beef bacon".
