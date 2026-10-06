@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.877 — Ketosis Banner: Controls No Longer Cover The Text
+
+Pete (6 Oct, screenshot): the 👁 hide button sat on top of the end of the ketosis banner ("92.2G REMAINING"), hiding part of the number, and the ▲ ▼ were nearly invisible on the light theme (white at 50%). The three controls now sit on their own row above the banner, in the same grey as every other card's controls. Test: p41 (fails on the old layout).
+
 ## v3.10.876 — Typing A Dish No Longer Gets Mistaken For A Suggestion Request
 
 Pete (6 Oct, same screenshot): he typed "Ceaser salad with beef bacon" to log it, and instead of logging it the app answered "Here's what fits, using real items from your library" with a beef burger in the salad. The short-phrase check for "meat and 2 veg" style requests split the text on "with", saw the category word "salad" and a food word, and decided it was a request for suggestions.
