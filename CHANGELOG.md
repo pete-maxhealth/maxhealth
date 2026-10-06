@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.873 — Weather Card: Show / Hide / Reorder, Help Tip, And Documented Formulas
+
+Pete: help tip for which environmental factors affect the app; update the Formulas card?; the usual show/hide/reorder.
+- **Show / hide / reorder:** the weather card now has the same ▲ ▼ 👁 controls as every other Today card (also on the "Add local weather" prompt), joins the "Hidden:" restore strip as "Weather", and sits just above Water by default. Anyone who had already saved a custom Today order keeps it; the weather card is slotted in above Water rather than resetting their layout.
+- **Help tip (?)** on the weather card: what the weather changes (water target, suggested effort, tips), what it does not change (calories, macros, ketosis targets), that your own adjustment wins, and that these are rule-of-thumb guides.
+- **Formulas & Technical Reference** has a new "Water Target & Weather" section: base target + 500ml per exercise hour + heat extra (25-29° +250ml, 30-34° +500ml, 35°+ +750ml), the effort-easing bands, and when tips appear. It is also findable through Settings search (weather, heat, hydration, effort).
+- **Hourly strip + best time for outdoor exercise:** under the weather summary, a scrolling 06:00-22:00 strip with a weather icon, temperature and rain chance (when 40%+) for each hour. The best window is outlined: the longest remaining run of hours that feel 27° or cooler, with rain under 40% and UV 5 or lower. If none, it names the coolest hour or says indoors is better. Your own temperature adjustment shifts every hour; marking today wet gives no window. Older cached weather refreshes itself to pick up hourly data.
+- Tests: p36, p37.
+
 ## v3.10.872 — HRV Shows Whole Milliseconds; Weather Search Box Fixed
 
 Pete (6 Oct, two screenshots): the weather card's town search was a tiny oval beside a huge Search button, and the HRV card showed 27.29901960784314 overflowing its tile.
