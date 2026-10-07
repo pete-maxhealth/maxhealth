@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.890 — Charts Follow Your Weight Unit, And Food/Water/Exercise Lines On Your Story
+
+Pete (7 Oct): "Today has exercise, food and water... can these be merged into the multiple metrics area? Best added to the Your story graphic. Charts in kg only."
+- **Charts in your unit:** the Your Journey chart, the weight / bone mass / hydration drill-down (hero number, stats, chart, day panel), the full-screen chart and Compare Metrics now show lb (or lb for st+lb, same as the Trends weight chart) when that is your unit. Stored data stays kg.
+- **Your Journey overlays:** seven chips above the chart (Calories, Protein, Carbs, Water, Logged exercise, Active calories, Steps). Each draws as a dashed line scaled to its own maximum, so they sit together on one chart; tap a day to see the real figures. Shown on the days you weighed (that is what the chart is built from). Your choice is remembered.
+- **Compare Metrics:** new "Logged exercise" (sum of the exercise you logged that day) and "Active calories (wearable)", both under Exercise. Fat (g) had been missing from every group so you could never pick it; it is now under Nutrition.
+- Test: new p51 (converters, series, groups, chips persist, day panel); p45/p46/p49 still pass.
+
 ## v3.10.889 — st + lb Entry, And The Compare-AI Chat Bubble Pulses
 
 Pete (7 Oct, real phone): (1) with the unit set to st + lb the Update Weight popup still asked for pounds; (2) the "Asking Claude, Gemini, and ChatGPT independently about..." chat bubble did not pulse.

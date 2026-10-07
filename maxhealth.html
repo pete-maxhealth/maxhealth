@@ -3287,8 +3287,9 @@
     <div class="metric-card card-unit" id="journeyCard" style="display:none;margin-bottom:16px;">
       <div class="section-title" id="title-trends-journey" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-journey','trends-journey-wrap','trends-journey-icon')">🗺️ Your Journey <span id="trends-journey-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
       <div id="trends-journey-wrap">
-        <div class="mh-qline">Your whole weight history, coloured by ketosis, with treatment markers. Tap a point for that day.</div>
+        <div class="mh-qline">Your whole weight history, coloured by ketosis, with treatment markers. Add food, water or exercise lines with the chips (shown on the days you weighed). Tap a point for that day.</div>
         <div id="journeyLegend" style="font-size:11px;color:var(--text3);margin-bottom:8px;">Weight over your whole tracked history · <span style="color:var(--accent);">●</span> in ketosis &nbsp; <span style="color:var(--yellow);">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day</div>
+        <div id="journeyOverlayBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
         <div class="mh-zoom-row" data-zoom-key="journey"><button type="button" class="mh-zoom-btn" data-zoom="out" onclick="mhChartZoom('journey',-1)" title="Zoom out - see more">−</button><button type="button" class="mh-zoom-btn" data-zoom="fit" onclick="mhChartZoomFit('journey')" title="Fit the whole range on screen">Fit</button><button type="button" class="mh-zoom-btn" data-zoom="in" onclick="mhChartZoom('journey',1)" title="Zoom in - more detail">+</button></div>
         <div id="journeyChartScrollWrap" style="position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <div id="journeyChartInner" style="height:180px;">
@@ -6056,7 +6057,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.889'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.890'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -32531,12 +32532,19 @@ function renderJourneyCard() {
   if (legendEl) {
     const inTargetWord = isKetogenicCondition() ? 'in ketosis' : 'under carb target';
     legendEl.innerHTML = offsetEnabled
-      ? `Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day`
-      : `Weight over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day`;
+      ? `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day`
+      : `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day`;
   }
 
   const labels = weighed.map(d => d.date);
   const weightVals = weighed.map(d => d.weight);
+  const _jwv = weightVals.map(v => mhChartCv('weight', v)); // chart copy in the chosen unit
+  const _jOver = mhJourneyOverlaySelected().map(def => {
+    const raw = weighed.map(d => def.get(d));
+    const mx = Math.max(0, ...raw.filter(v => v != null));
+    return { def, data: raw.map(v => (v == null || !mx) ? null : Math.round(v / mx * 1000) / 10) };
+  });
+  mhJourneyRenderChips();
   const pointColors = weighed.map(d => {
     if (d.totals?.kcal > 0) {
       if (isKetosisDay(d)) return '#2deb8f';
@@ -32552,7 +32560,7 @@ function renderJourneyCard() {
     }
     return '#8b90a0'; // wearable weight with no nutrition logged that day — neutral
   });
-  const wMinForMarker = Math.min(...weightVals) - 0.5;
+  const wMinForMarker = Math.min(..._jwv) - (mhWtUnit() === 'kg' ? 0.5 : 1);
   const treatmentMarkers = weighed.map(d => isTreatmentDay(d) ? wMinForMarker : null);
 
   // Same horizontal-scroll pattern as the drill and compare-metrics charts -
@@ -32585,10 +32593,11 @@ function renderJourneyCard() {
     chartInstances['journeyChart'] = new Chart(document.getElementById('journeyCanvas'), {
       type: 'line',
       data: { labels, datasets: [
-        { label: 'Weight', data: weightVals, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
+        { label: 'Weight', data: _jwv, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
           borderWidth: 1.5, fill: true, tension: 0.2, pointRadius: 2.5, pointBackgroundColor: pointColors, pointBorderWidth: 0 },
-        { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
-      ]},
+        { label: 'Treatment', data: treatmentMarkers.map(v => v == null ? null : mhChartCv('weight', v)), showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
+      ].concat(_jOver.map(o => ({ label: o.def.label, data: o.data, yAxisID: 'y2', borderColor: o.def.color, backgroundColor: o.def.color,
+          borderWidth: 1.5, borderDash: [4,3], fill: false, tension: 0.25, pointRadius: 0, spanGaps: true })))},
       options: { ...CHART_DEFAULTS,
         plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false },
           // Same reasoning as the drill and compare-metrics charts - the
@@ -32596,7 +32605,8 @@ function renderJourneyCard() {
           // Chart.js's own touch tracking) fights the horizontal scroll.
           // Tap a point instead - journeyDayPanel below, with a ✕.
           tooltip: { enabled: false } },
-        scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, ticks: { ...CHART_DEFAULTS.scales.x.ticks, maxTicksLimit: 6 } } },
+        scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, ticks: { ...CHART_DEFAULTS.scales.x.ticks, maxTicksLimit: 6 } },
+          ...(_jOver.length ? { y2: { position: 'right', min: 0, max: 100, display: false, grid: { drawOnChartArea: false } } } : {}) },
         onClick: (evt, elements) => {
           if (!elements.length) return;
           showJourneyDayPanel(elements[0].index, weighed, pointColors);
@@ -32622,6 +32632,45 @@ function renderJourneyCard() {
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
 }
 
+// ── Journey overlays (v3.10.890) ─────────────────────────────────────────
+// Optional extra lines on the Your Journey chart, each scaled 0-100% of its
+// own maximum on a hidden second axis (real values show when you tap a day).
+// Only plotted on days that have a weight reading - that is what the chart's
+// x-axis is made of.
+function mhJourneyOverlayDefs() {
+  return [
+    { key: 'kcal',     label: 'Calories',        unit: 'kcal',  icon: '🔥', color: '#06b6d4', get: d => (d.totals?.kcal > 0 ? d.totals.kcal : null) },
+    { key: 'protein',  label: 'Protein',         unit: 'g',     icon: '💪', color: '#2deb8f', get: d => (d.totals?.protein > 0 ? d.totals.protein : null) },
+    { key: 'carbs',    label: 'Carbs',           unit: 'g',     icon: '🌾', color: '#a16207', get: d => (d.totals?.carbs != null && d.totals?.kcal > 0 ? getEffectiveCarbsForDay(d) : null) },
+    { key: 'water',    label: 'Water',           unit: 'ml',    icon: '💧', color: '#2563eb', get: d => (parseFloat(d.water_ml) > 0 ? parseFloat(d.water_ml) : null) },
+    { key: 'exercise', label: 'Logged exercise', unit: 'kcal',  icon: '🏋️', color: '#f59e0b', get: d => { const v = (d.exercises || []).reduce((s, e) => s + (parseFloat(e.kcal) || 0), 0); return v > 0 ? v : null; } },
+    { key: 'active',   label: 'Active calories', unit: 'kcal',  icon: '⚡', color: '#fb923c', get: d => (parseFloat(d.calories_active) > 0 ? parseFloat(d.calories_active) : null) },
+    { key: 'steps',    label: 'Steps',           unit: 'steps', icon: '🚶', color: '#4d9fff', get: d => (parseFloat(d.steps) > 0 ? parseFloat(d.steps) : null) },
+  ];
+}
+function mhJourneyOverlayKeys() {
+  try { const a = JSON.parse(localStorage.getItem('mh_journey_overlays') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; }
+}
+function mhJourneyOverlaySelected() {
+  const keys = mhJourneyOverlayKeys();
+  return mhJourneyOverlayDefs().filter(o => keys.indexOf(o.key) > -1);
+}
+function mhJourneyToggleOverlay(key) {
+  let keys = mhJourneyOverlayKeys();
+  keys = keys.indexOf(key) > -1 ? keys.filter(k => k !== key) : keys.concat(key);
+  try { localStorage.setItem('mh_journey_overlays', JSON.stringify(keys)); } catch (_) {}
+  renderJourneyCard();
+}
+function mhJourneyRenderChips() {
+  const bar = document.getElementById('journeyOverlayBar');
+  if (!bar) return;
+  const on = mhJourneyOverlayKeys();
+  bar.innerHTML = mhJourneyOverlayDefs().map(o => {
+    const sel = on.indexOf(o.key) > -1;
+    return `<button type="button" data-jov="${o.key}" onclick="mhJourneyToggleOverlay('${o.key}')" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ${sel ? o.color : 'var(--border)'};background:${sel ? o.color + '18' : 'var(--surface2)'};color:${sel ? o.color : 'var(--text3)'};"><span style="opacity:${sel ? 1 : 0.5};">${o.icon}</span>${o.label}</button>`;
+  }).join('');
+}
+
 // Tap-a-point info panel for Your Journey - same pattern as the compare-
 // metrics and drill-chart panels (tap to open, ✕ to dismiss).
 function showJourneyDayPanel(index, weighed, pointColors) {
@@ -32636,6 +32685,7 @@ function showJourneyDayPanel(index, weighed, pointColors) {
         <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${d.date}</div>
         <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text);margin-top:4px;">${mhWtText(d.weight)}</div>
         <div style="font-size:11px;color:${color};margin-top:2px;">${statusText}</div>
+        ${mhJourneyOverlaySelected().map(o => { const v = o.get(d); return `<div style="font-size:12px;color:${o.color};margin-top:3px;">${o.icon} ${o.label}: ${v == null ? '—' : Math.round(v).toLocaleString() + ' ' + o.unit}</div>`; }).join('')}
       </div>
       <button onclick="closeJourneyDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
     </div>`;
@@ -34288,6 +34338,11 @@ const DRILL_CONFIG = {
   // either. No fixed ref band, since the real target (mh_target_water)
   // is user-configurable, not a universal number.
   water:      { title: 'Water',       unit: 'ml', color: '#2563eb', icon: '💧', field: 'water_ml',     ref: null, refLabel: '' },
+  // v3.10.890: exercise you logged by hand (sum of that day's exercise kcal)
+  // and the wearable's own active-calorie figure. Kept separate on purpose:
+  // they measure different things and are often both present on one day.
+  exercise_kcal: { title: 'Logged exercise', unit: 'kcal', color: '#f59e0b', icon: '🏋️', field: '_exerciseKcal',   ref: null, refLabel: '' },
+  active_cal:    { title: 'Active calories (wearable)', unit: 'kcal', color: '#fb923c', icon: '⚡', field: 'calories_active', ref: null, refLabel: '' },
   // Real blood glucose/ketone meter readings (glucose mmol/L ÷ ketones
   // mmol/L) — added 29/09/2026, a genuine gap where GKI was referenced as
   // static text in the Carb Zones tooltip with no actual way to log or
@@ -34654,7 +34709,9 @@ function getDrillData(metric, period) {
 
   return filtered.map(d => {
     let val;
-    if (cfg.field.includes('.')) {
+    if (metric === 'exercise_kcal') {
+      val = (d.exercises || []).reduce((s, e) => s + (parseFloat(e.kcal) || 0), 0);
+    } else if (cfg.field.includes('.')) {
       const parts = cfg.field.split('.');
       val = d[parts[0]]?.[parts[1]];
     } else {
@@ -34888,9 +34945,9 @@ function toggleMMMetric(key) {
 // this array are unaffected by which position a group sits in.
 const MM_METRIC_GROUPS = [
   { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
-  { label: 'Exercise', match: m => ['steps', 'distance'].includes(m.key) },
+  { label: 'Exercise', match: m => ['steps', 'distance', 'exercise_kcal', 'active_cal'].includes(m.key) },
   { label: 'Lab Results', match: m => m.isLabMarker },
-  { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'ketosis', 'water'].includes(m.key) },
+  { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water'].includes(m.key) },
   { label: 'Symptoms', match: m => m.isSymptom },
   { label: 'Treatment', match: m => m.isTreatment },
   { label: 'Vitals & Sleep', match: m => ['hr', 'hrv', 'spo2', 'sleep', 'gki'].includes(m.key) },
@@ -35057,7 +35114,7 @@ function renderMMChart() {
         .filter(d => d.val != null);
       return { metric: { ...m, unit: '%' }, points: pctPoints };
     }
-    return { metric: m, points: rawPoints.map(d => ({ date: d.date, val: d.val })) };
+    return { metric: mhChartIsWt(m.key) ? { ...m, unit: mhChartUnit(m.key, m.unit) } : m, points: rawPoints.map(d => ({ date: d.date, val: mhChartCv(m.key, d.val) })) };
   });
 
   const allDates = [...new Set(perMetricData.flatMap(pm => pm.points.map(p => p.date)))];
@@ -35889,8 +35946,17 @@ function renderDrill() {
     ? Math.round((last7.reduce((a,b)=>a+b,0)/last7.length - prev7.reduce((a,b)=>a+b,0)/prev7.length) * 10) / 10
     : null;
 
-  document.getElementById('drillHeroNum').textContent = last !== null ? last : (avg !== null ? avg : '—');
-  document.getElementById('drillHeroUnit').textContent = cfg.unit;
+  // Display copies (weight-type series follow the chosen unit); kg originals
+  // are kept for renderDrillContext which converts for itself.
+  const _cvm = v => mhChartCv(metric, v);
+  const dUnit = mhChartUnit(metric, cfg.unit);
+  const dVals = vals.map(_cvm);
+  const dLast = _cvm(last), dAvg = _cvm(avg), dMin = _cvm(min), dMax = _cvm(max);
+  const dTrend = trendDelta !== null ? (mhChartIsWt(metric) ? Math.round(_cvm(trendDelta) * 10) / 10 : trendDelta) : null;
+  const dCfg = Object.assign({}, cfg, { unit: dUnit });
+
+  document.getElementById('drillHeroNum').textContent = dLast !== null ? dLast : (dAvg !== null ? dAvg : '—');
+  document.getElementById('drillHeroUnit').textContent = dUnit;
 
   // Result badge
   let resultIcon = '●', resultText = '', resultColor = cfg.color;
@@ -35901,13 +35967,13 @@ function renderDrill() {
     else { resultIcon = '↑'; resultText = 'Above range'; resultColor = 'var(--red)'; }
   } else {
     resultIcon = avg !== null ? '~' : '—';
-    resultText = avg !== null ? `${avg} ${cfg.unit} avg` : 'No data';
+    resultText = avg !== null ? `${dAvg} ${dUnit} avg` : 'No data';
   }
   document.getElementById('drillResultIcon').textContent = resultIcon;
   document.getElementById('drillResultText').textContent = resultText;
   document.getElementById('drillResultText').style.color = resultColor;
-  document.getElementById('drillTrend').textContent = trendDelta !== null
-    ? ` · ${trendDelta >= 0 ? '+' : ''}${trendDelta} vs prev week`
+  document.getElementById('drillTrend').textContent = dTrend !== null
+    ? ` · ${dTrend >= 0 ? '+' : ''}${dTrend} vs prev week`
     : '';
   const drillGaugeEl = document.getElementById('drillGauge');
   if (drillGaugeEl) drillGaugeEl.innerHTML = renderThresholdGauge(last, cfg.ref, cfg.unit === 'steps' ? '' : cfg.unit, cfg.color);
@@ -35935,7 +36001,7 @@ function renderDrill() {
         [metric === 'carbs' ? 'Under target' : 'Hit target',
          vals.length ? `${vals.filter(v => metric === 'carbs' ? v <= _macroTargets[metric] : v >= _macroTargets[metric]).length}/${vals.length}` : '—'],
       ]
-    : [['Avg', avg !== null ? avg + (cfg.unit !== 'steps' ? '' : '') : '—'], ['Min', min !== null ? min : '—'], ['Max', max !== null ? max : '—']];
+    : [['Avg', dAvg !== null ? dAvg : '—'], ['Min', dMin !== null ? dMin : '—'], ['Max', dMax !== null ? dMax : '—']];
 
   statsGrid.style.gridTemplateColumns = `repeat(${stats.length}, 1fr)`;
   statsGrid.innerHTML = stats.map(([lbl, val]) => `
@@ -35972,7 +36038,7 @@ function renderDrill() {
 
   const datasets = [{
     label: cfg.title,
-    data: vals,
+    data: dVals,
     borderColor: cfg.color,
     backgroundColor: cfg.color + '15',
     borderWidth: 2,
@@ -35984,9 +36050,9 @@ function renderDrill() {
   }];
 
   // Add 7-day rolling average line
-  if (vals.length > 7) {
-    const rolling = vals.map((_, i) => {
-      const slice = vals.slice(Math.max(0, i-6), i+1);
+  if (dVals.length > 7) {
+    const rolling = dVals.map((_, i) => {
+      const slice = dVals.slice(Math.max(0, i-6), i+1);
       return Math.round(slice.reduce((a,b)=>a+b,0)/slice.length * 10)/10;
     });
     datasets.push({
@@ -36058,7 +36124,7 @@ function renderDrill() {
       },
       onClick: (evt, elements) => {
         if (!elements.length) return;
-        showDrillDayPanel(elements[0].index, labels, vals, cfg);
+        showDrillDayPanel(elements[0].index, labels, dVals, dCfg);
       }
     }
   });
@@ -44099,7 +44165,7 @@ function renderLightboxChart() {
   if (!data || data.length === 0) return;
 
   const labels = data.map(d => d.date);
-  const values = data.map(d => d.val);
+  const values = data.map(d => mhChartCv(_lightboxMetric, d.val));
   const COLORS = {
     weight: '#f5c542', calories: '#38bdf8', protein: '#2deb8f',
     carbs: '#ff8c42', fat: '#a78bfa', steps: '#a78bfa', sleep: '#60a5fa',
@@ -44296,6 +44362,12 @@ function mhWtUnit() {
   try { const u = localStorage.getItem('mh_weight_unit'); return (u === 'lbs' || u === 'st') ? u : 'kg'; } catch (_) { return 'kg'; }
 }
 function mhWtInputUnit() { return mhWtUnit() === 'kg' ? 'kg' : 'lb'; }          // unit typed into number fields
+// Charts follow the chosen weight unit (v3.10.890). Series stay kg in storage
+// and in getDrillData; only the displayed copy is converted. st uses lb on
+// chart axes (same as the Trends weight chart).
+function mhChartIsWt(metric) { return ['weight','bone_mass','hydration'].indexOf(metric) > -1 && mhWtUnit() !== 'kg'; }
+function mhChartCv(metric, v) { return (v == null || !mhChartIsWt(metric)) ? v : mhWtToInput(v, 1); }
+function mhChartUnit(metric, unit) { return mhChartIsWt(metric) ? mhWtInputUnit() : unit; }
 function mhWtUnitShort() { const u = mhWtUnit(); return u === 'kg' ? 'kg' : u === 'lbs' ? 'lb' : 'st'; } // unit under a big number
 // kg -> number in the typed-input unit (kg or lb), rounded
 function mhWtToInput(kg, dp) {
