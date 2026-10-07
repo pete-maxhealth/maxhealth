@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.884 — Photo Estimates: Count Small Items, Fresh vs Jarred, Don't Inflate Small Portions
+
+Pete (7 Oct): a bowl with about seven pitted cherries and a dollop of soft cheese came back as "cherries (fresh) 80g, 51kcal, 12.2g carbs", the worst over-estimate yet.
+- **Why:** the meal-photo prompt only had plate-sized anchors (a loaded dinner plate is 400-700g) and no way to size small countable items, so a handful of fruit was sized like a serving. It also had nothing to tell fresh fruit from jarred fruit in syrup.
+- **Fix (prompt):** (1) count visible pieces and multiply by a per-piece weight, shown in the message ("7 x ~4g = ~28g") - fresh cherry with stone ~8g, pitted/jarred ~4-5g, plus strawberry, blueberry, grape, olive, almond, walnut, prawn, cherry tomato; (2) pitted/glossy fruit in pooled juice is jarred/tinned, not "fresh" - use the drained weight, say so, and flag the syrup sugar; (3) the 400-700g anchor is for a loaded dinner plate only, a small bowl or dollop is typically 30-120g.
+- Still visual estimates (about +/-20%); the Edit ingredients button remains the quick correction. Test: p48.
+
 ## v3.10.883 — Slow Waits Get The Pulsing Border
 
 Pete (7 Oct): anything that can take a while to populate should show the same flashing box border as the chat's "Analysing photo…" bubble.
