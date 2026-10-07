@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.896 — Compare Two Periods (And Your Story) Were Limited By The Trends Window
+
+Pete (7 Oct, screenshot): the new card showed 1 logged day and 1 weigh-in for the baseline even though every date had weights.
+- **Cause:** `getTrendsData(true)` ("always full history") only skipped the Today view; with Trends set to a numbered window (e.g. 7 days) or a custom range it still cut the data to that window. So the Compare Two Periods card, Your Journey and the drill-downs could silently see only the last week or so.
+- **Fix:** full-history callers now ignore the numbered and custom Trends windows.
+- Test: p51 extended (windowed vs full counts, baseline days counted).
+
 ## v3.10.895 — Compare Two Periods (Photo-Estimate Check)
 
 Pete (7 Oct, home from holiday where meals were photo-logged): wants a comparison with the previous few weeks, since weight is drifting down slightly while logged intake is no higher than usual.
