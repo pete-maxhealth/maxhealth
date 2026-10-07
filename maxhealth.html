@@ -4339,7 +4339,7 @@
           <div id="gwuSt" onclick="setGlobalWeightUnit('st')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">st + lb</div>
         </div>
       </div>
-      <div class="settings-hint" style="margin-top:-2px;">Display only. Your data is always stored in kg, so switching never changes or loses anything. With st + lb, fields where you type a weight take pounds.</div>
+      <div class="settings-hint" style="margin-top:-2px;">Display only. Your data is always stored in kg, so switching never changes or loses anything. With st + lb, type weights as stones and pounds, e.g. 14 st 2.</div>
       <div class="settings-row">
         <div class="settings-label">Weight target</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
@@ -6056,7 +6056,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.888'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.889'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -11933,8 +11933,9 @@ function initSettings() {
   const high = getWeightTargetHigh();
   const lowEl  = document.getElementById('settingWeightTargetLow');
   const highEl = document.getElementById('settingWeightTargetHigh');
-  if (lowEl)  lowEl.value  = low  > 0 ? mhWtToInput(low)  : '';
-  if (highEl) highEl.value = high > 0 ? mhWtToInput(high) : '';
+  mhWtPrepField(lowEl); mhWtPrepField(highEl);
+  if (lowEl)  lowEl.value  = low  > 0 ? mhWtToField(low)  : '';
+  if (highEl) highEl.value = high > 0 ? mhWtToField(high) : '';
   if (typeof mhWtSyncSettingsUI === 'function') mhWtSyncSettingsUI();
   // Fibre target
   const waterTargetInput = document.getElementById('settingWaterTarget');
@@ -12511,8 +12512,8 @@ function clearLabelReadLog() {
 }
 
 function saveWeightTarget() {
-  const low  = mhWtFromInput(document.getElementById('settingWeightTargetLow')?.value);
-  const high = mhWtFromInput(document.getElementById('settingWeightTargetHigh')?.value);
+  const low  = mhWtFromField(document.getElementById('settingWeightTargetLow')?.value);
+  const high = mhWtFromField(document.getElementById('settingWeightTargetHigh')?.value);
   if (!isNaN(low))  localStorage.setItem('mh_weight_target_low',  low);
   if (!isNaN(high)) localStorage.setItem('mh_weight_target_high', high);
   // Also save the displayed kcal target to localStorage
@@ -20948,7 +20949,7 @@ async function runMultiAICheck(targetIndex) {
   const foods = (targetIndex !== undefined && allFoods[targetIndex]) ? [allFoods[targetIndex]] : allFoods;
   const isSingleItem = foods.length === 1;
   const desc = foods.map(f => `${f.name} (${f.amount})`).join(', ');
-  const thinking = addBubble(`🔍 Asking Claude, Gemini, and ChatGPT independently about: ${desc}…`, 'system');
+  const thinking = addBubble(`🔍 Asking Claude, Gemini, and ChatGPT independently about: ${desc}…`, 'system', 'thinking');
 
   const prompt = mhMultiCheckPrompt(desc, window._pendingMealText);
 
@@ -30971,8 +30972,9 @@ function setDayMode(mode) {
 
 // ─── WEIGHT MODAL ────────────────────────────────────────
 function openWeightModal() {
-  document.getElementById('weightInput').value = state.weight ? mhWtToInput(state.weight) : '';
-  const _wl = document.getElementById('weightModalLabel'); if (_wl) _wl.textContent = `Enter today's weight (${mhWtInputUnit()})`;
+  mhWtPrepField(document.getElementById('weightInput'));
+  document.getElementById('weightInput').value = state.weight ? mhWtToField(state.weight) : '';
+  const _wl = document.getElementById('weightModalLabel'); if (_wl) _wl.textContent = `Enter today's weight (${mhWtUnit() === 'st' ? 'stones and pounds, e.g. 14 st 2' : mhWtInputUnit()})`;
   document.getElementById('weightModal').classList.add('open');
 }
 
@@ -30981,7 +30983,7 @@ function closeWeightModal() {
 }
 
 function confirmWeight() {
-  const val = mhWtFromInput(document.getElementById('weightInput').value);
+  const val = mhWtFromField(document.getElementById('weightInput').value);
   if (isNaN(val) || val < 40 || val > 200) {
     showToast('Invalid weight'); return;
   }
@@ -31081,10 +31083,13 @@ function toggleWeightVoiceInput() {
     // just needs the first decimal number in the phrase.
     const match = text.match(/(\d+(\.\d+)?)/);
     if (!match) { showToast(`Didn't catch a number in "${text}" - try again`); return; }
+    const _all = text.match(/\d+(?:\.\d+)?/g) || [];
     const val = parseFloat(match[1]);
     const input = document.getElementById('weightInput');
-    if (input) input.value = val;
-    showToast(`🎤 Heard ${val}${mhWtInputUnit()} - check the field, then tap Confirm`);
+    // st + lb: keep both numbers ("14 stone 2" -> "14 st 2"); otherwise just the first number
+    const heard = (mhWtUnit() === 'st' && _all.length >= 2) ? `${_all[0]} st ${_all[1]}` : String(val);
+    if (input) input.value = heard;
+    showToast(`🎤 Heard ${heard}${mhWtUnit() === 'st' ? '' : mhWtInputUnit()} - check the field, then tap Confirm`);
   };
   rec.onerror = (e) => {
     if (e.error === 'no-speech' || e.error === 'aborted') return;
@@ -44304,6 +44309,37 @@ function mhWtFromInput(v) {
   v = parseFloat(v); if (isNaN(v)) return NaN;
   return mhWtUnit() === 'kg' ? v : Math.round(v * 0.45359237 * 10) / 10;
 }
+// FIELD helpers (v3.10.889): what goes in / comes out of a weight text box.
+// kg and lbs use plain numbers. st + lb uses two numbers in one box: "14 st 2"
+// (also accepts "14st 2lb", "14 stone 2", or just pounds like "198" - a lone
+// number of 40 or more is taken as pounds, under 40 as whole stones).
+function mhWtToField(kg, dp) {
+  const v = parseFloat(kg); if (isNaN(v)) return '';
+  if (mhWtUnit() !== 'st') return String(mhWtToInput(v, dp));
+  const lb = v / 0.45359237; let st = Math.floor(lb / 14), rem = Math.round((lb - st * 14) * 10) / 10;
+  if (rem >= 14) { st += 1; rem = 0; }
+  return `${st} st ${rem % 1 === 0 ? rem : rem.toFixed(1)}`;
+}
+function mhWtFromField(str) {
+  const t = String(str == null ? '' : str).trim().toLowerCase();
+  if (!t) return NaN;
+  if (mhWtUnit() !== 'st') return mhWtFromInput(t);
+  const nums = t.match(/\d+(?:\.\d+)?/g); if (!nums) return NaN;
+  const hasSt = /st|stone/.test(t);
+  let lb;
+  if (nums.length >= 2) lb = parseFloat(nums[0]) * 14 + parseFloat(nums[1]);
+  else if (hasSt) lb = parseFloat(nums[0]) * 14;
+  else lb = parseFloat(nums[0]) >= 40 ? parseFloat(nums[0]) : parseFloat(nums[0]) * 14;
+  return Math.round(lb * 0.45359237 * 10) / 10;
+}
+// make a weight box number-type for kg/lb and text-type for st + lb
+function mhWtPrepField(el) {
+  if (!el) return;
+  const st = mhWtUnit() === 'st';
+  el.type = st ? 'text' : 'number';
+  if (st) { el.removeAttribute('step'); el.inputMode = 'decimal'; el.placeholder = 'e.g. 14 st 2'; }
+  else { el.step = '0.1'; el.placeholder = el.id === 'weightInput' ? '90.6' : el.placeholder; }
+}
 // kg -> display text with unit: "92.2 kg" | "203.3 lb" | "14 st 8 lb"
 function mhWtText(kg, dp, noUnit) {
   const v = parseFloat(kg); if (isNaN(v)) return '—';
@@ -44351,11 +44387,12 @@ function mhWtSyncSettingsUI() {
     el.style.background = on ? 'var(--accent-dim)' : '';
     el.style.color = on ? 'var(--accent)' : 'var(--text3)';
   });
-  document.querySelectorAll('.mh-wt-unit').forEach(el => { el.textContent = mhWtInputUnit(); });
+  document.querySelectorAll('.mh-wt-unit').forEach(el => { el.textContent = mhWtUnit() === 'st' ? 'st lb' : mhWtInputUnit(); });
   const lowEl = document.getElementById('settingWeightTargetLow'), highEl = document.getElementById('settingWeightTargetHigh');
   const lo = getWeightTargetLow(), hi = getWeightTargetHigh();
-  if (lowEl && document.activeElement !== lowEl) lowEl.value = lo > 0 ? mhWtToInput(lo) : '';
-  if (highEl && document.activeElement !== highEl) highEl.value = hi > 0 ? mhWtToInput(hi) : '';
+  mhWtPrepField(lowEl); mhWtPrepField(highEl);
+  if (lowEl && document.activeElement !== lowEl) lowEl.value = lo > 0 ? mhWtToField(lo) : '';
+  if (highEl && document.activeElement !== highEl) highEl.value = hi > 0 ? mhWtToField(hi) : '';
 }
 function setGlobalWeightUnit(u) {
   try { localStorage.setItem('mh_weight_unit', (u === 'lbs' || u === 'st') ? u : 'kg'); } catch (_) {}

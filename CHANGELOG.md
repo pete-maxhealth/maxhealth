@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.889 — st + lb Entry, And The Compare-AI Chat Bubble Pulses
+
+Pete (7 Oct, real phone): (1) with the unit set to st + lb the Update Weight popup still asked for pounds; (2) the "Asking Claude, Gemini, and ChatGPT independently about..." chat bubble did not pulse.
+- **st + lb entry:** the Update Weight popup and the weight target boxes now take stones and pounds in one box, e.g. "14 st 2". It also understands "14st 2lb", "14 stone 2", a lone "198" (40 or more is read as pounds) and a lone "12" (under 40 is read as whole stones). Voice entry keeps both numbers ("fourteen stone two" becomes 14 st 2). The boxes switch back to plain numbers in kg or lbs. Stored value is still kg.
+- **Compare-AI bubble in the Log chat** is now a pulsing "thinking" bubble (the earlier wait-box change covered the edit screens, not this chat bubble). It is removed when the answers arrive, as before.
+- Test: p45 extended (st popup, parsing variants, st targets, back to kg), p47 extended.
+
 ## v3.10.888 — Topic Chips On Settings → Data (Import)
 
 Pete's Data screenshot showed seven sections tucked behind a "Hidden:" strip. Same view-filter chips, so the page needs far less hiding: All · Connect devices (sync wearable data, add new device, advanced/manual pipeline) · History & entry (wearable history, nutrition history, manual entry) · Backup & checks (data & backup, data management, preview & validator). Nothing is moved or un-hidden; search resets the chips to All. Test: p50 extended.

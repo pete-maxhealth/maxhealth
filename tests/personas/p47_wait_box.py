@@ -22,6 +22,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'mh-wait-box' not in h: f.add('BUG', 'mhWaitHTML wrong')
     n = page.evaluate("document.documentElement.innerHTML.split('mhWaitHTML(').length - 1")
     if n < 5: f.add('BUG', f'compare placeholders not converted ({n} refs)')
+    src = page.content()
+    if "independently about: ${desc}…`, 'system', 'thinking')" not in src: f.add('BUG', 'log-chat compare AI bubble is not a pulsing thinking bubble')
     if errs: f.add('BUG', f'page errors {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)
