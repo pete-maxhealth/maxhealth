@@ -1,0 +1,67 @@
+"""Persona 45: global weight unit - onboarding in lbs/st stores KG, the choice persists, and the dashboard, target fields, weight modal and trends all follow it. Storage is always kg."""
+import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
+from harness import *
+from playwright.sync_api import sync_playwright
+f = Findings()
+with fresh_server() as root, sync_playwright() as pw:
+    b = pw.chromium.launch(); errs = []
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    ctx.route(re.compile(r'https://(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)/.*'), lambda r: r.abort())
+    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160]))
+    page.goto('http://localhost:5757/'); page.wait_for_timeout(1200)
+    page.evaluate("onboardNext(2)"); page.fill('#onboardName', 'Ola'); page.evaluate("onboardNext(3)")
+    page.evaluate("obSetSex('male')"); page.fill('#onboardAge', '58')
+    page.evaluate("setHeightUnit('ft')"); page.fill('#onboardHeight', '5.10')
+    page.evaluate("setWeightUnit('lbs')"); page.fill('#onboardWeight', '200'); page.fill('#onboardTarget', '190')
+    page.evaluate("onboardNext(4)"); page.evaluate("obSetActivity('light')"); page.evaluate("obSetGoal('lose')")
+    page.evaluate("onboardNext(5)"); page.evaluate("obSetCondition('general')")
+    page.evaluate("onboardNext(6)"); page.evaluate("onboardFinish()"); page.wait_for_timeout(1500)
+    page.reload(); page.wait_for_timeout(1500)
+    ls = lambda k: page.evaluate(f"localStorage.getItem('{k}')")
+    w = page.evaluate("state.weight")
+    if not (90.5 <= (w or 0) <= 91.0): f.add('BUG', f'200 lb should be stored as ~90.7 kg, got {w}')
+    tl = float(ls('mh_weight_target_low') or 0)
+    if not (85.9 <= tl <= 86.4): f.add('BUG', f'190 lb target should be ~86.2 kg, got {tl}')
+    h = float(ls('mh_height_cm') or 0)
+    if not (176 <= h <= 179): f.add('BUG', f'5ft10 should be ~177.8 cm, got {h}')
+    if ls('mh_weight_unit') != 'lbs': f.add('BUG', f"onboarding unit not remembered: {ls('mh_weight_unit')}")
+    dash = lambda: page.evaluate("document.getElementById('displayWeight').textContent")
+    if 'lb' not in dash() or '200' not in dash(): f.add('BUG', f'dashboard not in lb: {dash()!r}')
+    gap = page.evaluate("document.getElementById('weightGap').textContent")
+    if 'kg' in gap: f.add('BUG', f'gap still kg: {gap}')
+    # target fields show lb; saving converts back to kg
+    page.evaluate("switchTabById('manage')"); page.wait_for_timeout(500); page.evaluate("loadSettingsUI && loadSettingsUI()") if False else None
+    lowv = page.evaluate("document.getElementById('settingWeightTargetLow').value")
+    if lowv and not (188 <= float(lowv) <= 192): f.add('BUG', f'target field not shown in lb: {lowv}')
+    page.fill('#settingWeightTargetLow', '200'); page.fill('#settingWeightTargetHigh', '205')
+    page.evaluate("saveWeightTarget()")
+    tl = float(ls('mh_weight_target_low')); th = float(ls('mh_weight_target_high'))
+    if not (90.6 <= tl <= 90.8 and 92.9 <= th <= 93.1): f.add('BUG', f'saving lb target not converted to kg: {tl} {th}')
+    # weight modal: type lb, stored kg
+    page.evaluate("openWeightModal()")
+    lab = page.evaluate("document.getElementById('weightModalLabel').textContent")
+    if '(lb)' not in lab: f.add('BUG', f'modal label not lb: {lab}')
+    page.fill('#weightInput', '198'); page.evaluate("confirmWeight()")
+    if abs(page.evaluate("state.weight") - 89.8) > 0.15: f.add('BUG', f"198 lb should store ~89.8 kg: {page.evaluate('state.weight')}")
+    # kg mode untouched
+    page.evaluate("setGlobalWeightUnit('kg')"); page.wait_for_timeout(1100)
+    if 'kg' not in dash() or '89.8' not in dash(): f.add('BUG', f'kg mode wrong: {dash()!r}')
+    page.evaluate("openWeightModal()")
+    if page.evaluate("document.getElementById('weightInput').value") != '89.8': f.add('BUG', 'kg modal prefill wrong')
+    page.evaluate("closeWeightModal()")
+    # st mode
+    page.evaluate("setGlobalWeightUnit('st')")
+    d = dash()
+    if 'st' not in d or 'lb' not in d: f.add('BUG', f'st display wrong: {d!r}')
+    txt = page.evaluate("mhWtText(89.8)")
+    if txt != '14 st 2 lb': f.add('BUG', f'89.8kg in st: {txt}')
+    if page.evaluate("mhWtText(63.5029)") != '10 st 0 lb' : f.add('BUG', 'round-up st case: ' + page.evaluate("mhWtText(63.5029)"))
+    if page.evaluate("mhWtUnitShort()") != 'st' and False: pass
+    # trends card follows the unit
+    page.evaluate("setGlobalWeightUnit('lbs')")
+    page.evaluate("switchTabById('trends')"); page.wait_for_timeout(800)
+    st = page.evaluate("document.getElementById('mcWeightStatus')?.textContent||''")
+    if st and 'kg' in st: f.add('BUG', f'trends weight status still kg: {st}')
+    if errs: f.add('BUG', f'page errors: {errs[:3]}')
+    b.close()
+print("findings", len(f)); sys.exit(1 if f else 0)

@@ -3942,7 +3942,7 @@
           <div style="margin-top:8px;"><span style="color:var(--red);">Heart &amp; Vitals</span><br>hr_avg · hr_min · hr_max · hrv · hrv_min · hrv_max · spo2 · spo2_min · spo2_max</div>
           <div style="margin-top:8px;"><span style="color:var(--text2);">Body</span><br>weight · bmi · fat_pct · fat_mass_kg · muscle_pct · muscle_mass_kg · bone_mass_kg</div>
         </div>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--text3);">All values per day · sleep in minutes · HRV in ms · SpO2 in % · weight in kg</div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--text3);">All values per day · sleep in minutes · HRV in ms · SpO2 in % · weight in kg (reports and exports always use kg)</div>
       </div>
 
       <!-- Query row -->
@@ -4297,6 +4297,15 @@
       </div>
       <div class="settings-hint" style="margin-top:-2px;"><span class="help-slot" data-id="sexfield" data-text="Used to personalize step/calorie estimates when no wearable data exists for a day — most relevant for cloud-only users with no device sync. Local users' real wearable data always takes priority over these regardless."></span></div>
       <div class="settings-row">
+        <div class="settings-label">Weight unit</div>
+        <div style="display:flex;gap:6px;width:100%;">
+          <div id="gwuKg" onclick="setGlobalWeightUnit('kg')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">kg</div>
+          <div id="gwuLbs" onclick="setGlobalWeightUnit('lbs')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">lbs</div>
+          <div id="gwuSt" onclick="setGlobalWeightUnit('st')" style="flex:1;text-align:center;padding:8px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:12px;font-family:Space Mono,monospace;">st + lb</div>
+        </div>
+      </div>
+      <div class="settings-hint" style="margin-top:-2px;">Display only. Your data is always stored in kg, so switching never changes or loses anything. With st + lb, fields where you type a weight take pounds.</div>
+      <div class="settings-row">
         <div class="settings-label">Weight target</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <div style="display:flex;align-items:center;gap:8px;">
@@ -4304,14 +4313,14 @@
             <input type="number" id="settingWeightTargetLow" step="0.1" min="30" max="200"
               style="flex:1;" class="settings-input"
               placeholder="92.0" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingWeightTargetLow', 'Weight Target (low)', saveWeightTarget)">
-            <span style="color:var(--text3);font-size:12px;">kg</span>
+            <span class="mh-wt-unit" style="color:var(--text3);font-size:12px;">kg</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="color:var(--text3);font-size:12px;width:36px;">To</span>
             <input type="number" id="settingWeightTargetHigh" step="0.1" min="30" max="200"
               style="flex:1;" class="settings-input"
               placeholder="93.0" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingWeightTargetHigh', 'Weight Target (high)', saveWeightTarget)">
-            <span style="color:var(--text3);font-size:12px;">kg</span>
+            <span class="mh-wt-unit" style="color:var(--text3);font-size:12px;">kg</span>
           </div>
         </div>
       </div>
@@ -5707,9 +5716,15 @@ function onboardNext(step) {
 
   // Save body stats on transition from step 3, trigger TDEE calc
   if (step === 4) {
-    const weight = parseFloat(document.getElementById('onboardWeight').value);
-    const target = parseFloat(document.getElementById('onboardTarget').value);
+    // Typed in whichever unit was picked (kg / lbs / st) - ALWAYS convert to kg
+    // for storage. Previously the raw typed number went in as if it were kg, so
+    // an lbs user's 176 became "176 kg".
+    const _wRaw = parseFloat(document.getElementById('onboardWeight').value);
+    const _tRaw = parseFloat(document.getElementById('onboardTarget').value);
+    const weight = isNaN(_wRaw) ? NaN : getWeightInKg(_wRaw);
+    const target = isNaN(_tRaw) ? NaN : getWeightInKg(_tRaw, 'onboardTarget');
     if (!isPreview) {
+      try { localStorage.setItem('mh_weight_unit', _weightUnit === 'lbs' || _weightUnit === 'st' ? _weightUnit : 'kg'); } catch (_) {}
       if (!isNaN(weight)) state.weight = weight;
       if (!isNaN(target)) {
         localStorage.setItem('mh_weight_target_low', target);
@@ -5723,7 +5738,8 @@ function onboardNext(step) {
     // silently discarded the moment onboarding finished. getCurrentTDEE()
     // would then report "missing from Profile" from day one, despite the
     // user having just typed it in moments earlier.
-    const heightVal = parseFloat(document.getElementById('onboardHeight').value);
+    const _hRaw = parseFloat(document.getElementById('onboardHeight').value);
+    const heightVal = isNaN(_hRaw) ? NaN : getHeightInCm(_hRaw);   // ft+in typed -> cm (was stored/rejected raw)
     const ageVal = parseFloat(document.getElementById('onboardAge').value);
     if (!isPreview) {
       if (!isNaN(heightVal) && heightVal >= 100 && heightVal <= 250) localStorage.setItem('mh_height_cm', heightVal);
@@ -6005,7 +6021,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.879'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.880'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -11279,7 +11295,7 @@ function renderSuggestedTargets() {
       <div style="background:var(--surface);border-radius:8px;padding:10px;">
         <div style="font-size:10px;color:var(--green);margin-bottom:2px;">PROTEIN</div>
         <div style="font-size:18px;font-weight:700;color:var(--green);">${protTarget}g</div>
-        <div style="font-size:10px;color:var(--text3);">${protMultiplier}g × ${weight}kg</div>
+        <div style="font-size:10px;color:var(--text3);">${protMultiplier}g × ${mhWtText(weight)}</div>
         ${activeProt && activeProt !== protTarget ? `<div style="font-size:10px;color:var(--yellow);margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">Currently active: ${activeProt}g<span onclick="applySuggestedSingle('protein')" style="color:var(--accent);cursor:pointer;margin-left:6px;text-decoration:underline;">apply →</span></div>` : ''}
       </div>
       <div style="background:var(--surface);border-radius:8px;padding:10px;">
@@ -11292,8 +11308,8 @@ function renderSuggestedTargets() {
     ${activeIsLeftover ? `<div style="background:rgba(239,68,68,0.08);border:1px solid var(--red);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12px;color:var(--text2);line-height:1.5;">⚠ <strong>${activeKcal}kcal is currently driving your dashboard, but it was never actually confirmed for ${goal === 'gain' ? 'Gain' : 'Maintain'}</strong> — it's what happened to be active when you last switched to this phase, inherited from whichever phase came before. Tap <strong>apply →</strong> above (or Apply these targets below) to set a real ${goal === 'gain' ? 'Gain' : 'Maintain'} figure, and it'll be remembered specifically for this phase from now on.</div>` : ''}
     ${!manualTdee ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.5;">⚠ No confirmed TDEE set yet — the ${tdee}kcal above is a formula guess (${getBMRFormulaLabel()} + step-based activity), typically accurate to within about ±10-15% for most people, sometimes considerably more off. It's most meaningful as a <strong style="color:var(--text2);">maintenance</strong> starting point specifically — once you've tracked real intake against real weight response for a couple of weeks, enter your own confirmed figure below and this panel will use that instead everywhere, including here.${goal !== 'maintain' ? ` Since your current goal is <strong style="color:var(--text2);">${goal}</strong>, the ${goal === 'lose' ? '−500' : '+400'}kcal adjustment is layered on top of that already-rough estimate, compounding the uncertainty further — treat the ${calTarget}kcal target with proportionally more caution until a confirmed TDEE replaces the guess underneath it.` : ''}</div>` : ''}
     <div style="font-size:11px;color:var(--text3);">Carbs: ≤${carbCeil}g (from your ceiling — unchanged)</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${weight}kg · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
-    ${isOffTargetMaintain ? `<div style="color:var(--yellow);margin-top:6px;font-size:11px;">⚖️ Weight is currently ${weight > wtHigh ? 'above' : 'below'} your ${wtLow}–${wtHigh}kg target, so this suggests a temporary ${CORRECTION_KCAL}kcal correction rather than pure TDEE — the same adjustment recommended in your Monthly Summary. Once weight is back in range, this reverts to plain TDEE.</div>` : ''}
+    <div style="font-size:11px;color:var(--text3);margin-top:2px;">Based on ${mhWtText(weight)} · ${heightCm}cm · age ${age} · ${sex} · ${goal} phase</div>
+    ${isOffTargetMaintain ? `<div style="color:var(--yellow);margin-top:6px;font-size:11px;">⚖️ Weight is currently ${weight > wtHigh ? 'above' : 'below'} your ${mhWtRange(wtLow, wtHigh)} target, so this suggests a temporary ${CORRECTION_KCAL}kcal correction rather than pure TDEE — the same adjustment recommended in your Monthly Summary. Once weight is back in range, this reverts to plain TDEE.</div>` : ''}
     ${!activeIsLeftover && ((activeKcal && activeKcal !== calTarget) || (activeProt && activeProt !== protTarget) || (activeFat && activeFat !== fatTarget)) ? `<div style="margin-top:6px;font-size:11px;">📐 Why these figures might differ from what's active<span onclick="const el=document.getElementById('suggtargets-explain');el.style.display=el.style.display==='none'?'block':'none';" style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text3);font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle;margin-left:6px;">?</span><span id="suggtargets-explain" style="display:none;color:var(--text3);line-height:1.5;">This calculator suggests fresh numbers from your <em>current</em> weight and phase each time you open it — it doesn't automatically match what's actually active elsewhere in the app (dashboard, reports) until you tap Apply below.
       ${['gbm','epilepsy','migraine','cluster_headache'].includes(cond) ? `
         ${activeProt && protTarget !== activeProt ? `<br><br><strong>Protein:</strong> this genuinely tracks bodyweight rather than being a fixed protocol number — as weight moves, the suggested figure is meant to move with it. Updating to the fresh number is normal here, not something to be cautious about.` : ''}
@@ -11870,8 +11886,9 @@ function initSettings() {
   const high = getWeightTargetHigh();
   const lowEl  = document.getElementById('settingWeightTargetLow');
   const highEl = document.getElementById('settingWeightTargetHigh');
-  if (lowEl)  lowEl.value  = low  > 0 ? low  : '';
-  if (highEl) highEl.value = high > 0 ? high : '';
+  if (lowEl)  lowEl.value  = low  > 0 ? mhWtToInput(low)  : '';
+  if (highEl) highEl.value = high > 0 ? mhWtToInput(high) : '';
+  if (typeof mhWtSyncSettingsUI === 'function') mhWtSyncSettingsUI();
   // Fibre target
   const waterTargetInput = document.getElementById('settingWaterTarget');
   if (waterTargetInput) waterTargetInput.value = localStorage.getItem('mh_target_water') || 2000;
@@ -12446,8 +12463,8 @@ function clearLabelReadLog() {
 }
 
 function saveWeightTarget() {
-  const low  = parseFloat(document.getElementById('settingWeightTargetLow')?.value);
-  const high = parseFloat(document.getElementById('settingWeightTargetHigh')?.value);
+  const low  = mhWtFromInput(document.getElementById('settingWeightTargetLow')?.value);
+  const high = mhWtFromInput(document.getElementById('settingWeightTargetHigh')?.value);
   if (!isNaN(low))  localStorage.setItem('mh_weight_target_low',  low);
   if (!isNaN(high)) localStorage.setItem('mh_weight_target_high', high);
   // Also save the displayed kcal target to localStorage
@@ -12455,7 +12472,7 @@ function saveWeightTarget() {
   const ptEl = document.getElementById('phaseTarget');
   if (ptEl) { const kc = parseInt(ptEl.textContent.replace(/[^0-9]/g,'')); if (kc > 0) localStorage.setItem('mh_target_kcal', kc); }
   updateDashboard();
-  showToast(`Weight target saved: ${low}–${high} kg`);
+  showToast(`Weight target saved: ${mhWtRange(low, high)}`);
 }
 
 // Real bug (found in a full audit of water logging paths, 29/09/2026):
@@ -18359,7 +18376,7 @@ function handleWeightQuery(lower) {
   const currentGoal = localStorage.getItem('mh_goal') || 'gain';
   const goalKcal = parseInt(localStorage.getItem('mh_target_kcal')) || 3670;
   const goalLabel = currentGoal === 'gain' ? `Gain phase (${goalKcal} kcal/day)` : currentGoal === 'lose' ? `Loss phase (${goalKcal} kcal/day)` : `Maintenance (${goalKcal} kcal/day)`;
-  addBubble(`Current weight: ${state.weight}kg\nTarget: ${WEIGHT_TARGET_LOW()}–${WEIGHT_TARGET_HIGH()}kg\nGap: +${gap}kg\n\n${goalLabel}.`, 'system');
+  addBubble(`Current weight: ${mhWtText(state.weight)}\nTarget: ${mhWtRange(WEIGHT_TARGET_LOW(), WEIGHT_TARGET_HIGH())}\nGap: ${mhWtDelta(gap)}\n\n${goalLabel}.`, 'system');
   return true;
 }
 
@@ -22235,11 +22252,11 @@ function checkGoalMismatch() {
 
   let mismatch = null;
   if (goal === 'gain' && change < FLAT_THRESHOLD) {
-    mismatch = `Your weight has ${change <= -FLAT_THRESHOLD ? `dropped ${Math.abs(change)}kg` : 'stayed flat'} over your last ~2 weeks despite a gain-phase target. Worth checking: has your actual activity increased recently, or is the current surplus not big enough?`;
+    mismatch = `Your weight has ${change <= -FLAT_THRESHOLD ? `dropped ${mhWtDeltaAbs(change)}` : 'stayed flat'} over your last ~2 weeks despite a gain-phase target. Worth checking: has your actual activity increased recently, or is the current surplus not big enough?`;
   } else if (goal === 'lose' && change > -FLAT_THRESHOLD) {
-    mismatch = `Your weight has ${change >= FLAT_THRESHOLD ? `risen ${change}kg` : 'stayed flat'} over your last ~2 weeks despite a lose-phase target. Worth checking: has activity dropped, or does the deficit need revisiting?`;
+    mismatch = `Your weight has ${change >= FLAT_THRESHOLD ? `risen ${mhWtDeltaAbs(change)}` : 'stayed flat'} over your last ~2 weeks despite a lose-phase target. Worth checking: has activity dropped, or does the deficit need revisiting?`;
   } else if (goal === 'maintain' && Math.abs(change) > 0.5) {
-    mismatch = `Your weight has moved ${change > 0 ? '+' : ''}${change}kg over your last ~2 weeks despite a maintain-phase target. Worth a look — intentional, or does something need adjusting?`;
+    mismatch = `Your weight has moved ${mhWtDelta(change)} over your last ~2 weeks despite a maintain-phase target. Worth a look — intentional, or does something need adjusting?`;
   }
   // Shown under any of the three messages above - explains WHY this can
   // happen at all rather than just leaving the person to guess. When a
@@ -23345,7 +23362,8 @@ function updateDashboard(skipActivityRender) {
 
   // Count up weight if present
   if (state.weight) {
-    animateCountUp('displayWeight', state.weight, v => v.toFixed(1) + '<span>kg</span>', 800);
+    if (mhWtUnit() === 'kg') animateCountUp('displayWeight', state.weight, v => v.toFixed(1) + '<span>kg</span>', 800);
+    else { const _wp = mhWtParts(state.weight); document.getElementById('displayWeight').innerHTML = _wp[0] + '<span>' + _wp[1] + '</span>'; }
   }
 
   // Activity calorie adjustment
@@ -23523,25 +23541,25 @@ function updateDashboard(skipActivityRender) {
   const displayWeight = state.weight || getLastKnownWeight();
   const weightIsCarried = !state.weight && !!displayWeight;
   document.getElementById('displayWeight').innerHTML = displayWeight
-    ? `${displayWeight}<span>kg</span>${weightIsCarried ? '<span style="font-size:9px;color:var(--text3);display:block;margin-top:1px;">last known</span>' : ''}`
-    : `—<span>kg</span>`;
+    ? `${mhWtParts(displayWeight)[0]}<span>${mhWtParts(displayWeight)[1]}</span>${weightIsCarried ? '<span style="font-size:9px;color:var(--text3);display:block;margin-top:1px;">last known</span>' : ''}`
+    : `—<span>${mhWtUnitShort()}</span>`;
   const wtLow  = WEIGHT_TARGET_LOW();
   const wtHigh = WEIGHT_TARGET_HIGH();
   const gap = displayWeight ? (wtLow - displayWeight).toFixed(1) : null;
   const gapEl = document.getElementById('weightGap');
   const tgtEl = document.getElementById('dashWeightTarget');
-  if (tgtEl) tgtEl.textContent = `${wtLow}–${wtHigh}`;
+  if (tgtEl) tgtEl.textContent = mhWtUnit() === 'kg' ? `${wtLow}–${wtHigh}` : mhWtRange(wtLow, wtHigh, mhWtUnit()==='st'?0:1);
   if (!displayWeight) {
     gapEl.textContent = 'No weight recorded';
     gapEl.style.color = 'var(--text3)';
   } else if (displayWeight < wtLow) {
-    gapEl.textContent = `+${gap}kg to go`;
+    gapEl.textContent = `${mhWtDeltaAbs(wtLow - displayWeight)} to go`;
     gapEl.style.color = 'var(--yellow)';
   } else if (displayWeight <= wtHigh) {
     gapEl.textContent = '✓ In target range';
     gapEl.style.color = 'var(--green)';
   } else {
-    gapEl.textContent = `${(displayWeight - wtHigh).toFixed(1)}kg over`;
+    gapEl.textContent = `${mhWtDeltaAbs(displayWeight - wtHigh)} over`;
     gapEl.style.color = 'var(--red)';
   }
   // Weight trend prediction
@@ -23580,7 +23598,7 @@ function updateDashboard(skipActivityRender) {
           ? Math.round((wtLow - state.weight) / avgDailyChange)
           : Math.round((state.weight - wtHigh) / Math.abs(avgDailyChange));
         const direction = avgDailyChange > 0 ? '↑' : '↓';
-        const changeStr = (avgDailyChange > 0 ? '+' : '') + avgDailyChange.toFixed(2) + 'kg/day';
+        const changeStr = mhWtDelta(avgDailyChange, 2, true);
         if (state.weight < wtLow && avgDailyChange > 0 && daysToTarget > 0) {
           trendEl.textContent = `${direction} ${changeStr} avg · target in ~${daysToTarget} days`;
           trendEl.style.color = 'var(--accent)';
@@ -26352,7 +26370,7 @@ function renderHistory() {
         `).join('')}
         ${cleanLog.length === 0 ? `<div style="margin-top:8px;"><span style="font-size:11px;color:var(--red);cursor:pointer;text-decoration:underline;" onclick="deleteHistDay('${day.date}')">🗑 Delete this day</span></div>` : ''}
         ${day.notes ? `<div class="hist-notes">📝 ${day.notes}</div>` : ''}
-        ${day.weight ? `<div class="hist-notes">⚖️ Weight: ${day.weight}kg</div>` : ''}
+        ${day.weight ? `<div class="hist-notes">⚖️ Weight: ${mhWtText(day.weight)}</div>` : ''}
         ${day.water_ml ? `<div class="hist-notes" style="color:#38bdf8;">💧 Water: ${day.water_ml}ml</div>` : ''}
         <div style="padding-top:6px;border-top:1px solid var(--border);margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="startPastDayLog('${day.date}')">🍽 + Add food to this day</span>
@@ -30900,7 +30918,8 @@ function setDayMode(mode) {
 
 // ─── WEIGHT MODAL ────────────────────────────────────────
 function openWeightModal() {
-  document.getElementById('weightInput').value = state.weight;
+  document.getElementById('weightInput').value = state.weight ? mhWtToInput(state.weight) : '';
+  const _wl = document.getElementById('weightModalLabel'); if (_wl) _wl.textContent = `Enter today's weight (${mhWtInputUnit()})`;
   document.getElementById('weightModal').classList.add('open');
 }
 
@@ -30909,7 +30928,7 @@ function closeWeightModal() {
 }
 
 function confirmWeight() {
-  const val = parseFloat(document.getElementById('weightInput').value);
+  const val = mhWtFromInput(document.getElementById('weightInput').value);
   if (isNaN(val) || val < 40 || val > 200) {
     showToast('Invalid weight'); return;
   }
@@ -30926,7 +30945,7 @@ function confirmWeight() {
   saveState();
   updateDashboard();
   closeWeightModal();
-  showToast(`Weight updated: ${val}kg`);
+  showToast(`Weight updated: ${mhWtText(val)}`);
   // Same gap as condition/goal - weight is a direct input to the Suggested
   // Targets calculation, so if that panel happens to be open (or gets
   // reopened shortly after), it should reflect the just-logged weight
@@ -31012,7 +31031,7 @@ function toggleWeightVoiceInput() {
     const val = parseFloat(match[1]);
     const input = document.getElementById('weightInput');
     if (input) input.value = val;
-    showToast(`🎤 Heard ${val}kg - check the field, then tap Confirm`);
+    showToast(`🎤 Heard ${val}${mhWtInputUnit()} - check the field, then tap Confirm`);
   };
   rec.onerror = (e) => {
     if (e.error === 'no-speech' || e.error === 'aborted') return;
@@ -32533,7 +32552,7 @@ function renderJourneyCard() {
   const statsEl = document.getElementById('journeyStats');
   if (statsEl) statsEl.innerHTML =
     stat('Days tracked', weighed.length) +
-    stat('Weight range', `${Math.min(...weightVals)}–${Math.max(...weightVals)}kg`) +
+    stat('Weight range', mhWtRange(Math.min(...weightVals), Math.max(...weightVals))) +
     stat(isKetogenicCondition() ? 'Ketosis adherence' : 'Carb target adherence', `${adherencePct}% (${ketosisDays}/${loggedDays.length})`) +
     stat('Current streak', `${streak} day${streak===1?'':'s'}`) +
     stat('Logging streak', `${calcLoggingStreak()} day${calcLoggingStreak()===1?'':'s'}`) +
@@ -32552,7 +32571,7 @@ function showJourneyDayPanel(index, weighed, pointColors) {
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
         <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${d.date}</div>
-        <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text);margin-top:4px;">${d.weight}kg</div>
+        <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text);margin-top:4px;">${mhWtText(d.weight)}</div>
         <div style="font-size:11px;color:${color};margin-top:2px;">${statusText}</div>
       </div>
       <button onclick="closeJourneyDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
@@ -32694,7 +32713,7 @@ function renderPatternsCard() {
       if (movingTowardRange || alreadyInRange) return; // moving toward - or already within - your own target range: not a problem, don't flag
     }
     const label = result.direction === 'high' ? 'trending up' : 'trending down';
-    earlyWarnings.push(`<strong>Weight — ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${result.mean}kg average, ±${result.sd}kg. Most recent: ${result.recentVals.join(', ')}kg.`);
+    earlyWarnings.push(`<strong>Weight — ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${mhWtText(result.mean)} average, ±${mhWtDeltaAbs(result.sd)}. Most recent: ${result.recentVals.join(', ')}kg.`);
   })();
 
   // 1. Sleep quality → NEXT day's ketosis adherence. Uses the person's own
@@ -33350,18 +33369,19 @@ function renderTrends() {
     const targetLow  = getWeightTargetLow()  || 92;
     const targetHigh = getWeightTargetHigh() || 93;
     const gap = (targetLow - latest).toFixed(1);
-    document.getElementById('mcWeightVal').textContent = latest;
-    document.getElementById('statWeightCurrent').textContent = latest + 'kg';
-    document.getElementById('statWeightMin').textContent = Math.min(...weightClean) + 'kg';
-    document.getElementById('statWeightMax').textContent = Math.max(...weightClean) + 'kg';
-    document.getElementById('statWeightAvg').textContent = avg(weightClean) + 'kg';
+    document.getElementById('mcWeightVal').textContent = mhWtParts(latest)[0];
+    const _mu = document.querySelector('#mcWeight .metric-unit'); if (_mu) _mu.textContent = mhWtParts(latest)[1];
+    document.getElementById('statWeightCurrent').textContent = mhWtText(latest);
+    document.getElementById('statWeightMin').textContent = mhWtText(Math.min(...weightClean));
+    document.getElementById('statWeightMax').textContent = mhWtText(Math.max(...weightClean));
+    document.getElementById('statWeightAvg').textContent = mhWtText(avg(weightClean));
     const statusEl = document.getElementById('mcWeightStatus');
     if (latest >= targetLow && latest <= targetHigh) {
-      statusEl.textContent = `${latest}kg · In target zone`; statusEl.className = 'metric-status good';
+      statusEl.textContent = `${mhWtText(latest)} · In target zone`; statusEl.className = 'metric-status good';
     } else if (latest < targetLow) {
-      statusEl.textContent = `${latest}kg · ${gap}kg below target`; statusEl.className = 'metric-status warn';
+      statusEl.textContent = `${mhWtText(latest)} · ${mhWtDeltaAbs(targetLow - latest)} below target`; statusEl.className = 'metric-status warn';
     } else {
-      statusEl.textContent = `${latest}kg · Above target`; statusEl.className = 'metric-status bad';
+      statusEl.textContent = `${mhWtText(latest)} · Above target`; statusEl.className = 'metric-status bad';
     }
     drawSparkline('sparkWeight', weightVals, '#f5c542');
     // Weight chart
@@ -33371,6 +33391,9 @@ function renderTrends() {
     });
     if (document.getElementById('chartWeight')) {
     destroyChart('chartWeight');
+    // chart in the chosen unit (kg or lb); data itself stays kg
+    const _cv = v => (v == null ? null : mhWtToInput(v));
+    const _isKg = mhWtUnit() === 'kg';
     const weightStyle = getChartStyle(CHART_STYLE_KEY, 'weight', 'line');
     chartInstances['chartWeight'] = new Chart(document.getElementById('chartWeight'), {
       type:'line', data:{ labels, datasets:[
@@ -33378,11 +33401,11 @@ function renderTrends() {
         // avg/target band are reference guides, not data, and stay as thin
         // dashed lines regardless (a bar/point rendering of a flat target
         // line adds nothing and just clutters the chart).
-        applyChartStyle({ label:'Weight', data:weightVals, borderColor:'#f5c542', backgroundColor:'rgba(245,197,66,0.07)', borderWidth:2, fill:weightStyle==='line', tension:0.3, pointRadius:weightVals.map(v=>v?3:0), pointBackgroundColor:'#f5c542' }, weightStyle),
-        { label:'7-day avg', data:rolling, borderColor:'rgba(245,197,66,0.5)', borderWidth:1.5, borderDash:[4,3], pointRadius:0, fill:false },
-        { label:'Target', data:Array(weightVals.length).fill(targetLow), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:false },
-        { label:'Target high', data:Array(weightVals.length).fill(targetHigh), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:'-1', backgroundColor:'rgba(45,235,143,0.05)' }
-      ]}, options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales.y, min:Math.max(80,Math.min(...weightClean)-1), max:Math.max(...weightClean)+1 }},
+        applyChartStyle({ label:'Weight', data:weightVals.map(_cv), borderColor:'#f5c542', backgroundColor:'rgba(245,197,66,0.07)', borderWidth:2, fill:weightStyle==='line', tension:0.3, pointRadius:weightVals.map(v=>v?3:0), pointBackgroundColor:'#f5c542' }, weightStyle),
+        { label:'7-day avg', data:rolling.map(_cv), borderColor:'rgba(245,197,66,0.5)', borderWidth:1.5, borderDash:[4,3], pointRadius:0, fill:false },
+        { label:'Target', data:Array(weightVals.length).fill(_cv(targetLow)), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:false },
+        { label:'Target high', data:Array(weightVals.length).fill(_cv(targetHigh)), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:'-1', backgroundColor:'rgba(45,235,143,0.05)' }
+      ]}, options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales.y, min:_cv(Math.max(_isKg?80:36,Math.min(...weightClean)-1)), max:_cv(Math.max(...weightClean)+1) }},
         plugins:{ ...CHART_DEFAULTS.plugins, legend:{ display:true, position:'bottom', labels:{ color:'#8b90a0', font:{size:9}, padding:8, boxWidth:8 }}}
       }
     });
@@ -36184,10 +36207,10 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
     const wtsec = document.createElement('div');
     wtsec.className = 'drill-section';
     wtsec.innerHTML = '<div class="drill-section-title">Weight vs target</div>'
-      + '<div class="drill-row"><span class="drill-row-label">Target range</span><span class="drill-row-val">'+wtLow+'–'+wtHigh+' kg</span></div>'
-      + '<div class="drill-row"><span class="drill-row-label">Current</span><span class="drill-row-val">'+(last?last+' kg':'—')+'</span></div>'
-      + '<div class="drill-row"><span class="drill-row-label">Avg (period)</span><span class="drill-row-val">'+(avg?avg+' kg':'—')+'</span></div>'
-      + '<div class="drill-row"><span class="drill-row-label">Range</span><span class="drill-row-val">'+((min&&max)?min+'–'+max+' kg':'—')+'</span></div>';
+      + '<div class="drill-row"><span class="drill-row-label">Target range</span><span class="drill-row-val">'+mhWtRange(wtLow, wtHigh)+'</span></div>'
+      + '<div class="drill-row"><span class="drill-row-label">Current</span><span class="drill-row-val">'+(last?mhWtText(last):'—')+'</span></div>'
+      + '<div class="drill-row"><span class="drill-row-label">Avg (period)</span><span class="drill-row-val">'+(avg?mhWtText(avg):'—')+'</span></div>'
+      + '<div class="drill-row"><span class="drill-row-label">Range</span><span class="drill-row-val">'+((min&&max)?mhWtRange(min,max):'—')+'</span></div>';
     el.appendChild(wtsec);
 
     // Body comp section
@@ -36208,7 +36231,7 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
 
       const protsec = document.createElement('div');
       protsec.className = 'drill-section';
-      const _wtRangeText = (_wtLow && _wtHigh) ? `staying ${_wtLow}–${_wtHigh}kg` : 'staying within your target weight range';
+      const _wtRangeText = (_wtLow && _wtHigh) ? `staying ${mhWtRange(_wtLow, _wtHigh)}` : 'staying within your target weight range';
       protsec.innerHTML = `<div style="font-size:13px;color:var(--text2);line-height:1.7;">Muscle mass is your primary metabolic asset${isGBMorEpilepsy ? ' for the GBM protocol' : ''}. Higher lean mass improves insulin sensitivity. Target: increase muscle while ${_wtRangeText}. <span style="color:var(--accent);">[Proven]</span></div>`;
       el.appendChild(protsec);
     }
@@ -36682,7 +36705,7 @@ function renderDailyView(data) {
   // Weight
   if (d.weight && d.weight > 0) {
     el.appendChild(makeSection('Weight', [
-      ['\u2696\uFE0F', 'Weight', d.weight + ' kg', d.weight >= WEIGHT_TARGET_LOW() && d.weight <= WEIGHT_TARGET_HIGH() ? 'var(--accent)' : 'var(--yellow)'],
+      ['\u2696\uFE0F', 'Weight', mhWtText(d.weight), d.weight >= WEIGHT_TARGET_LOW() && d.weight <= WEIGHT_TARGET_HIGH() ? 'var(--accent)' : 'var(--yellow)'],
     ], null, 'dv-weight'));
   }
 
@@ -39095,7 +39118,7 @@ function renderWeightProtocol() {
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:14px;">
       <div style="background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;overflow:hidden;">
-        <div style="font-size:clamp(14px,4vw,20px);font-weight:800;font-family:'Syne',sans-serif;color:${trendColor};white-space:nowrap;">${current}kg</div>
+        <div style="font-size:clamp(14px,4vw,20px);font-weight:800;font-family:'Syne',sans-serif;color:${trendColor};white-space:nowrap;">${mhWtText(current)}</div>
         <div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">CURRENT</div>
       </div>
       <div style="background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;overflow:hidden;">
@@ -39103,17 +39126,17 @@ function renderWeightProtocol() {
         <div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">TOTAL CHANGE</div>
       </div>
       <div style="background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;min-width:0;overflow:hidden;">
-        <div style="font-size:clamp(14px,4vw,20px);font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);white-space:nowrap;">${weeklyChange>0?'+':''}${weeklyChange}kg</div>
+        <div style="font-size:clamp(14px,4vw,20px);font-weight:800;font-family:'Syne',sans-serif;color:var(--text2);white-space:nowrap;">${mhWtDelta(weeklyChange)}</div>
         <div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">PER WEEK</div>
       </div>
     </div>
-    ${wtLow > 0 ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Target range: ${wtLow}–${wtHigh}kg · Currently <span style="color:${inRange?'var(--accent)':'var(--yellow)'};">${inRange?'✓ in range':current<wtLow?`${(wtLow-current).toFixed(1)}kg below target`:`${(current-wtHigh).toFixed(1)}kg above target`}</span></div>` : ''}
+    ${wtLow > 0 ? `<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Target range: ${mhWtRange(wtLow, wtHigh)} · Currently <span style="color:${inRange?'var(--accent)':'var(--yellow)'};">${inRange?'✓ in range':current<wtLow?`${(wtLow-current).toFixed(1)}kg below target`:`${(current-wtHigh).toFixed(1)}kg above target`}</span></div>` : ''}
     <div style="border-top:1px solid var(--border);padding-top:10px;">
       <div style="font-size:9px;color:var(--text3);font-family:'Space Mono',monospace;margin-bottom:8px;">TREND BY PERIOD</div>
       ${blocks.slice(0,4).map(b => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
           <span style="color:var(--text3);font-family:'Space Mono',monospace;font-size:10px;">${b.start} → ${b.end}</span>
-          <span style="color:var(--text2);">${b.avgWeight}kg avg${b.avgKcal?` · ${b.avgKcal}kcal`:''}</span>
+          <span style="color:var(--text2);">${mhWtText(b.avgWeight)} avg${b.avgKcal?` · ${b.avgKcal}kcal`:''}</span>
         </div>`).join('')}
     </div>`;
 }
@@ -39650,7 +39673,7 @@ function renderTreatmentAnalysis() {
       html += card(isKetogenicCondition() ? 'Ketosis adherence' : 'Carb target adherence', tAdherence, sAdherence, '%', 'var(--accent)');
     }
     if (tWeight !== null && sWeight !== null) {
-      html += card('Avg weight', tWeight, sWeight, 'kg', 'var(--yellow)');
+      html += card('Avg weight', mhWtToInput(tWeight), mhWtToInput(sWeight), mhWtInputUnit(), 'var(--yellow)');
     }
     html += '</div>';
     if (tWeight === null || sWeight === null) {
@@ -44015,7 +44038,93 @@ function renderLightboxChart() {
 // set directly in the HTML.
 
 
-// ── WEIGHT UNIT TOGGLE ────────────────────────────────────
+// ── GLOBAL WEIGHT UNIT (v3.10.880) ────────────────────────
+// One display unit for every body-weight figure: 'kg' | 'lbs' | 'st'.
+// STORAGE IS ALWAYS KG (combined.csv, history, targets) - these helpers only
+// convert for display and for typed input. In 'st' mode, display reads
+// "14 st 8 lb" but typed entry fields take plain pounds (labelled lb).
+// (literal, not a top-level const: this block sits late in the script and is called during early render)
+function mhWtUnit() {
+  try { const u = localStorage.getItem('mh_weight_unit'); return (u === 'lbs' || u === 'st') ? u : 'kg'; } catch (_) { return 'kg'; }
+}
+function mhWtInputUnit() { return mhWtUnit() === 'kg' ? 'kg' : 'lb'; }          // unit typed into number fields
+function mhWtUnitShort() { const u = mhWtUnit(); return u === 'kg' ? 'kg' : u === 'lbs' ? 'lb' : 'st'; } // unit under a big number
+// kg -> number in the typed-input unit (kg or lb), rounded
+function mhWtToInput(kg, dp) {
+  const v = parseFloat(kg); if (isNaN(v)) return '';
+  dp = dp == null ? 1 : dp;
+  const x = mhWtUnit() === 'kg' ? v : v / 0.45359237;
+  return parseFloat(x.toFixed(dp));
+}
+// typed number (kg or lb) -> kg, 1dp
+function mhWtFromInput(v) {
+  v = parseFloat(v); if (isNaN(v)) return NaN;
+  return mhWtUnit() === 'kg' ? v : Math.round(v * 0.45359237 * 10) / 10;
+}
+// kg -> display text with unit: "92.2 kg" | "203.3 lb" | "14 st 8 lb"
+function mhWtText(kg, dp, noUnit) {
+  const v = parseFloat(kg); if (isNaN(v)) return '—';
+  dp = dp == null ? 1 : dp;
+  const u = mhWtUnit();
+  if (u === 'kg') return v.toFixed(dp) + (noUnit ? '' : ' kg');
+  const lb = v / 0.45359237;
+  if (u === 'lbs') return lb.toFixed(dp) + (noUnit ? '' : ' lb');
+  let st = Math.floor(lb / 14), rem = Math.round((lb - st * 14) * 10) / 10;
+  if (rem >= 14) { st += 1; rem = 0; }
+  return `${st} st ${rem % 1 === 0 ? rem : rem.toFixed(1)} lb`;
+}
+// big-number form: [value, unitLabel]; for st the value carries "14 st 8" and unit "lb"
+function mhWtParts(kg, dp) {
+  const v = parseFloat(kg); if (isNaN(v)) return ['—', mhWtUnitShort()];
+  dp = dp == null ? 1 : dp;
+  const u = mhWtUnit();
+  if (u === 'kg') return [v.toFixed(dp), 'kg'];
+  const lb = v / 0.45359237;
+  if (u === 'lbs') return [lb.toFixed(dp), 'lb'];
+  const t = mhWtText(v, dp).replace(/ lb$/, '');
+  return [t, 'lb'];
+}
+// a CHANGE in kg -> signed text ("+0.4 kg" / "+0.9 lb"); st mode shows pounds for deltas
+function mhWtDelta(kg, dp, perDay) {
+  const v = parseFloat(kg); if (isNaN(v)) return '—';
+  dp = dp == null ? 1 : dp;
+  const u = mhWtUnit();
+  const x = u === 'kg' ? v : v / 0.45359237;
+  return (x > 0 ? '+' : '') + x.toFixed(dp) + (u === 'kg' ? 'kg' : 'lb') + (perDay ? '/day' : '');
+}
+function mhWtDeltaAbs(kg, dp) { return mhWtDelta(Math.abs(kg), dp).replace(/^\+/, ''); }
+// a range in kg -> "92.0–93.0 kg" etc.
+function mhWtRange(lo, hi, dp) {
+  const u = mhWtUnit();
+  if (u === 'st') return mhWtText(lo, dp) + ' – ' + mhWtText(hi, dp);
+  return mhWtText(lo, dp, true) + '–' + mhWtText(hi, dp);
+}
+function mhWtSyncSettingsUI() {
+  const u = mhWtUnit();
+  [['gwuKg','kg'],['gwuLbs','lbs'],['gwuSt','st']].forEach(([id, k]) => {
+    const el = document.getElementById(id); if (!el) return;
+    const on = u === k;
+    el.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
+    el.style.background = on ? 'var(--accent-dim)' : '';
+    el.style.color = on ? 'var(--accent)' : 'var(--text3)';
+  });
+  document.querySelectorAll('.mh-wt-unit').forEach(el => { el.textContent = mhWtInputUnit(); });
+  const lowEl = document.getElementById('settingWeightTargetLow'), highEl = document.getElementById('settingWeightTargetHigh');
+  const lo = getWeightTargetLow(), hi = getWeightTargetHigh();
+  if (lowEl && document.activeElement !== lowEl) lowEl.value = lo > 0 ? mhWtToInput(lo) : '';
+  if (highEl && document.activeElement !== highEl) highEl.value = hi > 0 ? mhWtToInput(hi) : '';
+}
+function setGlobalWeightUnit(u) {
+  try { localStorage.setItem('mh_weight_unit', (u === 'lbs' || u === 'st') ? u : 'kg'); } catch (_) {}
+  mhWtRefreshAll();
+}
+function mhWtRefreshAll() {
+  try { if (typeof mhWtSyncSettingsUI === 'function') mhWtSyncSettingsUI(); } catch (_) {}
+  try { if (typeof updateDashboard === 'function') updateDashboard(); } catch (_) {}
+  try { if (typeof renderTrends === 'function' && document.getElementById('tab-trends')?.classList.contains('active')) renderTrends(); } catch (_) {}
+}
+
+// ── WEIGHT UNIT TOGGLE (onboarding input) ─────────────────
 let _weightUnit = 'kg';
 
 function setWeightUnit(unit) {
@@ -44077,7 +44186,7 @@ function _fractionDigits(inputId, val) {
   return Math.round((val - Math.floor(val)) * 100);
 }
 
-function getWeightInKg(val) {
+function getWeightInKg(val, fieldId) {
   if (!val) return null;
   if (_weightUnit === 'lbs') return Math.round(val * 0.453592 * 10) / 10;
   if (_weightUnit === 'st') {
@@ -44085,7 +44194,7 @@ function getWeightInKg(val) {
     // 12.7 = 12st 7lb). The old (val - stones) * 10 turned a typed "12.10" into
     // 12.1 -> 1lb, silently wrong by 9lb.
     const stones = Math.floor(val);
-    const lbs = _fractionDigits('onboardWeight', val);
+    const lbs = _fractionDigits(fieldId || 'onboardWeight', val);
     return Math.round((stones * 6.35029 + lbs * 0.453592) * 10) / 10;
   }
   return val;
@@ -45257,7 +45366,7 @@ function dismissInsight() {
 <div class="modal-overlay" id="weightModal">
   <div class="modal">
     <div class="modal-title">UPDATE WEIGHT</div>
-    <div class="modal-label">Enter today's weight (kg)</div>
+    <div class="modal-label" id="weightModalLabel">Enter today's weight (kg)</div>
     <div style="display:flex;gap:8px;align-items:center;">
       <input class="modal-input" type="number" id="weightInput" step="0.1" placeholder="90.6" style="flex:1;">
       <button id="weightVoiceBtn" onclick="toggleWeightVoiceInput()" title="Say your weight" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:44px;height:44px;flex-shrink:0;cursor:pointer;font-size:16px;">🎤</button>

@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.880 — One Weight Unit For The Whole App (kg / lbs / st + lb)
+
+Pete (7 Oct): do the kg/lbs choice from onboarding and profile drive every weight card? They did not. The onboarding choice only converted what you typed, was never remembered, and everything displayed in kg.
+- **New Settings → Profile → Weight unit** (kg / lbs / st + lb). Display only: data is always stored in kg, so switching never changes or loses anything. In st + lb, fields where you type a weight take pounds (labelled lb); everything displayed reads like "14 st 2 lb".
+- **Follows the unit:** dashboard weight card, gap to target and trend rate, target range fields in Settings, the Update Weight popup (and voice entry), Trends weight card/stats/chart, history rows, journey stats, drill-down numbers, weekly report, suggested-targets text, early-warning text, chat weight reply.
+- **Real bug fixed:** onboarding in lbs or st stored the typed number as if it were kg (200 lb became "200 kg"), and the same for the target. Height typed in ft+in was also stored raw and dropped. Both are now converted to kg/cm, and the chosen unit is remembered.
+- **Not converted (still kg):** the metric drill-down chart and its hero figure, the journey chart, correlation tables, reports/exports and AI prompts (clinical figures stay in kg on purpose).
+- Test: p45 (lbs onboarding stores kg, unit persists, dashboard/target/modal/trends follow, st rounding, kg mode untouched).
+
 ## v3.10.879 — Tableware & Portion Sizes (Settings)
 
 Pete (7 Oct): a settings list of crockery and cutlery sizes so photo estimates are more accurate, with defaults, overrides, per-item return-to-default, and labelled sets.
