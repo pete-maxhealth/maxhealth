@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.886 — Trends "Today" View: Look-Alike Sections Merged, Chips Apply
+
+Pete (7 Oct): continue de-cluttering. Trends opens on the single-day "Today" view, which had its own look-alike cards.
+- **Weight and Body Composition are now one section** ("Weight & Body Composition": weight, fat %, muscle %, bone, hydration). Rows only appear when there is a reading. The weight row opens the weight chart. Bone and hydration now follow your chosen weight unit (they were stuck on kg).
+- **Sleep and Sleep Detail are now one "Sleep" section** (stages, then bedtime, wake time, efficiency and snoring when recorded).
+- **The topic chips now sit above both views** and filter the single-day sections too (Body = weight & body composition; Heart & sleep = activity & vitals and sleep; Food = meal breakdown). Patterns says there is nothing to compare in a single day.
+- Old saved hide/order settings for the retired Body Composition and Sleep Detail sections are simply ignored; your other choices are kept.
+- Test: p49 extended.
+
 ## v3.10.885 — Trends: Topic Chips And "What Question Does This Answer" Captions
 
 Pete (7 Oct): the app is so feature-rich that similar-looking cards confuse and overwhelm. First step, on Trends (the worst overlap).

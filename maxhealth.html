@@ -6053,7 +6053,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.885'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.886'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7745,8 +7745,6 @@ const GENERIC_SECTION_IDS = {
     'dv-sleep':       ['title-dv-sleep', 'dv-sleep-wrap'],
     'dv-meals':       ['title-dv-meals', 'dv-meals-wrap'],
     'dv-weight':      ['title-dv-weight', 'dv-weight-wrap'],
-    'dv-bodycomp':    ['title-dv-bodycomp', 'dv-bodycomp-wrap'],
-    'dv-sleepdetail': ['title-dv-sleepdetail', 'dv-sleepdetail-wrap'],
   },
 };
 const GENERIC_DEFAULT_ORDER = {
@@ -7754,7 +7752,7 @@ const GENERIC_DEFAULT_ORDER = {
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-tableware', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
-  dailyview: ['dv-activity', 'dv-sleep', 'dv-meals', 'dv-weight', 'dv-bodycomp', 'dv-sleepdetail'],
+  dailyview: ['dv-activity', 'dv-sleep', 'dv-meals', 'dv-weight'],
 };
 
 function makeContainerReorderable(containerEl, scopeKey) {
@@ -33460,6 +33458,7 @@ function renderTrends() {
       const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     renderDailyView(data);
+    try { mhTrendsGroupApply(); } catch (e) {}
     return;
   }
   // Hide daily view if switching away
@@ -36790,14 +36789,19 @@ function renderDailyView(data) {
     ['\uD83D\uDD25', 'Active Cal', fmt(d.calories_active, ' kcal'), 'var(--text)'],
   ], null, 'dv-activity'));
 
-  // Sleep
-  const sleepSec = makeSection('Sleep', [
+  // Sleep (v3.10.885: bedtime / wake / efficiency / snoring folded in - they were a second, look-alike "Sleep Detail" card)
+  const _sleepRows = [
     ['\uD83C\uDF19', 'Total sleep', fmtTime(d.sleep_duration), col(d.sleep_duration, 420, 360)],
     ['\uD83D\uDFE3', 'Deep', fmtTime(d.sleep_deep), '#6366f1'],
     ['\uD83D\uDD35', 'Light', fmtTime(d.sleep_light), 'var(--blue)'],
     ['\uD83D\uDFE2', 'REM', fmtTime(d.sleep_rem), 'var(--accent)'],
     ['\u2B1C', 'Awake', fmtTime(d.sleep_wake), 'var(--text3)'],
-  ], null, 'dv-sleep');
+  ];
+  if (d.bedtime) _sleepRows.push(['\u23F0', 'Bedtime', d.bedtime, 'var(--text2)']);
+  if (d.wake_time) _sleepRows.push(['\uD83C\uDF05', 'Wake time', d.wake_time, 'var(--text2)']);
+  if (d.sleep_efficiency) _sleepRows.push(['\uD83D\uDCCA', 'Efficiency', d.sleep_efficiency.toFixed(0) + '%', d.sleep_efficiency >= 85 ? 'var(--accent)' : d.sleep_efficiency >= 75 ? 'var(--yellow)' : 'var(--red)']);
+  if (d.snoring_min) _sleepRows.push(['\uD83D\uDD07', 'Snoring', d.snoring_min + ' min', d.snoring_min > 30 ? 'var(--red)' : 'var(--text3)']);
+  const sleepSec = makeSection('Sleep', _sleepRows, null, 'dv-sleep');
   el.appendChild(sleepSec);
 
   // Nutrition card deliberately removed (28/09/2026, Pete's call) - it only
@@ -36835,31 +36839,16 @@ function renderDailyView(data) {
     el.appendChild(mealsSec);
   }
 
-  // Weight
-  if (d.weight && d.weight > 0) {
-    el.appendChild(makeSection('Weight', [
-      ['\u2696\uFE0F', 'Weight', mhWtText(d.weight), d.weight >= WEIGHT_TARGET_LOW() && d.weight <= WEIGHT_TARGET_HIGH() ? 'var(--accent)' : 'var(--yellow)'],
-    ], null, 'dv-weight'));
-  }
-
-  // Body Composition
-  if (d.fat_pct || d.muscle_pct || d.bone_mass_kg || d.hydration_kg) {
-    el.appendChild(makeSection('Body Composition', [
-      ['\uD83E\uDDE8', 'Fat %', d.fat_pct ? d.fat_pct.toFixed(1) + '%' : '\u2014', d.fat_pct ? (d.fat_pct < 20 ? 'var(--accent)' : d.fat_pct < 25 ? 'var(--yellow)' : 'var(--red)') : 'var(--text3)'],
-      ['\uD83D\uDCAA', 'Muscle %', d.muscle_pct ? d.muscle_pct.toFixed(1) + '%' : '\u2014', d.muscle_pct ? (d.muscle_pct > 45 ? 'var(--accent)' : 'var(--yellow)') : 'var(--text3)'],
-      ['\uD83E\uDDB4', 'Bone mass', d.bone_mass_kg ? d.bone_mass_kg.toFixed(2) + ' kg' : '\u2014', 'var(--text)'],
-      ['\uD83D\uDCA7', 'Hydration', d.hydration_kg ? d.hydration_kg.toFixed(1) + ' kg' : '\u2014', 'var(--blue)'],
-    ], null, 'dv-bodycomp'));
-  }
-
-  // Sleep efficiency
-  if (d.sleep_efficiency || d.bedtime || d.wake_time) {
-    el.appendChild(makeSection('Sleep Detail', [
-      ['\u23F0', 'Bedtime', d.bedtime ? d.bedtime : '\u2014', 'var(--text2)'],
-      ['\uD83C\uDF05', 'Wake time', d.wake_time ? d.wake_time : '\u2014', 'var(--text2)'],
-      ['\uD83D\uDCCA', 'Efficiency', d.sleep_efficiency ? d.sleep_efficiency.toFixed(0) + '%' : '\u2014', d.sleep_efficiency ? (d.sleep_efficiency >= 85 ? 'var(--accent)' : d.sleep_efficiency >= 75 ? 'var(--yellow)' : 'var(--red)') : 'var(--text3)'],
-      ['\uD83D\uDD07', 'Snoring', d.snoring_min ? d.snoring_min + ' min' : '\u2014', d.snoring_min > 30 ? 'var(--red)' : 'var(--text3)'],
-    ], null, 'dv-sleepdetail'));
+  // Weight + Body Composition: ONE section (v3.10.885) - they were two look-alike
+  // cards for the same weigh-in. Rows only appear when there is a value.
+  {
+    const _bRows = [];
+    if (d.weight && d.weight > 0) _bRows.push(['\u2696\uFE0F', 'Weight', mhWtText(d.weight), d.weight >= WEIGHT_TARGET_LOW() && d.weight <= WEIGHT_TARGET_HIGH() ? 'var(--accent)' : 'var(--yellow)', 'weight']);
+    if (d.fat_pct) _bRows.push(['\uD83E\uDDE8', 'Fat %', d.fat_pct.toFixed(1) + '%', d.fat_pct < 20 ? 'var(--accent)' : d.fat_pct < 25 ? 'var(--yellow)' : 'var(--red)']);
+    if (d.muscle_pct) _bRows.push(['\uD83D\uDCAA', 'Muscle %', d.muscle_pct.toFixed(1) + '%', d.muscle_pct > 45 ? 'var(--accent)' : 'var(--yellow)']);
+    if (d.bone_mass_kg) _bRows.push(['\uD83E\uDDB4', 'Bone mass', mhWtText(d.bone_mass_kg, 2), 'var(--text)']);
+    if (d.hydration_kg) _bRows.push(['\uD83D\uDCA7', 'Hydration', mhWtText(d.hydration_kg), 'var(--blue)']);
+    if (_bRows.length) el.appendChild(makeSection(_bRows.length > 1 ? 'Weight & Body Composition' : 'Weight', _bRows, null, 'dv-weight'));
   }
 
   // Hide/reorder controls for this day's sections - a fresh scope
@@ -44210,16 +44199,16 @@ setInterval(mhWaitTick, 400);
 // ▲ ▼ 👁 settings keep working, and "All" shows exactly what was there before.
 function mhTrendsGroupDefs() {
   return {
-    body:    { label: 'Body',           ids: ['bodyCompCard', 'journeyCard', 'mcWeight', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration'] },
-    heart:   { label: 'Heart & sleep',  ids: ['mcHR', 'mcSpO2', 'mcHRV', 'mcSleep', 'mcSteps', 'mcDistance'] },
-    food:    { label: 'Food',           ids: ['mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcGKI', 'topFoodsCard', 'dayOfWeekCard'] },
+    body:    { label: 'Body',           ids: ['bodyCompCard', 'journeyCard', 'mcWeight', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration', 'dv-weight-wrap'] },
+    heart:   { label: 'Heart & sleep',  ids: ['mcHR', 'mcSpO2', 'mcHRV', 'mcSleep', 'mcSteps', 'mcDistance', 'dv-activity-wrap', 'dv-sleep-wrap'] },
+    food:    { label: 'Food',           ids: ['mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcGKI', 'topFoodsCard', 'dayOfWeekCard', 'dv-meals-wrap'] },
     patterns:{ label: 'Patterns',       ids: ['wellnessCard', 'patternsCard'] },
   };
 }
 function mhTrendsGroupGet() { try { return localStorage.getItem('mh_trends_group') || 'all'; } catch (_) { return 'all'; } }
 function mhTrendsGroupSet(k) { try { localStorage.setItem('mh_trends_group', k); } catch (_) {} mhTrendsGroupApply(); }
 function mhTrendsGroupApply() {
-  const first = document.getElementById('wellnessCard');
+  const first = document.getElementById('trendsDailyView');   // bar sits above BOTH the single-day list and the multi-day cards
   if (!first || !first.parentNode) return;
   const defs = mhTrendsGroupDefs();
   let cur = mhTrendsGroupGet(); if (cur !== 'all' && !defs[cur]) cur = 'all';
@@ -44234,6 +44223,11 @@ function mhTrendsGroupApply() {
     const el = document.getElementById(id); if (!el) return;
     el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k);
   }));
+  // Patterns need many days: say so instead of leaving the single-day view blank
+  const dv = document.getElementById('trendsDailyView');
+  let hint = document.getElementById('mhDvPatternsHint');
+  if (!hint) { hint = document.createElement('div'); hint.id = 'mhDvPatternsHint'; hint.className = 'mh-qline'; hint.style.cssText = 'padding:14px 4px;'; hint.textContent = 'Patterns compare many days, so there is nothing to show for a single day. Pick 7 Days, 30 Days or All above.'; first.parentNode.insertBefore(hint, first); }
+  hint.style.display = (cur === 'patterns' && dv && dv.style.display !== 'none') ? 'block' : 'none';
 }
 
 // ── GLOBAL WEIGHT UNIT (v3.10.880) ────────────────────────
