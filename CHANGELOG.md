@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.888 — Topic Chips On Settings → Data (Import)
+
+Pete's Data screenshot showed seven sections tucked behind a "Hidden:" strip. Same view-filter chips, so the page needs far less hiding: All · Connect devices (sync wearable data, add new device, advanced/manual pipeline) · History & entry (wearable history, nutrition history, manual entry) · Backup & checks (data & backup, data management, preview & validator). Nothing is moved or un-hidden; search resets the chips to All. Test: p50 extended.
+
 ## v3.10.887 — Topic Chips On Reports And Settings → Manage
 
 Pete (7 Oct): continue the de-cluttering. Reports had 13 flat sections and Settings → Manage had 19.

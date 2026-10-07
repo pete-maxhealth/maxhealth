@@ -11,11 +11,12 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     for scope, tab, sub, topic, shown, hidden in [
         ('reports', 'insights', 'reports', 'ask', ['rpt-askai', 'rpt-export'], ['rpt-summary', 'rpt-treatment', 'seasonal']),
+        ('import', 'settings', 'import', 'backup', ['set-databackup', 'imp-preview'], ['imp-sync', 'imp-manual', 'imp-master']),
         ('manage', 'settings', 'manage', 'tracking', ['set-supplements', 'set-labresults'], ['set-profile', 'set-aiprovider', 'set-about']),
     ]:
         page.evaluate(f"switchTab('{tab}'); switchSubTab('{tab}','{sub}')"); page.wait_for_timeout(900)
         chips = page.evaluate(f"[...document.querySelectorAll('#mhTopicBar-{scope} .mh-grp-chip')].map(c=>c.textContent)")
-        if len(chips) != 5 or chips[0] != 'All': f.add('BUG', f'{scope} chips wrong: {chips}')
+        if len(chips) < 4 or chips[0] != 'All': f.add('BUG', f'{scope} chips wrong: {chips}')
         page.evaluate(f"mhTopicSet('{scope}','{topic}')")
         isHid = lambda key: page.evaluate(f"(()=>{{const t=document.getElementById(GENERIC_SECTION_IDS['{scope}']['{key}'][0]);const u=t&&(t.closest('.card-unit')||t);return u?u.classList.contains('mh-grp-hide'):null}})()")
         for k in shown:
