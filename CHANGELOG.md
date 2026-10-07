@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.891 — Copy Previous Set, Backdate A Weight, Honest Gaps On Your Story
+
+Pete (7 Oct, on holiday with only gym scales): "Manual weight for days not provided by Withings... a 2 week gap would mean what on the charts?" and "creating a routine set, copy previous line would be useful."
+- **Copy previous set:** in the routine editor each set line has a ⧉ button (copies reps, weight and note into a new line below it), and each exercise has a "⧉ copy previous set" link. The same link is on the Apply (workout) screen. One typed line plus taps gives 3 x 10 @ 40 kg.
+- **Backdate a weight:** the Update Weight popup now has a Date box (defaults to today, can't pick the future). Choosing an earlier day saves that day's reading without changing your current weight unless it is your newest one.
+- **Your story graph shows gaps:** a break of more than 7 days between weigh-ins now stops the line and shows a "⋯ 18d" marker, instead of joining the two ends with a straight line. Also fixed: treatment markers were converted twice in lb/st (v3.10.890).
+- Not done on purpose: carrying a previous day's weight forward as stored data (it would flatten trends and distort the weekly rate).
+- Test: p51 extended (gap marker, backdate, future date, copy sets).
+
 ## v3.10.890 — Charts Follow Your Weight Unit, And Food/Water/Exercise Lines On Your Story
 
 Pete (7 Oct): "Today has exercise, food and water... can these be merged into the multiple metrics area? Best added to the Your story graphic. Charts in kg only."

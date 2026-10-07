@@ -6057,7 +6057,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.890'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.891'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -13841,9 +13841,11 @@ function renderRoutineExerciseRows() {
           <input type="number" placeholder="reps" value="${s.reps}" oninput="_routineDraftExercises[${i}].sets[${si}].reps=this.value" style="width:52px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
           <input type="number" placeholder="${_routineFormUnit}" value="${_routineFormDisplayWeight(s.weight_kg)}" step="0.5" oninput="updateRoutineDraftWeight(${i},${si},this.value)" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
           <input type="text" placeholder="Note — e.g. Purple band 40-80kg" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="_routineDraftExercises[${i}].sets[${si}].note=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <span onclick="mhRoutineCopySet(${i},${si})" title="Copy this line (reps, weight, note) as a new set below it" style="cursor:pointer;color:var(--text3);font-size:13px;padding:0 3px;flex-shrink:0;">⧉</span>
           <span onclick="_routineDraftExercises[${i}].sets.splice(${si},1);renderRoutineExerciseRows();" style="cursor:pointer;color:var(--red);font-size:14px;padding:0 4px;flex-shrink:0;">×</span>
         </div>`).join('')}
         <span onclick="_routineDraftExercises[${i}].sets.push(_blankRoutineDraftSet());renderRoutineExerciseRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
+        ${(ex.sets||[]).length ? `<span data-copyprev="${i}" onclick="mhRoutineCopySet(${i},${ex.sets.length-1})" style="font-size:10px;color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:12px;">⧉ copy previous set</span>` : ''}
         ${(ex.sets||[]).length ? '' : `<div style="font-size:10px;color:var(--text3);margin-top:2px;">No fixed sets yet — applying this routine will ask what to pre-fill from.</div>`}
       </div>
     </div>`).join('');
@@ -13854,6 +13856,21 @@ function renderRoutineExerciseRows() {
 // in a long list even though it was never actually missing. This lets the
 // template's own order be fixed directly, once, rather than needing the
 // Apply screen's session-only reorder repeated every single time it's used.
+// v3.10.891: duplicate a set line (reps, weight, note) right below itself, so
+// a block of identical sets (e.g. 3 x 10 @ 40kg) is one typed line plus taps.
+function mhApplyCopyPrevSet(exIdx) {
+  const sets = window._routineApplyDrafts && window._routineApplyDrafts[exIdx] && window._routineApplyDrafts[exIdx].sets;
+  if (!sets || !sets.length) return;
+  const last = sets[sets.length - 1];
+  sets.push({ ...last });
+  renderRoutineApplyRows();
+}
+function mhRoutineCopySet(exIdx, setIdx) {
+  const sets = _routineDraftExercises[exIdx] && _routineDraftExercises[exIdx].sets;
+  if (!sets || !sets[setIdx]) return;
+  sets.splice(setIdx + 1, 0, JSON.parse(JSON.stringify(sets[setIdx])));
+  renderRoutineExerciseRows();
+}
 function moveRoutineDraftExercise(i, direction) {
   const swapIdx = direction === 'up' ? i - 1 : i + 1;
   if (swapIdx < 0 || swapIdx >= _routineDraftExercises.length) return;
@@ -14073,6 +14090,7 @@ function renderRoutineApplyRows() {
           <input type="text" placeholder="Note" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].note=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
         </div>`).join('')}
       <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:'',note:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
+      ${ex.sets.length ? `<span data-applycopyprev="${exIdx}" onclick="mhApplyCopyPrevSet(${exIdx})" style="font-size:10px;color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:12px;">⧉ copy previous set</span>` : ''}
     </div>`).join('') + `
     <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>`;
 
@@ -30976,6 +30994,8 @@ function openWeightModal() {
   mhWtPrepField(document.getElementById('weightInput'));
   document.getElementById('weightInput').value = state.weight ? mhWtToField(state.weight) : '';
   const _wl = document.getElementById('weightModalLabel'); if (_wl) _wl.textContent = `Enter today's weight (${mhWtUnit() === 'st' ? 'stones and pounds, e.g. 14 st 2' : mhWtInputUnit()})`;
+  const _wd = document.getElementById('weightDateInput');
+  if (_wd) { const t = new Date(); const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; _wd.max = iso; _wd.value = iso; }
   document.getElementById('weightModal').classList.add('open');
 }
 
@@ -30988,9 +31008,19 @@ function confirmWeight() {
   if (isNaN(val) || val < 40 || val > 200) {
     showToast('Invalid weight'); return;
   }
-  state.weight = val;
-  // Also store on today's history entry so Trends weight chart shows daily weights
-  const today = todayStr();
+  // Date: defaults to today; an earlier date back-fills a missed day (v3.10.891).
+  const _wdIso = (document.getElementById('weightDateInput') || {}).value || '';
+  let today = todayStr();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(_wdIso)) {
+    const picked = `${_wdIso.slice(8,10)}/${_wdIso.slice(5,7)}/${_wdIso.slice(2,4)}`;
+    if (ddmmyySortKey(picked) > ddmmyySortKey(today)) { showToast('That date is in the future'); return; }
+    today = picked;
+  }
+  const _isToday = today === todayStr();
+  // state.weight is "your current weight": only move it when this reading is
+  // the newest one, never when back-filling an older day.
+  const _newerExists = state.history.some(h => h.weight && ddmmyySortKey(h.date) > ddmmyySortKey(today));
+  if (!_newerExists) state.weight = val;
   const existing = state.history.find(h => h.date === today);
   if (existing) {
     existing.weight = val;
@@ -31001,7 +31031,7 @@ function confirmWeight() {
   saveState();
   updateDashboard();
   closeWeightModal();
-  showToast(`Weight updated: ${mhWtText(val)}`);
+  showToast(_isToday ? `Weight updated: ${mhWtText(val)}` : `Weight saved for ${today}: ${mhWtText(val)}`);
   // Same gap as condition/goal - weight is a direct input to the Suggested
   // Targets calculation, so if that panel happens to be open (or gets
   // reopened shortly after), it should reflect the just-logged weight
@@ -32536,16 +32566,27 @@ function renderJourneyCard() {
       : `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day`;
   }
 
-  const labels = weighed.map(d => d.date);
+  // Real gaps (v3.10.891): the chart only has points for weighed days, so a
+  // 2-week break (holiday, no scales) used to vanish and join the two ends
+  // with a straight line. A break marker is inserted wherever more than 7
+  // days pass between readings, so the line stops and restarts honestly.
+  const _jd = s => { const p = s.split('/'); return new Date(2000 + (+p[2]), (+p[1]) - 1, +p[0]); };
+  const plot = [];
+  weighed.forEach((d, i) => {
+    if (i > 0) { const gap = Math.round((_jd(d.date) - _jd(weighed[i-1].date)) / 864e5); if (gap > 7) plot.push({ date: '⋯ ' + gap + 'd', _gap: true }); }
+    plot.push(d);
+  });
+  const labels = plot.map(d => d.date);
   const weightVals = weighed.map(d => d.weight);
-  const _jwv = weightVals.map(v => mhChartCv('weight', v)); // chart copy in the chosen unit
+  const _jwv = plot.map(d => d._gap ? null : mhChartCv('weight', d.weight)); // chart copy in the chosen unit
   const _jOver = mhJourneyOverlaySelected().map(def => {
-    const raw = weighed.map(d => def.get(d));
+    const raw = plot.map(d => d._gap ? null : def.get(d));
     const mx = Math.max(0, ...raw.filter(v => v != null));
     return { def, data: raw.map(v => (v == null || !mx) ? null : Math.round(v / mx * 1000) / 10) };
   });
   mhJourneyRenderChips();
-  const pointColors = weighed.map(d => {
+  const pointColors = plot.map(d => {
+    if (d._gap) return 'transparent';
     if (d.totals?.kcal > 0) {
       if (isKetosisDay(d)) return '#2deb8f';
       // Over ceiling — if the exercise-offset feature is on, distinguish
@@ -32560,8 +32601,8 @@ function renderJourneyCard() {
     }
     return '#8b90a0'; // wearable weight with no nutrition logged that day — neutral
   });
-  const wMinForMarker = Math.min(..._jwv) - (mhWtUnit() === 'kg' ? 0.5 : 1);
-  const treatmentMarkers = weighed.map(d => isTreatmentDay(d) ? wMinForMarker : null);
+  const wMinForMarker = Math.min(..._jwv.filter(v => v != null)) - (mhWtUnit() === 'kg' ? 0.5 : 1);
+  const treatmentMarkers = plot.map(d => (!d._gap && isTreatmentDay(d)) ? wMinForMarker : null);
 
   // Same horizontal-scroll pattern as the drill and compare-metrics charts -
   // below ~40 points this still just fills the screen width normally, but
@@ -32579,7 +32620,7 @@ function renderJourneyCard() {
     if (journeyInnerEl && journeyScrollWrapEl) {
       const minPxPerPoint = mhChartPxPerPoint('journey');
       const naturalWidth = journeyScrollWrapEl.clientWidth;
-      const neededWidth = weighed.length * minPxPerPoint;
+      const neededWidth = plot.length * minPxPerPoint;
       const scrollable = neededWidth > naturalWidth;
       journeyInnerEl.style.width = scrollable ? neededWidth + 'px' : '100%';
       // Default to the latest data, not the oldest - without this, a chart wide
@@ -32595,7 +32636,7 @@ function renderJourneyCard() {
       data: { labels, datasets: [
         { label: 'Weight', data: _jwv, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
           borderWidth: 1.5, fill: true, tension: 0.2, pointRadius: 2.5, pointBackgroundColor: pointColors, pointBorderWidth: 0 },
-        { label: 'Treatment', data: treatmentMarkers.map(v => v == null ? null : mhChartCv('weight', v)), showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
+        { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
       ].concat(_jOver.map(o => ({ label: o.def.label, data: o.data, yAxisID: 'y2', borderColor: o.def.color, backgroundColor: o.def.color,
           borderWidth: 1.5, borderDash: [4,3], fill: false, tension: 0.25, pointRadius: 0, spanGaps: true })))},
       options: { ...CHART_DEFAULTS,
@@ -32609,7 +32650,7 @@ function renderJourneyCard() {
           ...(_jOver.length ? { y2: { position: 'right', min: 0, max: 100, display: false, grid: { drawOnChartArea: false } } } : {}) },
         onClick: (evt, elements) => {
           if (!elements.length) return;
-          showJourneyDayPanel(elements[0].index, weighed, pointColors);
+          showJourneyDayPanel(elements[0].index, plot, pointColors);
         }
       }
     });
@@ -32677,6 +32718,7 @@ function showJourneyDayPanel(index, weighed, pointColors) {
   const panel = document.getElementById('journeyDayPanel');
   if (!panel) return;
   const d = weighed[index];
+  if (!d || d._gap) return;
   const color = pointColors[index];
   const statusText = color === '#2deb8f' ? (isKetogenicCondition() ? 'In ketosis' : 'Under carb target') : color === '#4d9fff' ? 'Over ceiling, addressed' : color === '#f5c542' ? 'Over ceiling' : 'No nutrition logged';
   panel.innerHTML = `
@@ -45723,6 +45765,11 @@ function dismissInsight() {
       <input class="modal-input" type="number" id="weightInput" step="0.1" placeholder="90.6" style="flex:1;">
       <button id="weightVoiceBtn" onclick="toggleWeightVoiceInput()" title="Say your weight" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:44px;height:44px;flex-shrink:0;cursor:pointer;font-size:16px;">🎤</button>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+      <label for="weightDateInput" style="font-size:12px;color:var(--text3);flex-shrink:0;">Date</label>
+      <input class="modal-input" type="date" id="weightDateInput" style="flex:1;min-width:0;">
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px;">Missed a day (e.g. no scales away from home)? Pick the date and enter that day's weight.</div>
     <div class="modal-row">
       <button class="modal-btn cancel" onclick="closeWeightModal()">Cancel</button>
       <button class="modal-btn confirm-new" onclick="confirmWeight()">Confirm</button>
