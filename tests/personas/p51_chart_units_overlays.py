@@ -61,6 +61,12 @@ with fresh_server() as root, sync_playwright() as pw:
     ds = page.evaluate("(()=>{const c=chartInstances.journeyChart; return c?[c.data.labels,c.data.datasets[0].data,c.data.datasets[1].data]:null})()")
     if not ds or len(ds[0]) != 4 or ds[1][2] is not None or '18d' not in ds[0][2]: f.add('BUG', f'journey gap marker missing: {ds}')
     elif any(v is not None for v in ds[2]) and ds[2][2] is not None: f.add('BUG', 'treatment marker on gap')
+    carry = page.evaluate("chartInstances.journeyChart.data.datasets.find(d=>d.label==='Last known').data")
+    if not carry or carry[1] is None or carry[2] is None or carry[3] is None or carry[0] is not None: f.add('BUG', f'journey carry-forward wrong: {carry}')
+    elif abs(carry[2] - carry[1]) > 0.01: f.add('BUG', f'carry not flat across gap: {carry}')
+    cf = page.evaluate("mhCarryForward([90,null,null,89,null,88])")
+    if cf != [90,90,90,89,89,89]: f.add('BUG', f'mhCarryForward: {cf}')
+    if 'last known' not in page.evaluate("document.getElementById('journeyLegend').textContent"): f.add('BUG', 'legend missing last known')
     # backdated weight
     page.evaluate("localStorage.setItem('mh_weight_unit','kg'); state.weight=89.0; openWeightModal()")
     if not page.evaluate("document.getElementById('weightDateInput').value"): f.add('BUG', 'weight date picker empty')

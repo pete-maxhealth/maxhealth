@@ -6057,7 +6057,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.891'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.892'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -32558,12 +32558,13 @@ function renderJourneyCard() {
   const isKetosisDay = d => (d.totals?.carbs != null) && (getEffectiveCarbsForDay(d) <= carbCeilFor(d));
   const offsetEnabled = localStorage.getItem('mh_exercise_offset_enabled') === '1';
 
+  const _jHasGap = weighed.some((d, i) => { if (!i) return false; const a = d.date.split('/'), b = weighed[i-1].date.split('/'); return Math.round((new Date(2000+(+a[2]), a[1]-1, +a[0]) - new Date(2000+(+b[2]), b[1]-1, +b[0])) / 864e5) > 7; });
   const legendEl = document.getElementById('journeyLegend');
   if (legendEl) {
     const inTargetWord = isKetogenicCondition() ? 'in ketosis' : 'under carb target';
     legendEl.innerHTML = offsetEnabled
-      ? `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day`
-      : `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day`;
+      ? `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#4d9fff;">●</span> over, addressed &nbsp; <span style="color:#f5c542;">●</span> over, unaddressed &nbsp; <span style="color:#a855f7;">▬</span> treatment day${_jHasGap ? ' &nbsp; <span style="color:rgba(245,197,66,0.6);">┄</span> last known (carried, not saved)' : ''}`
+      : `Weight (${mhChartUnit('weight','kg')}) over your whole tracked history · <span style="color:#2deb8f;">●</span> ${inTargetWord} &nbsp; <span style="color:#f5c542;">●</span> over ceiling &nbsp; <span style="color:#a855f7;">▬</span> treatment day${_jHasGap ? ' &nbsp; <span style="color:rgba(245,197,66,0.6);">┄</span> last known (carried, not saved)' : ''}`;
   }
 
   // Real gaps (v3.10.891): the chart only has points for weighed days, so a
@@ -32579,6 +32580,7 @@ function renderJourneyCard() {
   const labels = plot.map(d => d.date);
   const weightVals = weighed.map(d => d.weight);
   const _jwv = plot.map(d => d._gap ? null : mhChartCv('weight', d.weight)); // chart copy in the chosen unit
+  const _jCarry = mhCarryForward(_jwv, i => !!plot[i]._gap);
   const _jOver = mhJourneyOverlaySelected().map(def => {
     const raw = plot.map(d => d._gap ? null : def.get(d));
     const mx = Math.max(0, ...raw.filter(v => v != null));
@@ -32636,7 +32638,8 @@ function renderJourneyCard() {
       data: { labels, datasets: [
         { label: 'Weight', data: _jwv, borderColor: 'rgba(245,197,66,0.6)', backgroundColor: 'rgba(245,197,66,0.05)',
           borderWidth: 1.5, fill: true, tension: 0.2, pointRadius: 2.5, pointBackgroundColor: pointColors, pointBorderWidth: 0 },
-        { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' }
+        { label: 'Treatment', data: treatmentMarkers, showLine: false, pointStyle: 'rect', pointRadius: 3, backgroundColor: '#a855f7' },
+        { label: 'Last known', data: _jCarry, borderColor: 'rgba(245,197,66,0.28)', borderWidth: 1.5, borderDash: [2,4], fill: false, pointRadius: 0, tension: 0 }
       ].concat(_jOver.map(o => ({ label: o.def.label, data: o.data, yAxisID: 'y2', borderColor: o.def.color, backgroundColor: o.def.color,
           borderWidth: 1.5, borderDash: [4,3], fill: false, tension: 0.25, pointRadius: 0, spanGaps: true })))},
       options: { ...CHART_DEFAULTS,
@@ -32673,6 +32676,23 @@ function renderJourneyCard() {
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
 }
 
+// "Last known" carry-forward (v3.10.891, display only, never saved): across a
+// run of missing values, a faint flat line holds the last real value from the
+// last reading to the next one, so a gap reads as "no new data" rather than
+// as a straight-line slide between two points. vals may contain null/0/undefined.
+// Gap-marker slots ({gap:true}) are skipped over in journey via the isGap fn.
+function mhCarryForward(vals, isGap) {
+  const out = vals.map(() => null);
+  const real = i => vals[i] != null && vals[i] > 0 && !(isGap && isGap(i));
+  let lastReal = -1;
+  for (let i = 0; i < vals.length; i++) {
+    if (real(i)) {
+      if (lastReal >= 0 && i - lastReal > 1) { for (let j = lastReal; j <= i; j++) out[j] = vals[lastReal]; }
+      lastReal = i;
+    }
+  }
+  return out;
+}
 // ── Journey overlays (v3.10.890) ─────────────────────────────────────────
 // Optional extra lines on the Your Journey chart, each scaled 0-100% of its
 // own maximum on a hidden second axis (real values show when you tap a day).
@@ -33639,6 +33659,7 @@ function renderTrends() {
         // line adds nothing and just clutters the chart).
         applyChartStyle({ label:'Weight', data:weightVals.map(_cv), borderColor:'#f5c542', backgroundColor:'rgba(245,197,66,0.07)', borderWidth:2, fill:weightStyle==='line', tension:0.3, pointRadius:weightVals.map(v=>v?3:0), pointBackgroundColor:'#f5c542' }, weightStyle),
         { label:'7-day avg', data:rolling.map(_cv), borderColor:'rgba(245,197,66,0.5)', borderWidth:1.5, borderDash:[4,3], pointRadius:0, fill:false },
+        { label:'Last known', data:mhCarryForward(weightVals).map(_cv).map(v => v === '' ? null : v), borderColor:'rgba(245,197,66,0.28)', borderWidth:1.5, borderDash:[2,4], pointRadius:0, fill:false, tension:0 },
         { label:'Target', data:Array(weightVals.length).fill(_cv(targetLow)), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:false },
         { label:'Target high', data:Array(weightVals.length).fill(_cv(targetHigh)), borderColor:'rgba(45,235,143,0.35)', borderWidth:1, borderDash:[3,3], pointRadius:0, fill:'-1', backgroundColor:'rgba(45,235,143,0.05)' }
       ]}, options:{ ...CHART_DEFAULTS, scales:{ ...CHART_DEFAULTS.scales, y:{ ...CHART_DEFAULTS.scales.y, min:_cv(Math.max(_isKg?80:36,Math.min(...weightClean)-1)), max:_cv(Math.max(...weightClean)+1) }},

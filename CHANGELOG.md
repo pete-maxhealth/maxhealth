@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.892 — Faint "Last Known" Weight Line Across Gaps
+
+Pete (7 Oct): liked the idea of a faint carried-forward line for days with no weigh-in.
+- **Your story graph and the Trends weight chart** now draw a faint dotted flat line from your last real weigh-in across any gap to the next reading, so a gap reads as "no new data, last known was X" rather than a slide between two points. Display only: nothing is saved, and averages, rates and exports ignore it. A "last known (carried, not saved)" note appears in the legend when a gap exists.
+- Test: p51 extended (flat across the gap, helper, legend).
+
 ## v3.10.891 — Copy Previous Set, Backdate A Weight, Honest Gaps On Your Story
 
 Pete (7 Oct, on holiday with only gym scales): "Manual weight for days not provided by Withings... a 2 week gap would mean what on the charts?" and "creating a routine set, copy previous line would be useful."
