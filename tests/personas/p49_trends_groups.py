@@ -1,0 +1,32 @@
+"""Persona 49: Trends topic chips - All shows everything, a topic hides the other groups' cards, choice persists, hide/reorder system unaffected, captions present."""
+import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
+from harness import *
+from playwright.sync_api import sync_playwright
+f = Findings()
+with fresh_server() as root, sync_playwright() as pw:
+    b = pw.chromium.launch(); errs = []
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    ctx.route(re.compile(r'https://(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)/.*'), lambda r: r.abort())
+    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160]))
+    page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
+    page.evaluate("switchTabById('trends')"); page.wait_for_timeout(1000)
+    chips = page.evaluate("[...document.querySelectorAll('#mhTrendsGroupBar .mh-grp-chip')].map(c=>c.textContent)")
+    if chips != ['All', 'Body', 'Heart & sleep', 'Food', 'Patterns']: f.add('BUG', f'chips wrong: {chips}')
+    hid = lambda: page.evaluate("[...document.querySelectorAll('.mh-grp-hide')].map(e=>e.id)")
+    if hid(): f.add('BUG', f'All hides cards: {hid()}')
+    page.evaluate("mhTrendsGroupSet('food')")
+    h = hid()
+    if 'mcWeight' not in h or 'mcHR' not in h or 'patternsCard' not in h or 'bodyCompCard' not in h: f.add('BUG', f'Food did not hide other groups: {h}')
+    if 'mcCal' in h or 'topFoodsCard' in h or 'dayOfWeekCard' in h: f.add('BUG', f'Food hid its own cards: {h}')
+    page.evaluate("mhTrendsGroupSet('body')")
+    h = hid()
+    if 'mcCal' not in h or 'journeyCard' in h or 'bodyCompCard' in h: f.add('BUG', f'Body filter wrong: {h}')
+    page.reload(); page.wait_for_timeout(1500); page.evaluate("switchTabById('trends')"); page.wait_for_timeout(800)
+    if page.evaluate("document.querySelector('#mhTrendsGroupBar .mh-grp-chip.active')?.textContent") != 'Body': f.add('BUG', 'topic choice not remembered')
+    page.evaluate("mhTrendsGroupSet('all')")
+    if hid(): f.add('BUG', 'All did not restore')
+    caps = page.evaluate("document.querySelectorAll('.mh-qline').length")
+    if caps < 4: f.add('BUG', f'captions missing: {caps}')
+    if errs: f.add('BUG', f'page errors {errs[:3]}')
+    b.close()
+print('findings', len(f)); sys.exit(1 if f else 0)

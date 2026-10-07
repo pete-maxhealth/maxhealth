@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.885 — Trends: Topic Chips And "What Question Does This Answer" Captions
+
+Pete (7 Oct): the app is so feature-rich that similar-looking cards confuse and overwhelm. First step, on Trends (the worst overlap).
+- **Topic chips** across the top of Trends: All · Body · Heart & sleep · Food · Patterns. Tap one and only that topic's cards show (Body = Body Composition, Journey, weight, fat %, muscle %, bone, hydration; Heart & sleep = HR, SpO2, HRV, sleep, steps, distance; Food = calories, protein, carbs, water, GKI, top foods, day of week; Patterns = wellness balance and patterns). Remembered between visits.
+- **It is only a view filter.** Nothing is moved, deleted or un-hidden, so your own ▲ ▼ 👁 order and hidden cards keep working, and All looks exactly as before.
+- **One-line captions** on Journey, Body Composition, Patterns, Top Foods and Day of Week saying which question each answers, so look-alike cards are told apart at a glance.
+- Not yet done (next passes): the Today/daily view and Reports tab groupings, merging the separate fat/muscle/bone/hydration cards into Body Composition, and a Simple/Full switch for new users.
+- Test: p49.
+
 ## v3.10.884 — Photo Estimates: Count Small Items, Fresh vs Jarred, Don't Inflate Small Portions
 
 Pete (7 Oct): a bowl with about seven pitted cherries and a dollop of soft cheese came back as "cherries (fresh) 80g, 51kcal, 12.2g carbs", the worst over-estimate yet.
