@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.881 — Tableware Card Gets Show/Hide And Reorder
+
+Pete (7 Oct): every card needs show/hide and reorder. The Tableware & Portion Sizes card was registered for hiding but missing from the Settings ordering list, so it never got the ▲ ▼ 👁 controls.
+- Tableware now has ▲ ▼ 👁 like the other Settings cards (and starts in the same open/closed state handling as its neighbours).
+- **Side fix:** adding a card to a list used to throw away the order you had arranged (the saved order was only accepted if it matched the live list exactly). Your order is now kept, and a newly added card slots in after its natural neighbour. This protects every future card too.
+- Test: p44 extended (controls present, saved order kept, move works).
+
 ## v3.10.880 — One Weight Unit For The Whole App (kg / lbs / st + lb)
 
 Pete (7 Oct): do the kg/lbs choice from onboarding and profile drive every weight card? They did not. The onboarding choice only converted what you typed, was never remembered, and everything displayed in kg.

@@ -80,6 +80,18 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("switchTabById('manage'); mhTwRender(); document.getElementById('mhTwNewName').value='Soup bowl'; mhTwAddItem()")
     page.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('mh_tableware'));const id=s.custom[0].id;mhTwEdit('home',id,'wt','350');})()")
     if 'soup bowl empty weight 350g' not in page.evaluate("mhTablewareLine()"): f.add('BUG', 'custom item / empty weight missing: ' + page.evaluate("mhTablewareLine()")[:400])
+    # reorder + hide controls injected like every other settings card, and an existing saved order is kept
+    page.evaluate("localStorage.setItem('mh_reorder_manage', JSON.stringify(['set-profile','set-aiprovider','set-water','set-stepsbaseline']))")
+    page.reload(); page.wait_for_timeout(1500); page.evaluate("switchTabById('manage')"); page.wait_for_timeout(600)
+    ctl = page.evaluate("document.querySelector('#title-set-tableware')?.innerText||''")
+    if '▲' not in ctl and '▼' not in ctl and '👁' not in ctl: f.add('BUG', f'tableware card has no reorder/hide controls: {ctl!r}')
+    od = page.evaluate("JSON.parse(localStorage.getItem('mh_reorder_manage')||'[]')")
+    kept = [k for k in od if k in ('set-profile','set-aiprovider','set-water','set-stepsbaseline')]
+    if kept != ['set-profile','set-aiprovider','set-water','set-stepsbaseline']: f.add('BUG', f'a new card disturbed the saved settings order: {kept}')
+    if 'set-tableware' not in od: f.add('BUG', 'tableware missing from the order')
+    page.evaluate("moveGenericSection('manage','set-tableware','up')")
+    od2 = page.evaluate("JSON.parse(localStorage.getItem('mh_reorder_manage')||'[]')")
+    if od2.index('set-tableware') >= od.index('set-tableware'): f.add('BUG', f'move up did not move tableware: {od} -> {od2}')
     if errs: f.add('JS-exception', str(errs[:3]))
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)
