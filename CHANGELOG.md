@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.893 — Add Or Fix A Day's Weight From The Charts Too
+
+Pete (7 Oct): "Wouldn't it have been a good idea to update weight for previous days from here too?" (Fair point: the date box only existed behind the dashboard UPDATE button.)
+- **Trends weight card:** new "＋ Add or fix a day's weight" link, opening on the most recent day with no reading.
+- **Your story graph:** tapping a gap marker offers "＋ Add a weight for a missed day" (opens on the first missing date); tapping any weigh-in offers "✏️ Edit this day's weight".
+- **Weight drill-down:** same "＋ Add or fix a day's weight" link.
+- The popup opens on the chosen date, pre-filled with that day's reading if there is one (empty if not).
+- Test: p51 extended.
+
 ## v3.10.892 — Faint "Last Known" Weight Line Across Gaps
 
 Pete (7 Oct): liked the idea of a faint carried-forward line for days with no weigh-in.

@@ -3372,6 +3372,7 @@
         <div class="metric-unit">kg</div>
       </div>
       <div class="metric-status neutral" id="mcWeightStatus">—</div>
+      <div id="mcWeightAddBtn" onclick="event.stopPropagation();openWeightModal(mhMissingWeightDate())" style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin:2px 0 8px;">＋ Add or fix a day's weight</div>
       <div class="metric-stats">
         <div class="metric-stat"><div class="metric-stat-val" id="statWeightCurrent">—</div><div class="metric-stat-lbl">Current</div></div>
         <div class="metric-stat"><div class="metric-stat-val" id="statWeightMin">—</div><div class="metric-stat-lbl">Low</div></div>
@@ -6057,7 +6058,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.892'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.893'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -30990,12 +30991,21 @@ function setDayMode(mode) {
 }
 
 // ─── WEIGHT MODAL ────────────────────────────────────────
-function openWeightModal() {
+// openWeightModal(ddmmyy?) - optional date (DD/MM/YY) to log/edit a past day's
+// weight from the charts; with a date, the box shows THAT day's reading (or is
+// empty) instead of your current weight. (v3.10.893)
+function openWeightModal(forDate) {
   mhWtPrepField(document.getElementById('weightInput'));
-  document.getElementById('weightInput').value = state.weight ? mhWtToField(state.weight) : '';
+  const _row = forDate ? state.history.find(h => h.date === forDate) : null;
+  document.getElementById('weightInput').value = forDate ? (_row && _row.weight ? mhWtToField(_row.weight) : '') : (state.weight ? mhWtToField(state.weight) : '');
   const _wl = document.getElementById('weightModalLabel'); if (_wl) _wl.textContent = `Enter today's weight (${mhWtUnit() === 'st' ? 'stones and pounds, e.g. 14 st 2' : mhWtInputUnit()})`;
   const _wd = document.getElementById('weightDateInput');
-  if (_wd) { const t = new Date(); const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; _wd.max = iso; _wd.value = iso; }
+  if (_wd) {
+    const t = new Date(); const iso = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+    _wd.max = iso;
+    const pd = (forDate || '').split('/');
+    _wd.value = (pd.length === 3 && `20${pd[2]}-${pd[1]}-${pd[0]}` <= iso) ? `20${pd[2]}-${pd[1]}-${pd[0]}` : iso;
+  }
   document.getElementById('weightModal').classList.add('open');
 }
 
@@ -32574,7 +32584,7 @@ function renderJourneyCard() {
   const _jd = s => { const p = s.split('/'); return new Date(2000 + (+p[2]), (+p[1]) - 1, +p[0]); };
   const plot = [];
   weighed.forEach((d, i) => {
-    if (i > 0) { const gap = Math.round((_jd(d.date) - _jd(weighed[i-1].date)) / 864e5); if (gap > 7) plot.push({ date: '⋯ ' + gap + 'd', _gap: true }); }
+    if (i > 0) { const gap = Math.round((_jd(d.date) - _jd(weighed[i-1].date)) / 864e5); if (gap > 7) { const nx = new Date(_jd(weighed[i-1].date).getTime() + 864e5); plot.push({ date: '⋯ ' + gap + 'd', _gap: true, _days: gap - 1, _firstMissing: `${String(nx.getDate()).padStart(2,'0')}/${String(nx.getMonth()+1).padStart(2,'0')}/${String(nx.getFullYear()).slice(2)}` }); } }
     plot.push(d);
   });
   const labels = plot.map(d => d.date);
@@ -32693,6 +32703,18 @@ function mhCarryForward(vals, isGap) {
   }
   return out;
 }
+// Most recent day (up to 60 back) with no weight reading, as DD/MM/YY, so the
+// "add a day's weight" shortcuts open on a sensible date. Falls back to today.
+function mhMissingWeightDate() {
+  const have = new Set((state.history || []).filter(h => h.weight).map(h => h.date));
+  const d = new Date();
+  for (let i = 1; i <= 60; i++) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - i);
+    const k = `${String(x.getDate()).padStart(2,'0')}/${String(x.getMonth()+1).padStart(2,'0')}/${String(x.getFullYear()).slice(2)}`;
+    if (!have.has(k)) return k;
+  }
+  return todayStr();
+}
 // ── Journey overlays (v3.10.890) ─────────────────────────────────────────
 // Optional extra lines on the Your Journey chart, each scaled 0-100% of its
 // own maximum on a hidden second axis (real values show when you tap a day).
@@ -32738,7 +32760,19 @@ function showJourneyDayPanel(index, weighed, pointColors) {
   const panel = document.getElementById('journeyDayPanel');
   if (!panel) return;
   const d = weighed[index];
-  if (!d || d._gap) return;
+  if (d && d._gap) {
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">No weigh-ins for ${d._days} days</div>
+          <div onclick="closeJourneyDayPanel();openWeightModal('${d._firstMissing}')" style="font-size:12px;color:var(--accent);margin-top:6px;cursor:pointer;text-decoration:underline;">＋ Add a weight for a missed day</div>
+        </div>
+        <button onclick="closeJourneyDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
+      </div>`;
+    panel.style.display = 'block';
+    return;
+  }
+  if (!d) return;
   const color = pointColors[index];
   const statusText = color === '#2deb8f' ? (isKetogenicCondition() ? 'In ketosis' : 'Under carb target') : color === '#4d9fff' ? 'Over ceiling, addressed' : color === '#f5c542' ? 'Over ceiling' : 'No nutrition logged';
   panel.innerHTML = `
@@ -32747,6 +32781,7 @@ function showJourneyDayPanel(index, weighed, pointColors) {
         <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:800;color:var(--text);">${d.date}</div>
         <div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;color:var(--text);margin-top:4px;">${mhWtText(d.weight)}</div>
         <div style="font-size:11px;color:${color};margin-top:2px;">${statusText}</div>
+        <div onclick="closeJourneyDayPanel();openWeightModal('${d.date}')" style="font-size:11px;color:var(--accent);margin-top:4px;cursor:pointer;text-decoration:underline;">✏️ Edit this day's weight</div>
         ${mhJourneyOverlaySelected().map(o => { const v = o.get(d); return `<div style="font-size:12px;color:${o.color};margin-top:3px;">${o.icon} ${o.label}: ${v == null ? '—' : Math.round(v).toLocaleString() + ' ' + o.unit}</div>`; }).join('')}
       </div>
       <button onclick="closeJourneyDayPanel()" style="background:none;border:none;color:var(--text3);font-size:18px;line-height:1;padding:2px 4px;cursor:pointer;touch-action:manipulation;">✕</button>
@@ -36483,7 +36518,8 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
       + '<div class="drill-row"><span class="drill-row-label">Target range</span><span class="drill-row-val">'+mhWtRange(wtLow, wtHigh)+'</span></div>'
       + '<div class="drill-row"><span class="drill-row-label">Current</span><span class="drill-row-val">'+(last?mhWtText(last):'—')+'</span></div>'
       + '<div class="drill-row"><span class="drill-row-label">Avg (period)</span><span class="drill-row-val">'+(avg?mhWtText(avg):'—')+'</span></div>'
-      + '<div class="drill-row"><span class="drill-row-label">Range</span><span class="drill-row-val">'+((min&&max)?mhWtRange(min,max):'—')+'</span></div>';
+      + '<div class="drill-row"><span class="drill-row-label">Range</span><span class="drill-row-val">'+((min&&max)?mhWtRange(min,max):'—')+'</span></div>'
+      + '<div onclick="openWeightModal(mhMissingWeightDate())" style="font-size:12px;color:var(--accent);margin-top:8px;cursor:pointer;text-decoration:underline;">＋ Add or fix a day\'s weight</div>';
     el.appendChild(wtsec);
 
     // Body comp section
