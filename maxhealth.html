@@ -2831,6 +2831,7 @@
          whole message from scratch. One unified input now; the pipeline
          already correctly handles food, questions, water, EOD, and recipes
          from a single entry point regardless of any mode. -->
+    <div id="mhTwChip" onclick="mhTwOpenSettings()" style="display:none;margin:0 0 8px;padding:6px 10px;border:1px solid var(--accent-glow);background:var(--accent-dim);color:var(--accent);border-radius:12px;font-size:11px;cursor:pointer;"></div>
     <div class="quick-btns" id="quickBtnsLog">
       <div class="quick-btn" style="border-color:#60a5fa;" onclick="startNextMealFlow()">Next meal idea</div>
       <div class="quick-btn" style="border-color:#f97316;" onclick="startBalanceMacrosFlow()">Balance my macros</div>
@@ -2843,6 +2844,7 @@
       <div onclick="clearPhoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;line-height:1;">×</div>
       <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <div style="font-size:10px;color:var(--text3);">AI reads the photo automatically — add a name/amount below if you know it</div>
+        <div id="mhTwPhotoNote" style="font-size:10px;color:var(--text3);width:100%;"></div>
       </div>
     </div>
     <div class="input-row">
@@ -4839,6 +4841,7 @@
         <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Every place this app actually calls out to an AI, and what happens to its answer — checked directly against the code, not written from memory.</div>
         <div style="font-size:12px;color:var(--text2);line-height:1.6;">
           <strong style="color:var(--text);">Meal &amp; photo logging</strong> — typing a description, or using the camera/photo-library buttons in Log, sends it to the AI for parsing. This is the same path used for reading a nutrition label photo — the AI is instructed to read the panel, not guess. <strong style="color:var(--accent);">Once matched to an existing library item, the AI's numbers are discarded entirely</strong> — "From library — values locked" means exactly that; only your own explicit edits change a locked item. A genuinely new, unmatched item stays an AI estimate until you save or correct it.<br><br>
+          <strong style="color:var(--text);">Tableware &amp; portion sizes</strong> (Settings → Tableware) — the set you have in use (plate, bowl, mug and spoon sizes) is added to the photo/meal prompt and the 3-AI check as context for judging portions, and only for an item that is visible or named. It improves the estimate; it never replaces a weight you type, and Home's sizes are typical until you change them.<br><br>
           <strong style="color:var(--text);">Barcode scanning</strong> — the AI's only job here is reading the digits off the barcode photo. The actual nutrition data comes from Open Food Facts, a real independent database — not an AI guess.<br><br>
           <strong style="color:var(--text);">Ingredient search fallback</strong> — only triggered when an Open Food Facts search comes up empty. A clearly-marked AI estimate, not a database value.<br><br>
           <strong style="color:var(--text);">Verify across 3 AIs</strong> (Library edit, Log/History edit, Recipe add) — queries Claude, Gemini, and ChatGPT independently for the same food and portion, shows where they agree or disagree, and only applies a value if you choose to.<br><br>
@@ -4923,6 +4926,11 @@
         <span style="font-size:13px;color:var(--text3);">ml/day</span>
       </div>
     </div>
+    </div>
+
+    <div class="section-title" id="title-set-tableware" style="cursor:pointer;" onclick="toggleSection('set-tableware','set-tableware-wrap','set-tableware-icon')">Tableware &amp; Portion Sizes <span id="set-tableware-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-tableware-wrap">
+    <div class="settings-card" style="padding:14px 16px;" id="mhTwCard"></div>
     </div>
 
     <div class="section-title" id="title-set-stepsbaseline" style="cursor:pointer;" onclick="toggleSection('set-stepsbaseline','set-stepsbaseline-wrap','set-stepsbaseline-icon')">Incidental Steps Baseline <span id="set-stepsbaseline-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
@@ -5997,7 +6005,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.878'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.879'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7652,6 +7660,7 @@ const GENERIC_SECTION_IDS = {
     'set-notifications': ['title-set-notifications', 'set-notifications-wrap'],
     'set-idletimeout': ['title-set-idletimeout', 'set-idletimeout-wrap'],
     'set-water': ['title-set-water', 'set-water-wrap'],
+    'set-tableware': ['title-set-tableware', 'set-tableware-wrap'],
     'set-stepsbaseline': ['title-set-stepsbaseline', 'set-stepsbaseline-wrap'],
     'set-about': ['title-set-about', 'set-about-wrap'],
     'set-setup': ['title-set-setup', 'set-setup-wrap'],
@@ -12938,6 +12947,7 @@ function handlePhotoSelect(input) {
       document.getElementById('photoPreview').src = dataUrl;
       document.getElementById('photoPreviewWrap').style.display = 'block';
       document.getElementById('photoBtn').style.borderColor = 'var(--green)';
+      try { mhTwRefreshChips(); } catch (_) {}
       // Photo classification (meal vs label) is now automatic — no mode to set.
       const inp = document.getElementById('chatInput');
       if (inp) {
@@ -12990,7 +13000,7 @@ async function _parseWithAI_impl(userText, imageBase64, imageMime) {
 The user is ${name}, ${isKetogenicCondition() ? 'on a strict low-carb, high-protein protocol' : 'following their own calorie, protein and carb targets (below) - do not assume a low-carb diet'}.
 Today's targets: ${targets.kcal} kcal | ${targets.protein}g protein | ${targets.carbs}g carbs (${state.dayMode} day).
 So far today: ${totals.kcal} kcal | ${totals.protein}g protein | ${totals.carbs}g carbs.
-Today's date: ${todayStr()}
+Today's date: ${todayStr()}${(typeof mhTablewareLine === 'function') ? mhTablewareLine() : ''}
 
 If the user describes food or a meal (or you can see food in an image), respond ONLY with a JSON object (no markdown, no preamble):
 {
@@ -17462,6 +17472,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Device Precedence (which wearable wins)', key: 'set-deviceprec', subtab: 'manage', keywords: 'withings ringconn garmin amazfit zepp' },
   { label: 'Exercise Calorie Offset', key: 'set-exoffset', subtab: 'manage', keywords: 'wearable mismatch calibration adjustment MET' },
   { label: 'Steps Baseline', key: 'set-stepsbaseline', subtab: 'manage', keywords: 'daily step target goal 7500 activity' },
+  { label: 'Tableware & Portion Sizes (plates, bowls, spoons)', key: 'set-tableware', subtab: 'manage', keywords: 'crockery cutlery plate bowl mug glass spoon teaspoon tablespoon portion size holiday home work set tare weight photo estimate' },
   { label: 'Water Target', key: 'set-water', subtab: 'manage', keywords: 'hydration ml ounces daily goal' },
   { label: 'Supplements', key: 'set-supplements', subtab: 'manage', wrapId: 'supplementSettingsContent', keywords: 'vitamins pills medication reminders' },
   { label: 'AI Provider Settings', key: 'set-aiprovider', subtab: 'manage', keywords: 'anthropic openai claude gpt model api key' },
@@ -20722,7 +20733,7 @@ function cancelMealPreview() {
 // from the user's original words, and the compare card flags portion
 // disagreement separately from macro disagreement.
 function mhMultiCheckPrompt(desc, originalText) {
-  const ctx = originalText ? `\nThe person's own words describing the meal were: "${String(originalText).slice(0, 400)}"\n` : '';
+  const ctx = (originalText ? `\nThe person's own words describing the meal were: "${String(originalText).slice(0, 400)}"\n` : '') + ((typeof mhTablewareLine === 'function') ? mhTablewareLine() : '');
   return `Estimate the nutrition for exactly this food and amount, as eaten: ${desc}
 ${ctx}
 Respond in ONLY this exact format, nothing else, no other text:
@@ -20762,7 +20773,9 @@ function mhPortionNote(providers, desc) {
   const head = bad
     ? `⚠ Portion size is the shaky part: ${lines}${stated ? ` — the logged amount is ${stated}g` : ''}. If you can weigh it, do; the macros above only mean something if the portion is right.`
     : `✓ Portion sizes agree${stated ? ` with the logged ${stated}g` : ''}: ${lines}.`;
-  return `<div data-portion-note="1" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;${bad ? 'background:rgba(245,197,66,0.08);border:1px solid rgba(245,197,66,0.25);color:var(--yellow);' : 'background:var(--accent-dim);border:1px solid var(--accent-glow);color:var(--accent);'}">${head}</div>`;
+  const _twName = (typeof mhTablewareActiveName === 'function') ? mhTablewareActiveName() : '';
+  const _twTag = _twName ? ` (tableware set: ${_twName})` : '';
+  return `<div data-portion-note="1" style="margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;${bad ? 'background:rgba(245,197,66,0.08);border:1px solid rgba(245,197,66,0.25);color:var(--yellow);' : 'background:var(--accent-dim);border:1px solid var(--accent-glow);color:var(--accent);'}">${head}${_twTag}</div>`;
 }
 
 async function estimateNutritionViaTripleAI(desc) {
@@ -45638,6 +45651,198 @@ function dismissInsight() {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
   if (net.off) { net.timer = setInterval(verify, 15000); }
   else if (qGet().length) { setTimeout(verify, 1500); }   // saved entries exist: confirm the connection once on load
+})();
+</script>
+<script>
+// ─── TABLEWARE SETS (portion-size helper) ───────────────────────────────────
+// Pete (7 Oct): a settings list of crockery and cutlery sizes the AI uses to judge portions from
+// photos. Home is the built-in set (typical UK sizes, overridable, each with a back-to-default
+// arrow); other sets (holiday, work, parents' house...) store ONLY what differs from Home, so a
+// correction made to Home reaches every set. One set is in use at a time, with an optional
+// "back to Home on <date>". Empty weights have no default on purpose: plates vary far too much
+// to guess, so a weight only exists if the user entered it.
+(function () {
+  const KEY = 'mh_tableware';
+  const FACTORY = [
+    { id: 'dinner_plate', name: 'Dinner plate',       icon: '🍽', diam: 27, cap: null, wt: null },
+    { id: 'side_plate',   name: 'Side plate',         icon: '🍽', diam: 19, cap: null, wt: null },
+    { id: 'bowl',         name: 'Bowl (cereal/soup)', icon: '🥣', diam: 15, cap: 350,  wt: null },
+    { id: 'mug',          name: 'Mug',                icon: '☕', diam: null, cap: 300, wt: null },
+    { id: 'glass',        name: 'Glass',              icon: '🥛', diam: null, cap: 250, wt: null },
+    { id: 'teaspoon',     name: 'Teaspoon',           icon: '🥄', diam: null, cap: 5,   wt: null },
+    { id: 'dessertspoon', name: 'Dessert spoon',      icon: '🥄', diam: null, cap: 10,  wt: null },
+    { id: 'tablespoon',   name: 'Tablespoon',         icon: '🥄', diam: null, cap: 15,  wt: null },
+  ];
+  const FIELDS = [['diam', 'Across (cm)'], ['cap', 'Holds (ml)'], ['wt', 'Empty (g)']];
+  let viewId = 'home';
+
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const clean = s => String(s || '').replace(/["'`<>\n\r\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  // ISO local date (YYYY-MM-DD) - NOT the app's todayStr(), which is DD/MM/YY and would not compare with a date input's value.
+  const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+  function load() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+    if (!s || !Array.isArray(s.sets) || !s.sets.some(x => x.id === 'home')) s = { activeId: 'home', revertOn: null, sets: [{ id: 'home', name: 'Home', vals: {} }], custom: [] };
+    if (!Array.isArray(s.custom)) s.custom = [];
+    if (!s.sets.some(x => x.id === s.activeId)) s.activeId = 'home';
+    return s;
+  }
+  function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (_) {} }
+  const items = s => FACTORY.map(f => ({ ...f, builtin: true })).concat(s.custom.map(c => ({ ...c, builtin: false })));
+  const setById = (s, id) => s.sets.find(x => x.id === id) || s.sets[0];
+  const own = (set, itemId, f) => !!(set.vals && set.vals[itemId] && Object.prototype.hasOwnProperty.call(set.vals[itemId], f));
+  function baseVal(s, item, f) { // Home's value: Home override, else the factory/custom value
+    const home = setById(s, 'home');
+    if (own(home, item.id, f)) return home.vals[item.id][f];
+    return item[f] == null ? null : item[f];
+  }
+  function eff(s, set, item, f) {
+    if (own(set, item.id, f)) return set.vals[item.id][f];
+    return set.id === 'home' ? baseVal(s, item, f) : baseVal(s, item, f);
+  }
+  // A value is "typical" (a generic size, not the user's own measurement) only for an untouched built-in default.
+  const isTypical = (s, item, f) => item.builtin && !own(setById(s, 'home'), item.id, f) && item[f] != null;
+
+  function revertCheck() {
+    const s = load();
+    if (s.activeId !== 'home' && s.revertOn && s.revertOn <= today()) {
+      const was = setById(s, s.activeId).name;
+      s.activeId = 'home'; s.revertOn = null; save(s);
+      try { showToast('Tableware is back to Home (was ' + was + ')'); } catch (_) {}
+      return true;
+    }
+    return false;
+  }
+
+  function describeFor(s, set) {
+    const parts = [];
+    items(s).forEach(it => {
+      const d = eff(s, set, it, 'diam'), c = eff(s, set, it, 'cap'), w = eff(s, set, it, 'wt');
+      const bits = [];
+      if (d != null) bits.push(d + 'cm across');
+      if (c != null) bits.push((it.id.endsWith('spoon') ? 'level spoon ' : 'holds ') + c + 'ml');
+      if (w != null) bits.push('empty weight ' + w + 'g');
+      if (!bits.length) return;
+      const typical = ['diam', 'cap'].some(f => eff(s, set, it, f) != null && isTypical(s, it, f) && !own(set, it.id, f));
+      parts.push(it.name.toLowerCase() + ' ' + bits.join(', ') + (typical ? ' (typical size, not measured)' : ''));
+    });
+    return parts.join('; ');
+  }
+
+  // Text for AI prompts. Only the set in use; empty when nothing is useful.
+  window.mhTablewareLine = function () {
+    try {
+      const s = load(); const set = setById(s, s.activeId);
+      const body = describeFor(s, set);
+      if (!body) return '';
+      return `\nKNOWN TABLEWARE (the user's own settings, set "${clean(set.name)}"): ${body}.\nUse these to judge scale and portion size ONLY for an item that is visible in the photo or named by the user; never assume an item is present, and if you could not see one, say so in your message. A weight the user stated always beats these sizes.\n`;
+    } catch (_) { return ''; }
+  };
+  window.mhTablewareActiveName = function () { try { const s = load(); return s.activeId === 'home' ? '' : clean(setById(s, s.activeId).name); } catch (_) { return ''; } };
+
+  function refreshChips() {
+    const s = load(); const set = setById(s, s.activeId);
+    const chip = document.getElementById('mhTwChip');
+    if (chip) {
+      if (s.activeId === 'home') chip.style.display = 'none';
+      else {
+        chip.style.display = 'block';
+        chip.innerHTML = '🍽 Tableware: <b>' + esc(set.name) + '</b>' + (s.revertOn ? ' · back to Home on ' + esc(s.revertOn) : '') + ' <span style="text-decoration:underline;">change</span>';
+      }
+    }
+    const note = document.getElementById('mhTwPhotoNote');
+    if (note) note.textContent = 'Tableware sizes used: ' + set.name + (s.activeId === 'home' ? ' (your Home set)' : '');
+  }
+  window.mhTwRefreshChips = refreshChips;
+  window.mhTwOpenSettings = function () { try { siteSearchOpenSettings('set-tableware', 'manage', 'settings', ''); } catch (_) {} };
+
+  function cellHtml(s, set, it, f, label) {
+    const v = eff(s, set, it, f);
+    const isOwn = own(set, it.id, f);
+    const homeOwn = own(setById(s, 'home'), it.id, f);
+    const showReset = isOwn; // overridden here: offer the way back (to factory default on Home, to Home's value elsewhere)
+    const tip = set.id === 'home' ? 'Back to the default' : 'Same as Home';
+    const col = isOwn ? 'var(--accent)' : 'var(--text)';
+    return `<div style="min-width:0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--text3);margin-bottom:2px;"><span>${label}</span>${showReset ? `<span title="${tip}" onclick="mhTwReset('${set.id}','${it.id}','${f}')" style="cursor:pointer;color:var(--accent);font-size:13px;line-height:1;padding:0 2px;">↺</span>` : ''}</div>
+      <input type="number" inputmode="decimal" step="any" min="0" value="${v == null ? '' : v}" placeholder="–" onchange="mhTwEdit('${set.id}','${it.id}','${f}',this.value)"
+        style="width:100%;box-sizing:border-box;height:34px;padding:0 6px;border-radius:8px;border:1px solid ${isOwn ? 'var(--accent)' : 'var(--border)'};background:var(--surface2);color:${col};font-size:13px;">
+    </div>`;
+  }
+
+  window.mhTwRender = function () {
+    const host = document.getElementById('mhTwCard'); if (!host) return;
+    const s = load(); const set = setById(s, viewId); viewId = set.id;
+    const pills = s.sets.map(x => {
+      const on = x.id === set.id, inUse = x.id === s.activeId;
+      return `<div onclick="mhTwView('${x.id}')" style="padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:${on ? 'var(--accent)' : 'var(--text2)'};background:${on ? 'var(--accent-dim)' : 'transparent'};">${esc(x.name)}${inUse ? ' ●' : ''}</div>`;
+    }).join('') + (s.sets.length < 8 ? `<div onclick="mhTwAddSet()" style="padding:6px 12px;border-radius:16px;font-size:12px;cursor:pointer;border:1px dashed var(--border);color:var(--text3);">+ Add set</div>` : '');
+    const active = set.id === s.activeId;
+    const head = `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;">
+        <div style="font-size:13px;color:var(--text);flex:1;min-width:120px;"><b>${esc(set.name)}</b>${set.id === 'home' ? ' <span style="font-size:11px;color:var(--text3);">(always here)</span>' : ''}</div>
+        ${active ? '<span style="font-size:11px;color:var(--green);">● In use</span>' : `<button class="run-btn" style="padding:6px 12px;font-size:12px;width:auto;" onclick="mhTwUse('${set.id}')">Use this set</button>`}
+        ${set.id !== 'home' ? `<span onclick="mhTwRenameSet('${set.id}')" style="font-size:11px;color:var(--text3);text-decoration:underline;cursor:pointer;">rename</span><span onclick="mhTwDeleteSet('${set.id}')" style="font-size:11px;color:var(--red);text-decoration:underline;cursor:pointer;">delete</span>` : ''}
+      </div>`;
+    const revert = (active && set.id !== 'home') ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px;color:var(--text2);flex-wrap:wrap;">Go back to Home on
+        <input type="date" value="${esc(s.revertOn || '')}" min="${today()}" onchange="mhTwSetRevert(this.value)" style="height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:0 8px;font-size:13px;">
+        <span style="font-size:10px;color:var(--text3);">(optional)</span></div>` : '';
+    const rows = items(s).map(it => `<div style="padding:10px 0;border-top:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:13px;color:var(--text);">${it.icon || '🍴'} ${esc(it.name)}</div>${(!it.builtin && set.id === 'home') ? `<span onclick="mhTwRemoveItem('${it.id}')" style="font-size:11px;color:var(--red);cursor:pointer;">remove</span>` : ''}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${FIELDS.map(([f, l]) => cellHtml(s, set, it, f, l)).join('')}</div>
+      </div>`).join('');
+    const add = set.id === 'home' ? `<div style="display:flex;gap:6px;margin-top:10px;"><input id="mhTwNewName" placeholder="Add your own (e.g. Soup bowl)" class="settings-input" style="flex:1 1 0;width:0;height:36px;"><button class="run-btn" style="flex:0 0 auto;width:auto;padding:0 14px;height:36px;font-size:12px;" onclick="mhTwAddItem()">Add</button></div>` : '';
+    host.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sizes the AI uses to judge portions from photos and descriptions. <span class="help-slot" data-id="tableware" data-text="Used only when the AI estimates a portion: plate and bowl sizes give it a ruler, spoon and mug volumes help with 'a mug of' or 'two tablespoons'. Home starts with typical UK sizes. Change any to match yours; the ↺ puts it back. Other sets only store what differs from Home. Empty weights are blank on purpose (plates vary too much to guess); fill one in only if you've weighed the dish. A weight you type for the food always beats these sizes, and results stay estimates."></span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${pills}</div>${head}${revert}<div>${rows}</div>${add}`;
+    try { initHelpSlots(); } catch (_) {}
+  };
+
+  window.mhTwView = id => { viewId = id; mhTwRender(); };
+  window.mhTwUse = id => { const s = load(); s.activeId = id; if (id === 'home') s.revertOn = null; save(s); mhTwRender(); refreshChips(); try { showToast('Tableware: ' + setById(s, id).name); } catch (_) {} };
+  window.mhTwSetRevert = v => { const s = load(); s.revertOn = /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null; save(s); refreshChips(); };
+  window.mhTwAddSet = () => {
+    const nm = clean(prompt('Name for the new set (e.g. Holiday, Work, Mum\'s house):'));
+    if (!nm) return;
+    const s = load(); const id = 's' + Date.now().toString(36);
+    s.sets.push({ id, name: nm, vals: {} }); save(s); viewId = id; mhTwRender();
+  };
+  window.mhTwRenameSet = id => { const s = load(); const set = setById(s, id); if (set.id === 'home') return; const nm = clean(prompt('Rename set:', set.name)); if (!nm) return; set.name = nm; save(s); mhTwRender(); refreshChips(); };
+  window.mhTwDeleteSet = id => {
+    const s = load(); const set = setById(s, id); if (set.id === 'home') return;
+    if (!confirm('Delete the "' + set.name + '" set? Its changed sizes are lost; Home is unaffected.')) return;
+    s.sets = s.sets.filter(x => x.id !== id);
+    if (s.activeId === id) { s.activeId = 'home'; s.revertOn = null; }
+    save(s); viewId = 'home'; mhTwRender(); refreshChips();
+  };
+  window.mhTwEdit = (setId, itemId, f, raw) => {
+    const s = load(); const set = setById(s, setId); const it = items(s).find(x => x.id === itemId); if (!it) return;
+    const txt = String(raw).trim(); let v;
+    if (txt === '') v = null; else { v = parseFloat(txt); if (!isFinite(v) || v <= 0 || v > 5000) { mhTwRender(); return; } v = Math.round(v * 10) / 10; }
+    const inherited = set.id === 'home' ? (it[f] == null ? null : it[f]) : baseVal(s, it, f);
+    set.vals = set.vals || {};
+    if (v === inherited) { if (set.vals[itemId]) { delete set.vals[itemId][f]; if (!Object.keys(set.vals[itemId]).length) delete set.vals[itemId]; } }
+    else { set.vals[itemId] = set.vals[itemId] || {}; set.vals[itemId][f] = v; }
+    save(s); mhTwRender();
+  };
+  window.mhTwReset = (setId, itemId, f) => {
+    const s = load(); const set = setById(s, setId);
+    if (set.vals && set.vals[itemId]) { delete set.vals[itemId][f]; if (!Object.keys(set.vals[itemId]).length) delete set.vals[itemId]; }
+    save(s); mhTwRender();
+  };
+  window.mhTwAddItem = () => {
+    const nm = clean((document.getElementById('mhTwNewName') || {}).value); if (!nm) return;
+    const s = load(); if (s.custom.length >= 20) { try { showToast('That is plenty of custom items'); } catch (_) {} return; }
+    s.custom.push({ id: 'c' + Date.now().toString(36), name: nm, icon: '🍴', diam: null, cap: null, wt: null }); save(s); mhTwRender();
+  };
+  window.mhTwRemoveItem = id => { const s = load(); s.custom = s.custom.filter(c => c.id !== id); s.sets.forEach(x => { if (x.vals) delete x.vals[id]; }); save(s); mhTwRender(); };
+
+  window.mhTwRevertCheck = revertCheck;
+  function tick() { revertCheck(); refreshChips(); const h = document.getElementById('mhTwCard'); if (h && h.offsetParent !== null) mhTwRender(); }
+  setTimeout(() => { revertCheck(); refreshChips(); mhTwRender(); }, 900);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  window.addEventListener('focus', tick);
+  setInterval(tick, 60000);
 })();
 </script>
 <!-- LOCAL WEATHER (v3.10.866): location + Open-Meteo forecast, user-overridable; adjusts water target and gives exercise tips -->

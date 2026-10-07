@@ -2,6 +2,17 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.879 — Tableware & Portion Sizes (Settings)
+
+Pete (7 Oct): a settings list of crockery and cutlery sizes so photo estimates are more accurate, with defaults, overrides, per-item return-to-default, and labelled sets.
+- **Settings > Tableware & Portion Sizes:** dinner plate, side plate, bowl, mug, glass, teaspoon, dessertspoon, tablespoon. Each has Across (cm), Holds (ml) and Empty weight (g). Typical sizes are pre-filled; weights are blank by default (never guessed).
+- **Sets:** Home is built in and always the starting set. Add or remove your own (holiday, work, parents' house...). Non-Home sets store only what differs and inherit everything else from Home, so a later change to Home flows through.
+- **Reset:** a ↺ appears beside any changed value. On Home it restores the typical size; on other sets it means "same as Home".
+- **Back to Home on (date):** optional per set; checked on load, focus and every minute.
+- **Log chip:** shows the active set when it is not Home.
+- **AI:** the photo/meal estimate prompt gets a KNOWN TABLEWARE line (untouched defaults are marked "typical size, not measured"). The compare AIs are text-only (they never see the photo) so they get the same line in their prompt text.
+- Test: p44.
+
 ## v3.10.878 — The App Opens With No Connection At All (service worker v2.3)
 
 Pete (6 Oct, 20:24): with WiFi OR mobile data on, the app opens normally; with BOTH off (or airplane mode with WiFi off) it shows the old May screen instead. `/last-hits` proved Chrome never contacted the server in that state, so Chrome was showing something stale it had stored. Reproduced in the test browser: with no connection at all the old code fails to open the page (net::ERR_INTERNET_DISCONNECTED).

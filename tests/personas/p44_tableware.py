@@ -1,0 +1,85 @@
+"""Persona 44: tableware sets - Home defaults, overrides + back-to-default arrows, sets inherit from Home, in-use chip, date revert, and the AI prompt carrying the active set."""
+import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
+from harness import *
+from playwright.sync_api import sync_playwright
+f = Findings()
+FOOD = {"type": "food", "items": [{"name": "porridge", "amount": "250g", "kcal": 300, "protein": 10, "fat": 5, "carbs": 50}], "message": "ok"}
+with fresh_server() as root, sync_playwright() as pw:
+    b = pw.chromium.launch(); errs = []; bodies = []
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    def stub(route):
+        bodies.append(route.request.post_data or '')
+        route.fulfill(status=200, content_type='application/json', body=json.dumps({"content": [{"type": "text", "text": json.dumps(FOOD)}], "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    ctx.route(re.compile(r'https://(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)/.*'), lambda r: r.abort())
+    ctx.route('https://api.anthropic.com/**', stub)
+    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160])); page.on('dialog', lambda d: d.accept('Holiday'))
+    page.goto('http://localhost:5757/'); page.wait_for_timeout(1200)
+    page.evaluate("onboardNext(2)"); page.fill('#onboardName', 'Ola'); page.evaluate("onboardNext(3)")
+    page.evaluate("obSetSex('male')"); page.fill('#onboardAge', '58'); page.fill('#onboardHeight', '176')
+    page.fill('#onboardWeight', '82'); page.fill('#onboardTarget', '78')
+    page.evaluate("onboardNext(4)"); page.evaluate("obSetActivity('light')"); page.evaluate("obSetGoal('lose')")
+    page.evaluate("onboardNext(5)"); page.evaluate("obSetCondition('general')")
+    page.evaluate("onboardNext(6)"); page.evaluate("onboardFinish()"); page.wait_for_timeout(1500)
+    page.evaluate("localStorage.setItem('mh_provider','claude');localStorage.setItem('mh_apikey','sk-ant-test-key-123')")
+    page.reload(); page.wait_for_timeout(1500)
+    page.evaluate("switchTabById('manage')"); page.wait_for_timeout(500)
+    page.evaluate("mhTwRender()")
+    inputs = lambda: page.evaluate("document.querySelectorAll('#mhTwCard input[type=number]').length")
+    if inputs() != 24: f.add('BUG', f'expected 8 items x 3 fields = 24 inputs, got {inputs()}')
+    val = lambda it, fl: page.evaluate("(a)=>{const s=JSON.parse(localStorage.getItem('mh_tableware')||'null');return s}", None)
+    arrows = lambda: page.evaluate("[...document.querySelectorAll('#mhTwCard span')].filter(x=>x.textContent==='↺').length")
+    if arrows() != 0: f.add('BUG', 'back-to-default arrows shown with nothing changed')
+    line = page.evaluate("mhTablewareLine()")
+    if '27cm across (typical size, not measured)' not in line: f.add('BUG', 'Home default not marked typical in AI line: ' + line[:300])
+    if 'empty weight' in line: f.add('BUG', 'an empty weight was guessed by default')
+    if 'set "Home"' not in line: f.add('BUG', 'set name missing from AI line')
+    # edit Home: plate 28 -> arrow appears, line now says measured (no typical tag on that field)
+    page.evaluate("mhTwEdit('home','dinner_plate','diam','28')")
+    if arrows() != 1: f.add('BUG', f'expected 1 back-to-default arrow after editing Home, got {arrows()}')
+    line = page.evaluate("mhTablewareLine()")
+    if '28cm across' not in line or '28cm across (typical' in line: f.add('BUG', 'edited Home value not used / still tagged typical: ' + line[:200])
+    page.evaluate("mhTwReset('home','dinner_plate','diam')")
+    if '27cm across' not in page.evaluate("mhTablewareLine()"): f.add('BUG', 'back to default did not restore 27')
+    # new set inherits Home, stores only differences
+    page.evaluate("mhTwAddSet()"); page.wait_for_timeout(300)
+    st = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware'))")
+    hol = [x for x in st['sets'] if x['name'] == 'Holiday']
+    if not hol: f.add('BUG', 'Holiday set not created'); hid = None
+    else:
+        hid = hol[0]['id']
+        if hol[0]['vals'] != {}: f.add('BUG', 'new set copied values instead of inheriting')
+        page.evaluate(f"mhTwEdit('{hid}','dinner_plate','diam','24')")
+        page.evaluate("mhTwEdit('home','bowl','cap','400')")
+        page.evaluate(f"mhTwUse('{hid}')"); page.wait_for_timeout(300)
+        line = page.evaluate("mhTablewareLine()")
+        if 'set "Holiday"' not in line or '24cm across' not in line: f.add('BUG', 'Holiday override not in AI line: ' + line[:300])
+        if '400ml' not in line: f.add('BUG', 'Holiday did not inherit the Home bowl change: ' + line[:300])
+        chip = page.evaluate("(()=>{const c=document.getElementById('mhTwChip');return [c.style.display, c.textContent]})()")
+        if chip[0] == 'none' or 'Holiday' not in chip[1]: f.add('BUG', f'in-use chip not shown for non-Home set: {chip}')
+        page.evaluate(f"mhTwView('{hid}')")
+        if arrows() != 1: f.add('BUG', f'Holiday should show 1 arrow (the plate), got {arrows()}')
+        page.evaluate(f"mhTwReset('{hid}','dinner_plate','diam')")
+        if '27cm across' not in page.evaluate("mhTablewareLine()"): f.add('BUG', 'Holiday reset did not follow Home')
+        # AI request carries the set
+        page.click("[onclick^=\"switchTab('log'\"]"); page.wait_for_timeout(500)
+        page.fill('#chatInput', 'bowl of porridge'); page.click("[onclick=\"sendChat()\"]"); page.wait_for_timeout(2500)
+        if not any('KNOWN TABLEWARE' in x and 'Holiday' in x for x in bodies): f.add('BUG', 'meal request to the AI did not carry the tableware set')
+        mc = page.evaluate("mhMultiCheckPrompt('porridge 250g', null)")
+        if 'KNOWN TABLEWARE' not in mc: f.add('BUG', 'compare-AI prompt missing tableware')
+        # revert date in the past -> back to Home
+        page.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('mh_tableware'));s.revertOn='2020-01-01';localStorage.setItem('mh_tableware',JSON.stringify(s));})()")
+        page.evaluate("window.dispatchEvent(new Event('focus'))"); page.wait_for_timeout(500)
+        st = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware'))")
+        if st['activeId'] != 'home' or st['revertOn'] is not None: f.add('BUG', f'did not go back to Home on the date: {st["activeId"]}')
+        if page.evaluate("document.getElementById('mhTwChip').style.display") != 'none': f.add('BUG', 'chip still showing after revert')
+        # delete set
+        page.evaluate(f"mhTwDeleteSet('{hid}')")
+        if any(x['id'] == hid for x in page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).sets")): f.add('BUG', 'set not deleted')
+    # custom item + weight line
+    page.evaluate("document.getElementById('mhTwNewName') && (document.getElementById('mhTwNewName').value='Soup bowl')")
+    page.evaluate("switchTabById('manage'); mhTwRender(); document.getElementById('mhTwNewName').value='Soup bowl'; mhTwAddItem()")
+    page.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('mh_tableware'));const id=s.custom[0].id;mhTwEdit('home',id,'wt','350');})()")
+    if 'soup bowl empty weight 350g' not in page.evaluate("mhTablewareLine()"): f.add('BUG', 'custom item / empty weight missing: ' + page.evaluate("mhTablewareLine()")[:400])
+    if errs: f.add('JS-exception', str(errs[:3]))
+    b.close()
+print('findings', len(f)); sys.exit(1 if f else 0)
