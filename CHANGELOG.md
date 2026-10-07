@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.887 — Topic Chips On Reports And Settings → Manage
+
+Pete (7 Oct): continue the de-cluttering. Reports had 13 flat sections and Settings → Manage had 19.
+- **Reports chips:** All · Ask & share (Ask AI, Query Builder, Export) · Summaries (Summary, Insights, GBM, Research) · Analysis (activity credit, seasonal, sleep & ketosis, weight vs protocol) · Treatment (analysis, sessions).
+- **Settings → Manage chips:** All · Me & targets (profile, carb ceilings, water, tableware, steps, exercise offset, device precision, formulas) · AI & alerts (AI provider, notifications, idle timeout, carer) · Health tracking (supplements, symptoms, treatments, lab results, report profiles) · About & setup.
+- **View filter only:** nothing is moved, deleted or un-hidden; your own ▲ ▼ 👁 order and hidden cards keep working, and All looks as before. The topic is remembered per screen.
+- **Search is safe:** searching for any setting or report resets the chips to All first, so a chip can never hide the thing you just searched for.
+- Test: p50.
+
 ## v3.10.886 — Trends "Today" View: Look-Alike Sections Merged, Chips Apply
 
 Pete (7 Oct): continue de-cluttering. Trends opens on the single-day "Today" view, which had its own look-alike cards.

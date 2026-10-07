@@ -686,6 +686,9 @@
   /* v3.10.885: Trends topic filter + one-line "what question does this answer" captions */
   .mh-grp-hide { display: none !important; }
   .mh-qline { font-size: 11px; color: var(--text3); line-height: 1.45; margin: -2px 0 10px; }
+  .mh-topic-bar { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+  .mh-topic-bar .mh-grp-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); font-size: 12px; cursor: pointer; font-family: 'Space Mono', monospace; touch-action: manipulation; }
+  .mh-topic-bar .mh-grp-chip.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
   #mhTrendsGroupBar { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
   #mhTrendsGroupBar .mh-grp-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); font-size: 12px; cursor: pointer; font-family: 'Space Mono', monospace; touch-action: manipulation; }
   #mhTrendsGroupBar .mh-grp-chip.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
@@ -6053,7 +6056,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.886'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.887'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -17740,6 +17743,7 @@ function runSavedPromptTrackedById(id) {
 
 function siteSearchOpenSettings(key, subtab, tab, wrapId) {
   closeSiteSearch();
+  try { mhTopicResetAll(); } catch (e) {}   // a topic chip must never hide the section the person just searched for
   // Defaults to 'settings' - every existing index entry was written before
   // this parameter existed, so this keeps all of them working exactly as
   // before. Only entries that explicitly pass a different tab (Reports
@@ -31206,7 +31210,8 @@ function switchSubTab(parent, tab, el) {
     if (tab === 'reports') {
       renderReports();
       makeContainerReorderable(document.getElementById('view-reports'), 'reports');
-      setTimeout(() => makeContainerReorderable(document.getElementById('view-reports'), 'reports'), 100);
+      try { mhTopicApply('reports'); } catch (e) {}
+      setTimeout(() => { makeContainerReorderable(document.getElementById('view-reports'), 'reports'); try { mhTopicApply('reports'); } catch (e) {} }, 100);
     }
   } else if (parent === 'settings') {
     ['view-manage','view-customise','view-import'].forEach(id => { const v=document.getElementById(id); if(v) v.classList.remove('active'); });
@@ -31268,7 +31273,8 @@ function switchSubTab(parent, tab, el) {
       // comment above for why) as well as after the delay, which stays as
       // a safety net.
       makeContainerReorderable(document.getElementById('view-manage'), 'manage');
-      setTimeout(() => makeContainerReorderable(document.getElementById('view-manage'), 'manage'), 100);
+      try { mhTopicApply('manage'); } catch (e) {}
+      setTimeout(() => { makeContainerReorderable(document.getElementById('view-manage'), 'manage'); try { mhTopicApply('manage'); } catch (e) {} }, 100);
     }
     if (tab === 'import') {
       renderSavedDevices(); updateImportStatus(); initSyncUI();
@@ -44228,6 +44234,45 @@ function mhTrendsGroupApply() {
   let hint = document.getElementById('mhDvPatternsHint');
   if (!hint) { hint = document.createElement('div'); hint.id = 'mhDvPatternsHint'; hint.className = 'mh-qline'; hint.style.cssText = 'padding:14px 4px;'; hint.textContent = 'Patterns compare many days, so there is nothing to show for a single day. Pick 7 Days, 30 Days or All above.'; first.parentNode.insertBefore(hint, first); }
   hint.style.display = (cur === 'patterns' && dv && dv.style.display !== 'none') ? 'block' : 'none';
+}
+
+// ── TOPIC CHIPS FOR REPORTS + SETTINGS → MANAGE (v3.10.887) ─────────
+// Same idea as the Trends chips: a view filter over the existing flat lists.
+// Nothing is moved or un-hidden, so your own ▲ ▼ 👁 settings carry on working.
+const MH_TOPIC_SCOPES = {
+  reports: { view: 'view-reports', groups: {
+    ask:      { label: 'Ask & share', keys: ['rpt-askai', 'rpt-query', 'rpt-export'] },
+    summary:  { label: 'Summaries',   keys: ['rpt-summary', 'rpt-insights-box', 'rpt-gbm', 'rpt-research'] },
+    analysis: { label: 'Analysis',    keys: ['activitycredit', 'seasonal', 'rpt-sleepketo', 'rpt-weightproto'] },
+    treat:    { label: 'Treatment',   keys: ['rpt-treatment', 'rpt-sessions'] },
+  } },
+  manage: { view: 'view-manage', groups: {
+    me:       { label: 'Me & targets',     keys: ['set-profile', 'set-carbceilings', 'set-water', 'set-tableware', 'set-stepsbaseline', 'set-exoffset', 'set-deviceprec', 'set-formulas'] },
+    ai:       { label: 'AI & alerts',      keys: ['set-aiprovider', 'set-notifications', 'set-idletimeout', 'set-carer'] },
+    tracking: { label: 'Health tracking',  keys: ['set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'] },
+    about:    { label: 'About & setup',    keys: ['set-about', 'set-setup'] },
+  } },
+};
+function mhTopicGet(scope) { try { return localStorage.getItem('mh_topic_' + scope) || 'all'; } catch (_) { return 'all'; } }
+function mhTopicSet(scope, k) { try { localStorage.setItem('mh_topic_' + scope, k); } catch (_) {} mhTopicApply(scope); }
+function mhTopicResetAll() {
+  Object.keys(MH_TOPIC_SCOPES).forEach(sc => { try { localStorage.setItem('mh_topic_' + sc, 'all'); } catch (_) {} mhTopicApply(sc); });
+  try { mhTrendsGroupSet('all'); } catch (_) {}
+}
+function mhTopicApply(scope) {
+  const cfg = MH_TOPIC_SCOPES[scope]; if (!cfg) return;
+  const defs = cfg.groups;
+  let cur = mhTopicGet(scope); if (cur !== 'all' && !defs[cur]) cur = 'all';
+  const allUnits = [];
+  Object.keys(defs).forEach(k => defs[k].keys.forEach(key => genericUnitFor(scope, key).forEach(el => allUnits.push([k, el]))));
+  if (!allUnits.length) return;
+  const parent = allUnits[0][1].parentNode; if (!parent) return;
+  const barId = 'mhTopicBar-' + scope;
+  let bar = document.getElementById(barId);
+  if (!bar) { bar = document.createElement('div'); bar.id = barId; bar.className = 'mh-topic-bar'; parent.insertBefore(bar, parent.firstChild); }
+  const chips = [['all', 'All']].concat(Object.keys(defs).map(k => [k, defs[k].label]));
+  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}')">${l}</span>`).join('');
+  allUnits.forEach(([k, el]) => el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k));
 }
 
 // ── GLOBAL WEIGHT UNIT (v3.10.880) ────────────────────────
