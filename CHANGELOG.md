@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.883 — Slow Waits Get The Pulsing Border
+
+Pete (7 Oct): anything that can take a while to populate should show the same flashing box border as the chat's "Analysing photo…" bubble.
+- **New shared `.mh-wait-box`** — identical pulsing border (the chat thinking bubble's animation); respects reduced-motion.
+- **Compare AI** (library edit, log entry edit, history edit, recipe ingredient add): the "Asking Claude, Gemini and ChatGPT…" placeholder now pulses until the answers replace it.
+- **Report and AI buttons** (Ask AI, full summary, GBM review, oncology narrative, missed-day estimate, wearable sync): a pulsing box appears right under the button while it is working and disappears the moment it finishes, errors, or is re-enabled.
+- Chat bubbles already pulsed and are unchanged.
+- Test: p47.
+
 ## v3.10.882 — Body Composition Card (Trends)
 
 Pete (7 Oct): borrowed the best idea from Withings' Body Composition screen. Weight alone hides what changed; flat weight with fat up and muscle down is a different story from fat down and muscle up.
