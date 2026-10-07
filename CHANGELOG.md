@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.895 — Compare Two Periods (Photo-Estimate Check)
+
+Pete (7 Oct, home from holiday where meals were photo-logged): wants a comparison with the previous few weeks, since weight is drifting down slightly while logged intake is no higher than usual.
+- **New Trends card "Compare Two Periods"** (Patterns chip; has show/hide and reorder like every card). Defaults: Recent = your latest run of Holiday-mode days, Baseline = the 3 weeks before. Dates are editable and remembered.
+- Shows logged days, avg kcal, protein, carbs, steps, weight trend per week and weigh-ins for each period.
+- **Verdict:** logged kcal minus 7700 x daily weight change = the burn the logging implies. If real burn was similar in both periods (adjusted ~40 kcal per extra 1,000 steps), the gap between the two implied burns is how far the recent logging was off. Always shown with a margin of error; when the gap is inside the noise it says so rather than claiming a bias. Needs 3+ logged days and 3+ weigh-ins over 4+ days per period.
+- Honest limit: a ~6 day holiday gives a wide margin (several hundred kcal/day). Weigh-ins on the days the scales missed (the new backdate/edit weight options) tighten it.
+- Test: p51 extended.
+
 ## v3.10.894 — Weight In The History Day Editor
 
 Pete (7 Oct, screenshot of History → Edit day totals): that screen has water, steps and exercise but no weight, so a missed day could not be fixed there.

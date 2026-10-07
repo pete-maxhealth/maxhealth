@@ -3318,6 +3318,11 @@
       </div>
     </div>
 
+    <div class="metric-card card-unit" id="periodCmpCard" style="margin-bottom:16px;">
+      <div class="section-title" id="title-trends-periodcmp" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-periodcmp','trends-periodcmp-wrap','trends-periodcmp-icon')">⚖️ Compare Two Periods <span id="trends-periodcmp-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="trends-periodcmp-wrap"></div>
+    </div>
+
     <div class="metric-card card-unit" id="topFoodsCard" style="margin-bottom:16px;">
       <div class="section-title" id="title-trends-topfoods" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-topfoods','trends-topfoods-wrap','trends-topfoods-icon')">🍽️ Top Foods <span id="trends-topfoods-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
       <div id="trends-topfoods-wrap">
@@ -6058,7 +6063,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.894'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.895'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7684,6 +7689,7 @@ const GENERIC_SECTION_IDS = {
     'trends-journey': ['title-trends-journey', 'trends-journey-wrap'],
     'trends-bodycomp': ['title-trends-bodycomp', 'trends-bodycomp-wrap'],
     'trends-patterns': ['title-trends-patterns', 'trends-patterns-wrap'],
+    'trends-periodcmp': ['title-trends-periodcmp', 'trends-periodcmp-wrap'],
     'trends-wellness': ['title-trends-wellness', 'trends-wellness-wrap'],
     'trends-topfoods': ['title-trends-topfoods', 'trends-topfoods-wrap'],
     'trends-dow': ['title-trends-dow', 'trends-dow-wrap'],
@@ -7753,7 +7759,7 @@ const GENERIC_SECTION_IDS = {
   },
 };
 const GENERIC_DEFAULT_ORDER = {
-  trends: ['trends-journey', 'trends-bodycomp', 'trends-patterns', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
+  trends: ['trends-journey', 'trends-bodycomp', 'trends-patterns', 'trends-periodcmp', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-tableware', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
@@ -17637,6 +17643,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: "Today's Log", key: 'log-today', subtab: 'log', tab: 'log', keywords: 'food entries chat meal logging' },
   { label: 'Body Composition (Trends)', key: 'trends-bodycomp', subtab: 'trends', tab: 'insights', keywords: 'fat muscle bone gaining fat losing muscle composition verdict smart scale withings' },
   { label: 'Your Journey (Trends)', key: 'trends-journey', subtab: 'trends', tab: 'insights', keywords: 'weight over time ketosis treatment markers' },
+  { label: 'Compare Two Periods (Trends)', key: 'trends-periodcmp', subtab: 'trends', tab: 'insights', keywords: 'holiday photo accuracy estimate compare weeks before after intake weight maintenance calibration' },
   { label: 'Patterns (Trends)', key: 'trends-patterns', subtab: 'trends', tab: 'insights', keywords: 'findings correlations early warning cross-metric' },
   { label: "Wellness Balance", key: 'trends-wellness', subtab: 'trends', tab: 'insights', keywords: 'sleep activity vitals nutrition score summary wellness balance' },
 ];
@@ -31262,6 +31269,7 @@ function switchSubTab(parent, tab, el) {
         ['trends-journey',  'trends-journey-wrap',  'trends-journey-icon',  true],
         ['trends-bodycomp', 'trends-bodycomp-wrap', 'trends-bodycomp-icon', true],
         ['trends-patterns', 'trends-patterns-wrap', 'trends-patterns-icon', true],
+        ['trends-periodcmp', 'trends-periodcmp-wrap', 'trends-periodcmp-icon', true],
         ['trends-wellness', 'trends-wellness-wrap', 'trends-wellness-icon', true],
       ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
       // Called both immediately AND after the delay below (not one or the
@@ -32779,6 +32787,105 @@ function mhJourneyRenderChips() {
   }).join('');
 }
 
+// ── Compare two periods (v3.10.894) ───────────────────────────────────────
+// Built for checking photo-estimate accuracy after a stretch of eating out
+// (e.g. a holiday): compares a "recent" period against an earlier baseline
+// period using only things that don't depend on the logging method - the
+// weight trend and the days' steps. Logic: kcal(logged) - 7700 x weight
+// change per day = the burn the logging IMPLIES. If real burn was about the
+// same in both periods, the gap between the two implied burns is how far the
+// recent logging was off. Weight is noisy over short spans, so every result
+// carries a margin of error and the verdict says when it is inside the noise.
+function _pcIso(d) { const p = d.split('/'); return p.length === 3 ? `20${p[2]}-${p[1]}-${p[0]}` : ''; }
+function _pcIsoToday() { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; }
+function _pcAddDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function mhPcmpDefaults() {
+  const rows = getTrendsData(true);
+  // Recent period: the latest run of Holiday-mode days if there is one, else the last 14 days.
+  const hol = rows.filter(d => d.mode === 'holiday' && d.date !== todayStr()).map(d => _pcIso(d.date)).sort();
+  let a1, a2;
+  if (hol.length >= 3) {
+    a2 = hol[hol.length - 1]; a1 = a2;
+    for (let i = hol.length - 2; i >= 0; i--) { if ((new Date(a1) - new Date(hol[i])) / 864e5 <= 3) a1 = hol[i]; else break; }
+  } else { a2 = _pcAddDays(_pcIsoToday(), -1); a1 = _pcAddDays(a2, -13); }
+  return { a: [a1, a2], b: [_pcAddDays(a1, -21), _pcAddDays(a1, -1)] };
+}
+function mhPcmpGet() {
+  try { const v = JSON.parse(localStorage.getItem('mh_pcmp') || 'null'); if (v && v.a && v.b) return v; } catch (_) {}
+  return mhPcmpDefaults();
+}
+function mhPcmpSet(which, idx, val) {
+  const v = mhPcmpGet(); v[which][idx] = val;
+  try { localStorage.setItem('mh_pcmp', JSON.stringify(v)); } catch (_) {}
+  renderPeriodCompareCard();
+}
+function mhPcmpReset() { try { localStorage.removeItem('mh_pcmp'); } catch (_) {} renderPeriodCompareCard(); }
+function mhPcmpStats(rows, from, to) {
+  const inR = rows.filter(d => { const i = _pcIso(d.date); return i >= from && i <= to && d.date !== todayStr(); });
+  const logged = inR.filter(d => (d.totals?.kcal || 0) >= 500);
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const w = inR.filter(d => d.weight > 0).map(d => ({ x: (new Date(_pcIso(d.date) + 'T00:00:00') - new Date(from + 'T00:00:00')) / 864e5, y: d.weight }));
+  let slope = null, span = 0, noiseKcal = null;
+  if (w.length >= 3) {
+    span = Math.max(...w.map(p => p.x)) - Math.min(...w.map(p => p.x));
+    if (span >= 4) {
+      const mx = mean(w.map(p => p.x)), my = mean(w.map(p => p.y));
+      const num = w.reduce((s, p) => s + (p.x - mx) * (p.y - my), 0), den = w.reduce((s, p) => s + (p.x - mx) ** 2, 0);
+      slope = den ? num / den : null; // kg per day
+      noiseKcal = den ? (0.4 * 7700 / Math.sqrt(den)) : null; // 1 SD of the slope if the scale wobbles ~0.4 kg day to day
+    }
+  }
+  const kcal = mean(logged.map(d => d.totals.kcal));
+  const steps = mean(inR.filter(d => d.steps > 0).map(d => d.steps));
+  return {
+    days: logged.length, kcal, protein: mean(logged.map(d => d.totals.protein || 0)), carbs: mean(logged.map(d => getEffectiveCarbsForDay(d))),
+    steps, exKcal: logged.length ? mean(logged.map(d => (d.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0))) : null,
+    wN: w.length, span, slope,
+    implied: (kcal != null && slope != null) ? kcal - slope * 7700 : null,
+    noise: noiseKcal,
+  };
+}
+function renderPeriodCompareCard() {
+  const wrap = document.getElementById('trends-periodcmp-wrap');
+  if (!wrap) return;
+  const cfg = mhPcmpGet();
+  const rows = getTrendsData(true);
+  const A = mhPcmpStats(rows, cfg.a[0], cfg.a[1]), B = mhPcmpStats(rows, cfg.b[0], cfg.b[1]);
+  const f0 = v => v == null ? '—' : Math.round(v).toLocaleString();
+  const wk = s => s.slope == null ? '—' : mhWtDelta(s.slope * 7, 1) + '/wk';
+  const inp = (w, i, v) => `<input type="date" value="${v}" max="${_pcIsoToday()}" onchange="mhPcmpSet('${w}',${i},this.value)" style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);min-width:0;width:100%;box-sizing:border-box;">`;
+  const rowsHtml = [
+    ['Logged days', A.days, B.days],
+    ['Avg kcal / day', f0(A.kcal), f0(B.kcal)],
+    ['Avg protein g', f0(A.protein), f0(B.protein)],
+    ['Avg carbs g', f0(A.carbs), f0(B.carbs)],
+    ['Avg steps', f0(A.steps), f0(B.steps)],
+    ['Weight trend', wk(A), wk(B)],
+    ['Weigh-ins', A.wN, B.wN],
+  ].map(([l, a, b]) => `<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;padding:5px 0;border-top:1px solid var(--border);font-size:12px;"><span style="color:var(--text3);">${l}</span><span style="color:var(--text);font-weight:700;">${a}</span><span style="color:var(--text2);">${b}</span></div>`).join('');
+  let verdict;
+  if (A.implied == null || B.implied == null || A.days < 3 || B.days < 3) {
+    verdict = `<b>Not enough to judge yet.</b> Each period needs at least 3 logged days and 3 weigh-ins spread over 4+ days (a week or more is far better) (use <i>Add or fix a day's weight</i> for days the scales missed).`;
+  } else {
+    const actAdj = (A.steps != null && B.steps != null) ? (A.steps - B.steps) * 0.04 : 0; // ~40 kcal per 1000 extra steps
+    const err = A.implied - B.implied - actAdj;
+    const noise = Math.round(Math.sqrt(A.noise ** 2 + B.noise ** 2) / 10) * 10;
+    const pct = A.kcal ? Math.round(Math.abs(err) / A.kcal * 100) : 0;
+    const big = Math.abs(err) > noise;
+    verdict = `<b>${big ? (err > 0 ? `Logged intake looks about ${Math.round(Math.abs(err)/10)*10} kcal/day too high (≈${pct}%)` : `Logged intake looks about ${Math.round(Math.abs(err)/10)*10} kcal/day too low (≈${pct}%)`) : 'No detectable bias in the logged intake'}</b>`
+      + `<div style="margin-top:4px;">Margin of error about ±${noise} kcal/day${big ? '' : ' - the gap is inside the noise, so the photo estimates cannot be shown to be off'}. `
+      + `Burn implied by the later period: ${f0(A.implied)} vs ${f0(B.implied)} kcal/day in the baseline${actAdj ? ` (adjusted ${actAdj > 0 ? '-' : '+'}${Math.abs(Math.round(actAdj))} kcal/day for the steps difference)` : ''}.</div>`;
+  }
+  wrap.innerHTML = `
+    <div class="mh-qline">Check how far your logging was off after a stretch of photo-only meals: compares recent days with the weeks before, using your weight trend rather than the food log.</div>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;align-items:end;font-size:10px;color:var(--text3);margin-bottom:4px;">
+      <span></span><span>RECENT (from – to)</span><span>BASELINE (from – to)</span></div>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;margin-bottom:4px;"><span></span><div>${inp('a',0,cfg.a[0])}<div style="height:3px;"></div>${inp('a',1,cfg.a[1])}</div><div>${inp('b',0,cfg.b[0])}<div style="height:3px;"></div>${inp('b',1,cfg.b[1])}</div></div>
+    ${rowsHtml}
+    <div id="pcmpVerdict" style="margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--surface2);font-size:12px;line-height:1.55;color:var(--text2);">${verdict}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Assumes your real burn was similar in both periods apart from steps. Short periods can only show a large error (margin of error shrinks with longer periods and more weigh-ins); scale weight moves half a kilo or more with water and salt alone. Treat it as a guide, not a measurement. <span onclick="mhPcmpReset()" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Reset dates</span></div>`;
+}
+
 // Tap-a-point info panel for Your Journey - same pattern as the compare-
 // metrics and drill-chart panels (tap to open, ✕ to dismiss).
 function showJourneyDayPanel(index, weighed, pointColors) {
@@ -33626,6 +33733,7 @@ function renderTrends() {
   try { mhTrendsGroupApply(); } catch (e) { console.warn('[trends-groups]', e); }
   renderJourneyCard();
   try { renderBodyCompCard(); } catch (e) { console.warn('[bodycomp]', e); }
+  try { renderPeriodCompareCard(); } catch (e) { console.warn('[periodcmp]', e); }
   renderPatternsCard();
   renderTopFoodsCard();
   renderDayOfWeekCard();
@@ -44404,7 +44512,7 @@ function mhTrendsGroupDefs() {
     body:    { label: 'Body',           ids: ['bodyCompCard', 'journeyCard', 'mcWeight', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration', 'dv-weight-wrap'] },
     heart:   { label: 'Heart & sleep',  ids: ['mcHR', 'mcSpO2', 'mcHRV', 'mcSleep', 'mcSteps', 'mcDistance', 'dv-activity-wrap', 'dv-sleep-wrap'] },
     food:    { label: 'Food',           ids: ['mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcGKI', 'topFoodsCard', 'dayOfWeekCard', 'dv-meals-wrap'] },
-    patterns:{ label: 'Patterns',       ids: ['wellnessCard', 'patternsCard'] },
+    patterns:{ label: 'Patterns',       ids: ['wellnessCard', 'patternsCard', 'periodCmpCard'] },
   };
 }
 function mhTrendsGroupGet() { try { return localStorage.getItem('mh_trends_group') || 'all'; } catch (_) { return 'all'; } }

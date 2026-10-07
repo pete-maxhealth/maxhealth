@@ -106,6 +106,27 @@ with fresh_server() as root, sync_playwright() as pw:
         w = page.evaluate(f"state.history[{idx}].weight")
         if not w or abs(w - 89.8) > 0.15: f.add('BUG', f'history weight 198 lb should store ~89.8 kg: {w}')
     page.evaluate("localStorage.setItem('mh_weight_unit','kg')")
+    # v3.10.895: compare-two-periods card
+    hist = []
+    import datetime
+    base = datetime.date(2026,9,10)
+    for i in range(27):
+        d = base + datetime.timedelta(days=i); ds = d.strftime('%d/%m/%y')
+        holiday = i >= 21
+        hist.append({'date': ds, 'weight': round(90.0 - (0.02*i if not holiday else 0.02*21 + 0.06*(i-21)), 2), 'mode': 'holiday' if holiday else 'standard',
+                     'totals': {'kcal': 3300 if holiday else 3000, 'protein': 190, 'carbs': 40, 'fat': 200}, 'steps': 14000 if holiday else 8000, 'exercises': [], 'log': []})
+    page.evaluate("h => { state.history = h; }", hist)
+    d = page.evaluate("mhPcmpDefaults()")
+    if d['a'][0] != '2026-10-01' or d['a'][1] != '2026-10-06': f.add('BUG', f'holiday default period wrong: {d}')
+    page.evaluate("switchTabById('trends')"); page.wait_for_timeout(500)
+    page.evaluate("renderPeriodCompareCard()")
+    vt = page.evaluate("document.getElementById('pcmpVerdict').textContent")
+    if 'kcal/day' not in vt or 'Not enough' in vt: f.add('BUG', f'compare card gave no verdict: {vt!r}')
+    st = page.evaluate("mhPcmpStats(getTrendsData(true), '2026-10-01', '2026-10-06')")
+    if not st or st['days'] != 6 or st['slope'] is None or abs(st['slope'] + 0.06) > 0.02: f.add('BUG', f'period stats wrong: {st}')
+    page.evaluate("mhPcmpSet('a',0,'2026-10-04')")
+    if page.evaluate("JSON.parse(localStorage.getItem('mh_pcmp')).a[0]") != '2026-10-04': f.add('BUG', 'compare dates not saved')
+    page.evaluate("mhPcmpReset()")
     # copy previous set (routine editor)
     page.evaluate("_routineDraftExercises=[{name:'Rowing',sets:[{reps:'10',weight_kg:40,note:'n'}]}]; _routineEditingId=null; document.body.insertAdjacentHTML('beforeend','<div id=routineExerciseRows></div>'); renderRoutineExerciseRows()")
     if page.evaluate("document.querySelectorAll('[data-copyprev]').length") != 1: f.add('BUG', 'copy previous link missing')
