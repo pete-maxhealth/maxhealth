@@ -6063,7 +6063,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.897'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.898'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -32811,6 +32811,12 @@ function mhPcmpDefaults() {
   if (hol.length >= 3) {
     a2 = hol[hol.length - 1]; a1 = a2;
     for (let i = hol.length - 2; i >= 0; i--) { if ((new Date(a1) - new Date(hol[i])) / 864e5 <= 3) a1 = hol[i]; else break; }
+    // Travel days just before the first Holiday-mode day (e.g. a travel day tagged Occasion) belong to the trip.
+    const byIso = {}; rows.forEach(d => { byIso[_pcIso(d.date)] = d; });
+    for (let k = 0; k < 3; k++) {
+      const prev = byIso[_pcAddDays(a1, -1)];
+      if (prev && (prev.mode === 'occasion' || prev.mode === 'holiday' || /travel/i.test(prev.notes || ''))) a1 = _pcAddDays(a1, -1); else break;
+    }
   } else { a2 = _pcAddDays(_pcIsoToday(), -1); a1 = _pcAddDays(a2, -13); }
   return { a: [a1, a2], b: [_pcAddDays(a1, -21), _pcAddDays(a1, -1)] };
 }
@@ -32839,7 +32845,7 @@ function mhPcmpStats(rows, from, to) {
   let slope = null, span = 0, noiseKcal = null;
   if (w.length >= 3) {
     span = Math.max(...w.map(p => p.x)) - Math.min(...w.map(p => p.x));
-    if (span >= 4) {
+    if (span >= 3) {
       const mx = mean(w.map(p => p.x)), my = mean(w.map(p => p.y));
       const num = w.reduce((s, p) => s + (p.x - mx) * (p.y - my), 0), den = w.reduce((s, p) => s + (p.x - mx) ** 2, 0);
       slope = den ? num / den : null; // kg per day
@@ -32865,6 +32871,14 @@ function renderPeriodCompareCard() {
   const f0 = v => v == null ? '—' : Math.round(v).toLocaleString();
   const wk = s => s.slope == null ? '—' : mhWtDelta(s.slope * 7, 1) + '/wk';
   const inp = (w, i, v) => `<input type="date" value="${v}" max="${_pcIsoToday()}" onchange="mhPcmpSet('${w}',${i},this.value)" style="font-size:12px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);min-width:0;width:100%;box-sizing:border-box;">`;
+  // Prediction that does not need the recent weight trend: your baseline burn
+  // (from the baseline weight trend) plus the steps difference, set against
+  // what was logged in the recent period.
+  let expected = null, expAdj = 0;
+  if (B.implied != null && A.kcal != null) {
+    expAdj = (A.steps != null && B.steps != null) ? (A.steps - B.steps) * 0.04 : 0;
+    expected = (A.kcal - (B.implied + expAdj)) * 7 / 7700; // kg per week
+  }
   const rowsHtml = [
     ['Logged days', A.days, B.days],
     ['Avg kcal / day', f0(A.kcal), f0(B.kcal)],
@@ -32873,10 +32887,11 @@ function renderPeriodCompareCard() {
     ['Avg steps', f0(A.steps), f0(B.steps)],
     ['Weight trend', wk(A), wk(B)],
     ['Weigh-ins', A.wN, B.wN],
+    ['Expected trend if logging is accurate', expected == null ? '—' : mhWtDelta(expected, 1) + '/wk', ''],
   ].map(([l, a, b]) => `<div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;padding:5px 0;border-top:1px solid var(--border);font-size:12px;"><span style="color:var(--text3);">${l}</span><span style="color:var(--text);font-weight:700;">${a}</span><span style="color:var(--text2);">${b}</span></div>`).join('');
   let verdict;
   if (A.implied == null || B.implied == null || A.days < 3 || B.days < 3) {
-    verdict = `<b>Not enough to judge yet.</b> Each period needs at least 3 logged days and 3 weigh-ins spread over 4+ days (a week or more is far better) (use <i>Add or fix a day's weight</i> for days the scales missed).`;
+    verdict = (expected != null ? `<b>If your logging was accurate</b>, your baseline burn (${f0(B.implied)} kcal/day, plus about ${Math.round(expAdj)} for the extra steps) against ${f0(A.kcal)} kcal/day logged predicts about <b>${mhWtDelta(expected, 1)}/wk</b> in the recent period. Compare with what the scales show: a much bigger loss than that points to over-counting in the photos, flat or gaining points to under-counting. Treat anything within about ${mhWtDelta(0.3, 1).replace('+', '')}/wk as agreement.<div style="margin-top:6px;color:var(--text3);">The measured recent trend is not available yet: ` : `<b>Not enough to judge yet.</b> `) + `Each period needs at least 3 logged days and 3 weigh-ins spread over 3+ days (a week or more is far better) (use <i>Add or fix a day's weight</i> for days the scales missed).` + (expected != null ? '</div>' : '');
   } else {
     const actAdj = (A.steps != null && B.steps != null) ? (A.steps - B.steps) * 0.04 : 0; // ~40 kcal per 1000 extra steps
     const err = A.implied - B.implied - actAdj;

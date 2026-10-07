@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.898 — Compare Two Periods: Expected Trend, Travel Day Included, Shorter Spans
+
+Pete (7 Oct, screenshot): baseline now correctly counts 20 days, but the recent period (3-6 Oct, 4 weigh-ins over 3 days) showed no weight trend, so no verdict.
+- **Expected trend if logging is accurate:** new row. Your baseline burn (from the baseline weight trend) plus the steps difference, set against the kcal logged recently, predicts a weight trend per week. Compare it with what the scales show: a much bigger loss than predicted points to over-counting in the photos, flat or gaining to under-counting. Works even when the recent period is too short to measure its own trend.
+- **Default recent period** now extends back over adjacent travel/Occasion days (e.g. a travel day before the first Holiday-mode day), so the trip starts where the trip started.
+- A weight trend now needs weigh-ins over 3+ days (was 4+); the verdict still shows its margin of error.
+- Test: p51 extended.
+
 ## v3.10.897 — Compare Two Periods Shows What It Counted, And Reads Scale-File Weights
 
 Pete (7 Oct): still showing 2 days after the window fix.
