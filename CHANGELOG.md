@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.882 — Body Composition Card (Trends)
+
+Pete (7 Oct): borrowed the best idea from Withings' Body Composition screen. Weight alone hides what changed; flat weight with fat up and muscle down is a different story from fat down and muscle up.
+- **New Trends card "Body Composition"** (with ▲ ▼ 👁 like every card). A plain-words verdict: gaining fat / losing muscle / losing fat, gaining muscle / holding steady and so on.
+- **How it decides:** this week's smart-scale readings (averaged) vs the week before, with a 0.3 kg threshold, so one noisy bioimpedance reading can't flip it. With too little data it compares the latest weigh-in with the one before (0.5 kg threshold) and says so on the card. A single reading makes no claim. A note appears when weight barely moved but composition did.
+- **Stacked share bar** (muscle / fat / bone) from the latest reading, plus **change badges** for weight, muscle and fat (↗ ↙ arrows, change in your chosen weight unit, and change in share as points).
+- Reads the same Withings rows as the weight drill-down; hides itself when there are none. Honest caveat shown: scale estimates swing by half a kilo or more.
+- Not borrowed: Withings' population "Normal/High" bands (we have no population data) and BMR labels.
+- Test: p46 (verdicts for fat-up/muscle-down, recomposition, steady, sparse fallback, single reading, unit-aware, controls present).
+
 ## v3.10.881 — Tableware Card Gets Show/Hide And Reorder
 
 Pete (7 Oct): every card needs show/hide and reorder. The Tableware & Portion Sizes card was registered for hiding but missing from the Settings ordering list, so it never got the ▲ ▼ 👁 controls.

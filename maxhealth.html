@@ -3250,6 +3250,12 @@
       </div>
     </div>
 
+    <!-- Body Composition verdict (v3.10.882): reads the same Withings rows as the weight drill-down -->
+    <div class="metric-card card-unit" id="bodyCompCard" style="display:none;margin-bottom:16px;">
+      <div class="section-title" id="title-trends-bodycomp" style="cursor:pointer;margin-bottom:10px;" onclick="toggleSection('trends-bodycomp','trends-bodycomp-wrap','trends-bodycomp-icon')">🧬 Body Composition <span id="trends-bodycomp-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="trends-bodycomp-wrap"></div>
+    </div>
+
     <!-- Your Journey — always full history, independent of the filter above.
          Weight trend with each point coloured by that day's ketosis adherence
          (green = within ceiling, amber = over), plus a marker strip for
@@ -6021,7 +6027,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.881'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.882'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7645,6 +7651,7 @@ window._reorderableSections = {};
 const GENERIC_SECTION_IDS = {
   trends: {
     'trends-journey': ['title-trends-journey', 'trends-journey-wrap'],
+    'trends-bodycomp': ['title-trends-bodycomp', 'trends-bodycomp-wrap'],
     'trends-patterns': ['title-trends-patterns', 'trends-patterns-wrap'],
     'trends-wellness': ['title-trends-wellness', 'trends-wellness-wrap'],
     'trends-topfoods': ['title-trends-topfoods', 'trends-topfoods-wrap'],
@@ -7717,7 +7724,7 @@ const GENERIC_SECTION_IDS = {
   },
 };
 const GENERIC_DEFAULT_ORDER = {
-  trends: ['trends-journey', 'trends-patterns', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
+  trends: ['trends-journey', 'trends-bodycomp', 'trends-patterns', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-tableware', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'],
   import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
@@ -17577,6 +17584,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Ingredients', key: 'lib-ingredients', subtab: 'library', tab: 'log', keywords: 'recipe building blocks raw items' },
   { label: 'Recipes', key: 'lib-recipes', subtab: 'library', tab: 'log', keywords: 'cook mode meal combinations saved' },
   { label: "Today's Log", key: 'log-today', subtab: 'log', tab: 'log', keywords: 'food entries chat meal logging' },
+  { label: 'Body Composition (Trends)', key: 'trends-bodycomp', subtab: 'trends', tab: 'insights', keywords: 'fat muscle bone gaining fat losing muscle composition verdict smart scale withings' },
   { label: 'Your Journey (Trends)', key: 'trends-journey', subtab: 'trends', tab: 'insights', keywords: 'weight over time ketosis treatment markers' },
   { label: 'Patterns (Trends)', key: 'trends-patterns', subtab: 'trends', tab: 'insights', keywords: 'findings correlations early warning cross-metric' },
   { label: "Wellness Balance", key: 'trends-wellness', subtab: 'trends', tab: 'insights', keywords: 'sleep activity vitals nutrition score summary wellness balance' },
@@ -31150,6 +31158,7 @@ function switchSubTab(parent, tab, el) {
       // real markup).
       [
         ['trends-journey',  'trends-journey-wrap',  'trends-journey-icon',  true],
+        ['trends-bodycomp', 'trends-bodycomp-wrap', 'trends-bodycomp-icon', true],
         ['trends-patterns', 'trends-patterns-wrap', 'trends-patterns-icon', true],
         ['trends-wellness', 'trends-wellness-wrap', 'trends-wellness-icon', true],
       ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
@@ -33324,8 +33333,86 @@ function renderDayOfWeekCard() {
   }).join('');
 }
 
+
+// ── BODY COMPOSITION VERDICT CARD (v3.10.882) ───────────────────────
+// Weight alone hides composition: flat weight with fat up and muscle down is
+// a different story from flat weight with fat down and muscle up. Compares
+// THIS week's smart-scale readings with the week before (means, so one noisy
+// BIA reading can't flip the verdict); with too little data it falls back to
+// the latest reading vs the one before, and says so. Masses are kg in storage
+// and shown in the chosen weight unit; shares are percentage points.
+function renderBodyCompCard() {
+  const card = document.getElementById('bodyCompCard');
+  const wrap = document.getElementById('trends-bodycomp-wrap');
+  if (!card || !wrap) return;
+  const rows = getFullBodyCompositionHistory().filter(r => r.weight && r.muscle_mass_kg != null && r.fat_mass_kg != null);
+  if (!rows.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const last = rows[rows.length - 1];
+  const dayN = r => Math.floor(new Date(r.isoDate + 'T00:00:00').getTime() / 86400000);
+  const lastDay = dayN(last);
+  const inWin = (a, b) => rows.filter(r => { const d = dayN(r); return d > lastDay - a && d <= lastDay - b; });
+  const mean = (arr, f) => { const v = arr.map(f).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((p, c) => p + c, 0) / v.length : null; };
+  const pctOf = (r, k, kgK) => { const v = parseFloat(r[k]); if (!isNaN(v)) return v; const kg = parseFloat(r[kgK]); return (!isNaN(kg) && r.weight) ? kg / r.weight * 100 : null; };
+  const cur7 = inWin(7, 0), prev7 = inWin(14, 7);
+  let curSet, prevSet, basis, thr;
+  if (cur7.length >= 2 && prev7.length >= 2) { curSet = cur7; prevSet = prev7; basis = 'This week vs last week (averages)'; thr = 0.3; }
+  else if (rows.length >= 2) { curSet = [last]; prevSet = [rows[rows.length - 2]]; basis = 'Latest weigh-in vs the one before'; thr = 0.5; }
+  else { curSet = [last]; prevSet = null; basis = ''; thr = 0.5; }
+  const M = (set, f) => mean(set, f);
+  const cur = { w: M(curSet, r => r.weight), mu: M(curSet, r => r.muscle_mass_kg), fa: M(curSet, r => r.fat_mass_kg), mup: M(curSet, r => pctOf(r, 'muscle_pct', 'muscle_mass_kg')), fap: M(curSet, r => pctOf(r, 'fat_pct', 'fat_mass_kg')) };
+  const prv = prevSet ? { w: M(prevSet, r => r.weight), mu: M(prevSet, r => r.muscle_mass_kg), fa: M(prevSet, r => r.fat_mass_kg), mup: M(prevSet, r => pctOf(r, 'muscle_pct', 'muscle_mass_kg')), fap: M(prevSet, r => pctOf(r, 'fat_pct', 'fat_mass_kg')) } : null;
+
+  let verdict = 'First reading', vcol = 'var(--text2)', note = '';
+  if (prv) {
+    const dF = cur.fa - prv.fa, dM = cur.mu - prv.mu;
+    const fUp = dF >= thr, fDn = dF <= -thr, mUp = dM >= thr, mDn = dM <= -thr;
+    if (fUp && mDn) { verdict = 'Gaining fat, losing muscle'; vcol = 'var(--red)'; }
+    else if (fUp && mUp) { verdict = 'Gaining fat and muscle'; vcol = 'var(--yellow)'; }
+    else if (fUp) { verdict = 'Gaining fat'; vcol = 'var(--yellow)'; }
+    else if (fDn && mUp) { verdict = 'Losing fat, gaining muscle'; vcol = 'var(--green)'; }
+    else if (fDn && mDn) { verdict = 'Losing fat and muscle'; vcol = 'var(--yellow)'; }
+    else if (fDn) { verdict = 'Losing fat'; vcol = 'var(--green)'; }
+    else if (mDn) { verdict = 'Losing muscle'; vcol = 'var(--yellow)'; }
+    else if (mUp) { verdict = 'Gaining muscle'; vcol = 'var(--green)'; }
+    else { verdict = 'Holding steady'; vcol = 'var(--green)'; }
+    if (Math.abs(cur.w - prv.w) < 0.5 && (fUp || fDn || mUp || mDn)) note = 'Weight barely moved, but the make-up of it did, which the scale number alone would hide.';
+  }
+
+  // stacked share bar: muscle / fat / bone (+ remainder)
+  const boneKg = parseFloat(last.bone_mass_kg);
+  const mP = pctOf(last, 'muscle_pct', 'muscle_mass_kg'), fP = pctOf(last, 'fat_pct', 'fat_mass_kg');
+  const bP = !isNaN(boneKg) && last.weight ? boneKg / last.weight * 100 : null;
+  const segs = [['Muscle', mP, '#2deb8f'], ['Fat', fP, '#c4a2f0'], ['Bone', bP, '#8b90a0']].filter(x => x[1] != null && !isNaN(x[1]));
+  const sum = segs.reduce((p, c) => p + c[1], 0);
+  const rest = Math.max(0, 100 - sum);
+  const bar = segs.length ? `<div style="display:flex;gap:3px;height:12px;margin:6px 0 4px;">${segs.map(x => `<div title="${x[0]} ${x[1].toFixed(1)}%" style="flex:${x[1]};background:${x[2]};border-radius:6px;min-width:6px;"></div>`).join('')}${rest > 1.5 ? `<div title="Other ${rest.toFixed(1)}%" style="flex:${rest};background:var(--surface2);border-radius:6px;"></div>` : ''}</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;font-family:'Space Mono',monospace;">${segs.map(x => `<span style="color:${x[2]};">${x[0]} ${x[1].toFixed(1)}%</span>`).join('')}</div>` : '';
+
+  // change badges (kg masses in the chosen unit; shares in percentage points)
+  const arrow = d => d > 0.05 ? '↗' : d < -0.05 ? '↙' : '→';
+  const badge = (label, kgNow, kgPrev, pNow, pPrev, good) => {
+    if (!prv || kgNow == null || kgPrev == null) return `<div style="flex:1;min-width:0;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">${label}</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px;">${mhWtText(kgNow)}</div></div>`;
+    const d = kgNow - kgPrev, dp = (pNow != null && pPrev != null) ? pNow - pPrev : null;
+    const col = Math.abs(d) < 0.15 ? 'var(--text3)' : (good(d) ? 'var(--green)' : 'var(--yellow)');
+    return `<div style="flex:1;min-width:0;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">${label}</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px;">${mhWtText(kgNow)}</div><div style="font-size:10px;color:${col};font-family:'Space Mono',monospace;margin-top:2px;">${arrow(d)} ${mhWtDelta(d)}</div>${dp != null ? `<div style="font-size:10px;color:${col};font-family:'Space Mono',monospace;">${dp > 0 ? '+' : ''}${dp.toFixed(1)} pts</div>` : ''}</div>`;
+  };
+  wrap.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);margin-bottom:2px;">Latest reading ${last.date}${basis ? ' · ' + basis : ''}</div>
+    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${vcol};margin:4px 0 8px;">${verdict}</div>
+    ${bar}
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      ${badge('WEIGHT', cur.w, prv && prv.w, null, null, d => true)}
+      ${badge('MUSCLE', cur.mu, prv && prv.mu, cur.mup, prv && prv.mup, d => d > 0)}
+      ${badge('FAT', cur.fa, prv && prv.fa, cur.fap, prv && prv.fap, d => d < 0)}
+    </div>
+    ${note ? `<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.5;">${note}</div>` : ''}
+    <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Smart-scale (bioimpedance) estimates swing by half a kilo or more with hydration and timing. Trust the weeks, not a single reading.</div>`;
+}
+
 function renderTrends() {
   renderJourneyCard();
+  try { renderBodyCompCard(); } catch (e) { console.warn('[bodycomp]', e); }
   renderPatternsCard();
   renderTopFoodsCard();
   renderDayOfWeekCard();
