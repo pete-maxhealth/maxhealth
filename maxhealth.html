@@ -6058,7 +6058,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.893'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.894'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -27011,6 +27011,13 @@ function editHistDayTotals(dayIdx, renderIdx) {
     </div>
 
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
+      <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">WEIGHT</div>
+      <input type="hidden" id="hday-weight-orig-${dayIdx}" value="${day.weight || ''}">
+      <div style="font-size:10px;color:var(--yellow);margin-bottom:2px;">WEIGHT ${mhWtUnit() === 'st' ? '(st + lb)' : mhWtInputUnit()}</div>
+      <input id="hday-weight-${dayIdx}" class="modal-input" type="${mhWtUnit() === 'st' ? 'text' : 'number'}" ${mhWtUnit() === 'st' ? 'inputmode="decimal"' : 'step="0.1"'} value="${day.weight ? mhWtToField(day.weight) : ''}" placeholder="${mhWtUnit() === 'st' ? 'e.g. 14 st 2' : 'no reading'}" style="font-size:14px;padding:7px 10px;">
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">For days the scales didn't record. Leave blank for no reading.</div>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">EXERCISE</div>
       <div id="histExerciseRows-${dayIdx}">
         ${exercises.length === 0 ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">No exercise logged this day.</div>` : exercises.map((ex, exIdx) => `
@@ -27622,6 +27629,23 @@ function saveHistDayTotals(dayIdx) {
   day.water_ml = isNaN(waterVal) ? 0 : Math.round(waterVal);
   day.steps    = isNaN(stepsVal) ? 0 : Math.round(stepsVal);
 
+  // Weight (v3.10.894): typed in your chosen unit, stored as kg. Blank = no
+  // reading for the day. Done before the exercise block so a corrected weight
+  // is the one used to cost that day's exercise.
+  const _wRaw = (document.getElementById(`hday-weight-${dayIdx}`)?.value || '').trim();
+  const weightOrigKg = parseFloat(document.getElementById(`hday-weight-orig-${dayIdx}`)?.value) || 0;
+  if (document.getElementById(`hday-weight-${dayIdx}`)) {
+    if (_wRaw === '') { delete day.weight; }
+    else {
+      const wKg = mhWtFromField(_wRaw);
+      if (isNaN(wKg) || wKg < 40 || wKg > 200) { showToast('Weight looks wrong - 40 to 200 kg expected'); return; }
+      day.weight = wKg;
+    }
+    // "Current weight" follows the newest weigh-in
+    const _newest = state.history.filter(h => h.weight).sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1)[0];
+    if (_newest && _newest.date === day.date) state.weight = day.weight;
+  }
+
   // Exercise rows — read back whatever's left in the form (edited/deleted rows)
   const oldExerciseKcal = (day.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0);
   const exerciseRows = document.querySelectorAll(`#histExerciseRows-${dayIdx} [data-ex-idx]`);
@@ -27690,6 +27714,7 @@ function saveHistDayTotals(dayIdx) {
   if (Math.round(carbOrig*10)/10 !== day.totals.carbs) changes.push(`Carbs: ${carbOrig}g → ${day.totals.carbs}g`);
   if (Math.round(waterOrig) !== day.water_ml) changes.push(`Water: ${Math.round(waterOrig)}ml → ${day.water_ml}ml`);
   if (Math.round(stepsOrig) !== day.steps) changes.push(`Steps: ${Math.round(stepsOrig)} → ${day.steps}`);
+  if (document.getElementById(`hday-weight-${dayIdx}`) && (day.weight || 0) !== weightOrigKg) changes.push(`Weight: ${weightOrigKg ? mhWtText(weightOrigKg) : 'none'} → ${day.weight ? mhWtText(day.weight) : 'none'}`);
   if (exerciseKcalDelta !== 0) changes.push(`Exercise kcal: ${exerciseKcalDelta > 0 ? '+' : ''}${exerciseKcalDelta}`);
 
   traceLogMutation('saveHistDayTotals', day.date, 'after');

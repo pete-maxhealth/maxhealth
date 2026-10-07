@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.894 — Weight In The History Day Editor
+
+Pete (7 Oct, screenshot of History → Edit day totals): that screen has water, steps and exercise but no weight, so a missed day could not be fixed there.
+- **Edit day totals** now has a WEIGHT box (in your chosen unit, stones + pounds in st mode). Blank means no reading for that day. A corrected weight is also what that day's exercise calories are costed with, and your current weight follows the newest weigh-in. The "Changed:" summary after saving lists a weight change.
+- Test: p51 extended.
+
 ## v3.10.893 — Add Or Fix A Day's Weight From The Charts Too
 
 Pete (7 Oct): "Wouldn't it have been a good idea to update weight for previous days from here too?" (Fair point: the date box only existed behind the dashboard UPDATE button.)
