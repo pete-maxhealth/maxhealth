@@ -6063,7 +6063,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.896'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.897'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -32828,7 +32828,14 @@ function mhPcmpStats(rows, from, to) {
   const inR = rows.filter(d => { const i = _pcIso(d.date); return i >= from && i <= to && d.date !== todayStr(); });
   const logged = inR.filter(d => (d.totals?.kcal || 0) >= 500);
   const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
-  const w = inR.filter(d => d.weight > 0).map(d => ({ x: (new Date(_pcIso(d.date) + 'T00:00:00') - new Date(from + 'T00:00:00')) / 864e5, y: d.weight }));
+  // Weights: the app's own day records first, plus any scale readings that only
+  // exist in the imported scale file (days with no food logged have no day record).
+  const wByDate = {};
+  inR.filter(d => d.weight > 0).forEach(d => { wByDate[_pcIso(d.date)] = d.weight; });
+  try { getFullBodyCompositionHistory().forEach(r => { if (r.weight > 0 && r.isoDate >= from && r.isoDate <= to && r.isoDate !== _pcIsoToday() && !wByDate[r.isoDate]) wByDate[r.isoDate] = r.weight; }); } catch (_) {}
+  const w = Object.keys(wByDate).map(k => ({ x: (new Date(k + 'T00:00:00') - new Date(from + 'T00:00:00')) / 864e5, y: wByDate[k] }));
+  const weighIso = Object.keys(wByDate).sort();
+  const loggedIso = logged.map(d => _pcIso(d.date)).sort();
   let slope = null, span = 0, noiseKcal = null;
   if (w.length >= 3) {
     span = Math.max(...w.map(p => p.x)) - Math.min(...w.map(p => p.x));
@@ -32844,7 +32851,7 @@ function mhPcmpStats(rows, from, to) {
   return {
     days: logged.length, kcal, protein: mean(logged.map(d => d.totals.protein || 0)), carbs: mean(logged.map(d => getEffectiveCarbsForDay(d))),
     steps, exKcal: logged.length ? mean(logged.map(d => (d.exercises || []).reduce((s, e) => s + (e.kcal || 0), 0))) : null,
-    wN: w.length, span, slope,
+    wN: w.length, span, slope, weighIso, loggedIso, from, to,
     implied: (kcal != null && slope != null) ? kcal - slope * 7700 : null,
     noise: noiseKcal,
   };
@@ -32880,6 +32887,12 @@ function renderPeriodCompareCard() {
       + `<div style="margin-top:4px;">Margin of error about ±${noise} kcal/day${big ? '' : ' - the gap is inside the noise, so the photo estimates cannot be shown to be off'}. `
       + `Burn implied by the later period: ${f0(A.implied)} vs ${f0(B.implied)} kcal/day in the baseline${actAdj ? ` (adjusted ${actAdj > 0 ? '-' : '+'}${Math.abs(Math.round(actAdj))} kcal/day for the steps difference)` : ''}.</div>`;
   }
+  const short = iso => `${iso.slice(8,10)}/${iso.slice(5,7)}`;
+  const diag = (label, st) => {
+    const days = []; for (let d = st.from; d <= st.to && days.length < 120; d = _pcAddDays(d, 1)) days.push(d);
+    const noFood = days.filter(d => st.loggedIso.indexOf(d) < 0).map(short), noW = days.filter(d => st.weighIso.indexOf(d) < 0).map(short);
+    return `<div style="margin-top:4px;"><b>${label}</b> (${days.length} days): food logged ${st.loggedIso.length ? st.loggedIso.map(short).join(', ') : 'none'}; weighed ${st.weighIso.length ? st.weighIso.map(short).join(', ') : 'none'}.${noFood.length ? ` No food log on ${noFood.join(', ')}.` : ''}${noW.length ? ` No weight on ${noW.join(', ')}.` : ''}</div>`;
+  };
   wrap.innerHTML = `
     <div class="mh-qline">Check how far your logging was off after a stretch of photo-only meals: compares recent days with the weeks before, using your weight trend rather than the food log.</div>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;align-items:end;font-size:10px;color:var(--text3);margin-bottom:4px;">
@@ -32887,6 +32900,7 @@ function renderPeriodCompareCard() {
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;margin-bottom:4px;"><span></span><div>${inp('a',0,cfg.a[0])}<div style="height:3px;"></div>${inp('a',1,cfg.a[1])}</div><div>${inp('b',0,cfg.b[0])}<div style="height:3px;"></div>${inp('b',1,cfg.b[1])}</div></div>
     ${rowsHtml}
     <div id="pcmpVerdict" style="margin-top:10px;padding:10px 12px;border-radius:8px;background:var(--surface2);font-size:12px;line-height:1.55;color:var(--text2);">${verdict}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;"><b>What was counted</b> (${APP_VERSION})${diag('Recent', A)}${diag('Baseline', B)}</div>
     <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5;">Assumes your real burn was similar in both periods apart from steps. Short periods can only show a large error (margin of error shrinks with longer periods and more weigh-ins); scale weight moves half a kilo or more with water and salt alone. Treat it as a guide, not a measurement. <span onclick="mhPcmpReset()" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Reset dates</span></div>`;
 }
 

@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.897 — Compare Two Periods Shows What It Counted, And Reads Scale-File Weights
+
+Pete (7 Oct): still showing 2 days after the window fix.
+- **"What was counted"** under the card lists, for each period, the exact dates with food logged, the dates with a weight, and the dates with neither, plus the app version. If something is missing, it is now visible which day.
+- **Weights from the scale file:** days that only exist in the imported scale (Withings) file, with no food logged, now count as weigh-ins too (they previously did not, because the card read only the app's own day records).
+- Test: p51 extended.
+
 ## v3.10.896 — Compare Two Periods (And Your Story) Were Limited By The Trends Window
 
 Pete (7 Oct, screenshot): the new card showed 1 logged day and 1 weigh-in for the baseline even though every date had weights.
