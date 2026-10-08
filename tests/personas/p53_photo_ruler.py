@@ -48,6 +48,32 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("mhRulerUse()"); page.wait_for_timeout(300)
     d = page.evaluate("(JSON.parse(localStorage.getItem('mh_tableware')).sets[0].vals.dinner_plate||{}).diam")
     if not d or abs(d - 11.2) > 0.4: f.add('BUG', f'plate diam not saved from ruler: {d}')
+    # v3.10.905 gestures: pinch zooms the photo (not the page), drag pans, neither places a point; Clear/Undo work
+    page.evaluate("mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    def ev(typ, pid, x, y):
+        page.evaluate("""([t,id,x,y]) => { const v=document.getElementById('mhRulerView'); const r=v.getBoundingClientRect();
+          v.dispatchEvent(new PointerEvent(t,{pointerId:id,pointerType:'touch',clientX:r.left+x,clientY:r.top+y,bubbles:true,isPrimary:id===1})); }""", [typ, pid, x, y])
+    vw = page.evaluate("document.getElementById('mhRulerView').clientWidth")
+    ev('pointerdown', 1, 150, 150); ev('pointerdown', 2, 200, 150)
+    for i in range(1, 6): ev('pointermove', 1, 150 - i * 15, 150); ev('pointermove', 2, 200 + i * 15, 150)
+    ev('pointerup', 1, 75, 150); ev('pointerup', 2, 275, 150)
+    z = page.evaluate("document.getElementById('mhRulerCanvas').style.transform")
+    m = re.search(r'scale\(([\d.]+)\)', z)
+    if not m or float(m.group(1)) < 2: f.add('BUG', f'pinch did not zoom the photo: {z}')
+    if page.evaluate("document.getElementById('mhRulerBody').textContent").count('2 to go') != 1 or page.evaluate("st_cal_len = 0") is None: pass
+    if page.evaluate("window.visualViewport ? visualViewport.scale : 1") != 1: f.add('BUG', 'page itself got zoomed')
+    ev('pointerdown', 1, 100, 100)
+    for i in range(1, 6): ev('pointermove', 1, 100 + i * 10, 100 + i * 10)
+    ev('pointerup', 1, 150, 150)
+    if 'Step 1 of 2: tap both ends of the reference (2 to go)' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'pinch/drag placed a stray point')
+    page.evaluate("mhRulerZoom(3)"); tap(300, 300); tap(500, 300)
+    if 'Reference set' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'taps at zoom did not place the two points')
+    page.evaluate("mhRulerUndo()")
+    if '1 to go' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'Undo did not remove the last point')
+    page.evaluate("mhRulerReset()")
+    if '2 to go' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'Clear did not clear')
+    page.evaluate("mhRulerClose()")
     # a smaller card: type its length and it is remembered
     page.evaluate("mhRulerOpen('home','mug')")
     page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)

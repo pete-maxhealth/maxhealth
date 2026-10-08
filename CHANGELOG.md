@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.905 — Photo Ruler: Pinch To Zoom, Drag To Move, No More Stray Points
+
+Pete (8 Oct, screenshots): trying to zoom put points in and Clear did nothing. The header was shifted off the left edge: pinching had zoomed the whole page, not the photo.
+- **Gestures rebuilt:** two fingers pinch-zoom the photo (up to 8×, anchored on your fingers), one finger drags it around, a quick tap places a point. The screen behind can no longer be pinch-zoomed.
+- **Taps and zooms only repaint the photo**, they no longer rebuild the screen, so the buttons stay put and your place in the photo is kept.
+- **Buttons:** Fit / 3× / 6× (centred), **Undo** (last point) and **Clear** (this step's points). Marks stay the same size on screen at any zoom.
+- Test: p53 extended (pinch zooms the photo and not the page, drag pans without placing a point, taps at zoom, Undo, Clear).
+
 ## v3.10.904 — Photo Ruler: Choose An Existing Photo
 
 Pete (8 Oct): no way to choose a photo. The single button used the camera directly, which skips Android's photo picker.
