@@ -6063,7 +6063,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.898'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.899'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -10199,6 +10199,18 @@ function confirmAddFood() {
 // compare against similar existing items, rather than each path keeping its
 // own copy — that's exactly how the Save-to-library path ended up with
 // NEITHER check at all, silently, until this was found and fixed.
+// One Cancel ends the whole "Save ingredients" batch, not just the current
+// item's prompt - otherwise every remaining ingredient asks again.
+function mhAbortIngredientSaveQueue() {
+  if (!window._pendingIngredientSaveQueue) return false;
+  const left = window._pendingIngredientSaveQueue.length;
+  window._pendingIngredientSaveQueue = null;
+  window._ingredientSaveBar = null;
+  window._ingredientSaveResults = null;
+  showToast(left ? `Cancelled - skipped ${left} more` : 'Cancelled');
+  return true;
+}
+
 function validateAndSaveLibraryEntry(entry) {
   // Physical impossibility check: protein+fat+carbs, in grams, cannot exceed
   // the food's own weight. Catches entries like "135g protein per 100g" —
@@ -10209,7 +10221,7 @@ function validateAndSaveLibraryEntry(entry) {
     if (macroMass > massGrams * 1.05) {
       appConfirm(
         `${Math.round(macroMass*10)/10}g of protein+fat+carbs can't physically fit inside ${massGrams}g of food — that's more mass than the food itself. Double-check these values (often means the portion should be larger, e.g. this looks like a whole-pack total entered under a smaller portion). Save anyway?`,
-        () => { _proceedLibrarySaveAfterPlausibilityCheck(entry); }, null, true
+        () => { _proceedLibrarySaveAfterPlausibilityCheck(entry); }, () => { mhAbortIngredientSaveQueue(); }, true
       );
       return;
     }
@@ -10273,7 +10285,7 @@ function showAddFoodComparison(newEntry, comparable) {
       <button onclick="confirmSaveAddFoodAsNew()" style="width:100%;padding:14px 16px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;margin-bottom:10px;">
         Different product — save "${newEntry.name}" separately
       </button>
-      <button onclick="document.getElementById('addFoodComparisonModal').remove()"
+      <button onclick="document.getElementById('addFoodComparisonModal').remove(); mhAbortIngredientSaveQueue();"
         style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;">← Back to edit</button>
     </div>`;
 
@@ -20374,6 +20386,13 @@ function scalePreviewPortion(gramsStr) {
   }
 }
 
+// One tap closes every open item-edit form (there should only ever be one, but
+// a duplicate must never need a second Cancel press).
+function closePreviewEditForms() {
+  document.querySelectorAll('#previewEditForm').forEach(el => el.remove());
+  window._editPreviewBase = null;
+}
+
 function editPreviewItem(index) {
   const f = window._pendingMealFoods[index];
   if (!f) return;
@@ -20382,8 +20401,7 @@ function editPreviewItem(index) {
   const bubble = document.getElementById('mealPreviewBubble');
   if (!bubble) return;
 
-  const existing = document.getElementById('previewEditForm');
-  if (existing) existing.remove();
+  closePreviewEditForms();
 
   // Baseline for live amount-scaling, captured once when the form opens so
   // repeated edits to the Amount field all scale from the same original
@@ -20449,7 +20467,7 @@ function editPreviewItem(index) {
     </div>
     <div style="display:flex;gap:8px;">
       <button class="settings-save-btn" style="flex:1;" onclick="applyPreviewEdit(${index})">Apply</button>
-      <button class="copy-btn" style="flex:1;font-size:12px;" onclick="document.getElementById('previewEditForm').remove()">Cancel</button>
+      <button class="copy-btn" style="flex:1;font-size:12px;" onclick="closePreviewEditForms()">Cancel</button>
     </div>
   `;
   bubble.appendChild(form);

@@ -155,6 +155,11 @@ with fresh_server() as root, sync_playwright() as pw:
     if page.evaluate("_routineDraftExercises[0].sets[1].reps") != '10': f.add('BUG', 'copied set shares reference')
     page.evaluate("window._routineApplyDrafts=[{name:'Row',sets:[{reps:'8',weight_kg:'30',note:''}]}]; mhApplyCopyPrevSet(0)")
     if page.evaluate("window._routineApplyDrafts[0].sets.length") != 2: f.add('BUG', 'apply copy previous failed')
+    # v3.10.899: one Cancel ends an item edit and the whole save-ingredients batch
+    page.evaluate("document.body.insertAdjacentHTML('beforeend','<div id=previewEditForm></div><div id=previewEditForm></div>'); closePreviewEditForms()")
+    if page.evaluate("document.querySelectorAll('#previewEditForm').length") != 0: f.add('BUG', 'duplicate edit forms need more than one Cancel')
+    page.evaluate("window._pendingIngredientSaveQueue=[{name:'a'},{name:'b'},{name:'c'}]; window._ingredientSaveResults={saved:[],overwritten:[]}; mhAbortIngredientSaveQueue()")
+    if page.evaluate("window._pendingIngredientSaveQueue") is not None: f.add('BUG', 'one Cancel did not end the save-ingredients batch')
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print("findings", len(f)); sys.exit(1 if f else 0)

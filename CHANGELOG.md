@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.899 — One Cancel Is Enough
+
+Pete (8 Oct): editing one ingredient's portion on a photo-added meal and then cancelling needed a Cancel press per ingredient. I could not reproduce it in the plain pre-log edit (one Cancel works there), so this closes the two places where Cancel could repeat:
+- **Item edit form:** Cancel now closes every open edit form at once (and clears its scaling baseline), and opening an edit closes any other first.
+- **Save ingredients batch:** Cancel / "Back to edit" / dismissing the "can't physically fit" warning now ends the whole batch with a toast saying how many were skipped, instead of leaving each remaining ingredient to ask again (or leaving a half-finished batch stuck).
+- Still not fixed if you see it elsewhere: a screenshot of the screen where it happens will pin it down.
+- Test: p51 extended.
+
 ## v3.10.898 — Compare Two Periods: Expected Trend, Travel Day Included, Shorter Spans
 
 Pete (7 Oct, screenshot): baseline now correctly counts 20 days, but the recent period (3-6 Oct, 4 weigh-ins over 3 days) showed no weight trend, so no verdict.
