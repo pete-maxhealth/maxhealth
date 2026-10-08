@@ -2,6 +2,17 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.914 — The App Now Tells You When The Phone's Background Sync Has Stopped
+
+Pete (8 Oct): the launcher's 30-minute sync had silently stopped (battery rules, found with the launcher's diary), and "users are going to need to be aware of all these. Either a script to check and fix, or to report if changed."
+- **Fixing is not possible from the app or a script:** Android deliberately stops an app from lifting its own battery limits, so nothing can switch "No restrictions" on for you. What the app can do is notice the symptom and tell you, so that is what this does.
+- **How it notices:** the launcher writes a line to its own diary each time the sync service starts (every 30 minutes when healthy). The server reads the age of the last one (`/sync-status` now returns `launcher_age_minutes`). Under 3 hours is fine.
+- **Today banner:** after 3 hours with no run, an amber banner appears at the top of Today: "Background sync has not run for N hours". Tap it for a short sheet of the settings that cause it (battery No restrictions, Alarms & reminders, Autostart where the phone has it, lock the app / turn off "Pause app activity if unused", then open the launcher once), and a note that missed days may need Manual Entry. The ✕ hides it for the rest of the day; it disappears by itself when the sync recovers.
+- **Settings > Sync age** now also shows how long ago the background service last started, with the same tap-for-help link, and warns at 3 hours instead of only after 6.
+- **Self-check** (the Nothing to worry about / One to know / One to watch line) now includes a line when the background sync is late: amber after 3 hours, red after a day.
+- Nothing is shown when there is no launcher diary at all (for example before the launcher is installed).
+- Test: new p56 (diary age read correctly, unknown when missing, banner shows/hides/dismisses and returns when recovered, help sheet content, self-check both ways).
+
 ## v3.10.913 — A Sleep Night You Already Settled Is Not Asked Again
 
 Pete (8 Oct, 15:42): the "Sleep sources disagree" card for 8 Oct appeared again, although he had already chosen Zepp for that night at 09:33.

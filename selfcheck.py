@@ -146,11 +146,50 @@ def check_backups(items):
     return {'newest_hours': round(hours, 1)}
 
 
+def launcher_last_run_age_minutes(data_dir=None):
+    """Minutes since the Android launcher's background sync service last started (from its own diary), or None if unknown.
+    A healthy launcher starts it every 30 minutes. Reads only the tail of the file."""
+    path = os.path.join(data_dir or DATA, 'sync_service_debug.log')
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 16384))
+            tail = f.read().decode('utf-8', 'ignore')
+    except OSError:
+        return None
+    last = None
+    for line in tail.splitlines():
+        if line.startswith('[') and ' onCreate' in line:
+            try:
+                last = datetime.strptime(line[1:20], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                pass
+    if last is None:
+        return None
+    return max(0, int((datetime.now() - last).total_seconds() // 60))
+
+
+LAUNCHER_FIX = ('Check MaxedHealth Sync: Battery > No restrictions, Alarms & reminders allowed, Autostart on (if your phone has it), '
+                'and the app locked in recent apps, then open it once.')
+
+
+def check_launcher_sync(items):
+    age = launcher_last_run_age_minutes()
+    if age is None:
+        return {'launcher_age_minutes': None}
+    if age >= 24 * 60:
+        items.append(('red', f'The background sync has not run for {age // 60 // 24} days. {LAUNCHER_FIX}'))
+    elif age >= 180:
+        items.append(('amber', f'The background sync last ran {age // 60}h ago (it should run every 30 minutes). {LAUNCHER_FIX}'))
+    return {'launcher_age_minutes': age}
+
+
 def run_selfcheck(write=True):
     items = []
     out = {'checked': datetime.now().isoformat(timespec='seconds'),
            'combined': check_combined(items), 'pipeline_log': check_pipeline_log(items),
-           'app_errors': check_error_log(items), 'backups': check_backups(items)}
+           'app_errors': check_error_log(items), 'backups': check_backups(items), 'launcher_sync': check_launcher_sync(items)}
     rank = {'green': 0, 'amber': 1, 'red': 2}
     status = 'green'
     for lvl, _ in items:

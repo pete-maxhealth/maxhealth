@@ -1317,9 +1317,18 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                                 newest = m
                 except OSError:
                     pass
+            # v3.10.914: the launcher's own diary says when the background service last STARTED (every 30 minutes when healthy),
+            # which is a more direct sign of a stall than the age of the newest data file.
+            launcher_age = None
+            try:
+                import selfcheck as _sc
+                launcher_age = _sc.launcher_last_run_age_minutes(DATA_DIR)
+            except Exception:
+                launcher_age = None
             self.send_json({
                 'health_connect_last': newest,
                 'age_minutes': None if newest is None else int((time.time() - newest) / 60),
+                'launcher_age_minutes': launcher_age,
             })
 
         # ── Serve combined.csv ────────────────────────────────────────────

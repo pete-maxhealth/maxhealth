@@ -2395,6 +2395,14 @@
 <div class="subview active" id="view-dash">
   <div class="dash-scroll" id="dashScroll" onscroll="trackScrollNav(this)">
 
+    <!-- v3.10.914: shown only when the phone's background sync has stopped running; dismissed for the rest of the day -->
+    <div id="mhSyncBanner" style="display:none;margin:0 0 10px;padding:10px 12px;border:1px solid rgba(245,166,35,0.45);background:rgba(245,166,35,0.10);border-radius:12px;font-size:12px;color:var(--text);line-height:1.5;">
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <div onclick="mhSyncHelpOpen()" style="flex:1;cursor:pointer;"><b id="mhSyncBannerTitle">⚠️ Background sync has stopped</b><br><span style="color:var(--text2);">Your watch and ring data will not update on its own. Tap to see the 4 phone settings that fix it.</span></div>
+        <span onclick="mhSyncBannerDismiss()" title="Hide for today" style="cursor:pointer;color:var(--text3);font-size:16px;padding:0 4px;">✕</span>
+      </div>
+    </div>
+
     <!-- New user welcome banner — shown once, dismissed permanently -->
     <div id="newUserBanner" style="display:none;background:linear-gradient(135deg,rgba(45,235,143,0.08),rgba(45,235,143,0.04));border:1px solid var(--accent-glow);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;position:relative;">
       <div style="font-size:11px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">👋 Welcome to MaxedHealth</div>
@@ -6064,7 +6072,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.913'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.914'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -11874,6 +11882,48 @@ function buildProfileReportPDF(profile, treatment, headerLine, csvRows, anySkipp
   }
 }
 
+// v3.10.914: the app cannot change Android's battery rules itself (Android does not let an app lift its own limits), so it
+// watches for the symptom instead: the launcher's background service normally starts every 30 minutes. If it has not
+// started for 3 hours, a banner on Today says so and lists the settings that cause it, once a day until it recovers.
+let _mhSyncAge = null;
+async function mhCheckSyncHealth() {
+  const b = document.getElementById('mhSyncBanner'); if (!b) return;
+  try {
+    const j = await (await fetch(`${MH_SERVER}/sync-status`, { signal: AbortSignal.timeout(4000) })).json();
+    const age = j.launcher_age_minutes != null ? j.launcher_age_minutes : null;
+    _mhSyncAge = age;
+    let dismissed = null; try { dismissed = localStorage.getItem('mh_syncbanner_dismissed'); } catch (_) {}
+    if (age == null || age < 180 || dismissed === todayStr()) { b.style.display = 'none'; return; }
+    const t = age < 1440 ? Math.round(age / 60) + ' hours' : Math.round(age / 1440) + ' days';
+    const ti = document.getElementById('mhSyncBannerTitle'); if (ti) ti.textContent = '⚠️ Background sync has not run for ' + t;
+    b.style.display = 'block';
+  } catch (_) { b.style.display = 'none'; }
+}
+function mhSyncBannerDismiss() { try { localStorage.setItem('mh_syncbanner_dismissed', todayStr()); } catch (_) {} const b = document.getElementById('mhSyncBanner'); if (b) b.style.display = 'none'; }
+function mhSyncHelpOpen() {
+  document.getElementById('mhSyncHelp')?.remove();
+  const o = document.createElement('div'); o.id = 'mhSyncHelp';
+  o.style.cssText = 'position:fixed;inset:0;z-index:650;background:rgba(0,0,0,0.55);display:flex;align-items:flex-end;justify-content:center;';
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  o.innerHTML = `<div style="background:var(--surface);border-radius:18px 18px 0 0;padding:18px 18px 22px;width:100%;max-width:520px;max-height:85vh;overflow:auto;">
+    <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px;">Keep the background sync running</div>
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:10px;">MaxedHealth Sync is meant to read Health Connect every 30 minutes. Phones, especially Xiaomi, often stop apps that run quietly in the background. These settings are on your phone, and Android does not allow an app to change them for itself. For <b>MaxedHealth Sync</b> (the launcher app):</div>
+    <div style="font-size:13px;color:var(--text);line-height:1.7;">
+      <div style="margin-bottom:8px;"><b>1. Battery:</b> Settings > Apps > MaxedHealth Sync > Battery usage > Allow background usage (tap the arrow) > <b>No restrictions</b>. "Battery saver (recommended)" is not enough.</div>
+      <div style="margin-bottom:8px;"><b>2. Alarms &amp; reminders:</b> allowed for MaxedHealth Sync (search "Alarms &amp; reminders" in Settings).</div>
+      <div style="margin-bottom:8px;"><b>3. Autostart:</b> switched on, if your phone has the option (Xiaomi, Redmi, Poco). Some phones do not.</div>
+      <div style="margin-bottom:8px;"><b>4. Lock the app</b> in the recent-apps view so swiping apps away does not close it. Also turn off "Pause app activity if unused".</div>
+      <div style="margin-bottom:8px;"><b>5. Open MaxedHealth Sync once</b> afterwards. That restarts the 30-minute cycle.</div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:6px;">${_mhSyncAge != null ? 'The service last started ' + (_mhSyncAge < 120 ? _mhSyncAge + ' minutes' : Math.round(_mhSyncAge / 60) + ' hours') + ' ago.' : ''} Data from a day the sync missed is not recovered automatically, so you may need Manual Entry for it.</div>
+    <button class="run-btn" style="width:100%;margin-top:14px;" onclick="document.getElementById('mhSyncHelp').remove()">Got it</button>
+  </div>`;
+  document.body.appendChild(o);
+}
+setTimeout(mhCheckSyncHealth, 2500);
+setInterval(mhCheckSyncHealth, 10 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) mhCheckSyncHealth(); });
+
 // 01/10/26 - shows how long ago the Android launcher last delivered Health
 // Connect data, with plain advice if it looks stalled (battery restrictions
 // are the usual cause - the phone shuts the background sync down).
@@ -11886,8 +11936,10 @@ async function updateSyncAgeDisplay() {
     if (j.age_minutes == null) { el.textContent = 'No data received yet'; return; }
     const m = j.age_minutes;
     const txt = m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m/60)} h ago` : `${Math.round(m/1440)} days ago`;
-    if (m > 360) {
-      el.innerHTML = `⚠️ ${txt}<br><span style="font-size:11px;color:var(--text3);">Open MaxedHealth Sync, and check it is allowed to run in the background</span>`;
+    const la = j.launcher_age_minutes;
+    if (m > 360 || (la != null && la >= 180)) {
+      _mhSyncAge = la;
+      el.innerHTML = `⚠️ ${txt}${la != null ? ' (background service last started ' + (la < 120 ? la + ' min' : Math.round(la / 60) + ' h') + ' ago)' : ''}<br><span onclick="mhSyncHelpOpen()" style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer;">The background sync may have stopped: tap for the settings that fix it</span>`;
     } else {
       el.textContent = '✅ ' + txt;
     }
