@@ -12,7 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
         route.fulfill(status=200, content_type='application/json', body=json.dumps({"content": [{"type": "text", "text": json.dumps(FOOD)}], "usage": {"input_tokens": 1, "output_tokens": 1}}))
     ctx.route(re.compile(r'https://(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)/.*'), lambda r: r.abort())
     ctx.route('https://api.anthropic.com/**', stub)
-    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160])); page.on('dialog', lambda d: d.accept('Holiday'))
+    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160])); ans = ['Holiday']; page.on('dialog', lambda d: d.accept(ans[0]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200)
     page.evaluate("onboardNext(2)"); page.fill('#onboardName', 'Ola'); page.evaluate("onboardNext(3)")
     page.evaluate("obSetSex('male')"); page.fill('#onboardAge', '58'); page.fill('#onboardHeight', '176')
@@ -80,6 +80,34 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("switchTabById('manage'); mhTwRender(); document.getElementById('mhTwNewName').value='Soup bowl'; mhTwAddItem()")
     page.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('mh_tableware'));const id=s.custom[0].id;mhTwEdit('home',id,'wt','350');})()")
     if 'soup bowl empty weight 350g' not in page.evaluate("mhTablewareLine()"): f.add('BUG', 'custom item / empty weight missing: ' + page.evaluate("mhTablewareLine()")[:400])
+    # v3.10.908 copy as new: starts from the source's sizes, needs a different name, other sets get the copied sizes, Home is untouched
+    page.evaluate("mhTwEdit('home','dinner_plate','diam','29.1')")
+    ans[0] = 'Dinner plate'; n0 = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).custom.length")
+    page.evaluate("mhTwCopy('dinner_plate')")
+    if page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).custom.length") != n0: f.add('BUG', 'copy accepted a name already used')
+    ans[0] = ''
+    page.evaluate("mhTwCopy('dinner_plate')")
+    if page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).custom.length") != n0: f.add('BUG', 'copy accepted an empty name')
+    ans[0] = 'Large plate'
+    page.evaluate("mhTwCopy('dinner_plate')")
+    cp = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Large plate')")
+    if not cp or cp.get('diam') != 29.1: f.add('BUG', f'copy should start from the source as Home shows it (29.1): {cp}')
+    line = page.evaluate("mhTablewareLine()")
+    if 'large plate 29.1cm across' not in line.lower(): f.add('BUG', 'copy not in the AI line at the copied size: ' + line[-300:])
+    if page.evaluate("document.querySelectorAll('#mhTwCard [onclick^=\"mhTwCopy\"]').length") < 9: f.add('BUG', 'every item should offer copy as new')
+    # copy a spoon: keeps the level-spoon wording
+    ans[0] = 'Serving spoon'; page.evaluate("mhTwCopy('tablespoon')")
+    if 'serving spoon level spoon 15ml' not in page.evaluate("mhTablewareLine()").lower(): f.add('BUG', 'copied spoon lost its spoon wording')
+    # in another set the copy carries that set's sizes
+    ans[0] = 'Resort'; page.evaluate("mhTwAddSet()")
+    sid = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).sets.find(x=>x.name==='Resort').id")
+    page.evaluate(f"mhTwEdit('{sid}','side_plate','diam','21'); mhTwView('{sid}')")
+    ans[0] = 'Resort small'; page.evaluate("mhTwCopy('side_plate')")
+    st = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware'))")
+    rs = [c for c in st['custom'] if c['name'] == 'Resort small'][0]
+    resort = [x for x in st['sets'] if x['id'] == sid][0]
+    if rs['diam'] != 19 or resort['vals'].get(rs['id'], {}).get('diam') != 21: f.add('BUG', f'copy in another set: base {rs["diam"]}, set value {resort["vals"].get(rs["id"])}')
+    page.evaluate("mhTwView('home')")
     # reorder + hide controls injected like every other settings card, and an existing saved order is kept
     page.evaluate("localStorage.setItem('mh_reorder_manage', JSON.stringify(['set-profile','set-aiprovider','set-water','set-stepsbaseline']))")
     page.reload(); page.wait_for_timeout(1500); page.evaluate("switchTabById('manage')"); page.wait_for_timeout(600)

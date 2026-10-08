@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.907'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.908'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -46517,7 +46517,7 @@ function dismissInsight() {
       const d = eff(s, set, it, 'diam'), c = eff(s, set, it, 'cap'), w = eff(s, set, it, 'wt');
       const bits = [];
       if (d != null) bits.push(d + 'cm across');
-      if (c != null) bits.push((it.id.endsWith('spoon') ? 'level spoon ' : 'holds ') + c + 'ml');
+      if (c != null) bits.push((it.id.endsWith('spoon') || it.spoon ? 'level spoon ' : 'holds ') + c + 'ml');
       if (w != null) bits.push('empty weight ' + w + 'g');
       if (!bits.length) return;
       const typical = ['diam', 'cap'].some(f => eff(s, set, it, f) != null && isTypical(s, it, f) && !own(set, it.id, f));
@@ -46584,7 +46584,7 @@ function dismissInsight() {
         <input type="date" value="${esc(s.revertOn || '')}" min="${today()}" onchange="mhTwSetRevert(this.value)" style="height:34px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:0 8px;font-size:13px;">
         <span style="font-size:10px;color:var(--text3);">(optional)</span></div>` : '';
     const rows = items(s).map(it => `<div style="padding:10px 0;border-top:1px solid var(--border);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:13px;color:var(--text);">${it.icon || '🍴'} ${esc(it.name)}</div>${(!it.builtin && set.id === 'home') ? `<span onclick="mhTwRemoveItem('${it.id}')" style="font-size:11px;color:var(--red);cursor:pointer;">remove</span>` : ''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:13px;color:var(--text);">${it.icon || '🍴'} ${esc(it.name)}</div><div style="display:flex;gap:12px;"><span onclick="mhTwCopy('${it.id}')" title="Make a new item starting from this one's sizes" style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer;">copy as new</span>${(!it.builtin && set.id === 'home') ? `<span onclick="mhTwRemoveItem('${it.id}')" style="font-size:11px;color:var(--red);cursor:pointer;">remove</span>` : ''}</div></div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${FIELDS.map(([f, l]) => cellHtml(s, set, it, f, l)).join('')}</div>
       </div>`).join('');
     const add = set.id === 'home' ? `<div style="display:flex;gap:6px;margin-top:10px;"><input id="mhTwNewName" placeholder="Add your own (e.g. Soup bowl)" class="settings-input" style="flex:1 1 0;width:0;height:36px;"><button class="run-btn" style="flex:0 0 auto;width:auto;padding:0 14px;height:36px;font-size:12px;" onclick="mhTwAddItem()">Add</button></div>` : '';
@@ -46629,6 +46629,25 @@ function dismissInsight() {
     const nm = clean((document.getElementById('mhTwNewName') || {}).value); if (!nm) return;
     const s = load(); if (s.custom.length >= 20) { try { showToast('That is plenty of custom items'); } catch (_) {} return; }
     s.custom.push({ id: 'c' + Date.now().toString(36), name: nm, icon: '🍴', diam: null, cap: null, wt: null }); save(s); mhTwRender();
+  };
+  // v3.10.908: copy an item (plate, bowl, spoon...) as a NEW item that starts with this item's sizes as shown in the set being
+  // viewed. A different name is required, so two similar plates are never confused. The copy is a normal custom item: Home gets the
+  // sizes seen in Home; if you are viewing another set, that set gets the copied sizes and Home keeps Home's.
+  window.mhTwCopy = srcId => {
+    const s = load(); const src = items(s).find(x => x.id === srcId); if (!src) return;
+    const set = setById(s, viewId);
+    if (s.custom.length >= 20) { try { showToast('That is plenty of custom items'); } catch (_) {} return; }
+    const nm = clean(prompt('Copying "' + src.name + '". Give the copy a different name (e.g. Large plate):', ''));
+    if (!nm) return;
+    if (items(s).some(x => x.name.trim().toLowerCase() === nm.toLowerCase())) { try { showToast('That name is already used - pick a different one'); } catch (_) {} return; }
+    const id = 'c' + Date.now().toString(36);
+    const base = {}; ['diam', 'cap', 'wt'].forEach(f => { base[f] = baseVal(s, src, f); });
+    s.custom.push({ id, name: nm, icon: src.icon || '🍴', diam: base.diam, cap: base.cap, wt: base.wt, spoon: !!(src.spoon || src.id.endsWith('spoon')), from: src.name });
+    if (set.id !== 'home') {
+      ['diam', 'cap', 'wt'].forEach(f => { const v = eff(s, set, src, f); if (v !== base[f]) { set.vals = set.vals || {}; set.vals[id] = set.vals[id] || {}; set.vals[id][f] = v; } });
+    }
+    save(s); mhTwRender();
+    try { showToast('Added "' + nm + '" - now set its sizes'); } catch (_) {}
   };
   window.mhTwRemoveItem = id => { const s = load(); s.custom = s.custom.filter(c => c.id !== id); s.sets.forEach(x => { if (x.vals) delete x.vals[id]; }); save(s); mhTwRender(); };
 

@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.908 — Tableware: Copy As New
+
+Pete (8 Oct): the place he is staying has several plate sizes (his measured dinner plate came out at 29.1 cm), plus different cutlery and bowls, so he needs more than one of each. "A copy from and forced rename should do it."
+- **"copy as new"** link on every tableware item (plates, bowls, mug, glass, spoons, and your own). It makes a new item that starts with the source's sizes, then you adjust it (📏 for width, type the ml and weight).
+- **Different name required:** an empty name or one already used is refused, so two similar plates can never be confused.
+- Copy from Home: Home gets the copied sizes. Copy while viewing another set (Holiday etc.): that set gets the copied sizes and Home keeps Home's own.
+- A copied spoon keeps the "level spoon" wording sent to the AI.
+- Copies are ordinary custom items (remove on Home, up to 20), and they appear in the AI's tableware line like the built-in ones.
+- Test: p44 extended (empty and duplicate names refused, starts from Home's override, spoon wording, copy inside another set, copy link on every item).
+
 ## v3.10.907 — Photo Ruler: Edge Snap
 
 Pete (8 Oct): "Wouldn't a snap to object make this process fool proof?"
