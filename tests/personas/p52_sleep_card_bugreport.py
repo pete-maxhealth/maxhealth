@@ -33,6 +33,18 @@ with fresh_server() as root, sync_playwright() as pw:
     if code != 200 or r.get('status') != 'ok': f.add('BUG', f'own figure not accepted: {code} {r}')
     me = json.load(open(os.path.join(root, 'data', 'inbox', 'manual_entry.json'))) if os.path.exists(os.path.join(root, 'data', 'inbox', 'manual_entry.json')) else []
     if not any(e.get('date') == '2026-10-08' and e.get('sleep_duration') == 415 for e in me): f.add('BUG', f'manual sleep not saved: {me}')
+    # v3.10.913: a night you have settled is not asked again when the launcher re-queues the identical sessions; a changed night or "Decide later" is
+    def conflicts():
+        return json.loads(urllib.request.urlopen('http://localhost:5757/sleep-conflicts').read())['conflicts']
+    pend = os.path.join(root, 'data', 'sleep_conflicts_pending.json')
+    json.dump([conflict], open(pend, 'w'))                       # launcher re-queues the same overlap after the 415 choice above
+    if conflicts(): f.add('BUG', 'a settled night came back with identical sessions')
+    changed = json.loads(json.dumps(conflict)); changed['sessions'][0]['end'] = '2026-10-08T09:40:00Z'
+    json.dump([changed], open(pend, 'w'))
+    if not conflicts(): f.add('BUG', 'a night whose sessions changed should be asked again')
+    code, _ = post({'date': '2026-10-08', 'resolution': {'type': 'skip'}})
+    json.dump([changed], open(pend, 'w'))
+    if not conflicts(): f.add('BUG', 'Decide later (skip) should not be remembered as settled')
     # bug report
     t = page.evaluate("mhBuildBugReportText()")
     if 'App version: v3.10.' not in t or 'Device/browser' not in t: f.add('BUG', f'bug report text thin: {t[:120]}')

@@ -304,6 +304,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.903 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler bottom bar shows a readable step hint instead of a faded disabled button. |
 | v3.10.904 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler has separate camera (`capture`) and gallery file inputs. |
 | v3.10.905 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler touch handling rebuilt on pointer events: pinch-zoom/drag-pan inside `#mhRulerView` (`touch-action:none`), tap places a point; paints only, no re-render on taps. |
+| v3.10.913 | 23 | Full detail in CHANGELOG.md (Phase 23). server.py: `sleep_conflicts_resolved.json` + `sleep_conflict_fingerprint`; `GET /sleep-conflicts` drops identical re-queued overlaps for settled nights; skip is not remembered. |
 | v3.10.912 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware item `kind` (plate/bowl/cup/spoon/cutlery/other) drives `fieldsFor` and labels; filled boxes always shown; `mhTwIsLong` for length wording in ruler and AI line. |
 | v3.10.911 | 23 | Full detail in CHANGELOG.md (Phase 23). Notifications card: `refreshNotifUIIfChanged` (load, focus, visibility, 2s poll while visible); clearer not-asked and no-prompt messages. |
 | v3.10.910 | 23 | Full detail in CHANGELOG.md (Phase 23). Log edit: `scaleLogEditToGrams` (single entry, derives % from `_origAmount`), `scaleAllLogEditToGrams` + `logEditBaseGrams` (multi-ingredient, from `_base.grams`). Tableware help tip rewritten. |

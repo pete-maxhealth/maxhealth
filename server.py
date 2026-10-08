@@ -104,6 +104,33 @@ USER_EXT_DIR    = os.path.join(DATA_DIR, 'extractors')
 # resolveSleepHours() doc comment for why. Same DATA_DIR both sides already
 # share, so no new path convention is being introduced here.
 SLEEP_CONFLICTS_JSON = os.path.join(DATA_DIR, 'sleep_conflicts_pending.json')
+# v3.10.913: nights the person has already settled (a real choice, not "Decide later"), keyed by date and a fingerprint of the
+# sessions they were shown. The launcher re-queues the same overlap on EVERY sync because it cannot see what was decided, so
+# without this the card kept coming back for a night that was already answered.
+SLEEP_RESOLVED_JSON = os.path.join(DATA_DIR, 'sleep_conflicts_resolved.json')
+
+def sleep_conflict_fingerprint(conflict):
+    # source + start + end to the minute: identical records across syncs match; a night that genuinely changes does not
+    parts = sorted('%s|%s|%s' % (str(x.get('source')), str(x.get('start'))[:16], str(x.get('end'))[:16]) for x in (conflict.get('sessions') or []))
+    return ';'.join(parts)
+
+def load_sleep_resolved():
+    try:
+        with open(SLEEP_RESOLVED_JSON, 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+def remember_sleep_resolved(date_str, conflict):
+    d = load_sleep_resolved()
+    d[date_str] = sleep_conflict_fingerprint(conflict)
+    if len(d) > 60:                                   # keep it small: only recent nights can be re-queued
+        for k in sorted(d)[:len(d) - 60]:
+            d.pop(k, None)
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(SLEEP_RESOLVED_JSON, 'w', encoding='utf-8') as f:
+        json.dump(d, f, indent=2)
 # Same file extractors/manual.py reads via run(inbox) - INBOX_DIR is this
 # file's own already-derived path, so no separate cross-check comment is
 # needed the way PREFS_JSON above needs one (that one is independently
@@ -915,6 +942,9 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 # explicitly skipped, it shouldn't keep nagging on this same
                 # detection. A fresh overlap (even same date, re-synced) gets
                 # re-queued by the Kotlin side and will show up again.
+                if res_type != 'skip':
+                    try: remember_sleep_resolved(date_str, match)
+                    except Exception: pass
                 remaining = [c for c in pending if c.get('date') != date_str]
                 os.makedirs(DATA_DIR, exist_ok=True)
                 with open(SLEEP_CONFLICTS_JSON, 'w', encoding='utf-8') as f:
@@ -1349,6 +1379,16 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                         conflicts = loaded
                 except Exception:
                     pass
+            # v3.10.913: drop (and delete from the queue) any overlap for a night already settled with identical sessions
+            try:
+                settled = load_sleep_resolved()
+                live = [c for c in conflicts if settled.get(c.get('date')) != sleep_conflict_fingerprint(c)]
+                if len(live) != len(conflicts):
+                    with open(SLEEP_CONFLICTS_JSON, 'w', encoding='utf-8') as f:
+                        json.dump(live, f, indent=2)
+                    conflicts = live
+            except Exception:
+                pass
             self.send_json({'conflicts': conflicts})
 
         # ── GET /manual-entry-log — audit trail for the Advanced

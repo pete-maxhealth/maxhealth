@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.913 — A Sleep Night You Already Settled Is Not Asked Again
+
+Pete (8 Oct, 15:42): the "Sleep sources disagree" card for 8 Oct appeared again, although he had already chosen Zepp for that night at 09:33.
+- **Cause (read from the code):** the launcher cannot see what was decided, so it re-queues the same overlap every time it syncs. The server then served it again, and the card re-asked an already-answered question. (The earlier comment in the code that a re-detected overlap "will show up again" was meant for "Decide later", not for a settled night.)
+- **Fix (server only, no APK):** when you choose Use ringconn / Use zepp / add both / type your own figure, the server remembers that night together with a fingerprint of the sessions you were shown (source, start and end to the minute). If the launcher re-queues the identical sessions, they are dropped quietly. If the night genuinely changes (a different end time, a new session), you are asked again. **Decide later** is not remembered, so it still comes back.
+- Test: p52 extended (settled night with identical sessions does not return, a changed night does, Decide later does).
+
 ## v3.10.912 — Tableware Boxes Follow What The Item Is
 
 Pete (8 Oct, screenshot of a custom item called "Test" showing Across/Holds/Empty): "How did Test know what it was? If a bowl or cutlery, the dimensions wouldn't work."
