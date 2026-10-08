@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.903 — Photo Ruler: Readable Next Step
+
+Pete (8 Oct): the line at the bottom of the screen was barely readable.
+- It was a faded-out "Next" button, disabled until both ends of the reference were tapped. Now the bottom bar always says what to do ("Step 1 of 2: tap both ends of the reference (2 to go)", then "Step 2 of 2: tap both edges of the item"), and the Next / Use it buttons only appear when they work, at full strength.
+- Test: p53 extended.
+
 ## v3.10.902 — Photo Ruler: Clearer Reference Choices, Remembered
 
 Pete (8 Oct, screenshot): the reference list said "Bank card" but cards he has measure around 64 x 40 mm.

@@ -26,6 +26,8 @@ with fresh_server() as root, sync_playwright() as pw:
     def tap(x, y):
         box = page.evaluate("(()=>{const r=document.getElementById('mhRulerCanvas').getBoundingClientRect();return [r.left,r.top,r.width,r.height]})()")
         page.mouse.click(box[0] + x * box[2] / 1100, box[1] + y * box[3] / 900); page.wait_for_timeout(80)
+    if 'Step 1 of 2' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'no readable step hint before reference is set')
+    if page.evaluate("[...document.querySelectorAll('#mhRulerBody button')].some(b => b.textContent.includes('Next') && getComputedStyle(b).opacity < 1)"): f.add('BUG', 'faded Next button')
     tap(100, 208); tap(442, 208)                    # card long edge
     page.evaluate("mhRulerNext()")
     tap(350, 500); tap(950, 500)                    # across the bowl
