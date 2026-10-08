@@ -100,6 +100,7 @@ def run(inbox, password=None, dry_run=False):
             'sleep_light':     slp.get('sleep_light'),
             'sleep_rem':       slp.get('sleep_rem'),
             'sleep_wake':      slp.get('sleep_wake'),
+            'sleep_nap_min':   slp.get('sleep_nap_min'),
             'hr_avg':          vit.get('hr_avg'),
             'hr_min':          vit.get('hr_min'),
             'hr_max':          vit.get('hr_max'),
@@ -129,10 +130,29 @@ def _parse_activity(content):
     return result
 
 
+# v3.10.920: RingConn can record more than one sleep session under the same date. Previously only the longest was kept
+# and the rest silently dropped. Now, per date: the longest is the night; a short extra session (under 3 hours) that
+# starts or ends within 2 hours of the night is a broken night (woke, got up, slept again) and is ADDED to the night
+# (duration and stages); a short extra session further away than that is a nap and goes to sleep_nap_min. A long second
+# session (3 hours or more) is still ignored, as before, because that is a different night under the same date label.
+NAP_MAX_MIN = 180
+NAP_JOIN_GAP_MIN = 120
+
+def _parse_dt(v):
+    v = str(v or '').strip()
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            return datetime.strptime(v[:19], fmt)
+        except ValueError:
+            continue
+    return None
+
 def _parse_sleep(content):
+    from datetime import timedelta
     result = {}
     try:
         reader = csv.DictReader(content.strip().splitlines())
+        sessions = {}
         for row in reader:
             start = row.get('Start Time') or row.get('start_time') or row.get('Date') or ''
             if not start:
@@ -143,40 +163,46 @@ def _parse_sleep(content):
             # a day, on the assumption they were "really" the tail end of the
             # prior night. That assumption doesn't match RingConn's own app,
             # which labels a session by its raw bedtime date with no
-            # adjustment — e.g. a 01:01 bedtime is shown as belonging to that
+            # adjustment - e.g. a 01:01 bedtime is shown as belonging to that
             # same calendar day, not the day before. The shift caused a
             # confirmed one-day misalignment against RingConn's own UI.)
-            date = None
             start_str = str(start).strip()
-            for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M:%S'):
-                try:
-                    dt = datetime.strptime(start_str[:19], fmt)
-                    date = dt.strftime('%Y-%m-%d')
-                    break
-                except ValueError:
-                    continue
-
-            # Fallback: use raw date string
-            if not date:
-                date = _date(start_str[:10])
+            dt = _parse_dt(start_str)
+            date = dt.strftime('%Y-%m-%d') if dt else _date(start_str[:10])
             if not date:
                 continue
 
             duration = _int(row.get('Time Asleep(min)') or row.get('time_asleep') or row.get('Duration'))
-
-            # If multiple sessions map to the same date, keep the longest (main sleep)
-            existing = result.get(date)
-            existing_duration = existing.get('sleep_duration') if existing else None
-            if existing and existing_duration and duration and duration <= existing_duration:
-                continue  # Skip — existing session is longer
-
-            result[date] = {
-                'sleep_duration': duration,
-                'sleep_wake':     _int(row.get('Sleep Stages - Awake(min)') or row.get('Awake')),
-                'sleep_rem':      _int(row.get('Sleep Stages - REM(min)') or row.get('REM')),
-                'sleep_light':    _int(row.get('Sleep Stages - Light Sleep(min)') or row.get('Light')),
-                'sleep_deep':     _int(row.get('Sleep Stages - Deep Sleep(min)') or row.get('Deep')),
+            stages = {
+                'sleep_wake':  _int(row.get('Sleep Stages - Awake(min)') or row.get('Awake')),
+                'sleep_rem':   _int(row.get('Sleep Stages - REM(min)') or row.get('REM')),
+                'sleep_light': _int(row.get('Sleep Stages - Light Sleep(min)') or row.get('Light')),
+                'sleep_deep':  _int(row.get('Sleep Stages - Deep Sleep(min)') or row.get('Deep')),
             }
+            end = _parse_dt(row.get('End Time') or row.get('end_time'))
+            if dt and not end and duration:
+                end = dt + timedelta(minutes=duration + (stages['sleep_wake'] or 0))
+            sessions.setdefault(date, []).append({'start': dt, 'end': end, 'dur': duration, 'st': stages})
+
+        for date, lst in sessions.items():
+            lst.sort(key=lambda x: x['dur'] or 0, reverse=True)   # longest first = the night
+            main = lst[0]
+            night = {'sleep_duration': main['dur'], **main['st']}
+            nap = 0
+            for ex in lst[1:]:
+                if not ex['dur'] or ex['dur'] >= NAP_MAX_MIN or not main['dur']:
+                    continue
+                if not (main['start'] and main['end'] and ex['start'] and ex['end']):
+                    continue    # cannot tell where it sits, so keep the old behaviour (ignore it)
+                gap = max((ex['start'] - main['end']).total_seconds(), (main['start'] - ex['end']).total_seconds()) / 60
+                if gap <= NAP_JOIN_GAP_MIN:
+                    night['sleep_duration'] += ex['dur']
+                    for k, v in ex['st'].items():
+                        if v: night[k] = (night.get(k) or 0) + v
+                else:
+                    nap += ex['dur']
+            night['sleep_nap_min'] = nap or None
+            result[date] = night
         print(f"  [ringconn] Sleep: {len(result)} days", file=sys.stderr)
     except Exception as e:
         print(f"  [ringconn] Sleep parse error: {e}", file=sys.stderr)

@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.920 — RingConn Second Sleep Session: Broken Nights Joined, Naps Kept Separately
+
+Pete: "Yes to Ringconn second period." RingConn can record several sleep sessions under one date, and until now only the longest was kept; the rest were silently dropped (73 dates in the old export had this). Rule, per date: the longest session is the night. A short extra session (under 3 hours) that starts or ends within 2 hours of the night is a broken night (woke, got up, slept again), so its minutes and stages are **added to the night**. A short extra session further away than that is a **nap**, stored in a new field `sleep_nap_min` and shown as "Nap (separate)" in the day's Sleep card; it does not change the night's total. A long second session (3 hours or more) is a different night under the same date label and is ignored as before.
+- Applies to RingConn exports imported from now on. Dates already in combined.csv are not rewritten (the merge never overwrites a source with itself), so nothing already settled changes.
+- New column `sleep_nap_min` in combined.csv (old files simply gain an empty column). Not offered in Manual Entry.
+- Test: new p58 (plain night, joined broken night incl. stages, nap, long second session ignored).
+- Judgment call, flagged: the 3-hour and 2-hour limits are my defaults; they sit at the top of `extractors/ringconn.py` (`NAP_MAX_MIN`, `NAP_JOIN_GAP_MIN`) if they need tuning.
+
 ## v3.10.919 — New Day-Fix Links Respect Cloud Mode
 
 Pete: "How will all these new features affect cloud and Apple users?" Checked: Manual Entry saves through the local server, which cloud (GitHub Pages) and iPhone users do not have. The sync banner already stays hidden without a server, but the new "Edit this day by hand" link would have led to a form that cannot save, and the Missing Data card would have said only "could not check". Now the link is hidden without a local server, and the card explains it is a local-server feature. Everything else from 907-918 (photo ruler, tableware, grams, notifications card) runs in the page and works the same in cloud mode. p57 extended.
