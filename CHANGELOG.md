@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.919 — New Day-Fix Links Respect Cloud Mode
+
+Pete: "How will all these new features affect cloud and Apple users?" Checked: Manual Entry saves through the local server, which cloud (GitHub Pages) and iPhone users do not have. The sync banner already stays hidden without a server, but the new "Edit this day by hand" link would have led to a form that cannot save, and the Missing Data card would have said only "could not check". Now the link is hidden without a local server, and the card explains it is a local-server feature. Everything else from 907-918 (photo ruler, tableware, grams, notifications card) runs in the page and works the same in cloud mode. p57 extended.
+
 ## v3.10.918 — Missing Data: Gap Finder With One-Tap Fix
 
 Pete: "Plough away" on the gap finder. A stalled sync leaves whole days without steps, heart rate or sleep, and they are easy to miss. New card **Settings > Import > Missing Data** lists the finished days in the last 14 days that lack any of those three (today is left out, it is still in progress; days before your first recorded day are not counted). Each row shows what is missing and a "Fill in" tap that opens Manual Entry on that day.

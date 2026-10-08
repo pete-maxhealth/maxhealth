@@ -50,6 +50,10 @@ with fresh_server() as root, sync_playwright() as pw:
     ctrl = page.evaluate("(() => { const c = document.getElementById('title-imp-gaps').closest('.card-unit'); return c ? c.querySelectorAll('[onclick*=\"Generic\"], .mh-reorder, [title=\"Hide\"]').length : -1; })()")
     print('ctrl', ctrl)
     if ctrl <= 0: f.add('BUG', 'no hide / reorder controls injected on the Missing Data card')
+    # cloud mode (no local server): no link to a form that cannot save, and the card explains itself
+    page.evaluate("_serverOnline = false; updateTrendsDayLabel(); mhLoadDataGaps()"); page.wait_for_timeout(300)
+    if page.evaluate("getComputedStyle(document.getElementById('trendsDayEdit')).display !== 'none'"): f.add('BUG', 'edit-this-day link shown without a local server')
+    if 'cloud mode' not in page.evaluate("document.getElementById('mhGapsList').textContent"): f.add('BUG', 'Missing Data card does not explain itself in cloud mode')
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)
