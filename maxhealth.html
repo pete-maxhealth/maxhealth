@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.900'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.901'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -46561,7 +46561,7 @@ function dismissInsight() {
     const tip = set.id === 'home' ? 'Back to the default' : 'Same as Home';
     const col = isOwn ? 'var(--accent)' : 'var(--text)';
     return `<div style="min-width:0;">
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--text3);margin-bottom:2px;"><span>${label}</span>${showReset ? `<span title="${tip}" onclick="mhTwReset('${set.id}','${it.id}','${f}')" style="cursor:pointer;color:var(--accent);font-size:13px;line-height:1;padding:0 2px;">↺</span>` : ''}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--text3);margin-bottom:2px;"><span>${label}${f === 'diam' ? ` <span title="Measure with the camera" onclick="mhRulerOpen('${set.id}','${it.id}')" style="cursor:pointer;font-size:13px;">📏</span>` : ''}</span>${showReset ? `<span title="${tip}" onclick="mhTwReset('${set.id}','${it.id}','${f}')" style="cursor:pointer;color:var(--accent);font-size:13px;line-height:1;padding:0 2px;">↺</span>` : ''}</div>
       <input type="number" inputmode="decimal" step="any" min="0" value="${v == null ? '' : v}" placeholder="–" onchange="mhTwEdit('${set.id}','${it.id}','${f}',this.value)"
         style="width:100%;box-sizing:border-box;height:34px;padding:0 6px;border-radius:8px;border:1px solid ${isOwn ? 'var(--accent)' : 'var(--border)'};background:var(--surface2);color:${col};font-size:13px;">
     </div>`;
@@ -46638,6 +46638,158 @@ function dismissInsight() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   window.addEventListener('focus', tick);
   setInterval(tick, 60000);
+})();
+</script>
+
+<script>
+// ─── PHOTO RULER (v3.10.901) ───────────────────────────────────────────────
+// Pete (8 Oct): "a simple AR ruler for measuring crockery and cutlery". Real AR (WebXR) depends on
+// ARCore being present and supported on the phone, so this is the version that works everywhere:
+// photograph the item from straight above with a bank card lying flat beside it, tap the two ends of
+// the card's long edge (85.6 mm, the same on every card), then tap across the item. Distance ratio
+// does the rest. Result goes straight into that item's "Across (cm)" box.
+(function () {
+  const REFS = [['card_long', 'Bank card, long edge (85.6 mm)', 85.6], ['card_short', 'Bank card, short edge (54.0 mm)', 53.98], ['a4_short', 'A4 paper, short edge (210 mm)', 210], ['custom', 'Something else (type its mm)', null]];
+  let st = null;
+
+  // Pure maths, kept separate so it can be tested: calPx = pixel length of the reference, refMm its real length,
+  // measPx = pixel length of the thing being measured. Returns centimetres to 0.1, or null if unusable.
+  window.mhRulerCalc = function (calPx, refMm, measPx) {
+    if (!(calPx > 0) || !(refMm > 0) || !(measPx > 0)) return null;
+    return Math.round((measPx / calPx) * refMm / 10 * 10) / 10;
+  };
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+  window.mhRulerOpen = function (setId, itemId) {
+    mhRulerClose();
+    st = { setId, itemId, stage: 'cal', cal: [], meas: [], zoom: 1, img: null, ref: 'card_long' };
+    const o = document.createElement('div');
+    o.id = 'mhRulerModal';
+    o.style.cssText = 'position:fixed;inset:0;z-index:700;background:var(--bg);display:flex;flex-direction:column;';
+    o.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);">
+        <div style="flex:1;font-size:14px;color:var(--text);font-weight:600;">📏 Measure across</div>
+        <button class="copy-btn" style="width:auto;padding:6px 12px;font-size:12px;" onclick="mhRulerClose()">Close</button>
+      </div>
+      <div id="mhRulerBody" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>`;
+    document.body.appendChild(o);
+    render();
+  };
+  window.mhRulerClose = function () { document.getElementById('mhRulerModal')?.remove(); st = null; };
+
+  function render() {
+    const body = document.getElementById('mhRulerBody'); if (!body || !st) return;
+    if (!st.img) {
+      body.innerHTML = `<div style="padding:16px;font-size:13px;color:var(--text2);line-height:1.6;">
+        <div style="margin-bottom:10px;">1. Lay a <b>bank card</b> flat on the table next to the plate, bowl or spoon.</div>
+        <div style="margin-bottom:10px;">2. Take a photo from <b>straight above</b>, with both in view. Holding the phone tilted makes the answer wrong.</div>
+        <div style="margin-bottom:14px;">3. Tap the two ends of the card's long edge, then the two edges of the item.</div>
+        <label class="settings-save-btn" style="display:block;text-align:center;cursor:pointer;padding:14px;">📷 Take or choose a photo
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="mhRulerPick(this)"></label>
+        <div style="font-size:11px;color:var(--text3);margin-top:12px;">The photo stays on your phone and is not saved.</div>
+      </div>`;
+      return;
+    }
+    const calDone = st.cal.length === 2;
+    const measDone = st.meas.length === 2;
+    let msg, extra = '';
+    if (st.stage === 'cal') {
+      msg = calDone ? 'Reference set. Tap a point to nudge it, or continue.' : `Tap the ${st.cal.length === 0 ? 'first' : 'second'} end of the reference (zoom in for accuracy).`;
+      extra = `<select onchange="mhRulerRef(this.value)" style="width:100%;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:0 8px;font-size:13px;margin-top:6px;">${REFS.map(r => `<option value="${r[0]}" ${r[0] === st.ref ? 'selected' : ''}>${r[1]}</option>`).join('')}</select>` +
+        (st.ref === 'custom' ? `<input id="mhRulerCustom" type="number" inputmode="decimal" placeholder="Its real length in mm" value="${st.customMm || ''}" oninput="mhRulerCustom(this.value)" style="width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);padding:0 8px;font-size:13px;margin-top:6px;">` : '');
+    } else {
+      msg = measDone ? 'Tap a point to nudge it.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} edge of the item, across its widest part.`;
+    }
+    const cm = result();
+    body.innerHTML = `
+      <div style="padding:8px 12px;font-size:12px;color:var(--text2);">${msg}${extra}</div>
+      <div style="display:flex;gap:6px;padding:0 12px 8px;align-items:center;">
+        ${[1, 2, 3].map(z => `<button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;${st.zoom === z ? 'border-color:var(--accent);color:var(--accent);' : ''}" onclick="mhRulerZoom(${z})">${z}×</button>`).join('')}
+        <span style="flex:1;"></span>
+        <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerReset()">Clear points</button>
+      </div>
+      <div id="mhRulerScroll" style="flex:1;min-height:0;overflow:auto;background:#000;"><canvas id="mhRulerCanvas" style="display:block;width:${st.zoom * 100}%;"></canvas></div>
+      <div style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;">
+        ${st.stage === 'cal'
+          ? `<button class="settings-save-btn" style="flex:1;${calDone && refMm() ? '' : 'opacity:0.4;'}" onclick="mhRulerNext()">Next: measure the item</button>`
+          : `<div style="flex:1;font-size:15px;color:var(--text);">${cm != null ? '<b>' + cm + ' cm</b> across' : 'Place both points'}</div>
+             <button class="copy-btn" style="width:auto;padding:10px 12px;font-size:12px;" onclick="mhRulerBack()">Back</button>
+             <button class="settings-save-btn" style="width:auto;padding:10px 16px;${cm != null ? '' : 'opacity:0.4;'}" onclick="mhRulerUse()">Use it</button>`}
+      </div>`;
+    drawCanvas();
+    const c = document.getElementById('mhRulerCanvas');
+    c.onclick = onTap;
+  }
+
+  function refMm() {
+    if (!st) return null;
+    if (st.ref === 'custom') return st.customMm > 0 ? st.customMm : null;
+    return REFS.find(r => r[0] === st.ref)[2];
+  }
+  function result() {
+    if (!st || st.cal.length < 2 || st.meas.length < 2) return null;
+    return window.mhRulerCalc(dist(st.cal[0], st.cal[1]), refMm(), dist(st.meas[0], st.meas[1]));
+  }
+
+  function drawCanvas() {
+    const c = document.getElementById('mhRulerCanvas'); if (!c || !st.img) return;
+    c.width = st.img.width; c.height = st.img.height;
+    const g = c.getContext('2d');
+    g.drawImage(st.img, 0, 0);
+    const scale = c.width / 900;           // line thickness stays readable at any photo size
+    const draw = (pts, col) => {
+      if (pts.length === 2) { g.strokeStyle = col; g.lineWidth = 2 * scale; g.beginPath(); g.moveTo(pts[0].x, pts[0].y); g.lineTo(pts[1].x, pts[1].y); g.stroke(); }
+      pts.forEach(p => {
+        g.strokeStyle = col; g.lineWidth = 2 * scale;
+        g.beginPath(); g.arc(p.x, p.y, 9 * scale, 0, 7); g.stroke();
+        g.beginPath(); g.moveTo(p.x - 16 * scale, p.y); g.lineTo(p.x + 16 * scale, p.y); g.moveTo(p.x, p.y - 16 * scale); g.lineTo(p.x, p.y + 16 * scale); g.stroke();
+      });
+    };
+    draw(st.cal, '#f5c542'); draw(st.meas, '#2deb8f');
+  }
+
+  function onTap(e) {
+    if (!st) return;
+    const c = e.currentTarget, r = c.getBoundingClientRect();
+    const p = { x: (e.clientX - r.left) * c.width / r.width, y: (e.clientY - r.top) * c.height / r.height };
+    const pts = st.stage === 'cal' ? st.cal : st.meas;
+    if (pts.length < 2) pts.push(p);
+    else { // already two: nudge whichever is nearer
+      const i = dist(p, pts[0]) <= dist(p, pts[1]) ? 0 : 1; pts[i] = p;
+    }
+    render();
+    const sc = document.getElementById('mhRulerScroll'); if (sc && st.zoom > 1) { /* keep scroll where it was */ }
+  }
+
+  window.mhRulerPick = function (inp) {
+    const file = inp.files && inp.files[0]; if (!file || !st) return;
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 2000 / Math.max(im.naturalWidth, im.naturalHeight));
+      const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k);
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      if (!st) return;
+      st.img = cv; render();
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); try { showToast('Could not open that photo'); } catch (_) {} };
+    im.src = url;
+  };
+  window.mhRulerZoom = z => { if (st) { st.zoom = z; render(); } };
+  window.mhRulerReset = () => { if (st) { (st.stage === 'cal' ? st.cal : st.meas).length = 0; render(); } };
+  window.mhRulerRef = v => { if (st) { st.ref = v; render(); } };
+  window.mhRulerCustom = v => { if (st) { st.customMm = parseFloat(v) || 0; const b = document.querySelector('#mhRulerBody .settings-save-btn'); if (b) b.style.opacity = (st.cal.length === 2 && refMm()) ? '' : '0.4'; } };
+  window.mhRulerNext = () => { if (st && st.cal.length === 2 && refMm()) { st.stage = 'meas'; render(); } };
+  window.mhRulerBack = () => { if (st) { st.stage = 'cal'; render(); } };
+  window.mhRulerUse = () => {
+    const cm = result(); if (cm == null || !st) return;
+    if (cm < 1 || cm > 60) { try { showToast(cm + ' cm looks wrong for tableware. Check the two reference points.'); } catch (_) {} return; }
+    const { setId, itemId } = st;
+    mhRulerClose();
+    mhTwEdit(setId, itemId, 'diam', String(cm));
+    try { showToast('Saved ' + cm + ' cm'); } catch (_) {}
+  };
 })();
 </script>
 <!-- LOCAL WEATHER (v3.10.866): location + Open-Meteo forecast, user-overridable; adjusts water target and gives exercise tips -->

@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.900
+**Version:** v3.10.901
 
 ---
 
@@ -59,6 +59,7 @@
 - **Journey overlays** — chips on Your Journey add Calories, Protein, Carbs, Water, Logged exercise, Active calories or Steps as dashed lines on the weight chart. Compare Metrics gains Logged exercise, Active calories and Fat (g).
 - **Compare Two Periods** (Trends) — compares a recent stretch (default: latest Holiday-mode run) with the weeks before, on logged kcal, steps and weight trend, to check whether photo estimates are running high or low. Verdict always carries a margin of error, plus an expected-trend row and a list of exactly which days were counted.
 - **One-tap bug report** (Settings → About) — opens a GitHub issue pre-filled with app version, device and a health check, with a prompt for a screenshot; a copy-text option for anyone without GitHub.
+- **Photo ruler** (Settings → Tableware, 📏) — photograph a plate, bowl or spoon beside a bank card, tap the card's edge then the item's edges, and its width is filled in for you.
 - **Body Composition card** (Trends) — plain-words verdict (gaining fat / losing muscle / recomposition and so on) from smart-scale readings, with a share bar and change badges.
 - **Topic chips** on Trends, Reports, Settings → Manage and Settings → Data — view filters only, nothing is moved or hidden.
 - **Copy previous set** — in the routine editor and workout Apply screen, one tap repeats the last set's reps, weight and note.

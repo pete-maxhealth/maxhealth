@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.901 — Photo Ruler For Measuring Plates, Bowls And Spoons
+
+Pete (8 Oct): could we build a simple AR ruler for crockery and cutlery?
+- **Settings > Tableware:** a 📏 beside every "Across (cm)" box. Take or choose a photo from straight above with a bank card lying flat beside the item, tap the two ends of the card's long edge (85.6 mm), then tap across the item. The size is worked out from the ratio and goes straight into that box.
+- **Other references:** card short edge, A4 paper, or any object whose length you type in mm.
+- **Accuracy:** zoom 1×/2×/3× to place points precisely; tapping again nudges the nearest point. Expect within a few mm if the photo is taken straight down; a tilted phone gives a wrong answer, and the screen says so. A result under 1 cm or over 60 cm is refused as an obvious mis-tap.
+- **Why not real AR:** WebXR depends on ARCore being installed and supported on the phone, which cannot be checked from here. This works on any phone with a camera. If you want real AR later it can be added as an option on phones that support it.
+- The photo is processed on the phone and never saved or sent.
+- Test: p53 (new): known card and bowl sizes measured back to within 0.4 cm; plate value saved; absurd result refused.
+
 ## v3.10.900 — Sleep Card Spots Time-In-Bed Figures, Type Your Own; One-Tap Bug Report
 
 Pete (8 Oct, three screenshots): the sleep-conflict card offered RingConn 8.7h (23:16-08:01) against Zepp 5.0h. RingConn's own app says 6h55 asleep over that span; Zepp's says 4:25 plus a 0:43 nap (about 5h08), so Zepp's figure was right and RingConn's was the whole time in bed.
