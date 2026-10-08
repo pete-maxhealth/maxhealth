@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.906'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.907'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -46669,7 +46669,7 @@ function dismissInsight() {
     mhRulerClose();
     let saved = {}; try { saved = JSON.parse(localStorage.getItem('mh_ruler_ref') || '{}'); } catch (_) {}
     st = { setId, itemId, stage: 'cal', cal: [], meas: [], img: null, ref: REFS.some(r => r[0] === saved.ref) ? saved.ref : 'card_long', customMm: saved.customMm > 0 ? saved.customMm : 0,
-           view: { s: 1, tx: 0, ty: 0 }, ptrs: new Map(), g: null, sel: { cal: -1, meas: -1 } };
+           view: { s: 1, tx: 0, ty: 0 }, ptrs: new Map(), g: null, sel: { cal: -1, meas: -1 }, lum: null, snap: localStorage.getItem('mh_ruler_snap') !== '0' };
     const o = document.createElement('div');
     o.id = 'mhRulerModal';
     // touch-action:none keeps the browser from pinch-zooming the page behind the ruler
@@ -46718,11 +46718,12 @@ function dismissInsight() {
       : '';
     body.innerHTML = `
       <div style="padding:8px 12px 0;font-size:12px;color:var(--text2);"><div id="mhRulerHint"></div>${refBox}</div>
-      <div style="display:flex;gap:6px;padding:8px 12px;align-items:center;">
+      <div style="display:flex;gap:6px;padding:8px 12px;align-items:center;flex-wrap:wrap;">
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerZoom(1)">Fit</button>
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerZoom(3)">3×</button>
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerZoom(6)">6×</button>
         <span style="flex:1;"></span>
+        <button id="mhRulerSnapBtn" class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerSnapToggle()"></button>
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerUndo()">Undo</button>
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerReset()">Clear</button>
       </div>
@@ -46773,13 +46774,14 @@ function dismissInsight() {
     hint.textContent = st.stage === 'cal'
       ? (calDone ? 'Reference set. Tap a point to pick it up and nudge it with the arrows, or continue.' : `Tap the ${st.cal.length === 0 ? 'first' : 'second'} end of the reference. Pinch to zoom, drag to move the photo.`)
       : (measDone ? 'Tap a point to pick it up and nudge it with the arrows.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} edge of the item, across its widest part.`);
+    const sb = $('mhRulerSnapBtn'); if (sb) { sb.textContent = st.snap ? 'Snap ✓' : 'Snap off'; sb.style.borderColor = st.snap ? 'var(--accent)' : ''; sb.style.color = st.snap ? 'var(--accent)' : ''; }
     const nudge = $('mhRulerNudge'), pts = st.stage === 'cal' ? st.cal : st.meas;
     if (nudge) {
       if (!pts.length) nudge.style.display = 'none';
       else {
         const btn = (lbl, dx, dy) => `<button class="copy-btn" style="width:auto;min-width:46px;padding:8px 0;font-size:16px;" oncontextmenu="return false" onpointerdown="mhRulerNudgeStart(${dx},${dy})" onpointerup="mhRulerNudgeStop()" onpointerleave="mhRulerNudgeStop()" onpointercancel="mhRulerNudgeStop()">${lbl}</button>`;
         nudge.style.display = 'flex';
-        nudge.innerHTML = `<div style="font-size:11px;color:var(--text2);flex:1;line-height:1.3;">Point ${st.sel[st.stage] + 1} of ${pts.length} picked. Tap a point to pick it, then nudge:</div>${btn('◀', -1, 0)}${btn('▲', 0, -1)}${btn('▼', 0, 1)}${btn('▶', 1, 0)}`;
+        nudge.innerHTML = `<div style="font-size:11px;color:var(--text2);flex:1;line-height:1.3;">Point ${st.sel[st.stage] + 1} of ${pts.length} picked. Snap slides points to the nearest edge; nudge to fine-tune:</div>${btn('◀', -1, 0)}${btn('▲', 0, -1)}${btn('▼', 0, 1)}${btn('▶', 1, 0)}`;
       }
     }
     const cm = result();
@@ -46828,6 +46830,42 @@ function dismissInsight() {
     v.onpointerup = up; v.onpointercancel = up;
   }
 
+  // ── edge snap: after a pair is placed, slide each point ALONG the line joining the pair to the strongest nearby edge ──
+  function lumData() {
+    if (st.lum) return st.lum;
+    const w = st.img.width, h = st.img.height, d = st.img.getContext('2d').getImageData(0, 0, w, h).data, L = new Float32Array(w * h);
+    for (let i = 0, j = 0; i < L.length; i++, j += 4) L[i] = 0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2];
+    return (st.lum = { L, w, h });
+  }
+  function lumAt(D, x, y) {
+    x = Math.min(D.w - 1.001, Math.max(0, x)); y = Math.min(D.h - 1.001, Math.max(0, y));
+    const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, i = y0 * D.w + x0;
+    return D.L[i] * (1 - fx) * (1 - fy) + D.L[i + 1] * fx * (1 - fy) + D.L[i + D.w] * (1 - fx) * fy + D.L[i + D.w + 1] * fx * fy;
+  }
+  // Returns the point moved along the line towards `other` (or away), or the same point if there is no clear edge nearby.
+  window.mhRulerSnapPoint = function (p, other, imgPxPerScreenPx) {
+    const D = lumData(), len = dist(p, other); if (len < 4) return p;
+    const ux = (other.x - p.x) / len, uy = (other.y - p.y) / len;
+    const R = 28 * imgPxPerScreenPx, step = Math.max(0.5, imgPxPerScreenPx * 0.5), half = Math.max(1.5, imgPxPerScreenPx * 1.2);
+    let best = null, bestScore = 0, second = 0;
+    for (let t = -R; t <= R; t += step) {
+      const g = Math.abs(lumAt(D, p.x + ux * (t + half), p.y + uy * (t + half)) - lumAt(D, p.x + ux * (t - half), p.y + uy * (t - half)));
+      const score = g * Math.exp(-Math.pow(t / (R * 0.7), 2));      // strong edges win, but near the tap wins ties
+      if (score > bestScore) { bestScore = score; best = t; }
+    }
+    if (best == null || bestScore < 8) return p;                    // no real edge in reach: leave it exactly where it was tapped
+    return { x: p.x + ux * best, y: p.y + uy * best };
+  };
+  function snapPair(movedIdx) {
+    if (!st.snap) return;
+    const pts = st.stage === 'cal' ? st.cal : st.meas; if (pts.length < 2) return;
+    const f = fit(), k = st.img.width / (f.w * st.view.s);
+    const order = movedIdx == null ? [0, 1] : [movedIdx];
+    const o0 = { ...pts[0] }, o1 = { ...pts[1] };
+    order.forEach(i => { pts[i] = window.mhRulerSnapPoint(pts[i], i === 0 ? o1 : o0, k); });
+  }
+  window.mhRulerSnapToggle = function () { if (!st) return; st.snap = !st.snap; try { localStorage.setItem('mh_ruler_snap', st.snap ? '1' : '0'); } catch (_) {} if (st.snap) { snapPair(null); } paint(); };
+
   function tapAt(clientX, clientY) {
     const c = $('mhRulerCanvas'), r = c.getBoundingClientRect();
     if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;   // outside the photo
@@ -46836,8 +46874,8 @@ function dismissInsight() {
     const near = pts.map(q => Math.hypot((q.x - p.x) * k, (q.y - p.y) * k));          // screen-pixel distance to each existing point
     const ni = near.length ? near.indexOf(Math.min(...near)) : -1;
     if (ni >= 0 && near[ni] < 32) st.sel[st.stage] = ni;                              // tap on a point = pick it up (then nudge it)
-    else if (pts.length < 2) { pts.push(p); st.sel[st.stage] = pts.length - 1; }
-    else { pts[ni] = p; st.sel[st.stage] = ni; }                                      // elsewhere with two placed: move the nearer one there
+    else if (pts.length < 2) { pts.push(p); st.sel[st.stage] = pts.length - 1; if (pts.length === 2) snapPair(null); }
+    else { pts[ni] = p; st.sel[st.stage] = ni; snapPair(ni); }                        // elsewhere with two placed: move the nearer one there
     paint();
   }
 
@@ -46866,7 +46904,7 @@ function dismissInsight() {
       cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
       URL.revokeObjectURL(url);
       if (!st) return;
-      st.img = cv; st.view = { s: 1, tx: 0, ty: 0 }; render();
+      st.img = cv; st.lum = null; st.view = { s: 1, tx: 0, ty: 0 }; render();
     };
     im.onerror = () => { URL.revokeObjectURL(url); try { showToast('Could not open that photo'); } catch (_) {} };
     im.src = url;

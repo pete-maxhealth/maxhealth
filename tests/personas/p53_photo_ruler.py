@@ -75,7 +75,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if '2 to go' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'Clear did not clear')
     page.evaluate("mhRulerClose()")
     # v3.10.906 nudge: place a point roughly, push it with the arrows, pick up the other point by tapping it
-    page.evaluate("mhRulerOpen('home','mug')")
+    page.evaluate("localStorage.setItem('mh_ruler_snap','0'); mhRulerOpen('home','mug')")
     page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
     def pts(): return page.evaluate("(()=>{const t=document.getElementById('mhRulerBody').innerHTML; return 0})()")
     tap(100, 208)
@@ -95,6 +95,27 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = page.evaluate("document.getElementById('mhRulerBody').textContent")
     m = re.search(r'([\d.]+) cm across', txt)
     if not m or abs(float(m.group(1)) - exp) > 0.3: f.add('BUG', f'nudged measurement off: {m and m.group(1)} (expected ~{exp:.1f})')
+    page.evaluate("mhRulerClose()")
+    # v3.10.907 edge snap: taps a few pixels off the true edge land on it; flat areas are left alone; toggle works
+    page.evaluate("localStorage.setItem('mh_ruler_snap','1'); mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    tap(100 - 14, 208); tap(442 + 12, 208)         # card ends tapped ~13px outside the real edges (x=100 and x=442)
+    page.evaluate("mhRulerNext()"); tap(350 - 11, 500); tap(950 + 9, 500)   # bowl edges (x=350 and x=950) tapped off
+    m = re.search(r'([\d.]+) cm across', page.evaluate("document.getElementById('mhRulerBody').textContent"))
+    if not m or abs(float(m.group(1)) - 15.0) > 0.35: f.add('BUG', f'snap did not land on the edges: {m and m.group(1)} cm (expected ~15.0)')
+    page.evaluate("mhRulerClose()")
+    page.evaluate("mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    page.evaluate("mhRulerSnapToggle()")           # off
+    tap(100 - 14, 208); tap(442 + 12, 208); page.evaluate("mhRulerNext()"); tap(350 - 11, 500); tap(950 + 9, 500)
+    m2 = re.search(r'([\d.]+) cm across', page.evaluate("document.getElementById('mhRulerBody').textContent"))
+    if not m2 or abs(float(m2.group(1)) - 15.0) < 0.35: f.add('BUG', 'snap-off should leave the taps exactly where they were (measurement should be visibly off)')
+    page.evaluate("mhRulerSnapToggle(); mhRulerClose()")
+    # flat area: no edge, point must not move
+    page.evaluate("mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    moved = page.evaluate("mhRulerSnapPoint({x:900,y:150},{x:1000,y:150},2)")
+    if abs(moved['x'] - 900) > 0.01 or abs(moved['y'] - 150) > 0.01: f.add('BUG', f'snap moved a point with no edge nearby: {moved}')
     page.evaluate("mhRulerClose()")
     # a smaller card: type its length and it is remembered
     page.evaluate("mhRulerOpen('home','mug')")

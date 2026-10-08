@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.907 — Photo Ruler: Edge Snap
+
+Pete (8 Oct): "Wouldn't a snap to object make this process fool proof?"
+- **Snap to edge:** when a point is placed (or moved), it slides to the strongest light/dark edge within about a thumb-width, searched along the line joining the two points, so rough taps land on the card edge or rim. Flat areas with no clear edge are left exactly where you tapped.
+- **Snap button** (zoom row) turns it off, remembered in `mh_ruler_snap`. Nudge arrows still work on top.
+- Test: p53 extended (tap off the edge lands on it, flat area untouched, toggle works); nudge test runs with snap off.
+
 ## v3.10.906 — Photo Ruler: Pick Up A Point And Nudge It
 
 Pete (8 Oct, screenshot): very difficult to place a point exactly, and a mistake means starting again.
