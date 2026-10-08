@@ -43,8 +43,15 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("mhRulerUse()"); page.wait_for_timeout(300)
     d = page.evaluate("(JSON.parse(localStorage.getItem('mh_tableware')).sets[0].vals.dinner_plate||{}).diam")
     if not d or abs(d - 11.2) > 0.4: f.add('BUG', f'plate diam not saved from ruler: {d}')
+    # a smaller card: type its length and it is remembered
+    page.evaluate("mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    page.evaluate("mhRulerRef('custom'); mhRulerCustom('64')")
+    page.evaluate("mhRulerClose(); mhRulerOpen('home','mug')")
+    if page.evaluate("JSON.parse(localStorage.getItem('mh_ruler_ref')).customMm") != 64: f.add('BUG', 'typed reference length not remembered')
+    page.evaluate("mhRulerClose()")
     # absurd result is refused
-    page.evaluate("mhRulerOpen('home','dinner_plate')")
+    page.evaluate("localStorage.removeItem('mh_ruler_ref'); mhRulerOpen('home','dinner_plate')")
     page.set_input_files('#mhRulerModal input[type=file]', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
     tap(100, 208); tap(110, 208); page.evaluate("mhRulerNext()"); tap(100, 500); tap(1000, 500); page.evaluate("mhRulerUse()")
     if not page.evaluate("!!document.getElementById('mhRulerModal')"): f.add('BUG', 'absurd measurement (>60cm) was accepted')

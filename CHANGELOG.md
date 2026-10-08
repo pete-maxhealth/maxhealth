@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.902 — Photo Ruler: Clearer Reference Choices, Remembered
+
+Pete (8 Oct, screenshot): the reference list said "Bank card" but cards he has measure around 64 x 40 mm.
+- Options renamed "Debit/credit card" with a note that those are the standard 85.6 x 54 mm; smaller loyalty or key-fob cards need the last option ("Smaller card or other object") with their length typed in mm.
+- The chosen reference and any typed length are remembered, so it is set once.
+- Test: p53 extended.
+
 ## v3.10.901 — Photo Ruler For Measuring Plates, Bowls And Spoons
 
 Pete (8 Oct): could we build a simple AR ruler for crockery and cutlery?
