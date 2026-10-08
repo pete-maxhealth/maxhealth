@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.915 — Sync Warning Now Links Straight To Manual Entry
+
+Pete (8 Oct): "A link to manual adjustments from here maybe? It would make sense." Since a day the background sync missed is not recovered automatically, the warning now offers the fix.
+- The sync help sheet has a "Fill in yesterday by hand (Manual Entry)" button: it closes the sheet, opens Settings > Import > Manual Entry, expands it and sets the date to yesterday (existing values for that day load so you only fill the gaps).
+- Settings > Sync age warning also has a "fill a missed day by hand" link.
+- Test: p56 extended (sheet closes, date is yesterday, section is visible).
+
 ## v3.10.914 — The App Now Tells You When The Phone's Background Sync Has Stopped
 
 Pete (8 Oct): the launcher's 30-minute sync had silently stopped (battery rules, found with the launcher's diary), and "users are going to need to be aware of all these. Either a script to check and fix, or to report if changed."
