@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.911'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.912'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -46535,17 +46535,26 @@ function dismissInsight() {
 (function () {
   const KEY = 'mh_tableware';
   const FACTORY = [
-    { id: 'dinner_plate', name: 'Dinner plate',       icon: '🍽', diam: 27, food: null, cap: null, wt: null },
-    { id: 'side_plate',   name: 'Side plate',         icon: '🍽', diam: 19, food: null, cap: null, wt: null },
-    { id: 'bowl',         name: 'Bowl (cereal/soup)', icon: '🥣', diam: 15, cap: 350,  wt: null },
-    { id: 'mug',          name: 'Mug',                icon: '☕', diam: null, cap: 300, wt: null },
-    { id: 'glass',        name: 'Glass',              icon: '🥛', diam: null, cap: 250, wt: null },
-    { id: 'teaspoon',     name: 'Teaspoon',           icon: '🥄', diam: null, cap: 5,   wt: null },
-    { id: 'dessertspoon', name: 'Dessert spoon',      icon: '🥄', diam: null, cap: 10,  wt: null },
-    { id: 'tablespoon',   name: 'Tablespoon',         icon: '🥄', diam: null, cap: 15,  wt: null },
+    { id: 'dinner_plate', name: 'Dinner plate',       icon: '🍽', kind: 'plate', diam: 27, food: null, cap: null, wt: null },
+    { id: 'side_plate',   name: 'Side plate',         icon: '🍽', kind: 'plate', diam: 19, food: null, cap: null, wt: null },
+    { id: 'bowl',         name: 'Bowl (cereal/soup)', icon: '🥣', kind: 'bowl', diam: 15, cap: 350,  wt: null },
+    { id: 'mug',          name: 'Mug',                icon: '☕', kind: 'cup', diam: null, cap: 300, wt: null },
+    { id: 'glass',        name: 'Glass',              icon: '🥛', kind: 'cup', diam: null, cap: 250, wt: null },
+    { id: 'teaspoon',     name: 'Teaspoon',           icon: '🥄', kind: 'spoon', diam: null, cap: 5,   wt: null },
+    { id: 'dessertspoon', name: 'Dessert spoon',      icon: '🥄', kind: 'spoon', diam: null, cap: 10,  wt: null },
+    { id: 'tablespoon',   name: 'Tablespoon',         icon: '🥄', kind: 'spoon', diam: null, cap: 15,  wt: null },
   ];
   const FIELDS = [['diam', 'Across (cm)'], ['cap', 'Holds (ml)'], ['wt', 'Empty (g)'], ['food', 'Food area (cm)']];
-  const fieldsFor = it => FIELDS.filter(([f]) => f !== 'food' || 'food' in it);   // food area only on plates (and copies of plates)
+  // v3.10.911: which boxes make sense depends on what the item IS. Plates: width, food area, weight. Bowls: width, ml, weight.
+  // Cups and glasses: ml, weight. Spoons: length, ml. Knives/forks: length. Anything else (and older custom items): the
+  // three generic boxes. A box that already holds a value always stays visible, so nothing you entered ever disappears.
+  const KINDS = [['plate', 'Plate'], ['bowl', 'Bowl'], ['cup', 'Cup, mug or glass'], ['spoon', 'Spoon'], ['cutlery', 'Knife or fork'], ['other', 'Something else']];
+  const KIND_FIELDS = { plate: ['diam', 'food', 'wt'], bowl: ['diam', 'cap', 'wt'], cup: ['cap', 'wt'], spoon: ['diam', 'cap'], cutlery: ['diam'], other: ['diam', 'cap', 'wt'] };
+  const kindOf = it => (it && KIND_FIELDS[it.kind]) ? it.kind : 'other';
+  const isLong = it => kindOf(it) === 'spoon' || kindOf(it) === 'cutlery';     // measured along, not across
+  const labelFor = (it, f, fallback) => f === 'diam' ? (isLong(it) ? 'Length (cm)' : 'Across (cm)') : fallback;
+  const fieldsFor = (it, s, set) => FIELDS.filter(([f]) => KIND_FIELDS[kindOf(it)].includes(f) || (s && set && eff(s, set, it, f) != null));
+  window.mhTwIsLong = id => { try { const s = load(); return isLong(items(s).find(x => x.id === id)); } catch (_) { return false; } };
   window.mhTwHasFood = id => { try { const s = load(); const it = items(s).find(x => x.id === id); return !!(it && 'food' in it); } catch (_) { return false; } };
   let viewId = 'home';
 
@@ -46594,7 +46603,7 @@ function dismissInsight() {
     items(s).forEach(it => {
       const d = eff(s, set, it, 'diam'), c = eff(s, set, it, 'cap'), w = eff(s, set, it, 'wt');
       const bits = [];
-      if (d != null) bits.push(d + 'cm across');
+      if (d != null) bits.push(d + (isLong(it) ? 'cm long' : 'cm across'));
       const fa = eff(s, set, it, 'food'); if (fa != null && d != null) bits.push('food area (inside the rim) about ' + fa + 'cm across');
       if (c != null) bits.push((it.id.endsWith('spoon') || it.spoon ? 'level spoon ' : 'holds ') + c + 'ml');
       if (w != null) bits.push('empty weight ' + w + 'g');
@@ -46664,9 +46673,9 @@ function dismissInsight() {
         <span style="font-size:10px;color:var(--text3);">(optional)</span></div>` : '';
     const rows = items(s).map(it => `<div style="padding:10px 0;border-top:1px solid var(--border);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><div style="font-size:13px;color:var(--text);">${it.icon || '🍴'} ${esc(it.name)}</div><div style="display:flex;gap:12px;"><span onclick="mhTwCopy('${it.id}')" title="Make a new item starting from this one's sizes" style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer;">copy as new</span>${(!it.builtin && set.id === 'home') ? `<span onclick="mhTwRemoveItem('${it.id}')" style="font-size:11px;color:var(--red);cursor:pointer;">remove</span>` : ''}</div></div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${fieldsFor(it).map(([f, l]) => cellHtml(s, set, it, f, l)).join('')}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${fieldsFor(it, s, set).map(([f, l]) => cellHtml(s, set, it, f, labelFor(it, f, l))).join('')}</div>
       </div>`).join('');
-    const add = set.id === 'home' ? `<div style="display:flex;gap:6px;margin-top:10px;"><input id="mhTwNewName" placeholder="Add your own (e.g. Soup bowl)" class="settings-input" style="flex:1 1 0;width:0;height:36px;"><button class="run-btn" style="flex:0 0 auto;width:auto;padding:0 14px;height:36px;font-size:12px;" onclick="mhTwAddItem()">Add</button></div>` : '';
+    const add = set.id === 'home' ? `<div style="display:flex;gap:6px;margin-top:10px;"><input id="mhTwNewName" placeholder="Add your own (e.g. Soup bowl)" class="settings-input" style="flex:1 1 0;width:0;height:36px;"><select id="mhTwNewKind" title="What kind of item is it?" style="flex:0 0 auto;max-width:42%;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;padding:0 4px;">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select><button class="run-btn" style="flex:0 0 auto;width:auto;padding:0 14px;height:36px;font-size:12px;" onclick="mhTwAddItem()">Add</button></div>` : '';
     host.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sizes the AI uses to judge portions from photos and descriptions. <span class="help-slot" data-id="tableware" data-text="Used only when the AI estimates a portion from a photo or description. What matters most for accuracy, in order: 1) Plates: the food area (the flat bit inside the rim) matters more than the full width, because it is what the food actually covers. 2) Bowls, mugs and glasses: the ml you measure with water beats any photo. 3) Width to within about 1 cm is plenty; do not chase millimetres. 4) A weight you type for the food always beats these sizes, so weigh when you can. 5) If you use the photo ruler: shoot straight down, keep the card at the same height as the plate rim (rest it on the rim) or stand back and zoom, and check each point sits on the edge. Home starts with typical UK sizes; change any to match yours and the arrow puts it back. Other sets store only what differs from Home. Empty weights are blank on purpose. Use 'copy as new' to add a second plate or bowl size. Results are always estimates."></span></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${pills}</div>${head}${revert}<div>${rows}</div>${add}`;
     try { initHelpSlots(); } catch (_) {}
@@ -46707,7 +46716,8 @@ function dismissInsight() {
   window.mhTwAddItem = () => {
     const nm = clean((document.getElementById('mhTwNewName') || {}).value); if (!nm) return;
     const s = load(); if (s.custom.length >= 20) { try { showToast('That is plenty of custom items'); } catch (_) {} return; }
-    s.custom.push({ id: 'c' + Date.now().toString(36), name: nm, icon: '🍴', diam: null, cap: null, wt: null }); save(s); mhTwRender();
+    const kd = (document.getElementById('mhTwNewKind') || {}).value; const kind = KIND_FIELDS[kd] ? kd : 'other';
+    s.custom.push({ id: 'c' + Date.now().toString(36), name: nm, icon: kind === 'plate' ? '🍽' : kind === 'bowl' ? '🥣' : kind === 'cup' ? '☕' : kind === 'spoon' ? '🥄' : '🍴', kind, diam: null, cap: null, wt: null, ...(kind === 'plate' ? { food: null } : {}), spoon: kind === 'spoon' }); save(s); mhTwRender();
   };
   // v3.10.908: copy an item (plate, bowl, spoon...) as a NEW item that starts with this item's sizes as shown in the set being
   // viewed. A different name is required, so two similar plates are never confused. The copy is a normal custom item: Home gets the
@@ -46722,7 +46732,7 @@ function dismissInsight() {
     const id = 'c' + Date.now().toString(36);
     const fl = ['diam', 'cap', 'wt'].concat('food' in src ? ['food'] : []);
     const base = {}; fl.forEach(f => { base[f] = baseVal(s, src, f); });
-    s.custom.push({ id, name: nm, icon: src.icon || '🍴', diam: base.diam, cap: base.cap, wt: base.wt, ...('food' in src ? { food: base.food } : {}), spoon: !!(src.spoon || src.id.endsWith('spoon')), from: src.name });
+    s.custom.push({ id, name: nm, icon: src.icon || '🍴', diam: base.diam, cap: base.cap, wt: base.wt, kind: kindOf(src), ...('food' in src ? { food: base.food } : {}), spoon: !!(src.spoon || src.id.endsWith('spoon')), from: src.name });
     if (set.id !== 'home') {
       fl.forEach(f => { const v = eff(s, set, src, f); if (v !== base[f]) { set.vals = set.vals || {}; set.vals[id] = set.vals[id] || {}; set.vals[id][f] = v; } });
     }
@@ -46768,7 +46778,7 @@ function dismissInsight() {
   window.mhRulerOpen = function (setId, itemId) {
     mhRulerClose();
     let saved = {}; try { saved = JSON.parse(localStorage.getItem('mh_ruler_ref') || '{}'); } catch (_) {}
-    st = { setId, itemId, stage: 'cal', cal: [], meas: [], foodPts: [], hasFood: !!(window.mhTwHasFood && window.mhTwHasFood(itemId)), img: null, ref: REFS.some(r => r[0] === saved.ref) ? saved.ref : 'card_long', customMm: saved.customMm > 0 ? saved.customMm : 0,
+    st = { setId, itemId, stage: 'cal', cal: [], meas: [], foodPts: [], hasFood: !!(window.mhTwHasFood && window.mhTwHasFood(itemId)), long: !!(window.mhTwIsLong && window.mhTwIsLong(itemId)), img: null, ref: REFS.some(r => r[0] === saved.ref) ? saved.ref : 'card_long', customMm: saved.customMm > 0 ? saved.customMm : 0,
            view: { s: 1, tx: 0, ty: 0 }, ptrs: new Map(), g: null, sel: { cal: -1, meas: -1, food: -1 }, lum: null, snap: localStorage.getItem('mh_ruler_snap') !== '0' };
     const o = document.createElement('div');
     o.id = 'mhRulerModal';
@@ -46776,7 +46786,7 @@ function dismissInsight() {
     o.style.cssText = 'position:fixed;inset:0;z-index:700;background:var(--bg);display:flex;flex-direction:column;touch-action:none;';
     o.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);">
-        <div style="flex:1;font-size:14px;color:var(--text);font-weight:600;">📏 Measure across</div>
+        <div style="flex:1;font-size:14px;color:var(--text);font-weight:600;">📏 Measure ${st.long ? 'length' : 'across'}</div>
         <button class="copy-btn" style="width:auto;padding:6px 12px;font-size:12px;" onclick="mhRulerClose()">Close</button>
       </div>
       <div id="mhRulerBody" style="flex:1;min-height:0;display:flex;flex-direction:column;"></div>`;
@@ -46890,7 +46900,7 @@ function dismissInsight() {
       ? (calDone ? 'Reference set. Tap a point to pick it up and nudge it with the arrows, or continue.' : `Tap the ${st.cal.length === 0 ? 'first' : 'second'} end of the reference. Pinch to zoom, drag to move the photo.`)
       : st.stage === 'food'
         ? (st.foodPts.length ? 'The dashed ring is the food area: it should follow the inside edge of the rim. Nudge the point if not.' : 'Tap once on the inner edge of the rim, where the food area stops. The app uses the plate centre from your last two points.')
-        : (measDone ? 'Tap a point to pick it up and nudge it with the arrows.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} edge of the item, across its widest part.`);
+        : (measDone ? 'Tap a point to pick it up and nudge it with the arrows.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} ${st.long ? 'end of the item, along its full length' : 'edge of the item, across its widest part'}.`);
     const sb = $('mhRulerSnapBtn'); if (sb) { sb.textContent = st.snap ? 'Snap ✓' : 'Snap off'; sb.style.borderColor = st.snap ? 'var(--accent)' : ''; sb.style.color = st.snap ? 'var(--accent)' : ''; }
     const nudge = $('mhRulerNudge'), pts = cur();
     if (nudge) {
@@ -46910,7 +46920,7 @@ function dismissInsight() {
         ? `<div style="flex:1;font-size:15px;color:var(--text);">${fcm != null ? '<b>' + fcm + ' cm</b> food area' : 'Step 3 of 3: tap the inner edge of the rim (1 to go)'}</div>
            <button class="copy-btn" style="width:auto;padding:10px 12px;font-size:12px;" onclick="mhRulerBack()">Back</button>
            ${fcm != null ? `<button class="settings-save-btn" style="width:auto;padding:12px 18px;font-size:14px;" onclick="mhRulerUse(true)">Use both</button>` : ''}`
-        : `<div style="flex:1;font-size:15px;color:var(--text);">${cm != null ? '<b>' + cm + ' cm</b> across' : 'Step 2 of ' + N + ': tap both edges of the item (' + (2 - st.meas.length) + ' to go)'}</div>
+        : `<div style="flex:1;font-size:15px;color:var(--text);">${cm != null ? '<b>' + cm + ' cm</b> ' + (st.long ? 'long' : 'across') : 'Step 2 of ' + N + ': tap both ' + (st.long ? 'ends' : 'edges') + ' of the item (' + (2 - st.meas.length) + ' to go)'}</div>
            <button class="copy-btn" style="width:auto;padding:10px 12px;font-size:12px;" onclick="mhRulerBack()">Back</button>
            ${cm != null && st.hasFood ? `<button class="copy-btn" style="width:auto;padding:10px 12px;font-size:12px;" onclick="mhRulerNext()">Food area ›</button>` : ''}
            ${cm != null ? `<button class="settings-save-btn" style="width:auto;padding:12px 18px;font-size:14px;" onclick="mhRulerUse()">Use it</button>` : ''}`;

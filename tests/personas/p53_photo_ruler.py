@@ -23,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if page.evaluate("mhRulerCalc(0, 85.6, 600)") is not None or page.evaluate("mhRulerCalc(342, 0, 600)") is not None: f.add('BUG', 'calc accepted bad input')
     page.evaluate("switchTabById('settings')"); page.wait_for_timeout(500)
     page.evaluate("mhTwRender()")
-    if page.evaluate("document.querySelectorAll('#mhTwCard [onclick^=\"mhRulerOpen\"]').length") != 8: f.add('BUG', '📏 should sit on every tableware item')
+    if page.evaluate("document.querySelectorAll('#mhTwCard [onclick^=\"mhRulerOpen\"]').length") != 6: f.add('BUG', '📏 should sit on plates, bowl and spoons (6), not on cups')
     page.evaluate("mhRulerOpen('home','bowl')")
     page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
     def tap(x, y):

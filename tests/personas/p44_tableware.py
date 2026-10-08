@@ -25,7 +25,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("switchTabById('manage')"); page.wait_for_timeout(500)
     page.evaluate("mhTwRender()")
     inputs = lambda: page.evaluate("document.querySelectorAll('#mhTwCard input[type=number]').length")
-    if inputs() != 26: f.add('BUG', f'expected 8 items x 3 fields + 2 plate food areas = 26 inputs, got {inputs()}')
+    if inputs() != 19: f.add('BUG', f'expected 19 inputs (plates 3, bowl 3, mug/glass 2, spoons 2), got {inputs()}')
     val = lambda it, fl: page.evaluate("(a)=>{const s=JSON.parse(localStorage.getItem('mh_tableware')||'null');return s}", None)
     arrows = lambda: page.evaluate("[...document.querySelectorAll('#mhTwCard span')].filter(x=>x.textContent==='↺').length")
     if arrows() != 0: f.add('BUG', 'back-to-default arrows shown with nothing changed')
@@ -117,6 +117,23 @@ with fresh_server() as root, sync_playwright() as pw:
     if not c2 or c2.get('food') != 19.5 or not page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Big plate 2').id)"): f.add('BUG', f'copy of a plate lost its food area: {c2}')
     ans[0] = 'Bowl 2'; page.evaluate("mhTwCopy('bowl')")
     if page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Bowl 2').id)"): f.add('BUG', 'a copy of a bowl should not get a food area')
+    # v3.10.912 kinds: the boxes follow what the item is
+    def kind_box_count(item_name):
+        return page.evaluate("""n => { for (const row of document.querySelectorAll('#mhTwCard > div > div[style*="border-top"]')) { if (row.firstElementChild.textContent.includes(n)) return row.querySelectorAll('input[type=number]').length; } return -1 }""", item_name)
+    for nm, want in (('Dinner plate', 3), ('Bowl', 3), ('Mug', 2), ('Teaspoon', 2)):
+        if kind_box_count(nm) != want: f.add('BUG', f'{nm}: expected {want} boxes, got {kind_box_count(nm)}')
+    page.evaluate("switchTabById('manage'); mhTwRender()")
+    for kd, label, want in (('cutlery', 'Test fork', 1), ('plate', 'Test plate', 3), ('cup', 'Test cup', 2), ('other', 'Test thing', 3)):
+        page.evaluate("([k,l]) => { document.getElementById('mhTwNewKind').value = k; document.getElementById('mhTwNewName').value = l; mhTwAddItem(); }", [kd, label])
+        if kind_box_count(label) != want: f.add('BUG', f'{kd}: expected {want} boxes, got {kind_box_count(label)}')
+    if 'Length (cm)' not in page.evaluate("document.getElementById('mhTwCard').textContent"): f.add('BUG', 'knife/fork/spoon should say Length (cm)')
+    if not page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Test plate').id)"): f.add('BUG', 'a custom plate should get a food area')
+    if page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Test fork').id)"): f.add('BUG', 'a fork should not get a food area')
+    page.evaluate("(()=>{const id=JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Test fork').id; mhTwEdit('home',id,'diam','19');})()")
+    if 'test fork 19cm long' not in page.evaluate("mhTablewareLine()").lower(): f.add('BUG', 'fork length should read "cm long" in the AI line: ' + page.evaluate("mhTablewareLine()")[-300:])
+    page.evaluate("mhTwEdit('home','mug','diam','8')")     # a value in a box the kind hides keeps it visible
+    if kind_box_count('Mug') != 3: f.add('BUG', 'a box that holds a value should stay visible')
+    page.evaluate("mhTwReset('home','mug','diam')")
     # reorder + hide controls injected like every other settings card, and an existing saved order is kept
     page.evaluate("localStorage.setItem('mh_reorder_manage', JSON.stringify(['set-profile','set-aiprovider','set-water','set-stepsbaseline']))")
     page.reload(); page.wait_for_timeout(1500); page.evaluate("switchTabById('manage')"); page.wait_for_timeout(600)

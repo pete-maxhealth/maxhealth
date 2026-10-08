@@ -2,6 +2,20 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.912 — Tableware Boxes Follow What The Item Is
+
+Pete (8 Oct, screenshot of a custom item called "Test" showing Across/Holds/Empty): "How did Test know what it was? If a bowl or cutlery, the dimensions wouldn't work."
+- **It didn't know.** Every custom item got the same three generic boxes. Now each item has a **kind**, chosen from a list when you add it (Plate, Bowl, Cup/mug/glass, Spoon, Knife or fork, Something else), and the boxes follow it:
+  - Plate: Across, Food area, Empty weight
+  - Bowl: Across, Holds (ml), Empty weight
+  - Cup, mug, glass: Holds (ml), Empty weight (no width box)
+  - Spoon: Length, Holds (ml)
+  - Knife or fork: Length only
+  - Something else (and every item you added before this): the original three boxes
+- Spoons and cutlery say **Length (cm)**, the photo ruler says "Measure length" and "tap both ends", and the AI line says "cm long" instead of "cm across". Plates still get the food area.
+- A box that already holds a value always stays visible, so nothing you entered can vanish. "Copy as new" keeps the source's kind. The built-in items were given their kinds.
+- Test: p44 extended (box counts per kind, Length wording, food area on custom plates only, fork "cm long" in the AI line, filled boxes stay visible); p53 now expects 📏 on the 6 width/length items.
+
 ## v3.10.911 — Notifications Card Showed "Enable" Even When Already On
 
 Pete (8 Oct): "Settings/Manage/Notifications. Even if notifications are set, the button still says enable notifications."
