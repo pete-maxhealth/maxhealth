@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.910'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.911'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -42145,14 +42145,35 @@ function initNotifUI() {
     // header's onclick, which calls this on every open, not just at boot).
     btn.style.display='';
     if (settingsEl) settingsEl.style.display='none';
-    if (statusEl) statusEl.textContent='Enable daily reminders and weekly summaries.';
+    if (statusEl) statusEl.textContent='Enable daily reminders and weekly summaries. (This page has not been given permission yet: the browser reports "not asked".)';
   }
+  _notifLastPerm = perm;
 }
+// v3.10.911: this card used to be set up only when Reports opened or its header was tapped, so on the Settings page it
+// could keep showing the page's fixed "ENABLE NOTIFICATIONS" button even when permission was already granted. It now
+// refreshes on load, when the app comes back to the front (e.g. after changing the setting in Android), and whenever
+// the browser's answer changes while the card is on screen.
+let _notifLastPerm = null;
+function refreshNotifUIIfChanged(force) {
+  try {
+    if (!('Notification' in window)) return;
+    const st = document.getElementById('rpt-notif-status');
+    if (!st) return;
+    if (force || (st.offsetParent !== null && Notification.permission !== _notifLastPerm)) initNotifUI();
+  } catch (_) {}
+}
+window.addEventListener('focus', () => refreshNotifUIIfChanged(true));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshNotifUIIfChanged(true); });
+setInterval(() => refreshNotifUIIfChanged(false), 2000);
+setTimeout(() => refreshNotifUIIfChanged(true), 1500);
 
 async function requestNotifPermission() {
   if (!('Notification' in window)) { showToast('Notifications not supported'); return; }
-  const perm=await Notification.requestPermission();
-  if (perm==='granted') { initNotifUI(); showToast('Notifications enabled ✓'); }
+  let perm = 'default';
+  try { perm = await Notification.requestPermission(); } catch (_) { perm = Notification.permission; }
+  initNotifUI();
+  if (perm==='granted') showToast('Notifications enabled ✓');
+  else if (perm==='default') showToast('No permission prompt appeared. Allow notifications for this page in your browser\'s site settings, then come back.');
   else showToast('Permission denied — enable it in your browser or device settings');
 }
 

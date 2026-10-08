@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.911 — Notifications Card Showed "Enable" Even When Already On
+
+Pete (8 Oct): "Settings/Manage/Notifications. Even if notifications are set, the button still says enable notifications."
+- **Cause (reproduced):** the card was only brought up to date when the Reports tab opened or its header was tapped. The Settings page itself only had the page's fixed "🔔 ENABLE NOTIFICATIONS" button, so with permission already granted it still showed Enable until you happened to do one of those. Denied showed it too.
+- **Fix:** the card now refreshes at load, when the app returns to the front (for example after changing the setting in Android), and whenever the browser's answer changes while the card is on screen.
+- If the browser has not been asked yet, the status line now says so ("the browser reports 'not asked'"). If you tap Enable and no prompt appears, a message explains to allow notifications in the browser's site settings, instead of a misleading "Permission denied".
+- Test: new p55 (granted hides the button, not-asked shows it, denied hides it, and a permission change while open is followed). It fails on the old code.
+
 ## v3.10.910 — Type A Portion In Grams, And A Real Accuracy Tip For Crockery
 
 Pete (8 Oct): the food-log edit has a way to change a portion by percentage, but needs "or enter a new portion size manually". And: is there a help tip explaining what actually matters for accuracy under crockery and cutlery?
