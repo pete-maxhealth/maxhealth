@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.905'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.906'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -46669,7 +46669,7 @@ function dismissInsight() {
     mhRulerClose();
     let saved = {}; try { saved = JSON.parse(localStorage.getItem('mh_ruler_ref') || '{}'); } catch (_) {}
     st = { setId, itemId, stage: 'cal', cal: [], meas: [], img: null, ref: REFS.some(r => r[0] === saved.ref) ? saved.ref : 'card_long', customMm: saved.customMm > 0 ? saved.customMm : 0,
-           view: { s: 1, tx: 0, ty: 0 }, ptrs: new Map(), g: null };
+           view: { s: 1, tx: 0, ty: 0 }, ptrs: new Map(), g: null, sel: { cal: -1, meas: -1 } };
     const o = document.createElement('div');
     o.id = 'mhRulerModal';
     // touch-action:none keeps the browser from pinch-zooming the page behind the ruler
@@ -46727,6 +46727,7 @@ function dismissInsight() {
         <button class="copy-btn" style="width:auto;padding:4px 12px;font-size:12px;" onclick="mhRulerReset()">Clear</button>
       </div>
       <div id="mhRulerView" style="flex:1;min-height:0;position:relative;overflow:hidden;background:#000;touch-action:none;"><canvas id="mhRulerCanvas" style="position:absolute;left:0;top:0;transform-origin:0 0;"></canvas></div>
+      <div id="mhRulerNudge" style="display:none;padding:6px 12px;border-top:1px solid var(--border);align-items:center;gap:6px;"></div>
       <div id="mhRulerBar" style="padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;"></div>`;
     wireView();
     layout(); paint();
@@ -46757,7 +46758,10 @@ function dismissInsight() {
     const draw = (pts, col) => {
       g.strokeStyle = col; g.lineWidth = 2 * px;
       if (pts.length === 2) { g.beginPath(); g.moveTo(pts[0].x, pts[0].y); g.lineTo(pts[1].x, pts[1].y); g.stroke(); }
-      pts.forEach(p => { g.beginPath(); g.arc(p.x, p.y, 8 * px, 0, 7); g.stroke(); g.beginPath(); g.moveTo(p.x - 14 * px, p.y); g.lineTo(p.x + 14 * px, p.y); g.moveTo(p.x, p.y - 14 * px); g.lineTo(p.x, p.y + 14 * px); g.stroke(); });
+      pts.forEach((p, i) => {
+        g.beginPath(); g.arc(p.x, p.y, 8 * px, 0, 7); g.stroke(); g.beginPath(); g.moveTo(p.x - 14 * px, p.y); g.lineTo(p.x + 14 * px, p.y); g.moveTo(p.x, p.y - 14 * px); g.lineTo(p.x, p.y + 14 * px); g.stroke();
+        if (pts === (st.stage === 'cal' ? st.cal : st.meas) && i === st.sel[st.stage]) { g.beginPath(); g.arc(p.x, p.y, 15 * px, 0, 7); g.stroke(); g.fillStyle = col; g.beginPath(); g.arc(p.x, p.y, 2.5 * px, 0, 7); g.fill(); }
+      });
     };
     draw(st.cal, '#f5c542'); draw(st.meas, '#2deb8f');
     paintText();
@@ -46767,8 +46771,17 @@ function dismissInsight() {
     const calDone = st.cal.length === 2, measDone = st.meas.length === 2;
     const hint = $('mhRulerHint'), bar = $('mhRulerBar'); if (!hint || !bar) return;
     hint.textContent = st.stage === 'cal'
-      ? (calDone ? 'Reference set. Tap near a point to move it, or continue.' : `Tap the ${st.cal.length === 0 ? 'first' : 'second'} end of the reference. Pinch to zoom, drag to move the photo.`)
-      : (measDone ? 'Tap near a point to move it.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} edge of the item, across its widest part.`);
+      ? (calDone ? 'Reference set. Tap a point to pick it up and nudge it with the arrows, or continue.' : `Tap the ${st.cal.length === 0 ? 'first' : 'second'} end of the reference. Pinch to zoom, drag to move the photo.`)
+      : (measDone ? 'Tap a point to pick it up and nudge it with the arrows.' : `Tap the ${st.meas.length === 0 ? 'first' : 'second'} edge of the item, across its widest part.`);
+    const nudge = $('mhRulerNudge'), pts = st.stage === 'cal' ? st.cal : st.meas;
+    if (nudge) {
+      if (!pts.length) nudge.style.display = 'none';
+      else {
+        const btn = (lbl, dx, dy) => `<button class="copy-btn" style="width:auto;min-width:46px;padding:8px 0;font-size:16px;" oncontextmenu="return false" onpointerdown="mhRulerNudgeStart(${dx},${dy})" onpointerup="mhRulerNudgeStop()" onpointerleave="mhRulerNudgeStop()" onpointercancel="mhRulerNudgeStop()">${lbl}</button>`;
+        nudge.style.display = 'flex';
+        nudge.innerHTML = `<div style="font-size:11px;color:var(--text2);flex:1;line-height:1.3;">Point ${st.sel[st.stage] + 1} of ${pts.length} picked. Tap a point to pick it, then nudge:</div>${btn('◀', -1, 0)}${btn('▲', 0, -1)}${btn('▼', 0, 1)}${btn('▶', 1, 0)}`;
+      }
+    }
     const cm = result();
     bar.innerHTML = st.stage === 'cal'
       ? (calDone && refMm()
@@ -46819,11 +46832,29 @@ function dismissInsight() {
     const c = $('mhRulerCanvas'), r = c.getBoundingClientRect();
     if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;   // outside the photo
     const p = { x: (clientX - r.left) * c.width / r.width, y: (clientY - r.top) * c.height / r.height };
-    const pts = st.stage === 'cal' ? st.cal : st.meas;
-    if (pts.length < 2) pts.push(p);
-    else { const i = dist(p, pts[0]) <= dist(p, pts[1]) ? 0 : 1; pts[i] = p; }
+    const pts = st.stage === 'cal' ? st.cal : st.meas, k = r.width / c.width;
+    const near = pts.map(q => Math.hypot((q.x - p.x) * k, (q.y - p.y) * k));          // screen-pixel distance to each existing point
+    const ni = near.length ? near.indexOf(Math.min(...near)) : -1;
+    if (ni >= 0 && near[ni] < 32) st.sel[st.stage] = ni;                              // tap on a point = pick it up (then nudge it)
+    else if (pts.length < 2) { pts.push(p); st.sel[st.stage] = pts.length - 1; }
+    else { pts[ni] = p; st.sel[st.stage] = ni; }                                      // elsewhere with two placed: move the nearer one there
     paint();
   }
+
+  // Nudge the picked-up point by whole screen pixels (so it moves finer the more you zoom). Hold to repeat.
+  let nudgeTimer = null;
+  window.mhRulerNudge = function (dx, dy) {
+    if (!st || !st.img) return;
+    const pts = st.stage === 'cal' ? st.cal : st.meas, i = st.sel[st.stage], q = pts[i]; if (!q) return;
+    const f = fit(), k = st.img.width / (f.w * st.view.s);
+    q.x = Math.min(st.img.width, Math.max(0, q.x + dx * k)); q.y = Math.min(st.img.height, Math.max(0, q.y + dy * k));
+    paint();
+  };
+  window.mhRulerNudgeStart = function (dx, dy) {
+    mhRulerNudgeStop(); mhRulerNudge(dx, dy);
+    nudgeTimer = setTimeout(() => { nudgeTimer = setInterval(() => mhRulerNudge(dx, dy), 70); }, 350);
+  };
+  window.mhRulerNudgeStop = function () { if (nudgeTimer) { clearTimeout(nudgeTimer); clearInterval(nudgeTimer); nudgeTimer = null; } };
 
   window.mhRulerPick = function (inp) {
     const file = inp.files && inp.files[0]; if (!file || !st) return;
@@ -46845,8 +46876,8 @@ function dismissInsight() {
     if (!st || !st.img) return; const f = fit(); if (!f) return; const V = st.view, cx = f.vw / 2, cy = f.vh / 2, k = z / V.s;
     V.tx = cx - (cx - V.tx) * k; V.ty = cy - (cy - V.ty) * k; V.s = z; clampView(); applyTransform(); paint();
   };
-  window.mhRulerUndo = () => { if (st) { (st.stage === 'cal' ? st.cal : st.meas).pop(); paint(); } };
-  window.mhRulerReset = () => { if (st) { (st.stage === 'cal' ? st.cal : st.meas).length = 0; paint(); } };
+  window.mhRulerUndo = () => { if (st) { const p = st.stage === 'cal' ? st.cal : st.meas; p.pop(); st.sel[st.stage] = p.length - 1; paint(); } };
+  window.mhRulerReset = () => { if (st) { (st.stage === 'cal' ? st.cal : st.meas).length = 0; st.sel[st.stage] = -1; paint(); } };
   const keep = () => { try { localStorage.setItem('mh_ruler_ref', JSON.stringify({ ref: st.ref, customMm: st.customMm || 0 })); } catch (_) {} };
   window.mhRulerRef = v => { if (st) { st.ref = v; keep(); render(); } };
   window.mhRulerCustom = v => { if (st) { st.customMm = parseFloat(v) || 0; keep(); paintText(); } };   // text only, so the box keeps focus

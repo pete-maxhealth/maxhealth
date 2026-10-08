@@ -74,6 +74,28 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("mhRulerReset()")
     if '2 to go' not in page.evaluate("document.getElementById('mhRulerBody').textContent"): f.add('BUG', 'Clear did not clear')
     page.evaluate("mhRulerClose()")
+    # v3.10.906 nudge: place a point roughly, push it with the arrows, pick up the other point by tapping it
+    page.evaluate("mhRulerOpen('home','mug')")
+    page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)
+    def pts(): return page.evaluate("(()=>{const t=document.getElementById('mhRulerBody').innerHTML; return 0})()")
+    tap(100, 208)
+    if not page.evaluate("document.getElementById('mhRulerNudge').style.display") == 'flex': f.add('BUG', 'nudge strip not shown after a point is placed')
+    k = page.evaluate("(()=>{const c=document.getElementById('mhRulerCanvas'); return c.width/c.getBoundingClientRect().width})()")
+    page.evaluate("mhRulerNudge(1,0)")
+    for _ in range(9): page.evaluate("mhRulerNudge(1,0)")
+    page.evaluate("mhRulerNudge(0,-1)")
+    tap(442, 208)                                  # second point, becomes the picked one
+    nud = page.evaluate("document.getElementById('mhRulerNudge').textContent")
+    if 'Point 2 of 2' not in nud: f.add('BUG', f'second point not picked after placing: {nud[:60]}')
+    tap(100 + 10 * k, 208 - k)                     # tap on the first point: picks it up, does not move anything
+    if 'Point 1 of 2' not in page.evaluate("document.getElementById('mhRulerNudge').textContent"): f.add('BUG', 'tapping a point did not pick it up')
+    page.evaluate("mhRulerNext()"); tap(350, 500); tap(950, 500)
+    import math
+    exp = 600 / math.hypot(442 - (100 + 10 * k), k) * 8.56   # first point moved 10 screen px right and 1 up
+    txt = page.evaluate("document.getElementById('mhRulerBody').textContent")
+    m = re.search(r'([\d.]+) cm across', txt)
+    if not m or abs(float(m.group(1)) - exp) > 0.3: f.add('BUG', f'nudged measurement off: {m and m.group(1)} (expected ~{exp:.1f})')
+    page.evaluate("mhRulerClose()")
     # a smaller card: type its length and it is remembered
     page.evaluate("mhRulerOpen('home','mug')")
     page.set_input_files('#mhRulerModal input[type=file]:not([capture])', IMG); page.wait_for_selector('#mhRulerCanvas', timeout=5000)

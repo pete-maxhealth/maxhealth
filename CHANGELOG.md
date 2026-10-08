@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.906 — Photo Ruler: Pick Up A Point And Nudge It
+
+Pete (8 Oct, screenshot): very difficult to place a point exactly, and a mistake means starting again.
+- **Pick up and nudge:** the newest point is picked automatically (shown with an extra ring). Arrows ◀ ▲ ▼ ▶ appear under the photo and move it one screen pixel at a time, so zooming in makes the steps finer. Hold an arrow to keep moving.
+- **Tap a point to pick it up** (within about a thumb-width) instead of replacing it, then nudge. Tapping elsewhere with both points placed still moves the nearer one there.
+- Undo and Clear keep the picked-point marker in step.
+- Test: p53 extended (nudge moves the picked point by the expected amount; tapping a point picks it up without moving it; the measurement follows).
+
 ## v3.10.905 — Photo Ruler: Pinch To Zoom, Drag To Move, No More Stray Points
 
 Pete (8 Oct, screenshots): trying to zoom put points in and Clear did nothing. The header was shifted off the left edge: pinching had zoomed the whole page, not the photo.
