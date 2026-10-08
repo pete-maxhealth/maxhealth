@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.916 — Pick Which Day To Fill In
+
+Pete: "What if it's not yesterday?" The Manual Entry link in the sync help sheet was fixed on yesterday. The sheet now has a date box (defaults to yesterday, cannot pick the future); the button opens Manual Entry on whichever day you chose. The Settings "fill a missed day by hand" link still goes to yesterday, and you can change the date in Manual Entry itself. p56 updated.
+
 ## v3.10.915 — Sync Warning Now Links Straight To Manual Entry
 
 Pete (8 Oct): "A link to manual adjustments from here maybe? It would make sense." Since a day the background sync missed is not recovered automatically, the warning now offers the fix.

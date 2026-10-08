@@ -43,12 +43,13 @@ with fresh_server() as root, sync_playwright() as pw:
     t = page.evaluate("document.getElementById('mhSyncHelp').textContent")
     for w in ('No restrictions', 'Alarms', 'Autostart', 'Lock the app', 'Manual Entry'):
         if w not in t: f.add('BUG', f'help sheet missing: {w}')
-    page.evaluate("mhOpenManualEntry(1)"); page.wait_for_timeout(1200)
+    page.evaluate("document.getElementById('mhSyncHelpDate').value = '2026-10-04'")
+    page.evaluate("mhOpenManualEntry()"); page.wait_for_timeout(1200)
     if page.evaluate("!!document.getElementById('mhSyncHelp')"): f.add('BUG', 'manual entry link did not close the help sheet')
     import datetime as _dt
-    want = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    want = '2026-10-04'
     got = page.evaluate("document.getElementById('manualEntryDate').value")
-    if got != want: f.add('BUG', f'manual entry date should be yesterday {want}, got {got}')
+    if got != want: f.add('BUG', f'manual entry date should be the picked day {want}, got {got}')
     if not page.evaluate("document.getElementById('imp-manual-wrap').offsetParent !== null"): f.add('BUG', 'manual entry section not visible after the link')
     page.evaluate("mhSyncHelpOpen()")
     page.evaluate("document.getElementById('mhSyncHelp').remove(); mhSyncBannerDismiss()")
