@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.910 — Type A Portion In Grams, And A Real Accuracy Tip For Crockery
+
+Pete (8 Oct): the food-log edit has a way to change a portion by percentage, but needs "or enter a new portion size manually". And: is there a help tip explaining what actually matters for accuracy under crockery and cutlery?
+- **Today > edit an entry (single item):** under PORTION % there is now "or type the new portion [__] g", showing what it was logged as. It works out the percentage from the logged amount, fills the % box, and the macros follow exactly as if that % had been typed. If the entry has no gram size it says so and points to the % box.
+- **Multi-ingredient entries:** a matching "or set the whole portion to [__] g" under "Scale entire entry to %". Every ingredient is scaled by the same factor from its ORIGINAL amount (applying twice never compounds). If any ingredient has no gram size (for example "1 bowl") it refuses and changes nothing.
+- **Crockery and cutlery help tip rewritten** to say what actually matters, in order: the plate's food area, the ml you measure with water for bowls/mugs/glasses, width to about 1 cm being plenty, a typed food weight always beating these sizes, and the photo-ruler rules (straight down, card at rim height or stand back and zoom, check the points).
+- Test: new p54 (single-entry grams to %, multi-entry factor and no-compounding, refusal when a size is missing, tip wording).
+
 ## v3.10.909 — Plates: Food Area, Measured With A Third Point
 
 Pete (8 Oct): his plate is 29.1 cm across, but the food sits on a much smaller circle inside the rim. "Definitely needs the actual food area, and it might be sensible for a third measuring point."

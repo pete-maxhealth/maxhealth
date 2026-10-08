@@ -6064,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.909'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.910'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -23936,6 +23936,21 @@ function scaleLogEdit(id, pct) {
   if (polyolsEl) polyolsEl.value = scaled.polyols;
 }
 
+// v3.10.910: type the new portion in grams instead of a percentage. It works out the percentage from the amount the entry
+// was logged with, fills the % box, and the macros follow exactly as if that % had been typed.
+function scaleLogEditToGrams(id, gramsStr) {
+  const entry = state.todayLog.find(e => e.id === id);
+  if (!entry) return;
+  const g = parseFloat(gramsStr);
+  if (isNaN(g) || g <= 0) return;
+  const orig = parseFloat(entry._origAmount || entry.amount) || 0;
+  if (!(orig > 0)) { showToast('This entry has no gram size to compare with, so use the % box'); return; }
+  const pct = Math.round(g / orig * 1000) / 10;
+  const pctEl = document.getElementById('edit-pct-' + id);
+  if (pctEl) pctEl.value = pct;
+  scaleLogEdit(id, pct);
+}
+
 function updateEditNetCarbLine(id) {
   const carbEl = document.getElementById('edit-carb-' + id);
   const polyEl = document.getElementById('edit-polyols-' + id);
@@ -24016,6 +24031,13 @@ function editLogEntry(id) {
           style="width:80px;font-size:16px;padding:6px 8px;text-align:center;"
           oninput="scaleLogEdit(${id}, this.value)">
         <span style="font-size:12px;color:var(--text3);">% &nbsp; 100=same · 200=double · 50=half</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--text3);">or type the new portion</span>
+        <input id="edit-grams-${id}" class="modal-input" type="number" inputmode="decimal" min="1" step="1" placeholder="g"
+          style="width:80px;font-size:16px;padding:6px 8px;text-align:center;"
+          oninput="scaleLogEditToGrams(${id}, this.value)">
+        <span style="font-size:12px;color:var(--text3);">g${(parseFloat(entry._origAmount || entry.amount) > 0) ? ' (logged as ' + Math.round(parseFloat(entry._origAmount || entry.amount)) + 'g)' : ''}</span>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
@@ -24130,6 +24152,13 @@ function renderLogEditItemsForm(id, entry) {
       <span style="font-size:11px;color:var(--text3);">%</span>
       <button class="modal-btn" style="font-size:11px;padding:5px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);" onclick="scaleAllLogEditItems(${id})">Apply</button>
     </div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--text3);white-space:nowrap;">or set the whole portion to</span>
+      <input id="log-edit-scalegrams-${id}" type="number" step="1" inputmode="decimal" placeholder="g" style="width:64px;font-size:12px;padding:5px 6px;" class="modal-input">
+      <span style="font-size:11px;color:var(--text3);">g</span>
+      <button class="modal-btn" style="font-size:11px;padding:5px 10px;background:transparent;border:1px solid var(--border);color:var(--text2);" onclick="scaleAllLogEditToGrams(${id})">Apply</button>
+      <span id="log-edit-nowgrams-${id}" style="font-size:10px;color:var(--text3);"></span>
+    </div>
     <div id="log-edit-total-${id}" style="font-size:12px;color:var(--text3);padding:4px 0;"></div>
     <div style="display:flex;gap:8px;">
       <button class="modal-btn" style="flex:1;font-size:12px;padding:8px;background:transparent;border:1px solid var(--red);color:var(--red);" onclick="deleteLogEntry(${id})">Delete</button>
@@ -24165,6 +24194,8 @@ function renderLogEditItemsList(id) {
     </div>
   `).join('');
   updateLogEditTotalLine(id);
+  const ng = document.getElementById('log-edit-nowgrams-' + id);
+  if (ng) { const tg = logEditBaseGrams(id); ng.textContent = tg ? '(logged as ' + Math.round(tg) + 'g)' : ''; }
 }
 
 function updateLogEditItem(id, idx, field, value) {
@@ -24311,6 +24342,30 @@ function scaleAllLogEditItems(id) {
   });
   renderLogEditItemsList(id);
   showToast(`Scaled entire entry to ${pct}% ✓`);
+}
+
+// v3.10.910: the whole entry's original size in grams, or null when any ingredient has no reliable gram figure.
+function logEditBaseGrams(id) {
+  const items = (window._logEditWorkingItems && window._logEditWorkingItems[id]) || [];
+  if (!items.length || items.some(it => !it._base || !(it._base.grams > 0))) return null;
+  return items.reduce((a, it) => a + it._base.grams, 0);
+}
+// Type the new portion as grams instead of a percentage. Scales every ingredient by the same factor from its ORIGINAL
+// amount, exactly like the % box, so applying twice never compounds.
+function scaleAllLogEditToGrams(id) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items || !items.length) return;
+  const g = parseFloat(document.getElementById('log-edit-scalegrams-' + id)?.value);
+  if (!g || g <= 0) { showToast('Enter a portion size in grams'); return; }
+  const base = logEditBaseGrams(id);
+  if (!base) { showToast('Some ingredients have no gram size, so use the % box or edit each Amount'); return; }
+  const factor = g / base;
+  items.forEach(it => {
+    Object.assign(it, scaleMacros(it._base, factor));
+    it.amount = Math.round(it._base.grams * factor * 10) / 10 + 'g';
+  });
+  renderLogEditItemsList(id);
+  showToast(`Portion set to ${Math.round(g * 10) / 10}g (${Math.round(factor * 100)}%) ✓`);
 }
 
 function updateLogEditTotalLine(id) {
@@ -46591,7 +46646,7 @@ function dismissInsight() {
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">${fieldsFor(it).map(([f, l]) => cellHtml(s, set, it, f, l)).join('')}</div>
       </div>`).join('');
     const add = set.id === 'home' ? `<div style="display:flex;gap:6px;margin-top:10px;"><input id="mhTwNewName" placeholder="Add your own (e.g. Soup bowl)" class="settings-input" style="flex:1 1 0;width:0;height:36px;"><button class="run-btn" style="flex:0 0 auto;width:auto;padding:0 14px;height:36px;font-size:12px;" onclick="mhTwAddItem()">Add</button></div>` : '';
-    host.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sizes the AI uses to judge portions from photos and descriptions. <span class="help-slot" data-id="tableware" data-text="Used only when the AI estimates a portion: plate and bowl sizes give it a ruler, spoon and mug volumes help with 'a mug of' or 'two tablespoons'. Home starts with typical UK sizes. Change any to match yours; the ↺ puts it back. Other sets only store what differs from Home. Empty weights are blank on purpose (plates vary too much to guess); fill one in only if you've weighed the dish. A weight you type for the food always beats these sizes, and results stay estimates."></span></div>
+    host.innerHTML = `<div style="font-size:12px;color:var(--text3);">Sizes the AI uses to judge portions from photos and descriptions. <span class="help-slot" data-id="tableware" data-text="Used only when the AI estimates a portion from a photo or description. What matters most for accuracy, in order: 1) Plates: the food area (the flat bit inside the rim) matters more than the full width, because it is what the food actually covers. 2) Bowls, mugs and glasses: the ml you measure with water beats any photo. 3) Width to within about 1 cm is plenty; do not chase millimetres. 4) A weight you type for the food always beats these sizes, so weigh when you can. 5) If you use the photo ruler: shoot straight down, keep the card at the same height as the plate rim (rest it on the rim) or stand back and zoom, and check each point sits on the edge. Home starts with typical UK sizes; change any to match yours and the arrow puts it back. Other sets store only what differs from Home. Empty weights are blank on purpose. Use 'copy as new' to add a second plate or bowl size. Results are always estimates."></span></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${pills}</div>${head}${revert}<div>${rows}</div>${add}`;
     try { initHelpSlots(); } catch (_) {}
   };
