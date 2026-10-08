@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.839
+**Version:** v3.10.899
 
 ---
 
@@ -51,8 +51,22 @@
 - **Remote diagnostics** — Settings → Manage → Advanced Troubleshooting Tools → App Health Check shows the real auto-update log, crontab, and whether crond/the server are actually running, alongside the existing version-sync and div-balance checks. One tap, then copy the output — lets a stuck device get debugged by someone else entirely, without needing Termux access on the affected phone. **📋 Copy Diagnostics for Claude** bundles every diagnostic source (Log Mutation Debug, AI-Assist trace, category traces, Body Comp Debug, Rollover log) into one paste-ready block, showing a live entry count per source so it's clear up front which ones actually have anything to contribute.
 - **In-app update check** — the PWA itself (separate from the server-side auto-update above) normally notices a new version via its service worker and shows a banner automatically; Settings → About also has a **🔄 CHECK FOR UPDATES** button for checking on demand instead of waiting.
 - **Supplements** — Tablet counts (e.g. "2 capsules") shown separately from the mg dose, and time-of-day lists are reorderable per period via ▲▼ buttons — a supplement in both the morning and evening lists isn't forced to the same relative position in both.
-- **Offline fallback** — when AI is unreachable (flight mode etc.), a manual macro entry form appears automatically.
+- **Offline mode** — the app opens with no connection at all (service worker keeps the last good page; Chart.js, jsPDF and JSZip ship with the app). An offline banner shows on every screen, internet-only features (3-AI check, Ask AI, barcode, food search) say "needs internet", and meals the local database can't recognise can be saved for later and reviewed one by one when the connection returns. If AI is unreachable, a manual macro entry form still appears.
 - **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
+- **One weight unit everywhere** — kg, lbs or st + lb (Settings → Profile). Display only; storage stays kg. st + lb takes "14 st 2" in one box. Charts, drill-downs and Compare Metrics follow the unit.
+- **Backdated and edited weights** — Update Weight has a Date box; a missed day's weight can also be added or fixed from the Trends weight card, Your Journey, the weight drill-down and History → Edit day totals.
+- **Faint "last known" weight line** — Your Journey and the Trends weight chart draw a dotted flat line across gaps. Display only, never saved. Gaps over 7 days show a "⋯ Nd" marker on Your Journey.
+- **Journey overlays** — chips on Your Journey add Calories, Protein, Carbs, Water, Logged exercise, Active calories or Steps as dashed lines on the weight chart. Compare Metrics gains Logged exercise, Active calories and Fat (g).
+- **Compare Two Periods** (Trends) — compares a recent stretch (default: latest Holiday-mode run) with the weeks before, on logged kcal, steps and weight trend, to check whether photo estimates are running high or low. Verdict always carries a margin of error, plus an expected-trend row and a list of exactly which days were counted.
+- **Body Composition card** (Trends) — plain-words verdict (gaining fat / losing muscle / recomposition and so on) from smart-scale readings, with a share bar and change badges.
+- **Topic chips** on Trends, Reports, Settings → Manage and Settings → Data — view filters only, nothing is moved or hidden.
+- **Copy previous set** — in the routine editor and workout Apply screen, one tap repeats the last set's reps, weight and note.
+- **Tableware & portion sizes** (Settings) — plate, bowl, mug, glass and spoon sizes in named sets (Home, holiday, parents' house...) so photo estimates and the 3-AI check know your crockery.
+- **Better photo and portion checks** — small countable items are sized piece by piece, jarred fruit is told from fresh, and each of Claude, Gemini and ChatGPT now gives its own portion guess in the 3-AI check, flagging when they disagree.
+- **Local weather card** — optional (Open-Meteo, no account): water target rises on hot days, suggested exercise effort, an hourly strip and best time to exercise outdoors. Always overridable.
+- **Barcode scanning** ignores QR codes and, when a product isn't found, offers to read the label with AI.
+- **Slow-wait pulsing border** — AI and report waits show the same pulsing box as the chat's "Analysing photo" bubble.
+- **Self-monitoring** — Settings → About → System health summarises data freshness, pipeline errors, recorded app errors and backup age.
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Health Connect (Android) also supported — steps, heart rate, weight, and sleep read directly from Android's own health data hub, deliberately last in precedence behind any dedicated device's own reading. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
 - **Demo mode, now with real personas** — "Try a demo first" opens a picker of genuinely different starting points (currently ten: two goal-based — general weight loss, body recomposition with real training-block/HRV progression data — and one persona for each of the seven supported conditions, including two deliberately contrasting outcomes on the same evidence base, and a nutrition/effort-focused "still struggling" case with no medical condition at all). Nutrition history, weight trend, and (for several) treatment sessions/symptoms/a ready-made Report Profile are generated to genuinely match that persona's stated targets and story, not a single fixed dataset relabelled. Entirely in memory — never touches real storage during a session, and now self-heals automatically on the next load even if the session ends without an explicit "Exit demo" (closing the tab, switching apps, or the phone locking no longer leaves demo data stuck in a real account).
 - **Log food to a past day** — from History, add a forgotten or mis-logged item to any previous day through the exact same AI-parsing pipeline used for today (text, photo, barcode, library). Recalculates that day's totals from its full log automatically, no manual arithmetic.
