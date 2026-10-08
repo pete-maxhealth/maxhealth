@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.904 — Photo Ruler: Choose An Existing Photo
+
+Pete (8 Oct): no way to choose a photo. The single button used the camera directly, which skips Android's photo picker.
+- Two buttons now: "Take a photo now" (camera) and "Choose a photo I already took" (gallery).
+- Test: p53 extended.
+
 ## v3.10.903 — Photo Ruler: Readable Next Step
 
 Pete (8 Oct): the line at the bottom of the screen was barely readable.

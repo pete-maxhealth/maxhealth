@@ -302,6 +302,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.901 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler (`mhRulerOpen`, `mhRulerCalc`): card-calibrated two-tap measurement from a photo fills a tableware item's Across (cm); no ARCore/WebXR dependency. |
 | v3.10.902 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler reference options clarified and remembered (`mh_ruler_ref`). |
 | v3.10.903 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler bottom bar shows a readable step hint instead of a faded disabled button. |
+| v3.10.904 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler has separate camera (`capture`) and gallery file inputs. |
 
 ---
 
