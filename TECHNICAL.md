@@ -304,6 +304,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.903 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler bottom bar shows a readable step hint instead of a faded disabled button. |
 | v3.10.904 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler has separate camera (`capture`) and gallery file inputs. |
 | v3.10.905 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler touch handling rebuilt on pointer events: pinch-zoom/drag-pan inside `#mhRulerView` (`touch-action:none`), tap places a point; paints only, no re-render on taps. |
+| v3.10.909 | 23 | Full detail in CHANGELOG.md (Phase 23). Plate `food` field (`mhTwHasFood`), photo ruler stage `food` (`st.foodPts`, `foodResult()`: 2 x distance from the width-pair midpoint, scaled by the card), AI line carries the food area. |
 | v3.10.908 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware `mhTwCopy`: duplicate any item as a new custom item (forced unique name); per-set values stored as overrides on the new item id; `spoon` flag keeps wording. |
 | v3.10.907 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler edge snap: luminance cache, 1D gradient search along the point pair (`mhRulerSnapPoint`, `snapPair`), toggle `mh_ruler_snap`. |
 | v3.10.906 | 23 | Full detail in CHANGELOG.md (Phase 23). Photo ruler: picked-point selection (`st.sel`) and arrow nudging by screen pixel (`mhRulerNudge`, hold-to-repeat). |

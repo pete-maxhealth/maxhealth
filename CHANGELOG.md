@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.909 — Plates: Food Area, Measured With A Third Point
+
+Pete (8 Oct): his plate is 29.1 cm across, but the food sits on a much smaller circle inside the rim. "Definitely needs the actual food area, and it might be sensible for a third measuring point."
+- **New "Food area (cm)" box on plates** (dinner plate, side plate and copies of plates). Optional and blank by default, because rims vary far too much to guess.
+- **Photo ruler, step 3 of 3 (plates only):** after the width, a "Food area ›" button asks for ONE tap on the inner edge of the rim. The plate centre is the midpoint of your width points, so the distance from the centre to that tap gives the food diameter. A dashed ring shows what it measured so you can see it follows the rim, and the point can be nudged or snapped like the others. "Use it" still saves the width only; "Use both" saves width and food area. A food area at least as big as the plate is refused. Mugs, bowls and cutlery still use the 2-step version.
+- **AI portion line** now includes "food area (inside the rim) about N cm across", with an instruction to judge how much of that inner circle is covered rather than the full rim.
+- "Copy as new" carries the food area for plates and does not add one to bowls.
+- Test: p53 (3-step flow, ~10.0 cm food area from a known image, both values saved, oversize refused, Back returns, mug has no food step), p44 (plates only, AI line wording, copies).
+
 ## v3.10.908 — Tableware: Copy As New
 
 Pete (8 Oct): the place he is staying has several plate sizes (his measured dinner plate came out at 29.1 cm), plus different cutlery and bowls, so he needs more than one of each. "A copy from and forced rename should do it."

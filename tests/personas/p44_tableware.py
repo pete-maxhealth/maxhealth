@@ -25,7 +25,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("switchTabById('manage')"); page.wait_for_timeout(500)
     page.evaluate("mhTwRender()")
     inputs = lambda: page.evaluate("document.querySelectorAll('#mhTwCard input[type=number]').length")
-    if inputs() != 24: f.add('BUG', f'expected 8 items x 3 fields = 24 inputs, got {inputs()}')
+    if inputs() != 26: f.add('BUG', f'expected 8 items x 3 fields + 2 plate food areas = 26 inputs, got {inputs()}')
     val = lambda it, fl: page.evaluate("(a)=>{const s=JSON.parse(localStorage.getItem('mh_tableware')||'null');return s}", None)
     arrows = lambda: page.evaluate("[...document.querySelectorAll('#mhTwCard span')].filter(x=>x.textContent==='↺').length")
     if arrows() != 0: f.add('BUG', 'back-to-default arrows shown with nothing changed')
@@ -108,6 +108,15 @@ with fresh_server() as root, sync_playwright() as pw:
     resort = [x for x in st['sets'] if x['id'] == sid][0]
     if rs['diam'] != 19 or resort['vals'].get(rs['id'], {}).get('diam') != 21: f.add('BUG', f'copy in another set: base {rs["diam"]}, set value {resort["vals"].get(rs["id"])}')
     page.evaluate("mhTwView('home')")
+    # v3.10.909 food area: only plates carry it, it is optional, and a copy of a plate keeps the field and the value
+    if page.evaluate("[mhTwHasFood('dinner_plate'), mhTwHasFood('side_plate'), mhTwHasFood('bowl'), mhTwHasFood('mug')]") != [True, True, False, False]: f.add('BUG', 'food area should be on plates only')
+    page.evaluate("mhTwEdit('home','dinner_plate','food','19.5')")
+    if 'dinner plate 29.1cm across, food area (inside the rim) about 19.5cm across' not in page.evaluate("mhTablewareLine()").lower(): f.add('BUG', 'food area missing from the AI line: ' + page.evaluate("mhTablewareLine()")[:300])
+    ans[0] = 'Big plate 2'; page.evaluate("mhTwCopy('dinner_plate')")
+    c2 = page.evaluate("JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Big plate 2')")
+    if not c2 or c2.get('food') != 19.5 or not page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Big plate 2').id)"): f.add('BUG', f'copy of a plate lost its food area: {c2}')
+    ans[0] = 'Bowl 2'; page.evaluate("mhTwCopy('bowl')")
+    if page.evaluate("mhTwHasFood(JSON.parse(localStorage.getItem('mh_tableware')).custom.find(c=>c.name==='Bowl 2').id)"): f.add('BUG', 'a copy of a bowl should not get a food area')
     # reorder + hide controls injected like every other settings card, and an existing saved order is kept
     page.evaluate("localStorage.setItem('mh_reorder_manage', JSON.stringify(['set-profile','set-aiprovider','set-water','set-stepsbaseline']))")
     page.reload(); page.wait_for_timeout(1500); page.evaluate("switchTabById('manage')"); page.wait_for_timeout(600)
