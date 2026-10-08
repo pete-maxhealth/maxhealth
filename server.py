@@ -14,6 +14,7 @@ Endpoints:
   GET  /inbox             — list files in inbox
   GET  /pattern-signals   — Day 2 signals for wearables (meal windows, sleep, activity, HRV)
   POST /save-precedence   — merge source_precedence into pipeline_prefs.json (Settings → Device Precedence)
+  GET  /data-gaps?days=14 — recent finished days with steps / heart rate / sleep missing (Settings > Import > Missing Data)
   GET  /manual-entry?date=YYYY-MM-DD — held (combined.csv) + manual values for a date (Manual Entry screen)
   POST /save-manual-entry — save a manual entry for a date, triggers a pipeline run
   POST /save-manual-entries-bulk — save many dates at once (CSV template upload), one pipeline run
@@ -1305,6 +1306,40 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 pass
             clean['user_extractors'] = [{'key': k, 'overrides_builtin': k in builtin} for k in keys]
             self.send_json(clean)
+
+        elif path == '/data-gaps':
+            # v3.10.918: which of the last N finished days (today excluded, it is still in progress) lack
+            # steps, heart rate or sleep in combined.csv. Days before the first recorded day are not gaps.
+            try: n = max(1, min(60, int(params.get('days', ['14'])[0])))
+            except Exception: n = 14
+            rows = {}
+            try:
+                if os.path.exists(COMBINED):
+                    with open(COMBINED, 'r', encoding='utf-8', newline='') as fh:
+                        for r in csv.DictReader(fh):
+                            if r.get('date'): rows[r['date']] = r
+            except Exception:
+                pass
+            gaps = []
+            if rows:
+                first = min(rows)
+                today = datetime.now().date()
+                for i in range(1, n + 1):
+                    d = (today - timedelta(days=i)).isoformat()
+                    if d < first: break
+                    r = rows.get(d, {})
+                    def has(*keys):
+                        for k in keys:
+                            try:
+                                if float(r.get(k) or 0) > 0: return True
+                            except ValueError: pass
+                        return False
+                    miss = []
+                    if not has('steps'): miss.append('steps')
+                    if not has('hr_resting', 'hr_avg'): miss.append('heart rate')
+                    if not has('sleep_duration'): miss.append('sleep')
+                    if miss: gaps.append({'date': d, 'missing': miss})
+            self.send_json({'gaps': gaps, 'days': n})
 
         elif path == '/sync-status':
             newest = None

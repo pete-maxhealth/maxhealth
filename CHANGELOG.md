@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.918 — Missing Data: Gap Finder With One-Tap Fix
+
+Pete: "Plough away" on the gap finder. A stalled sync leaves whole days without steps, heart rate or sleep, and they are easy to miss. New card **Settings > Import > Missing Data** lists the finished days in the last 14 days that lack any of those three (today is left out, it is still in progress; days before your first recorded day are not counted). Each row shows what is missing and a "Fill in" tap that opens Manual Entry on that day.
+- Server: new `GET /data-gaps?days=N` (1-60, default 14) reads combined.csv; a day with no row at all counts as missing everything.
+- The card has show/hide and reorder like the other Import cards, sits in the "History & entry" chip group and is findable by site search ("missing", "gaps").
+- Test: new p57 (gap rules incl. empty rows, today excluded, pre-history ignored; row opens the right day; hide/reorder controls present).
+
 ## v3.10.917 — "Edit This Day By Hand" On Every Day
 
 Pete: "Could it not be a simple link on each previous days, so as you navigate, the option is there per day?" The Trends day navigator (← →) now shows a small "✏️ Edit this day by hand" link under the date. It opens Manual Entry on exactly the day you are looking at (today, yesterday, any day back), so a gap you spot while browsing is one tap from fixing. The sync-warning sheet's date box stays for when you already know which day. p56 extended.

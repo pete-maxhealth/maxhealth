@@ -5553,6 +5553,15 @@
       </div>
     </div>
 
+    <!-- v3.10.918: Missing Data - recent finished days with steps / heart rate / sleep absent, each with a one-tap fix -->
+    <div class="import-card card-unit" style="border-color:rgba(245,166,35,0.3);">
+      <div class="import-label" id="title-imp-gaps" style="color:var(--yellow,#f5a623);cursor:pointer;" onclick="toggleSection('imp-gaps','imp-gaps-wrap','imp-gaps-icon'); mhLoadDataGaps()">Missing Data <span id="imp-gaps-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▾ hide</span></div>
+      <div id="imp-gaps-wrap">
+        <p style="font-size:12px;color:var(--text3);margin-bottom:10px;">Finished days in the last two weeks that have no steps, heart rate or sleep recorded. Tap a day to fill it in by hand. Today is left out because it is still in progress.</p>
+        <div id="mhGapsList" style="font-size:13px;color:var(--text2);">Checking...</div>
+      </div>
+    </div>
+
     <!-- Manual Entry (28/09/26) — raised directly: "expand the pipeline setup
          to house a manual entry screen which gets any live measures from
          today or last recorded as initial values to overwrite... follow the
@@ -6073,7 +6082,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.917'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.918'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7750,6 +7759,7 @@ const GENERIC_SECTION_IDS = {
     'imp-preview': ['title-imp-preview', 'dataPreviewPanel'],
     'imp-adddevice': ['title-imp-adddevice', 'imp-adddevice-wrap'],
     'imp-manual': ['title-imp-manual', 'imp-manual-wrap'],
+    'imp-gaps': ['title-imp-gaps', 'imp-gaps-wrap'],
   },
   // Trends → "Today" window's own daily breakdown (renderDailyView()) -
   // deliberately a SEPARATE scope from 'trends' above, not folded into it.
@@ -7772,7 +7782,7 @@ const GENERIC_DEFAULT_ORDER = {
   trends: ['trends-journey', 'trends-bodycomp', 'trends-patterns', 'trends-periodcmp', 'trends-wellness', 'trends-topfoods', 'trends-dow'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'seasonal', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-tableware', 'set-stepsbaseline', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'],
-  import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual'],
+  import: ['set-databackup', 'imp-sync', 'imp-combined', 'imp-advanced', 'imp-master', 'imp-databulk', 'imp-preview', 'imp-adddevice', 'imp-manual', 'imp-gaps'],
   dailyview: ['dv-activity', 'dv-sleep', 'dv-meals', 'dv-weight'],
 };
 
@@ -11901,6 +11911,20 @@ async function mhCheckSyncHealth() {
   } catch (_) { b.style.display = 'none'; }
 }
 function mhSyncBannerDismiss() { try { localStorage.setItem('mh_syncbanner_dismissed', todayStr()); } catch (_) {} const b = document.getElementById('mhSyncBanner'); if (b) b.style.display = 'none'; }
+// v3.10.918: Settings > Import > Missing Data. Asks the server which recent finished days lack steps / heart rate / sleep.
+async function mhLoadDataGaps() {
+  const el = document.getElementById('mhGapsList'); if (!el) return;
+  try {
+    const j = await (await fetch(`${MH_SERVER}/data-gaps?days=14`, { signal: AbortSignal.timeout(5000) })).json();
+    if (!j.gaps || !j.gaps.length) { el.innerHTML = '✅ No gaps in the last 14 days.'; return; }
+    el.innerHTML = j.gaps.map(g => {
+      const dt = new Date(g.date + 'T12:00:00');
+      const lbl = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      return `<div onclick="mhOpenManualEntry('${g.date}')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;"><span><b style="color:var(--text);">${lbl}</b><br><span style="font-size:11px;color:var(--text3);">missing: ${g.missing.join(', ')}</span></span><span style="color:var(--accent);font-size:12px;">✏️ Fill in ›</span></div>`;
+    }).join('');
+  } catch (_) { el.textContent = 'Could not check (server not reachable).'; }
+}
+
 // v3.10.915: jump from the sync warning straight to Manual Entry with the missed day (default yesterday) already chosen.
 function mhOpenManualEntry(daysAgo) {
   const picked = (typeof daysAgo === 'string') ? daysAgo : (document.getElementById('mhSyncHelpDate') || {}).value;
@@ -17722,6 +17746,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Redo Setup Wizard', key: 'set-setup', subtab: 'manage', keywords: 'onboarding restart reset' },
   { label: 'Sync Wearable Data', key: 'imp-sync', subtab: 'import', keywords: 'withings ringconn garmin amazfit zepp android health connect' },
   { label: 'Add New Device / Data Source', key: 'imp-adddevice', subtab: 'import', keywords: 'withings ringconn garmin amazfit zepp android health connect' },
+  { label: 'Missing Data', key: 'imp-gaps', subtab: 'import', keywords: 'gaps missing days no steps heart rate sleep blank sync failed fill in' },
   { label: 'Manual Entry', key: 'imp-manual', subtab: 'import', keywords: 'manual weight steps heart rate hrv spo2 sleep apple health type in by hand correction' },
   { label: 'Wearable History', key: 'imp-combined', subtab: 'import', keywords: 'combined.csv steps sleep heart rate weight history' },
   { label: 'Import Nutrition History (master.csv)', key: 'imp-master', subtab: 'import', keywords: 'bulk food log history csv' },
@@ -31543,7 +31568,7 @@ function switchSubTab(parent, tab, el) {
       setTimeout(() => { makeContainerReorderable(document.getElementById('view-manage'), 'manage'); try { mhTopicApply('manage'); } catch (e) {} }, 100);
     }
     if (tab === 'import') {
-      renderSavedDevices(); updateImportStatus(); initSyncUI();
+      renderSavedDevices(); updateImportStatus(); initSyncUI(); mhLoadDataGaps();
       // Collapse state was being saved on every toggle (toggleSection always
       // writes to localStorage) but never actually read back on load, unlike
       // every other tab with collapsible sections - cards were silently
@@ -31560,6 +31585,7 @@ function switchSubTab(parent, tab, el) {
         ['imp-preview',   'dataPreviewPanel',   'dataPreviewToggle',  false],
         ['imp-adddevice', 'imp-adddevice-wrap', 'imp-adddevice-icon', true],
         ['imp-manual',    'imp-manual-wrap',    'imp-manual-icon',    true],
+        ['imp-gaps',      'imp-gaps-wrap',      'imp-gaps-icon',      true],
       ].forEach(([k, w, i, d]) => applySectionState(k, w, i, d));
       applySectionState('imp-restore', 'imp-restore-wrap', 'imp-restore-icon', false); // found in audit sweep - not part of the reorder system (not in GENERIC_SECTION_IDS.import), just needed the same collapse-state fix
       makeContainerReorderable(document.getElementById('view-import'), 'import');
@@ -44799,7 +44825,7 @@ const MH_TOPIC_SCOPES = {
   } },
   import: { view: 'view-import', groups: {
     connect:  { label: 'Connect devices',  keys: ['imp-sync', 'imp-adddevice', 'imp-advanced'] },
-    history:  { label: 'History & entry',  keys: ['imp-combined', 'imp-master', 'imp-manual'] },
+    history:  { label: 'History & entry',  keys: ['imp-combined', 'imp-master', 'imp-manual', 'imp-gaps'] },
     backup:   { label: 'Backup & checks',  keys: ['set-databackup', 'imp-databulk', 'imp-preview'] },
   } },
 };
