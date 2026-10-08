@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.900 — Sleep Card Spots Time-In-Bed Figures, Type Your Own; One-Tap Bug Report
+
+Pete (8 Oct, three screenshots): the sleep-conflict card offered RingConn 8.7h (23:16-08:01) against Zepp 5.0h. RingConn's own app says 6h55 asleep over that span; Zepp's says 4:25 plus a 0:43 nap (about 5h08), so Zepp's figure was right and RingConn's was the whole time in bed.
+- **Flag on the card:** when a source's duration equals its whole start-to-end span (it sent no sleep stages), the card now says so: that figure is time in bed, not time asleep, so check the device's own app first.
+- **Type your own:** a box on the card ("Or type your own, hours") saves your figure for that night through the same manual-entry path as the other choices. The server accepts 0.5-20 hours.
+- **Not fixed (needs the launcher):** RingConn's Health Connect record carries no sleep stages, so the launcher can only see the whole span. Fixing that properly means a launcher change; until then the flag and the typed figure cover it.
+- **Report a bug:** Settings → About → "Send feedback / report a bug" now opens a GitHub issue already filled in with app version, device, screen, connection and the server health check, with a prompt to drag in a screenshot. Under it, "Copy the report text instead" for anyone without GitHub. No food or health data is included.
+- Test: p52 (new).
+
 ## v3.10.899 — One Cancel Is Enough
 
 Pete (8 Oct): editing one ingredient's portion on a photo-added meal and then cancelling needed a Cancel press per ingredient. I could not reproduce it in the plain pre-log edit (one Cancel works there), so this closes the two places where Cancel could repeat:

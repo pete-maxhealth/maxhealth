@@ -5044,7 +5044,8 @@
       <div class="settings-hint" style="margin-top:6px;">Shows the first-visit tips again on your next visit to each tab.</div>
       <button class="copy-btn" onclick="showDemoPersonaPicker()" style="margin-top:12px;">👁 TRY DEMO MODE</button>
       <div class="settings-hint" style="margin-top:6px;">Explore with 30 days of sample data — nothing you do in demo mode touches your real data. Exit anytime from the banner at the top.</div>
-      <a href="https://github.com/pete-maxhealth/maxhealth/issues/new?template=feedback.md&title=[Feedback]&labels=feedback" target="_blank" style="display:block;margin-top:12px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 16px;font-size:12px;font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);text-decoration:none;">💬 SEND FEEDBACK / REPORT A BUG</a>
+      <button onclick="mhReportBug()" style="display:block;width:100%;margin-top:12px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 16px;font-size:12px;font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);cursor:pointer;">💬 SEND FEEDBACK / REPORT A BUG</button>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;text-align:center;">Opens a GitHub report already filled in with your app version, device and a health check. Add a screenshot by dragging it into the box or using the image button. No GitHub account? <a href="#" onclick="mhReportBug(true);return false;" style="color:var(--accent);">Copy the report text instead</a> and send it however you like.</div>
       <div class="settings-hint" style="margin-top:6px;">Opens GitHub Issues — no account needed to read, account required to post.</div>
     </div>
     </div>
@@ -6063,7 +6064,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.899'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.900'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -10403,6 +10404,8 @@ function showSleepConflictComparison(conflict) {
           <span style="color:var(--text);font-weight:600;">${s.source}</span>
           <span style="color:var(--text3);"> — ${fmtTime(s.start)}–${fmtTime(s.end)} (${fmtHours(s.duration_minutes)})</span>
         </div>`).join('')}
+      ${sessions.filter(s => Math.abs(((new Date(s.end) - new Date(s.start)) / 60000) - s.duration_minutes) <= 3).map(s => `
+        <div style="font-size:11px;color:var(--yellow);margin-bottom:8px;line-height:1.4;">${s.source}'s ${fmtHours(s.duration_minutes)} is the whole start-to-end span: it sent no sleep stages, so this is time in bed, not time asleep. Check ${s.source}'s own app before choosing it.</div>`).join('')}
       ${sessions.map(s => `
         <button onclick="resolveSleepConflict('${conflict.date}', {type:'use_source', source:'${s.source}'})" style="width:100%;padding:10px;background:none;border:1px solid var(--border);color:var(--text2);border-radius:8px;font-size:12px;cursor:pointer;margin-bottom:8px;">Use ${s.source} — ${fmtHours(s.duration_minutes)}</button>
       `).join('')}
@@ -10410,6 +10413,10 @@ function showSleepConflictComparison(conflict) {
            ever appears when two DIFFERENT devices overlap in time (same night), and the launcher already
            sums genuinely separate periods on its own, so "add them" could only ever double-count a night.
            Pete's real morning: RingConn + Zepp both said 5h17 asleep; this button would have offered 13.3h. -->
+      <div style="display:flex;gap:8px;margin:4px 0 8px;align-items:center;">
+        <input id="sleepConflictOwn" type="number" step="0.05" min="0.5" max="20" placeholder="Or type your own, hours (e.g. 6.9)" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:12px;">
+        <button onclick="mhSleepConflictOwn('${conflict.date}')" style="padding:10px 14px;background:var(--accent);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Use</button>
+      </div>
       <button onclick="resolveSleepConflict('${conflict.date}', {type:'skip'})"
         style="width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text3);font-size:14px;cursor:pointer;margin-top:4px;">Decide later</button>
     </div>`;
@@ -10419,6 +10426,45 @@ function showSleepConflictComparison(conflict) {
   // modal) — this isn't a "back to edit" situation with an underlying form
   // to return to, and an accidental dismiss would just mean re-asking next
   // open anyway. "Decide later" above covers the same intent explicitly.
+}
+
+
+// v3.10.900: one-tap bug report. Builds a short, privacy-light summary (no food
+// or health data - version, device, screen, connection, server health check)
+// and opens a pre-filled GitHub issue, or copies the text for people without GitHub.
+async function mhBuildBugReportText() {
+  const lines = [];
+  lines.push(`App version: ${APP_VERSION}`);
+  lines.push(`Device/browser: ${navigator.userAgent}`);
+  lines.push(`Screen: ${screen.width}x${screen.height} (window ${innerWidth}x${innerHeight}), ${matchMedia('(display-mode: standalone)').matches ? 'installed app' : 'browser tab'}`);
+  lines.push(`Online: ${navigator.onLine ? 'yes' : 'no'}  |  Theme: ${localStorage.getItem('mh_theme') || 'default'}  |  Weight unit: ${localStorage.getItem('mh_weight_unit') || 'kg'}`);
+  try {
+    const r = await fetch(`${MH_SERVER}/selfcheck`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const d = await r.json();
+      lines.push(`Health check: ${d.headline || d.status}`);
+      (d.items || []).slice(0, 6).forEach(i => lines.push(`  [${i.level}] ${String(i.text).slice(0, 160)}`));
+    } else lines.push('Health check: server answered with an error');
+  } catch (e) { lines.push('Health check: phone server not reachable from this page'); }
+  try { const err = JSON.parse(localStorage.getItem('mh_error_log') || '[]'); if (err.length) lines.push(`Recent app errors: ${err.slice(-3).map(e => String(e.message || e).slice(0, 120)).join(' | ')}`); } catch (e) {}
+  return lines.join('\n');
+}
+
+async function mhReportBug(copyOnly) {
+  const info = await mhBuildBugReportText();
+  const body = `**What happened?**\n\n\n**What did you expect?**\n\n\n**Screenshot** (drag it into this box or tap the image button)\n\n\n---\n<details><summary>Automatic details</summary>\n\n\`\`\`\n${info}\n\`\`\`\n</details>\n`;
+  if (copyOnly) {
+    try { await navigator.clipboard.writeText('MaxedHealth bug report\n\nWhat happened?\n\nWhat did you expect?\n\n(attach a screenshot if you can)\n\n' + info); showToast('Report text copied ✓'); } catch (e) { showToast('Copy failed'); }
+    return;
+  }
+  const url = 'https://github.com/pete-maxhealth/maxhealth/issues/new?labels=feedback&title=' + encodeURIComponent('[Bug] ') + '&body=' + encodeURIComponent(body.slice(0, 4500));
+  window.open(url, '_blank');
+}
+
+function mhSleepConflictOwn(date) {
+  const v = parseFloat(document.getElementById('sleepConflictOwn')?.value);
+  if (!(v >= 0.5 && v <= 20)) { showToast('Type your sleep in hours, e.g. 6.9'); return; }
+  resolveSleepConflict(date, { type: 'manual', minutes: Math.round(v * 60) });
 }
 
 async function resolveSleepConflict(date, resolution) {

@@ -869,8 +869,8 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                     self.send_json({'error': 'date is required'}, 400)
                     return
                 res_type = resolution.get('type')
-                if res_type not in ('use_source', 'sum', 'skip'):
-                    self.send_json({'error': 'resolution.type must be use_source, sum, or skip'}, 400)
+                if res_type not in ('use_source', 'sum', 'skip', 'manual'):
+                    self.send_json({'error': 'resolution.type must be use_source, sum, skip or manual'}, 400)
                     return
 
                 pending = []
@@ -897,6 +897,16 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                         return
                     chosen_minutes = session.get('duration_minutes')
                     chosen_label = source
+                elif res_type == 'manual':
+                    # v3.10.900: the person types their own figure (e.g. read off a device's own app)
+                    try:
+                        chosen_minutes = int(round(float(resolution.get('minutes'))))
+                    except (TypeError, ValueError):
+                        chosen_minutes = None
+                    if chosen_minutes is None or not (30 <= chosen_minutes <= 1200):
+                        self.send_json({'error': 'manual sleep must be between 0.5 and 20 hours'}, 400)
+                        return
+                    chosen_label = 'own figure'
                 elif res_type == 'sum':
                     chosen_minutes = sum(s.get('duration_minutes', 0) for s in match.get('sessions', []))
                     chosen_label = 'sum of both'

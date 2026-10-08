@@ -24,7 +24,7 @@ def onboard(pg, cond):
     pg.evaluate("onboardNext(6)"); pg.evaluate("onboardFinish()"); pg.wait_for_timeout(1500)
 def tap(pg, tab, sub):
     pg.click(f"[onclick^=\"switchTab('{tab}'\"]"); pg.click(f"[onclick^=\"switchSubTab('{tab}','{sub}'\"]"); pg.wait_for_timeout(700)
-BAD = re.compile(r'\b(NaN|undefined|Infinity|\[object Object\])\b|-0\b')
+BAD = re.compile(r'\b(NaN|undefined|Infinity|\[object Object\])\b|(?<![\d.])-0(?![.\d])')
 PERSONAL = re.compile(r'92-93|\bPete\b|Beyond the Diagnosis', re.I)
 
 for label, cond, ndays in (('no-data', 'general', 0), ('45-days', 'general', 45), ('gbm-45-days', 'gbm', 45)):

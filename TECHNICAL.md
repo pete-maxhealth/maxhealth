@@ -298,6 +298,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.897 | 23 | Full detail in CHANGELOG.md (Phase 23). Compare Two Periods lists exactly what it counted per period and counts weigh-ins that exist only in the imported scale file. |
 | v3.10.898 | 23 | Full detail in CHANGELOG.md (Phase 23). Compare Two Periods adds an expected-trend row, extends the default recent period over adjacent travel/Occasion days, and needs weigh-ins over 3+ days (was 4+). |
 | v3.10.899 | 23 | Full detail in CHANGELOG.md (Phase 23). Item edit Cancel closes every open edit form, and cancelling a Save-ingredients batch ends the whole batch. |
+| v3.10.900 | 23 | Full detail in CHANGELOG.md (Phase 23). Sleep-conflict card flags a source whose duration equals its whole span (no stages, so time in bed) and accepts a typed figure (`/resolve-sleep-conflict` type `manual`, 30-1200 min); `mhReportBug()` opens a prefilled GitHub issue (`mhBuildBugReportText()`: version, device, screen, `/selfcheck`). |
 
 ---
 
