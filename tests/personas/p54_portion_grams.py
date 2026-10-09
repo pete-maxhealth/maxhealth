@@ -32,13 +32,16 @@ with fresh_server() as root, sync_playwright() as pw:
         pct = page.evaluate("parseFloat(document.getElementById('edit-pct-9001').value)")
         kc = page.evaluate("parseFloat(document.getElementById('edit-kcal-9001').value)")
         if abs(pct - 150) > 0.2 or abs(kc - 495) > 1: f.add('BUG', f'300g on a 200g entry should be 150% / 495 kcal, got {pct}% / {kc}')
+        for txt in ('300g', '300 g', ' 300G '):   # v3.10.935: the box is text, so a unit typed after the number is accepted
+            page.fill('#edit-grams-9001', ''); page.fill('#edit-grams-9001', txt); page.wait_for_timeout(150)
+            if abs(page.evaluate("parseFloat(document.getElementById('edit-pct-9001').value)") - 150) > 0.2: f.add('BUG', f'typing "{txt}" was not accepted')
     page.evaluate("cancelLogEdit(9001)")
     # multi-item with grams everywhere: 200g -> 300g, every ingredient x1.5
     page.evaluate("editLogEntry(9002)"); page.wait_for_timeout(200)
     page.fill('#log-edit-scalegrams-9002', '300'); page.evaluate("scaleAllLogEditToGrams(9002)")
     tot = page.evaluate("window._logEditWorkingItems[9002].map(i=>[i.amount,i.kcal])")
     if tot != [['150g', 248], ['150g', 503]] and not (abs(tot[0][1] - 247.5) < 1 and tot[0][0] == '150g'): f.add('BUG', f'multi-item grams scaling wrong: {tot}')
-    page.fill('#log-edit-scalegrams-9002', '300'); page.evaluate("scaleAllLogEditToGrams(9002)")      # again: must not compound
+    page.fill('#log-edit-scalegrams-9002', '300g'); page.evaluate("scaleAllLogEditToGrams(9002)")      # again (with a unit): must not compound
     tot2 = page.evaluate("window._logEditWorkingItems[9002].map(i=>i.amount)")
     if tot2 != ['150g', '150g']: f.add('BUG', f'applying twice compounded: {tot2}')
     if '200g' not in page.evaluate("document.getElementById('log-edit-nowgrams-9002').textContent"): f.add('BUG', 'original size not shown beside the grams box')
