@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.932 — Meal Time Can Be Corrected When You Edit An Entry
+
+Pete Spence: "Updating portion sizes would adjust the mealtime, so we'd need an update timestamp or change switch." Checked first: editing a portion (or any value) has never touched the time a meal was eaten, so fasts are not disturbed by portion changes (proved in the new test). The gap was the other way round: a time could never be corrected, and meals logged to a past day without a time stayed "approximate" and were ignored for fasting for ever. Both edit forms (single item and multi-ingredient) now have a **Meal time** field. It is blank for approximate entries, saving without choosing a time leaves them as they were, and choosing one sets the time and clears the approximate flag. Cancel discards it. New test: `p65_edit_meal_time.py`.
+
 ## v3.10.931 — Pete Spence, In Full
 
 Pete Spence: "it's about time to change all references in the app and documentation of Pete to Pete Spence". Every reference in the app (Settings "Developed by", comments, messages), the landing page, README, TECHNICAL.md, the user guide, story and why-free pages, the GBM patient guide, CODEOWNERS, the server and the update scripts now uses the full name. Left alone on purpose: real export file names such as `Activity-Pete-*.csv` and `Data Export-Pete-*.zip` (the parsers match the names the devices actually produce), the test personas' typed-in name, and the Android launcher source (outside this repository). New test: `p64_full_name.py`.

@@ -6182,7 +6182,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.931'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.932'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -24291,6 +24291,26 @@ function updateEditNetCarbLine(id) {
   }
 }
 
+// Meal time in the edit forms (v3.10.931). Editing a portion never moves the time a meal was eaten; this lets the time be
+// corrected on purpose, and a time chosen here replaces the "approximate" flag so the entry counts for fasting.
+window._logEditTime = window._logEditTime || {};
+function mhEditTimeRow(id, entry) {
+  const stash = window._logEditTime[id];
+  const approx = !!entry.timeApprox;
+  const val = stash !== undefined ? stash : (approx ? '' : (entry.time || ''));
+  const note = approx ? 'Not set, so this meal is ignored when working out fasts' : 'Only change this if the time is wrong';
+  return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--text3);">Meal time</span>
+      <input id="edit-time-${id}" type="time" value="${val}" class="modal-input" style="width:120px;font-size:16px;padding:6px 8px;" oninput="window._logEditTime[${id}]=this.value">
+      <span style="font-size:11px;color:var(--text3);">${note}</span>
+    </div>`;
+}
+function mhApplyEditTime(id, entry) {
+  const el = document.getElementById('edit-time-' + id);
+  delete window._logEditTime[id];
+  if (!el || !/^\d{2}:\d{2}$/.test(el.value)) return;
+  if (el.value !== entry.time || entry.timeApprox) { entry.time = el.value; delete entry.timeApprox; }
+}
 function editLogEntry(id) {
   const entry = state.todayLog.find(e => e.id === id);
   if (!entry) return;
@@ -24349,6 +24369,7 @@ function editLogEntry(id) {
   form.innerHTML = `
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">EDIT ENTRY</div>
     <input id="edit-desc-${id}" class="modal-input" value="${entry.description}" placeholder="Description" style="font-size:13px;padding:7px 10px;">
+    ${mhEditTimeRow(id, entry)}
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">PORTION % <span style="opacity:0.6;font-weight:400;">— use this OR edit values below</span></div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -24449,6 +24470,7 @@ function cancelLogEdit(id) {
   // Working copy was staged in memory only — discard it, nothing was
   // written to state.todayLog until Save changes, so Cancel is a true no-op.
   if (window._logEditWorkingItems) delete window._logEditWorkingItems[id];
+  if (window._logEditTime) delete window._logEditTime[id];
 }
 
 // ── Per-ingredient editor for multi-item log entries ────────────────────
@@ -24469,6 +24491,7 @@ function renderLogEditItemsForm(id, entry) {
   form.innerHTML = `
     <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">EDIT ENTRY — INGREDIENTS</div>
     <input id="edit-desc-${id}" class="modal-input" value="${entry.description}" placeholder="Description" style="font-size:13px;padding:7px 10px;">
+    ${mhEditTimeRow(id, entry)}
     <div id="log-edit-items-${id}"></div>
     <button class="modal-btn" style="font-size:12px;padding:7px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addLogEditItem(${id})">+ Add ingredient</button>
     <div style="display:flex;gap:6px;align-items:center;">
@@ -24744,6 +24767,7 @@ function saveLogEditItems(id) {
   const desc = document.getElementById('edit-desc-' + id)?.value.trim();
   entry.description = desc || entry.description;
   entry.items = sanitised;
+  mhApplyEditTime(id, entry);
 
   // Aggregate is now DERIVED from items rather than typed into separate
   // fields — this is the actual structural fix, not just a UI addition:
@@ -25007,6 +25031,7 @@ function saveLogEdit(id) {
 
   entry.description = desc || entry.description;
   entry.fat = sanitised.fat;
+  mhApplyEditTime(id, entry);
   entry.kcal = Math.round(sanitised.kcal);
   entry.protein = Math.round(sanitised.protein * 10) / 10;
   entry.carbs = Math.round(sanitised.carbs * 10) / 10;
