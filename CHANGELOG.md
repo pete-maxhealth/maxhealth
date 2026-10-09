@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.925 — Protecting Cloud Users' Data From Being Lost
+
+Pete: "Is there any way to stop MaxHealth from having the cache cleared or to either highlight any data outstanding that would be lost or fire a warning?" The honest limit first: the browser, not the app, decides when a website's data is deleted, and no web page can force it to keep it. (Clearing "cached images and files" does not touch the app's data; clearing "cookies and site data" does.) So three layers:
+- **Ask the browser to protect it.** The app now requests persistent storage (`navigator.storage.persist()`) shortly after start. If granted, the browser will not delete the data to free space. It can be refused, so Settings > Data & Backup shows which one you have ("🛡️ granted" or "⚠ not promised").
+- **Say what would be lost.** For cloud users the backup banner on Today now appears after 7 days (was 14) or as soon as 5 days of entries are unsaved, and says how many days of entries (food and readings) have been added since the last backup, instead of a generic "it's been a while". Local (Termux) users are unchanged because the server backs up for them.
+- **iPhone:** in a normal Safari tab (not installed) the banner and the Settings line explain that Safari can delete a website's data after 7 days without a visit (Apple's WebKit policy), and that adding MaxedHealth to the Home Screen avoids that.
+- Not done: automatic backup for cloud users (a browser cannot write files in the background on a phone). A "share backup to Files/Drive" one-tap option could come later.
+- Test: p59 extended (storage requested, both Settings states, banner names the unsaved days and clears after a backup, iPhone Safari tab recognised).
+
 ## v3.10.924 — Hide "Push To Local Server" For Cloud Users
 
 Pete: "Yes please" (the leftover found by the cloud persona). The Import tab's "🔄 Push this app's data to the local server" button is hidden when there is no local server, and shown again as soon as one is found. p59 now checks it.

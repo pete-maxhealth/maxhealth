@@ -315,6 +315,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.922 | 23 | Full detail in CHANGELOG.md (Phase 23). `checkServer()` offline branch: non-localhost hostname gets the cloud-mode message and hides `#serverOfflineNotice` (Termux help). |
 | v3.10.923 | 23 | Full detail in CHANGELOG.md (Phase 23). New persona `p59_cloud_user.py` (cloud visitor: page served from a non-localhost host, all other requests refused). Test only. |
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
+| v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.913 | 23 | Full detail in CHANGELOG.md (Phase 23). server.py: `sleep_conflicts_resolved.json` + `sleep_conflict_fingerprint`; `GET /sleep-conflicts` drops identical re-queued overlaps for settled nights; skip is not remembered. |
 | v3.10.912 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware item `kind` (plate/bowl/cup/spoon/cutlery/other) drives `fieldsFor` and labels; filled boxes always shown; `mhTwIsLong` for length wording in ruler and AI line. |
 | v3.10.911 | 23 | Full detail in CHANGELOG.md (Phase 23). Notifications card: `refreshNotifUIIfChanged` (load, focus, visibility, 2s poll while visible); clearer not-asked and no-prompt messages. |

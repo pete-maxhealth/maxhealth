@@ -84,6 +84,30 @@ with sync_playwright() as pw:
     # 6. no sleep-conflict card, no server-only prompts on Today
     page.evaluate("switchTab('today'); switchSubTab('today','dash')"); page.wait_for_timeout(1000)
     if page.evaluate("!!document.getElementById('sleepConflictCard') && getComputedStyle(document.getElementById('sleepConflictCard')).display !== 'none'"): f.add('BUG', 'sleep conflict card visible to a cloud user')
+
+    # 7. data protection for a cloud user: persistent storage is requested, the backup banner says what is at risk
+    page.evaluate("mhRequestPersistentStorage()"); page.wait_for_timeout(500)
+    if page.evaluate("window._mhPersisted") not in (True, False, 'unsupported'): f.add('BUG', 'persistent storage was never requested')
+    page.evaluate("window._mhPersisted = false; switchTab('settings'); switchSubTab('settings','import'); updateDataBackupWarningForMode(false)"); page.wait_for_timeout(500)
+    if 'not promised' not in page.evaluate("document.getElementById('mhStorageStatus').textContent"): f.add('BUG', 'Settings does not warn when the browser has not agreed to keep the data')
+    page.evaluate("window._mhPersisted = true; mhUpdateStorageStatus()")
+    if 'agreed to keep' not in page.evaluate("document.getElementById('mhStorageStatus').textContent"): f.add('BUG', 'Settings does not show protected state')
+    page.evaluate("""() => { localStorage.removeItem('mh_last_export_nudge'); window._dismissedWarnings = new Set();
+        state.history = state.history.filter(h => !(h.totals && h.totals.kcal > 0)); }""")
+    seed = [iso(i) for i in range(1, 7)]
+    page.evaluate("""ds => { ds.forEach(d => { const p = d.split('-'); state.history.push({date: p[2]+'/'+p[1]+'/'+p[0].slice(2), totals: {kcal: 1800, protein: 90, carbs: 40, fat: 120}}); }); }""", seed)
+    page.evaluate("checkBackupReminder()"); page.wait_for_timeout(300)
+    bt = page.evaluate("document.getElementById('backupReminderBanner').textContent")
+    if page.evaluate("getComputedStyle(document.getElementById('backupReminderBanner')).display === 'none'") or 'day' not in bt or 'Clearing this browser' not in bt: f.add('BUG', f'cloud backup banner should name what is at risk: {bt[:160]}')
+    page.evaluate("localStorage.setItem('mh_last_export_nudge', arguments[0])" if False else "d => { localStorage.setItem('mh_last_export_nudge', d); window._dismissedWarnings = new Set(); }", iso(0))
+    page.evaluate("checkBackupReminder()"); page.wait_for_timeout(300)
+    if page.evaluate("getComputedStyle(document.getElementById('backupReminderBanner')).display !== 'none'"): f.add('BUG', 'backup banner still shown right after a backup')
+    # iPhone in a Safari tab (not installed): home-screen advice appears
+    ictx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block', user_agent='Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'); serve(ictx)
+    ip = ictx.new_page(); ip.goto('https://cloud.example/'); ip.wait_for_timeout(1200)
+    if not ip.evaluate("mhIsIOSBrowserTab()"): f.add('BUG', 'iPhone Safari tab not recognised')
+    ip.evaluate("window._mhPersisted = false; mhUpdateStorageStatus()") if ip.evaluate("!!document.getElementById('mhStorageStatus')") else None
+    ictx.close()
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)

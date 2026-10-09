@@ -5343,6 +5343,7 @@
     <div id="set-databackup-wrap">
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div id="dataBackupStatusBlock">
+        <div id="mhStorageStatus" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px;"></div>
         <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes, routines, supplements, symptoms and treatments — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
         <div class="settings-row" style="margin-bottom:12px;">
           <div class="settings-label">History entries</div>
@@ -6082,7 +6083,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.924'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.925'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -22440,9 +22441,55 @@ function dismissWarning(el) {
 // which a cloud-only user (no automatic server-side backup at all) might
 // rarely trigger. The dashboard is the one place guaranteed to be seen
 // every single day.
+// v3.10.925: protecting a cloud / web user's data. The browser, not the app, decides when site data is deleted, so there
+// are three layers: (1) ask the browser to mark this site's storage "persistent" (not evicted under storage pressure;
+// Chrome and Safari decide on their own rules, so it can be refused), (2) say plainly what would be lost, as a count
+// of days added since the last backup, and (3) on iPhone, steer people to Add to Home Screen, because Safari can wipe a
+// website's data after 7 days without a visit while installed home-screen web apps are exempt (Apple's WebKit policy).
+window._mhPersisted = null;
+async function mhRequestPersistentStorage() {
+  try {
+    if (!(navigator.storage && navigator.storage.persist)) { window._mhPersisted = 'unsupported'; return; }
+    let ok = await navigator.storage.persisted();
+    if (!ok) ok = await navigator.storage.persist();
+    window._mhPersisted = !!ok;
+  } catch (_) { window._mhPersisted = 'unsupported'; }
+  try { mhUpdateStorageStatus(); } catch (_) {}
+}
+function mhIsCloudHost() { const h = window.location.hostname; return !(h === 'localhost' || h === '127.0.0.1'); }
+function mhIsIOSBrowserTab() {
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  return ios && !standalone;
+}
+function mhUnsavedDays() {
+  // days with any entry (food or a reading) dated after the last backup/export; everything if never backed up
+  let last = null; try { last = localStorage.getItem('mh_last_export_nudge'); } catch (_) {}
+  let n = 0;
+  (state.history || []).forEach(h => {
+    const p = (h.date || '').split('/'); if (p.length !== 3) return;
+    const d = `20${p[2]}-${p[1]}-${p[0]}`;
+    if (last && d <= last) return;
+    const has = (h.totals && h.totals.kcal > 0) || ['steps', 'sleep_duration', 'hr_avg', 'hr_resting', 'weight'].some(k => parseFloat(h[k]) > 0);
+    if (has) n++;
+  });
+  return { n, last };
+}
+function mhUpdateStorageStatus() {
+  const el = document.getElementById('mhStorageStatus'); if (!el) return;
+  const v = window._mhPersisted;
+  el.innerHTML = v === true ? '🛡️ Your browser has agreed to keep this data (persistent storage granted). A backup is still your safety net.'
+    : v === false ? '⚠ Your browser has not promised to keep this data and may delete it if the phone runs low on space or you clear site data. Back up regularly.'
+    : v === 'unsupported' ? '⚠ This browser cannot be asked to protect the data, so back up regularly.' : '';
+  if (mhIsIOSBrowserTab()) el.innerHTML += '<br>📱 <b>iPhone tip:</b> tap Share, then <b>Add to Home Screen</b>, and open MaxedHealth from there. Safari can delete a website\'s data after 7 days without a visit; home-screen web apps are exempt.';
+}
+setTimeout(mhRequestPersistentStorage, 4000);
+
 function checkBackupReminder() {
   const el = document.getElementById('backupReminderBanner');
   if (!el) return;
+  const cloud = mhIsCloudHost();
 
   const lastExport = localStorage.getItem('mh_last_export_nudge');
   const today = localISODate(new Date());
@@ -22450,14 +22497,21 @@ function checkBackupReminder() {
     ? Math.floor((new Date(today) - new Date(lastExport)) / 86400000)
     : 999;
 
-  if (daysSince < 14) {
+  const unsaved = cloud ? mhUnsavedDays().n : 0;
+  if (cloud ? (daysSince < 7 && unsaved < 5) : daysSince < 14) {
     el.style.display = 'none';
     return;
   }
 
-  const msg = lastExport
+  let msg = lastExport
     ? `It's been ${daysSince} days since your last export — your data lives only in this browser, with nothing backing it up automatically.`
     : `You haven't exported a backup yet — your data lives only in this browser, with nothing backing it up automatically.`;
+  if (cloud) {
+    msg = (lastExport ? `${unsaved} day${unsaved === 1 ? '' : 's'} of entries (food and readings) have been added since your last backup ${daysSince} days ago.`
+                      : `You have ${unsaved} day${unsaved === 1 ? '' : 's'} of entries and no backup yet.`)
+        + ` Clearing this browser's site data would lose them.`
+        + (mhIsIOSBrowserTab() ? ` On iPhone, add MaxedHealth to your Home Screen too: Safari can delete a website's data after 7 days without a visit.` : '');
+  }
 
   window._dismissedWarnings = window._dismissedWarnings || new Set();
   if (window._dismissedWarnings.has(msg)) {
@@ -32111,6 +32165,7 @@ function updateDataBackupWarningForMode(isLocal) {
   if (statusBlock) statusBlock.style.display = isLocal ? 'none' : 'block';
   if (isLocal) return; // nothing left to update below - text only matters when the block is actually shown
 
+  try { mhUpdateStorageStatus(); } catch (_) {}
   const headline = document.getElementById('dataBackupWarningHeadline');
   if (!headline) return;
   const helpSpan = document.getElementById('help-databackupwarning');
