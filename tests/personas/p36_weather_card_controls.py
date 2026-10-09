@@ -23,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("d=>{localStorage.setItem('mh_wx_loc',JSON.stringify({lat:38.42,lon:27.14,name:'Izmir'}));localStorage.setItem('mh_wx_cache',JSON.stringify({lat:38.42,lon:27.14,at:Date.now(),date:todayStr(),temp:30,feelsNow:32,code:0,feelsMax:33,hi:31,lo:22,uv:8,rainPct:5}))}")
     page.reload(wait_until='domcontentloaded'); page.wait_for_timeout(2500)
     order = page.evaluate("getDashboardOrder()")
-    exp = list(custom); exp.insert(exp.index('water'), 'weather')
+    exp = list(custom); exp.insert(exp.index('water'), 'weather'); exp.insert(exp.index('water'), 'fasting')  # fasting (v3.10.930) also slots in just above water
     if order != exp: f.add('BUG', f'custom order not preserved with weather slotted before water: {order}')
     idx = lambda: page.evaluate("(()=>{const p=document.getElementById('mhWxCard').parentNode;const k=[...p.children];return [k.indexOf(document.getElementById('mhWxCard')),k.indexOf(document.getElementById('dashSection-water'))]})()")
     a, w = idx()
