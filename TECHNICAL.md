@@ -316,6 +316,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.923 | 23 | Full detail in CHANGELOG.md (Phase 23). New persona `p59_cloud_user.py` (cloud visitor: page served from a non-localhost host, all other requests refused). Test only. |
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
+| v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
 | v3.10.913 | 23 | Full detail in CHANGELOG.md (Phase 23). server.py: `sleep_conflicts_resolved.json` + `sleep_conflict_fingerprint`; `GET /sleep-conflicts` drops identical re-queued overlaps for settled nights; skip is not remembered. |
 | v3.10.912 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware item `kind` (plate/bowl/cup/spoon/cutlery/other) drives `fieldsFor` and labels; filled boxes always shown; `mhTwIsLong` for length wording in ruler and AI line. |
 | v3.10.911 | 23 | Full detail in CHANGELOG.md (Phase 23). Notifications card: `refreshNotifUIIfChanged` (load, focus, visibility, 2s poll while visible); clearer not-asked and no-prompt messages. |
@@ -1035,6 +1036,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p17_winzip_aes.py` — WinZip-AES reader (Zepp export): FIPS test vectors, round trip, wrong password, tamper detection.
 - `p18_midnight.py` — midnight rollover: closed-app gaps (1/5/40 days), no duplicates, empty day, app left open across midnight.
 - `p59_cloud_user.py` — a web-only (cloud / iPhone) visitor with no local server: every screen loads without errors or Termux wording, sync card explains cloud mode, Missing Data and Manual Entry work from browser storage and survive a reload.
+- `p60_prompt_rules.py` — guards key AI meal-prompt rules (cooking-fat note, no sauce double-counting, ambiguity, text overrides photo).
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
 - `p20_hc_automerge.py` — server merges a launcher-written Health Connect export on its own (no cron).
 - `p21_cron_setup.py` — server adds missing cron jobs (update_health every 30 min, auto-update) on a fresh install; never alters an existing crontab.

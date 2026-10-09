@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.926 — Cooking Fat: Say So Instead Of Silently Counting Zero
+
+Pete: "Say go" on the hidden-fat idea, after the research showed photo apps miss roughly 30 g of fat per meal (oil and butter that soaked in). The AI prompt already itemised visible oil, sauce and butter and already refused to add ingredients you did not mention. The gap was the case in between: food that was clearly fried, roasted or pan-cooked with no fat visible or stated. New **cooking fat note** rule: the AI still adds nothing and invents no amount (your "never add unlisted ingredients" rule stands), but ends the message with one line: "No cooking oil or butter counted - tell me what you used and how much and I'll add it." It stays quiet when you already gave the fat, when fat is visible and itemised, or when nothing was cooked in fat (raw, boiled, steamed, microwaved, ready meals, labelled packaged foods). Prompt-only change; new p60 guards the rule wording so a later edit cannot quietly drop it.
+
 ## v3.10.925 — Protecting Cloud Users' Data From Being Lost
 
 Pete: "Is there any way to stop MaxHealth from having the cache cleared or to either highlight any data outstanding that would be lost or fire a warning?" The honest limit first: the browser, not the app, decides when a website's data is deleted, and no web page can force it to keep it. (Clearing "cached images and files" does not touch the app's data; clearing "cookies and site data" does.) So three layers:
