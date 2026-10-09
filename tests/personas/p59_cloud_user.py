@@ -8,9 +8,15 @@ from datetime import date, timedelta
 from playwright.sync_api import sync_playwright
 f = Findings()
 HTML = open(os.path.join(REPO, 'maxhealth.html'), encoding='utf-8').read()
+JSZ = open(os.path.join(REPO, 'lib', 'jszip.min.js'), encoding='utf-8').read()
 iso = lambda n: (date.today() - timedelta(days=n)).isoformat()
 def serve(ctx):
-    ctx.route(re.compile(r'.*'), lambda r: r.fulfill(status=200, content_type='text/html', body=HTML) if r.request.url.rstrip('/') in ('https://cloud.example', 'https://cloud.example/maxhealth.html') else r.abort())
+    def h(r):
+        u = r.request.url.rstrip('/')
+        if u in ('https://cloud.example', 'https://cloud.example/maxhealth.html'): return r.fulfill(status=200, content_type='text/html', body=HTML)
+        if u == 'https://cloud.example/lib/jszip.min.js': return r.fulfill(status=200, content_type='application/javascript', body=JSZ)
+        return r.abort()
+    ctx.route(re.compile(r'.*'), h)
 def onboard(page):
     page.evaluate("onboardNext(2)"); page.fill('#onboardName', 'Ola'); page.evaluate("onboardNext(3)")
     page.evaluate("obSetSex('female')"); page.fill('#onboardAge', '45'); page.fill('#onboardHeight', '165')
@@ -108,6 +114,25 @@ with sync_playwright() as pw:
     if not ip.evaluate("mhIsIOSBrowserTab()"): f.add('BUG', 'iPhone Safari tab not recognised')
     ip.evaluate("window._mhPersisted = false; mhUpdateStorageStatus()") if ip.evaluate("!!document.getElementById('mhStorageStatus')") else None
     ictx.close()
+
+    # 8. one-tap "Share backup" for cloud users: shown only where the phone can share files; shares a zip; a cancelled share saves nothing
+    shctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block'); serve(shctx)
+    shctx.add_init_script("""Object.defineProperty(navigator, 'canShare', {value: d => !!(d && d.files && d.files.length), configurable: true});
+        window.__mode = 'ok'; navigator.share = async d => { if (window.__mode === 'cancel') { const e = new Error('x'); e.name = 'AbortError'; throw e; } window.__shared = d.files.map(f => ({name: f.name, size: f.size, type: f.type})); };""")
+    sp = shctx.new_page(); sp.goto('https://cloud.example/'); sp.wait_for_timeout(2200)
+    if not sp.evaluate("mhCanShareBackup()"): f.add('BUG', 'share-capable browser not detected')
+    sp.evaluate("switchTab('settings'); switchSubTab('settings','import'); updateDataBackupWarningForMode(false); mhShowShareBackupButtons()"); sp.wait_for_timeout(500)
+    if sp.evaluate("getComputedStyle(document.querySelector('.mhShareBackupBtn')).display === 'none'"): f.add('BUG', 'Share backup button hidden although the browser can share files')
+    sp.evaluate("localStorage.removeItem('mh_last_export_nudge'); window.__mode = 'cancel'"); sp.evaluate("exportAllShare()"); sp.wait_for_timeout(1500)
+    if sp.evaluate("localStorage.getItem('mh_last_export_nudge')"): f.add('BUG', 'a cancelled share was recorded as a backup')
+    sp.evaluate("window.__mode = 'ok'"); sp.evaluate("exportAllShare()"); sp.wait_for_timeout(2000)
+    sh = sp.evaluate("window.__shared || null")
+    if not sh or not sh[0]['name'].endswith('.zip') or sh[0]['size'] < 100: f.add('BUG', f'share did not hand over a zip backup: {sh}')
+    if not sp.evaluate("localStorage.getItem('mh_last_export_nudge')"): f.add('BUG', 'a completed share was not recorded as a backup')
+    shctx.close()
+    # a browser that cannot share files: the button stays hidden
+    page.evaluate("Object.defineProperty(navigator, 'canShare', {value: undefined, configurable: true}); mhShowShareBackupButtons()")
+    if page.evaluate("[...document.querySelectorAll('.mhShareBackupBtn')].some(b => getComputedStyle(b).display !== 'none')"): f.add('BUG', 'Share backup button shown where sharing files is not supported')
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)

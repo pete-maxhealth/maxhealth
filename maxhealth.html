@@ -5344,6 +5344,7 @@
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div id="dataBackupStatusBlock">
         <div id="mhStorageStatus" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px;"></div>
+        <button class="copy-btn mhShareBackupBtn" style="display:none;width:100%;margin-bottom:10px;" onclick="exportAllShare()">📤 Share backup to Files / Drive / iCloud</button>
         <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes, routines, supplements, symptoms and treatments — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
         <div class="settings-row" style="margin-bottom:12px;">
           <div class="settings-label">History entries</div>
@@ -6083,7 +6084,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.926'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.927'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -13085,7 +13086,8 @@ function autoBackupIfNeeded() {
 // offline on first load before it's cached) - see the <script> tag's own
 // comment - so backing up never silently does nothing just because the zip
 // library isn't available.
-async function exportAll() {
+async function exportAll(opts) {
+  const share = !!(opts && opts.share);
   const dateStr = todayStr().replace(/\//g,'-');
 
   // Also push to the server, not just Downloads - explicit button press,
@@ -13117,6 +13119,23 @@ async function exportAll() {
 
   const jsonBackup = JSON.stringify(buildFullBackupPayload(), null, 2);
 
+  // v3.10.927: "Share backup" hands the file to the phone's share sheet (Files, Drive, iCloud, email, messages), the one
+  // way a browser app on a phone can put a backup somewhere outside the browser in a single tap. Returns true if shared.
+  const tryShare = async (blobOrText, name, type) => {
+    try {
+      const file = new File([blobOrText], name, { type });
+      if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return false;
+      await navigator.share({ files: [file], title: 'MaxedHealth backup' });
+      showToast('Backup shared ✓');
+      localStorage.setItem('mh_last_export_nudge', localISODate(new Date()));
+      return true;
+    } catch (e) {
+      if (e && e.name === 'AbortError') { showToast('Share cancelled, nothing saved'); return true; }
+      return false;   // anything else: fall back to a normal download below
+    }
+  };
+  if (share && !window.JSZip && await tryShare(jsonBackup, `maxhealth_backup_${dateStr}.json`, 'application/json')) return;
+
   if (window.JSZip) {
     try {
       const zip = new JSZip();
@@ -13124,6 +13143,7 @@ async function exportAll() {
       if (nutritionRows) zip.file(`master_${dateStr}.csv`, nutritionRows);
       if (combinedCsv) zip.file(`combined_${dateStr}.csv`, combinedCsv);
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      if (share && await tryShare(blob, `maxhealth_backup_${dateStr}.zip`, 'application/zip')) return;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `maxhealth_backup_${dateStr}.zip`; a.click();
@@ -13156,6 +13176,13 @@ async function exportAll() {
   showToast(`Exporting ${count} file${count > 1 ? 's' : ''}… check Downloads`);
   localStorage.setItem('mh_last_export_nudge', localISODate(new Date()));
 }
+
+function mhCanShareBackup() {
+  try { return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [new File(['x'], 'b.zip', { type: 'application/zip' })] })); } catch (_) { return false; }
+}
+function exportAllShare() { return exportAll({ share: true }); }
+function mhShowShareBackupButtons() { document.querySelectorAll('.mhShareBackupBtn').forEach(b => { b.style.display = mhCanShareBackup() ? '' : 'none'; }); }
+setTimeout(mhShowShareBackupButtons, 1500);
 
 // ─── PHOTO HANDLING ──────────────────────────────────────
 let _pendingPhotoBase64 = null;
@@ -22027,6 +22054,7 @@ function showEODSummary(message, csvLine) {
         style="width:100%;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);color:var(--yellow);border-radius:var(--radius-sm);padding:8px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">
         📦 EXPORT ALL DATA
       </button>
+    <button class="mhShareBackupBtn" onclick="exportAllShare()" style="display:none;width:100%;margin-top:8px;background:transparent;border:1px solid rgba(245,197,66,0.5);color:var(--yellow);border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;">📤 Share to Files / Drive / iCloud</button>
     </div>` : '';
 
   div.innerHTML = `<div class="bubble-label">MAXEDHEALTH — END OF DAY</div>${message.replace(/\n/g,'<br>')}
@@ -22526,6 +22554,7 @@ function checkBackupReminder() {
     <button onclick="exportAll();this.textContent='✓ Exporting…';this.style.opacity='0.6';this.disabled=true;setTimeout(()=>{document.getElementById('backupReminderBanner').style.display='none';},2500);" style="display:block;width:100%;margin-top:8px;background:rgba(245,197,66,0.15);border:1px solid rgba(245,197,66,0.35);color:var(--yellow);border-radius:6px;padding:7px;font-size:12px;font-family:Space Mono,monospace;cursor:pointer;">📦 Export now</button>
     <span onclick="dismissWarning(this)" data-warning-key="${msg.replace(/"/g,'&quot;')}" data-rerender="checkBackupReminder" style="position:absolute;top:8px;right:10px;cursor:pointer;color:var(--yellow);opacity:0.6;font-size:16px;line-height:1;padding:4px;">×</span>
   </div>`;
+  try { mhShowShareBackupButtons(); } catch (_) {}
 }
 
 function checkGoalMismatch() {
