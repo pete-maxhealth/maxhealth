@@ -1,4 +1,9 @@
-// MaxedHealth Service Worker v2.3
+// MaxedHealth Service Worker v2.4
+// v2.4: a connection that is ON but silent (airplane mode with a VPN still showing, a dead hotspot) used to make the
+// page wait for the browser's own long timeout before the saved copy was used. If this page is already saved and the
+// server has not even started to answer within NET_WAIT_MS, the saved copy is shown at once and the fetch carries on in
+// the background to refresh it. The landing page (/maxhealth/ and index.html) is covered too, not just the app page,
+// and so are the bundled /lib/ scripts, which block the page while loading.
 // v2.2: tapping a notification opens/focuses the app on the screen the reminder was about.
 // v2.3: works with NO connection at all. Android Chrome will not even try the local server
 // (localhost:5757) when the phone has no network of any kind (airplane mode with WiFi and
@@ -7,6 +12,7 @@
 // back only when the server cannot be reached. Whenever the server answers, the page always
 // comes fresh from it (network first, cache: 'no-store'); the saved copy is a fallback only.
 const SHELL_CACHE = 'mh-shell-v1';
+const NET_WAIT_MS = 3000; // time to first response only (headers); a slow download is never cut off
 
 function shellKey(url) {
   const u = new URL(url);
@@ -15,7 +21,8 @@ function shellKey(url) {
 function isAppPage(req) {
   if (req.mode !== 'navigate') return false;
   const p = new URL(req.url).pathname;
-  return p === '/' || p === '/maxhealth' || p === '/maxhealth.html' || p === '/maxhealth/maxhealth.html';
+  return p === '/' || p === '/index.html' || p === '/maxhealth' || p === '/maxhealth/' || p === '/maxhealth/index.html' ||
+         p === '/maxhealth.html' || p === '/maxhealth/maxhealth.html';
 }
 
 self.addEventListener('install', e => {
@@ -25,6 +32,13 @@ self.addEventListener('install', e => {
       const r = await fetch(self.registration.scope, { cache: 'no-store' });
       if (r && r.status === 200) (await caches.open(SHELL_CACHE)).put(shellKey(self.registration.scope), r.clone());
     } catch (_) { /* offline at install time: nothing to save yet, not an error */ }
+    // Save the bundled scripts too, so the very first offline open does not wait on them.
+    try {
+      const c = await caches.open(SHELL_CACHE);
+      for (const n of ['chart.umd.js', 'jspdf.umd.min.js', 'jspdf.plugin.autotable.min.js', 'jszip.min.js']) {
+        try { const u = new URL('lib/' + n, self.registration.scope).href; const r = await fetch(u, { cache: 'no-store' }); if (r && r.status === 200) await c.put(u, r); } catch (_) {}
+      }
+    } catch (_) {}
     self.skipWaiting();
   })());
 });
@@ -38,20 +52,38 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (isAppPage(e.request)) {
     e.respondWith((async () => {
-      try {
-        // { cache: 'no-store' } forces a genuine network round-trip every time, bypassing the
-        // browser's own HTTP cache, so a reachable server always wins over any saved copy.
-        const r = await fetch(e.request, { cache: 'no-store' });
-        if (r && r.status === 200 && !r.redirected) {
-          try { (await caches.open(SHELL_CACHE)).put(shellKey(e.request.url), r.clone()); } catch (_) {}
-        }
+      const c = await caches.open(SHELL_CACHE);
+      const key = shellKey(e.request.url);
+      const fallback = async () => (await c.match(key)) || (await c.match(shellKey(self.registration.scope))) || Response.error();
+      // { cache: 'no-store' } forces a genuine network round-trip every time, bypassing the
+      // browser's own HTTP cache, so a reachable server always wins over any saved copy.
+      const net = fetch(e.request, { cache: 'no-store' }).then(r => {
+        if (r && r.status === 200 && !r.redirected) { try { c.put(key, r.clone()); } catch (_) {} }
         return r;
-      } catch (err) {
-        const c = await caches.open(SHELL_CACHE);
-        return (await c.match(shellKey(e.request.url))) ||
-               (await c.match(shellKey(self.registration.scope))) ||
-               Response.error();
-      }
+      });
+      const have = await c.match(key);
+      if (!have) { try { return await net; } catch (err) { return fallback(); } }
+      let timer;
+      const silent = new Promise(res => { timer = setTimeout(() => res(null), NET_WAIT_MS); });
+      try {
+        const r = await Promise.race([net, silent]);
+        clearTimeout(timer);
+        if (r) return r;
+        e.waitUntil(net.catch(() => {}));
+        return have;
+      } catch (err) { clearTimeout(timer); return fallback(); }
+    })());
+    return;
+  }
+  // The bundled libraries (Chart.js, jsPDF, JSZip) are plain <script> tags that block the page while they load, so a silent
+  // connection would hold the whole app up on them. Serve the saved copy at once and refresh it in the background.
+  if (new URL(e.request.url).pathname.includes('/lib/')) {
+    e.respondWith((async () => {
+      const c = await caches.open(SHELL_CACHE);
+      const have = await c.match(e.request.url);
+      const net = fetch(e.request, { cache: 'no-store' }).then(r => { if (r && r.status === 200) { try { c.put(e.request.url, r.clone()); } catch (_) {} } return r; });
+      if (have) { e.waitUntil(net.catch(() => {})); return have; }
+      return net;
     })());
     return;
   }
