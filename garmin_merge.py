@@ -1,6 +1,6 @@
 """
 garmin_merge.py — merges Garmin wellness + activities data into the pipeline's
-daily combined structure, applying the precedence rule Pete confirmed:
+daily combined structure, applying the precedence rule Pete Spence confirmed:
 Garmin's own recorded activity calories override the app's MET-based estimate
 for any exercise session Garmin actually captured. Wellness fields (steps,
 resting HR, etc.) still go through the existing user-configurable device

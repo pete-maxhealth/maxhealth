@@ -5,7 +5,7 @@ garmin_activities.py — parser for Garmin Connect's "Export CSV" activities fil
 IMPORTANT — unit ambiguity in Garmin's own export:
 Garmin's CSV does not include an explicit units column. Distance and pace units
 depend on each activity's own device/display settings at the time it was recorded,
-and can genuinely differ row-to-row in the same file (confirmed in Pete's actual
+and can genuinely differ row-to-row in the same file (confirmed in Pete Spence's actual
 sample: a running activity's distance value matches its "5K" title only if read
 as kilometres, while the same file's cycling row shows "15.5 mph" — implying
 miles for that row instead). Silently assuming one global unit would be wrong

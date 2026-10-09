@@ -1,6 +1,6 @@
 """
 generate_test_data.py — realistic synthetic Garmin export data, matching the
-exact schemas confirmed against Pete's real examples (both the wellness JSON
+exact schemas confirmed against Pete Spence's real examples (both the wellness JSON
 and the activities CSV). Used only to build and validate the merge logic
 before the real 24-48hr bulk export arrives — not meant to be mistaken for
 real data anywhere downstream.
@@ -10,7 +10,7 @@ import json
 import csv
 
 # 5 days of synthetic wellness data (unofficial get_user_summary schema —
-# the one Pete will actually get from a personal export/script)
+# the one Pete Spence will actually get from a personal export/script)
 wellness_days = [
     {"userProfileId": 111, "calendarDate": "2026-07-05", "steps": 8420, "distanceInMeters": 6540.0,
      "activeCalories": 410, "bmrCalories": 1850, "totalCalories": 2260,
@@ -42,7 +42,7 @@ wellness_days = [
 with open('test_garmin_wellness.json', 'w') as f:
     json.dump(wellness_days, f, indent=2)
 
-# 3 days with a real recorded activity — matching Pete's actual CSV format,
+# 3 days with a real recorded activity — matching Pete Spence's actual CSV format,
 # including his exact column set and a realistic date spread that overlaps
 # with the wellness days above, so the merge has real matches to work with.
 activities_rows = [

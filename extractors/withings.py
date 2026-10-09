@@ -33,7 +33,7 @@ from datetime import datetime
 
 # Withings' real export naming convention is data_{ACCOUNT_NAME}_{unix_timestamp}.zip
 # - the account holder's own name sits in the middle, so a check hardcoded to
-# one specific name (originally 'pet', from testing only against Pete's own
+# one specific name (originally 'pet', from testing only against Pete Spence's own
 # export) silently rejected every other family member's real export with
 # the exact same, correct file structure. This matches the SHAPE of a
 # Withings filename instead of any specific name inside it.

@@ -290,7 +290,7 @@ def move_exports_to_inbox():
 
         # Withings — real export filenames are data_{ACCOUNT_NAME}_{timestamp}.zip,
         # so a check hardcoded to one specific name ('data_pet_', from testing
-        # only against Pete's own export) silently rejected every other family
+        # only against Pete Spence's own export) silently rejected every other family
         # member's real export with the exact same, correct file structure.
         # This is the same fix as extractors/withings.py's _looks_like_withings_zip -
         # duplicated here rather than imported since this file only needs the one
@@ -513,7 +513,7 @@ def ensure_scheduled_jobs(force=False):
 
 
 # ── crond keep-alive (05/10/26) ───────────────────────────────────────────────
-# Pete's phone: crond had silently died (auto-update log stopped dead on 2 Oct), so the
+# Pete Spence's phone: crond had silently died (auto-update log stopped dead on 2 Oct), so the
 # watchdog that restarts this server and the update/merge jobs never ran again - the
 # server then died and the app showed 'Site cannot be reached'. While this server is
 # alive it now checks every minute that crond is running and restarts it if not, and
@@ -1396,7 +1396,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         # `manual` (the raw, currently-saved manual override for that date, if
         # any - lets the form distinguish "this field's shown value came from
         # a device" from "this is what I typed in last time", since a device
-        # reading and Pete's own manual correction can genuinely differ).
+        # reading and Pete Spence's own manual correction can genuinely differ).
         elif path == '/manual-entry':
             date_str = params.get('date', [''])[0].strip()
             if not date_str:
@@ -1899,7 +1899,7 @@ def clear_manual_entry(date_str, fields=None):
     Removes a date's manual override — either specific fields (`fields` given)
     or the whole entry (`fields` None/empty).
 
-    IMPORTANT, real limitation (found via Pete's own first live test,
+    IMPORTANT, real limitation (found via Pete Spence's own first live test,
     28/09/26): this can only do two things —
       1. Remove the value from MANUAL_ENTRY_JSON, so it's no longer offered
          as a manual override on the next pipeline run and no longer

@@ -121,7 +121,7 @@ SOURCE_FIELDS = {
                  'weight', 'bmi', 'fat_pct', 'muscle_pct', 'water_pct', 'bone_mass_kg'],
     # 30/09/26 — widened from the original 4 (steps/sleep_duration/hr_avg/weight)
     # to add hrv, spo2, calories_active — the launcher's HealthConnectBridge.kt
-    # now reads and sends these three too (Pete noticed them permanently empty
+    # now reads and sends these three too (Pete Spence noticed them permanently empty
     # on the Today screen; health_connect had simply never been given permission
     # to carry them, on either side — Kotlin wasn't reading them AND this
     # whitelist would have dropped them even if it had). Same lowest-precedence
@@ -637,7 +637,7 @@ def run_extractor(device, inbox, password=None, dry_run=False):
     # device. app/extractors/ (BASE) sits OUTSIDE the git repo, so nothing ever
     # updated it and nothing ever created the files in it for a new user (the
     # launcher's provision.sh only makes the empty folder). Shipping health_connect.py
-    # in the repo and preferring it means a plain `git pull` is enough, for Pete
+    # in the repo and preferring it means a plain `git pull` is enough, for Pete Spence
     # and for every new install, with no hand-copy step.
     repo_extractor = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'extractors', f'{device}.py')
     # Which copy wins (01/10/26): health_connect and manual always use the repo's (the phone's

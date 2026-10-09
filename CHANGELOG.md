@@ -2,29 +2,33 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.931 — Pete Spence, In Full
+
+Pete Spence: "it's about time to change all references in the app and documentation of Pete to Pete Spence". Every reference in the app (Settings "Developed by", comments, messages), the landing page, README, TECHNICAL.md, the user guide, story and why-free pages, the GBM patient guide, CODEOWNERS, the server and the update scripts now uses the full name. Left alone on purpose: real export file names such as `Activity-Pete-*.csv` and `Data Export-Pete-*.zip` (the parsers match the names the devices actually produce), the test personas' typed-in name, and the Android launcher source (outside this repository). New test: `p64_full_name.py`.
+
 ## v3.10.930 — Fasting, Built Into The Whole App
 
-Pete: fasting has to be "fully embodied into the system, not just a bolt on", for everyone with or without a condition, and a help tip is needed because "a lot of people think longer is better". Every logged meal already carries a time, so fasting is **measured from the existing log with no new entry**, and past days count retroactively. Overnight fast for a day = its first meal minus the previous logged day's last meal; eating window = last meal minus first. A meal is any entry at or above a kcal threshold (default 50, Settings), so a black coffee or a supplement never breaks a fast. Times before 04:00 count as the late end of that day. Entries logged to a past day without choosing a time are now marked `timeApprox` (their stored time is when they were logged) and are ignored. A multi-day fast counts only when every day between the two meals is tagged Fasting. **Today:** new Fasting card (live time since last meal, goal bar, last completed fast, last eating window, condition note), with show/hide, reorder and an order migration for saved layouts. **Settings > Manage:** Fasting card (your own overnight goal, default 12 h, and the threshold); both are `mh_` keys so they travel in backups. **Trends:** Overnight Fast card (bars against a goal line, longest, % at goal, average eating window) with hide/reorder and order migration. **Compare Metrics:** Overnight fast and Eating window in the Nutrition group. **Reports:** Fasting section (last 30 days and all time, plus days after a fast at or above your goal against the rest on ketosis/on-target adherence, sleep and GKI, labelled as an association) with collapse/reorder; also a Fasting block in the printable report and a FASTING line in the AI context (the goal is the person's own, no medical target, association only). **Conditions:** diabetes gets a plain caution about glucose-lowering medicine, epilepsy about anti-seizure medicine, migraine a note on meal gaps as a trigger, GBM/keto a Proven / Early stage note linking fasts to ketones and GKI. **Help tip:** longer is not better; ketogenic eating already sits close to a fasting state; fat or protein taken with medicine barely moves insulin or glucose and never means skipping a dose. Persona `p63_fasting.py`.
+Pete Spence: fasting has to be "fully embodied into the system, not just a bolt on", for everyone with or without a condition, and a help tip is needed because "a lot of people think longer is better". Every logged meal already carries a time, so fasting is **measured from the existing log with no new entry**, and past days count retroactively. Overnight fast for a day = its first meal minus the previous logged day's last meal; eating window = last meal minus first. A meal is any entry at or above a kcal threshold (default 50, Settings), so a black coffee or a supplement never breaks a fast. Times before 04:00 count as the late end of that day. Entries logged to a past day without choosing a time are now marked `timeApprox` (their stored time is when they were logged) and are ignored. A multi-day fast counts only when every day between the two meals is tagged Fasting. **Today:** new Fasting card (live time since last meal, goal bar, last completed fast, last eating window, condition note), with show/hide, reorder and an order migration for saved layouts. **Settings > Manage:** Fasting card (your own overnight goal, default 12 h, and the threshold); both are `mh_` keys so they travel in backups. **Trends:** Overnight Fast card (bars against a goal line, longest, % at goal, average eating window) with hide/reorder and order migration. **Compare Metrics:** Overnight fast and Eating window in the Nutrition group. **Reports:** Fasting section (last 30 days and all time, plus days after a fast at or above your goal against the rest on ketosis/on-target adherence, sleep and GKI, labelled as an association) with collapse/reorder; also a Fasting block in the printable report and a FASTING line in the AI context (the goal is the person's own, no medical target, association only). **Conditions:** diabetes gets a plain caution about glucose-lowering medicine, epilepsy about anti-seizure medicine, migraine a note on meal gaps as a trigger, GBM/keto a Proven / Early stage note linking fasts to ketones and GKI. **Help tip:** longer is not better; ketogenic eating already sits close to a fasting state; fat or protein taken with medicine barely moves insulin or glucose and never means skipping a dose. Persona `p63_fasting.py`.
 
 ## v3.10.929 — A Silent Connection No Longer Holds The App Up (Service Worker 2.4)
 
-Pete tested the web version in airplane mode (a VPN icon still showing), pressed Home and the page that came back was the landing page, and it was slow to appear. Three causes, all fixed. (1) A connection that is on but silent makes the browser wait its own long timeout before using the saved copy. The service worker now shows the saved copy if the server has not started answering within 3 seconds (time to first response only, so a slow download is never cut off) and refreshes it in the background. (2) The landing page (`/maxhealth/`, `index.html`) was not covered by the saved-copy fallback; it is now. (3) The landing page's Google Fonts stylesheet blocked rendering; it now loads without blocking, as the app already did. Also found by the new test: the bundled Chart.js / jsPDF / JSZip `<script>` tags block the page while loading, so with a silent connection the app never finished starting. They are now saved at install and served from the saved copy, refreshed in the background. Wording: the welcome screen no longer says "no subscriptions"; the landing page's "0 subscriptions" tile became "Free web version", and its wearable-sync line points to Premium first with the Termux DIY route second. The step-by-step Termux setup guide moved off the public landing page to an unlisted `premium-site/setup.html` (branded, `noindex`) for Premium customers; the landing page now has a Premium section with the register-interest link in its place. Persona `p62_silent_network.py` stops the server mid-test so connections are accepted but never answered; it hangs on the old worker and passes on the new one.
+Pete Spence tested the web version in airplane mode (a VPN icon still showing), pressed Home and the page that came back was the landing page, and it was slow to appear. Three causes, all fixed. (1) A connection that is on but silent makes the browser wait its own long timeout before using the saved copy. The service worker now shows the saved copy if the server has not started answering within 3 seconds (time to first response only, so a slow download is never cut off) and refreshes it in the background. (2) The landing page (`/maxhealth/`, `index.html`) was not covered by the saved-copy fallback; it is now. (3) The landing page's Google Fonts stylesheet blocked rendering; it now loads without blocking, as the app already did. Also found by the new test: the bundled Chart.js / jsPDF / JSZip `<script>` tags block the page while loading, so with a silent connection the app never finished starting. They are now saved at install and served from the saved copy, refreshed in the background. Wording: the welcome screen no longer says "no subscriptions"; the landing page's "0 subscriptions" tile became "Free web version", and its wearable-sync line points to Premium first with the Termux DIY route second. The step-by-step Termux setup guide moved off the public landing page to an unlisted `premium-site/setup.html` (branded, `noindex`) for Premium customers; the landing page now has a Premium section with the register-interest link in its place. Persona `p62_silent_network.py` stops the server mid-test so connections are accepted but never answered; it hangs on the old worker and passes on the new one.
 
 ## v3.10.928 — Premium (Local Version) Card And A Register-Interest Page
 
-Pete's plan: keep the web version free, offer the local Android version as a paid Premium, and until payment is set up send interested people to a register-interest page on pspence.co.uk. New **Premium (local version)** card in Settings > Manage (show/hide, reorder, site search). A cloud visitor sees what local adds (automatic Health Connect wearable sync, data on your own phone, works with no signal, setup help and updates) and a **Register interest** link that opens `MH_PREMIUM_URL` in a new tab (`noopener`); the app itself sends nothing. A local user sees a thank-you instead. New `premium-site/` folder: `index.html` (page with an unticked consent box and a plain privacy note) and `register.php` (validates email, requires consent, honeypot, 30 s rate limit, saves to a private CSV above the web root, guards spreadsheet formulas, emails a notice) plus a GoDaddy cPanel README. The repo already carries an all-rights-reserved LICENSE. Persona `p61_premium_card.py`. The page is dark to match the app, carries the MaxedHealth icon (favicon, header, footer, link preview), shows the four Premium benefits as cards and is checked at phone and desktop width. Second pass: brighter secondary text, seven benefit cards (adds full offline mode, device extractors including adding new ones, device precedence with sleep-conflict flagging, self-checks and auto-update) and a Free web vs Premium table. The in-app card lists the same benefits.
+Pete Spence's plan: keep the web version free, offer the local Android version as a paid Premium, and until payment is set up send interested people to a register-interest page on pspence.co.uk. New **Premium (local version)** card in Settings > Manage (show/hide, reorder, site search). A cloud visitor sees what local adds (automatic Health Connect wearable sync, data on your own phone, works with no signal, setup help and updates) and a **Register interest** link that opens `MH_PREMIUM_URL` in a new tab (`noopener`); the app itself sends nothing. A local user sees a thank-you instead. New `premium-site/` folder: `index.html` (page with an unticked consent box and a plain privacy note) and `register.php` (validates email, requires consent, honeypot, 30 s rate limit, saves to a private CSV above the web root, guards spreadsheet formulas, emails a notice) plus a GoDaddy cPanel README. The repo already carries an all-rights-reserved LICENSE. Persona `p61_premium_card.py`. The page is dark to match the app, carries the MaxedHealth icon (favicon, header, footer, link preview), shows the four Premium benefits as cards and is checked at phone and desktop width. Second pass: brighter secondary text, seven benefit cards (adds full offline mode, device extractors including adding new ones, device precedence with sleep-conflict flagging, self-checks and auto-update) and a Free web vs Premium table. The in-app card lists the same benefits.
 
 ## v3.10.927 — One-Tap "Share Backup" For Cloud Users
 
-Pete: "Anything that doesn't involve Android Studio is good to work on." A browser app on a phone cannot back itself up in the background, but it can hand a file to the phone's share sheet in one tap. New **📤 Share backup to Files / Drive / iCloud** button in Settings > Data & Backup and in the Today backup reminder. It builds the same zip as Export All Data and passes it to the share sheet, so you can send it to Files, Google Drive, iCloud, email or a message. The button only appears on browsers that can share files (phones, mostly); elsewhere it stays hidden and Export All Data still downloads as before. A cancelled share is not counted as a backup, so the reminder keeps nagging; a completed one is. If the share fails for any other reason it falls back to the normal download. p59 extended (button shown/hidden by capability, cancelled share not recorded, completed share hands over a zip and is recorded).
+Pete Spence: "Anything that doesn't involve Android Studio is good to work on." A browser app on a phone cannot back itself up in the background, but it can hand a file to the phone's share sheet in one tap. New **📤 Share backup to Files / Drive / iCloud** button in Settings > Data & Backup and in the Today backup reminder. It builds the same zip as Export All Data and passes it to the share sheet, so you can send it to Files, Google Drive, iCloud, email or a message. The button only appears on browsers that can share files (phones, mostly); elsewhere it stays hidden and Export All Data still downloads as before. A cancelled share is not counted as a backup, so the reminder keeps nagging; a completed one is. If the share fails for any other reason it falls back to the normal download. p59 extended (button shown/hidden by capability, cancelled share not recorded, completed share hands over a zip and is recorded).
 
 ## v3.10.926 — Cooking Fat: Say So Instead Of Silently Counting Zero
 
-Pete: "Say go" on the hidden-fat idea, after the research showed photo apps miss roughly 30 g of fat per meal (oil and butter that soaked in). The AI prompt already itemised visible oil, sauce and butter and already refused to add ingredients you did not mention. The gap was the case in between: food that was clearly fried, roasted or pan-cooked with no fat visible or stated. New **cooking fat note** rule: the AI still adds nothing and invents no amount (your "never add unlisted ingredients" rule stands), but ends the message with one line: "No cooking oil or butter counted - tell me what you used and how much and I'll add it." It stays quiet when you already gave the fat, when fat is visible and itemised, or when nothing was cooked in fat (raw, boiled, steamed, microwaved, ready meals, labelled packaged foods). Prompt-only change; new p60 guards the rule wording so a later edit cannot quietly drop it.
+Pete Spence: "Say go" on the hidden-fat idea, after the research showed photo apps miss roughly 30 g of fat per meal (oil and butter that soaked in). The AI prompt already itemised visible oil, sauce and butter and already refused to add ingredients you did not mention. The gap was the case in between: food that was clearly fried, roasted or pan-cooked with no fat visible or stated. New **cooking fat note** rule: the AI still adds nothing and invents no amount (your "never add unlisted ingredients" rule stands), but ends the message with one line: "No cooking oil or butter counted - tell me what you used and how much and I'll add it." It stays quiet when you already gave the fat, when fat is visible and itemised, or when nothing was cooked in fat (raw, boiled, steamed, microwaved, ready meals, labelled packaged foods). Prompt-only change; new p60 guards the rule wording so a later edit cannot quietly drop it.
 
 ## v3.10.925 — Protecting Cloud Users' Data From Being Lost
 
-Pete: "Is there any way to stop MaxHealth from having the cache cleared or to either highlight any data outstanding that would be lost or fire a warning?" The honest limit first: the browser, not the app, decides when a website's data is deleted, and no web page can force it to keep it. (Clearing "cached images and files" does not touch the app's data; clearing "cookies and site data" does.) So three layers:
+Pete Spence: "Is there any way to stop MaxHealth from having the cache cleared or to either highlight any data outstanding that would be lost or fire a warning?" The honest limit first: the browser, not the app, decides when a website's data is deleted, and no web page can force it to keep it. (Clearing "cached images and files" does not touch the app's data; clearing "cookies and site data" does.) So three layers:
 - **Ask the browser to protect it.** The app now requests persistent storage (`navigator.storage.persist()`) shortly after start. If granted, the browser will not delete the data to free space. It can be refused, so Settings > Data & Backup shows which one you have ("🛡️ granted" or "⚠ not promised").
 - **Say what would be lost.** For cloud users the backup banner on Today now appears after 7 days (was 14) or as soon as 5 days of entries are unsaved, and says how many days of entries (food and readings) have been added since the last backup, instead of a generic "it's been a while". Local (Termux) users are unchanged because the server backs up for them.
 - **iPhone:** in a normal Safari tab (not installed) the banner and the Settings line explain that Safari can delete a website's data after 7 days without a visit (Apple's WebKit policy), and that adding MaxedHealth to the Home Screen avoids that.
@@ -33,20 +37,20 @@ Pete: "Is there any way to stop MaxHealth from having the cache cleared or to ei
 
 ## v3.10.924 — Hide "Push To Local Server" For Cloud Users
 
-Pete: "Yes please" (the leftover found by the cloud persona). The Import tab's "🔄 Push this app's data to the local server" button is hidden when there is no local server, and shown again as soon as one is found. p59 now checks it.
+Pete Spence: "Yes please" (the leftover found by the cloud persona). The Import tab's "🔄 Push this app's data to the local server" button is hidden when there is no local server, and shown again as soon as one is found. p59 now checks it.
 
 ## v3.10.923 — Cloud-User Persona (Daily Watch)
 
-Pete: "We probably need to do a full test as a cloud user. Could this be simulated and added as persona so we can keep a daily watch?" New `tests/personas/p59_cloud_user.py`, picked up automatically by the nightly run (it runs every `p[0-9]*.py`). It simulates a web-only visitor (iPhone or browser, no local server) by serving the page from a non-localhost host with every other request refused, then: onboards; confirms the app knows there is no server; walks all 10 screens checking for page errors and for Termux / `mhstart` wording outside the Import tab; checks the Sync card explains cloud mode, the Sync button is off and no background-sync banner shows; imports a CSV, checks Missing Data lists the right days, fills one gap and a brand-new day with Manual Entry; reloads the page and checks the hand-entered values and imported rows survived. No app change in this release.
+Pete Spence: "We probably need to do a full test as a cloud user. Could this be simulated and added as persona so we can keep a daily watch?" New `tests/personas/p59_cloud_user.py`, picked up automatically by the nightly run (it runs every `p[0-9]*.py`). It simulates a web-only visitor (iPhone or browser, no local server) by serving the page from a non-localhost host with every other request refused, then: onboards; confirms the app knows there is no server; walks all 10 screens checking for page errors and for Termux / `mhstart` wording outside the Import tab; checks the Sync card explains cloud mode, the Sync button is off and no background-sync banner shows; imports a CSV, checks Missing Data lists the right days, fills one gap and a brand-new day with Manual Entry; reloads the page and checks the hand-entered values and imported rows survived. No app change in this release.
 - Found while building it, not changed (flagging rather than expanding scope): the Import tab still shows "Push this app's data to the local server" to cloud users. It does nothing useful for them.
 
 ## v3.10.922 — Wearable Sync Card Says Plainly It Is Not For Cloud Mode
 
-Pete: "How is the wearable sync card dealt with for these users? Is it hidden or carry a message saying that it's not for cloud use?" Checked: it was shown, with the Sync button greyed out, but the text said "Local server not running" and the panel under it told people to open Termux and type `mhstart`, which an iPhone or browser-only user cannot do. Now, on the web (cloud) version the card says "Wearable sync is not available in cloud mode. It needs the local version of MaxedHealth, which runs on an Android phone." and points to Manual Entry, the importers below it and Data Backup; the Termux panel is not shown. On the Android local version the old "server not running" help is unchanged. Test: p57 extended (page served from a non-localhost host with every other request blocked).
+Pete Spence: "How is the wearable sync card dealt with for these users? Is it hidden or carry a message saying that it's not for cloud use?" Checked: it was shown, with the Sync button greyed out, but the text said "Local server not running" and the panel under it told people to open Termux and type `mhstart`, which an iPhone or browser-only user cannot do. Now, on the web (cloud) version the card says "Wearable sync is not available in cloud mode. It needs the local version of MaxedHealth, which runs on an Android phone." and points to Manual Entry, the importers below it and Data Backup; the Termux panel is not shown. On the Android local version the old "server not running" help is unchanged. Test: p57 extended (page served from a non-localhost host with every other request blocked).
 
 ## v3.10.921 — Manual Entry And Missing Data Now Work In Cloud Mode; Bolder Log-Confirm Buttons
 
-Pete: "Yes to the cloud fix" (and a screenshot of the log-confirmation buttons asking for bolder text).
+Pete Spence: "Yes to the cloud fix" (and a screenshot of the log-confirmation buttons asking for bolder text).
 - **Cloud / GitHub Pages / iPhone users can now use Manual Entry.** With no local server, the same screen saves into this browser's own data (the same place a combined.csv import fills): the day is merged into the in-app history, and the browser's cached combined.csv is updated so it survives a reload. Only the typed fields are written, other days are untouched, and a day you open shows what the browser already holds for it. Local (Termux) behaviour is unchanged and still goes through the server.
 - **Missing Data card** now works in cloud mode too: it works out the same gaps (no steps, heart rate or sleep on a finished day in the last 14) from the browser's data. The "Edit this day by hand" link on Trends is back for everyone (the v3.10.919 hiding is removed because it is no longer needed).
 - **Bolder buttons:** "Log it ✓", "Save only", "Cancel" and "Verify across 3 AIs" in the log-confirmation panel now use bold text.
@@ -54,7 +58,7 @@ Pete: "Yes to the cloud fix" (and a screenshot of the log-confirmation buttons a
 
 ## v3.10.920 — RingConn Second Sleep Session: Broken Nights Joined, Naps Kept Separately
 
-Pete: "Yes to Ringconn second period." RingConn can record several sleep sessions under one date, and until now only the longest was kept; the rest were silently dropped (73 dates in the old export had this). Rule, per date: the longest session is the night. A short extra session (under 3 hours) that starts or ends within 2 hours of the night is a broken night (woke, got up, slept again), so its minutes and stages are **added to the night**. A short extra session further away than that is a **nap**, stored in a new field `sleep_nap_min` and shown as "Nap (separate)" in the day's Sleep card; it does not change the night's total. A long second session (3 hours or more) is a different night under the same date label and is ignored as before.
+Pete Spence: "Yes to Ringconn second period." RingConn can record several sleep sessions under one date, and until now only the longest was kept; the rest were silently dropped (73 dates in the old export had this). Rule, per date: the longest session is the night. A short extra session (under 3 hours) that starts or ends within 2 hours of the night is a broken night (woke, got up, slept again), so its minutes and stages are **added to the night**. A short extra session further away than that is a **nap**, stored in a new field `sleep_nap_min` and shown as "Nap (separate)" in the day's Sleep card; it does not change the night's total. A long second session (3 hours or more) is a different night under the same date label and is ignored as before.
 - Applies to RingConn exports imported from now on. Dates already in combined.csv are not rewritten (the merge never overwrites a source with itself), so nothing already settled changes.
 - New column `sleep_nap_min` in combined.csv (old files simply gain an empty column). Not offered in Manual Entry.
 - Test: new p58 (plain night, joined broken night incl. stages, nap, long second session ignored).
@@ -62,33 +66,33 @@ Pete: "Yes to Ringconn second period." RingConn can record several sleep session
 
 ## v3.10.919 — New Day-Fix Links Respect Cloud Mode
 
-Pete: "How will all these new features affect cloud and Apple users?" Checked: Manual Entry saves through the local server, which cloud (GitHub Pages) and iPhone users do not have. The sync banner already stays hidden without a server, but the new "Edit this day by hand" link would have led to a form that cannot save, and the Missing Data card would have said only "could not check". Now the link is hidden without a local server, and the card explains it is a local-server feature. Everything else from 907-918 (photo ruler, tableware, grams, notifications card) runs in the page and works the same in cloud mode. p57 extended.
+Pete Spence: "How will all these new features affect cloud and Apple users?" Checked: Manual Entry saves through the local server, which cloud (GitHub Pages) and iPhone users do not have. The sync banner already stays hidden without a server, but the new "Edit this day by hand" link would have led to a form that cannot save, and the Missing Data card would have said only "could not check". Now the link is hidden without a local server, and the card explains it is a local-server feature. Everything else from 907-918 (photo ruler, tableware, grams, notifications card) runs in the page and works the same in cloud mode. p57 extended.
 
 ## v3.10.918 — Missing Data: Gap Finder With One-Tap Fix
 
-Pete: "Plough away" on the gap finder. A stalled sync leaves whole days without steps, heart rate or sleep, and they are easy to miss. New card **Settings > Import > Missing Data** lists the finished days in the last 14 days that lack any of those three (today is left out, it is still in progress; days before your first recorded day are not counted). Each row shows what is missing and a "Fill in" tap that opens Manual Entry on that day.
+Pete Spence: "Plough away" on the gap finder. A stalled sync leaves whole days without steps, heart rate or sleep, and they are easy to miss. New card **Settings > Import > Missing Data** lists the finished days in the last 14 days that lack any of those three (today is left out, it is still in progress; days before your first recorded day are not counted). Each row shows what is missing and a "Fill in" tap that opens Manual Entry on that day.
 - Server: new `GET /data-gaps?days=N` (1-60, default 14) reads combined.csv; a day with no row at all counts as missing everything.
 - The card has show/hide and reorder like the other Import cards, sits in the "History & entry" chip group and is findable by site search ("missing", "gaps").
 - Test: new p57 (gap rules incl. empty rows, today excluded, pre-history ignored; row opens the right day; hide/reorder controls present).
 
 ## v3.10.917 — "Edit This Day By Hand" On Every Day
 
-Pete: "Could it not be a simple link on each previous days, so as you navigate, the option is there per day?" The Trends day navigator (← →) now shows a small "✏️ Edit this day by hand" link under the date. It opens Manual Entry on exactly the day you are looking at (today, yesterday, any day back), so a gap you spot while browsing is one tap from fixing. The sync-warning sheet's date box stays for when you already know which day. p56 extended.
+Pete Spence: "Could it not be a simple link on each previous days, so as you navigate, the option is there per day?" The Trends day navigator (← →) now shows a small "✏️ Edit this day by hand" link under the date. It opens Manual Entry on exactly the day you are looking at (today, yesterday, any day back), so a gap you spot while browsing is one tap from fixing. The sync-warning sheet's date box stays for when you already know which day. p56 extended.
 
 ## v3.10.916 — Pick Which Day To Fill In
 
-Pete: "What if it's not yesterday?" The Manual Entry link in the sync help sheet was fixed on yesterday. The sheet now has a date box (defaults to yesterday, cannot pick the future); the button opens Manual Entry on whichever day you chose. The Settings "fill a missed day by hand" link still goes to yesterday, and you can change the date in Manual Entry itself. p56 updated.
+Pete Spence: "What if it's not yesterday?" The Manual Entry link in the sync help sheet was fixed on yesterday. The sheet now has a date box (defaults to yesterday, cannot pick the future); the button opens Manual Entry on whichever day you chose. The Settings "fill a missed day by hand" link still goes to yesterday, and you can change the date in Manual Entry itself. p56 updated.
 
 ## v3.10.915 — Sync Warning Now Links Straight To Manual Entry
 
-Pete (8 Oct): "A link to manual adjustments from here maybe? It would make sense." Since a day the background sync missed is not recovered automatically, the warning now offers the fix.
+Pete Spence (8 Oct): "A link to manual adjustments from here maybe? It would make sense." Since a day the background sync missed is not recovered automatically, the warning now offers the fix.
 - The sync help sheet has a "Fill in yesterday by hand (Manual Entry)" button: it closes the sheet, opens Settings > Import > Manual Entry, expands it and sets the date to yesterday (existing values for that day load so you only fill the gaps).
 - Settings > Sync age warning also has a "fill a missed day by hand" link.
 - Test: p56 extended (sheet closes, date is yesterday, section is visible).
 
 ## v3.10.914 — The App Now Tells You When The Phone's Background Sync Has Stopped
 
-Pete (8 Oct): the launcher's 30-minute sync had silently stopped (battery rules, found with the launcher's diary), and "users are going to need to be aware of all these. Either a script to check and fix, or to report if changed."
+Pete Spence (8 Oct): the launcher's 30-minute sync had silently stopped (battery rules, found with the launcher's diary), and "users are going to need to be aware of all these. Either a script to check and fix, or to report if changed."
 - **Fixing is not possible from the app or a script:** Android deliberately stops an app from lifting its own battery limits, so nothing can switch "No restrictions" on for you. What the app can do is notice the symptom and tell you, so that is what this does.
 - **How it notices:** the launcher writes a line to its own diary each time the sync service starts (every 30 minutes when healthy). The server reads the age of the last one (`/sync-status` now returns `launcher_age_minutes`). Under 3 hours is fine.
 - **Today banner:** after 3 hours with no run, an amber banner appears at the top of Today: "Background sync has not run for N hours". Tap it for a short sheet of the settings that cause it (battery No restrictions, Alarms & reminders, Autostart where the phone has it, lock the app / turn off "Pause app activity if unused", then open the launcher once), and a note that missed days may need Manual Entry. The ✕ hides it for the rest of the day; it disappears by itself when the sync recovers.
@@ -99,14 +103,14 @@ Pete (8 Oct): the launcher's 30-minute sync had silently stopped (battery rules,
 
 ## v3.10.913 — A Sleep Night You Already Settled Is Not Asked Again
 
-Pete (8 Oct, 15:42): the "Sleep sources disagree" card for 8 Oct appeared again, although he had already chosen Zepp for that night at 09:33.
+Pete Spence (8 Oct, 15:42): the "Sleep sources disagree" card for 8 Oct appeared again, although he had already chosen Zepp for that night at 09:33.
 - **Cause (read from the code):** the launcher cannot see what was decided, so it re-queues the same overlap every time it syncs. The server then served it again, and the card re-asked an already-answered question. (The earlier comment in the code that a re-detected overlap "will show up again" was meant for "Decide later", not for a settled night.)
 - **Fix (server only, no APK):** when you choose Use ringconn / Use zepp / add both / type your own figure, the server remembers that night together with a fingerprint of the sessions you were shown (source, start and end to the minute). If the launcher re-queues the identical sessions, they are dropped quietly. If the night genuinely changes (a different end time, a new session), you are asked again. **Decide later** is not remembered, so it still comes back.
 - Test: p52 extended (settled night with identical sessions does not return, a changed night does, Decide later does).
 
 ## v3.10.912 — Tableware Boxes Follow What The Item Is
 
-Pete (8 Oct, screenshot of a custom item called "Test" showing Across/Holds/Empty): "How did Test know what it was? If a bowl or cutlery, the dimensions wouldn't work."
+Pete Spence (8 Oct, screenshot of a custom item called "Test" showing Across/Holds/Empty): "How did Test know what it was? If a bowl or cutlery, the dimensions wouldn't work."
 - **It didn't know.** Every custom item got the same three generic boxes. Now each item has a **kind**, chosen from a list when you add it (Plate, Bowl, Cup/mug/glass, Spoon, Knife or fork, Something else), and the boxes follow it:
   - Plate: Across, Food area, Empty weight
   - Bowl: Across, Holds (ml), Empty weight
@@ -120,7 +124,7 @@ Pete (8 Oct, screenshot of a custom item called "Test" showing Across/Holds/Empt
 
 ## v3.10.911 — Notifications Card Showed "Enable" Even When Already On
 
-Pete (8 Oct): "Settings/Manage/Notifications. Even if notifications are set, the button still says enable notifications."
+Pete Spence (8 Oct): "Settings/Manage/Notifications. Even if notifications are set, the button still says enable notifications."
 - **Cause (reproduced):** the card was only brought up to date when the Reports tab opened or its header was tapped. The Settings page itself only had the page's fixed "🔔 ENABLE NOTIFICATIONS" button, so with permission already granted it still showed Enable until you happened to do one of those. Denied showed it too.
 - **Fix:** the card now refreshes at load, when the app returns to the front (for example after changing the setting in Android), and whenever the browser's answer changes while the card is on screen.
 - If the browser has not been asked yet, the status line now says so ("the browser reports 'not asked'"). If you tap Enable and no prompt appears, a message explains to allow notifications in the browser's site settings, instead of a misleading "Permission denied".
@@ -128,7 +132,7 @@ Pete (8 Oct): "Settings/Manage/Notifications. Even if notifications are set, the
 
 ## v3.10.910 — Type A Portion In Grams, And A Real Accuracy Tip For Crockery
 
-Pete (8 Oct): the food-log edit has a way to change a portion by percentage, but needs "or enter a new portion size manually". And: is there a help tip explaining what actually matters for accuracy under crockery and cutlery?
+Pete Spence (8 Oct): the food-log edit has a way to change a portion by percentage, but needs "or enter a new portion size manually". And: is there a help tip explaining what actually matters for accuracy under crockery and cutlery?
 - **Today > edit an entry (single item):** under PORTION % there is now "or type the new portion [__] g", showing what it was logged as. It works out the percentage from the logged amount, fills the % box, and the macros follow exactly as if that % had been typed. If the entry has no gram size it says so and points to the % box.
 - **Multi-ingredient entries:** a matching "or set the whole portion to [__] g" under "Scale entire entry to %". Every ingredient is scaled by the same factor from its ORIGINAL amount (applying twice never compounds). If any ingredient has no gram size (for example "1 bowl") it refuses and changes nothing.
 - **Crockery and cutlery help tip rewritten** to say what actually matters, in order: the plate's food area, the ml you measure with water for bowls/mugs/glasses, width to about 1 cm being plenty, a typed food weight always beating these sizes, and the photo-ruler rules (straight down, card at rim height or stand back and zoom, check the points).
@@ -136,7 +140,7 @@ Pete (8 Oct): the food-log edit has a way to change a portion by percentage, but
 
 ## v3.10.909 — Plates: Food Area, Measured With A Third Point
 
-Pete (8 Oct): his plate is 29.1 cm across, but the food sits on a much smaller circle inside the rim. "Definitely needs the actual food area, and it might be sensible for a third measuring point."
+Pete Spence (8 Oct): his plate is 29.1 cm across, but the food sits on a much smaller circle inside the rim. "Definitely needs the actual food area, and it might be sensible for a third measuring point."
 - **New "Food area (cm)" box on plates** (dinner plate, side plate and copies of plates). Optional and blank by default, because rims vary far too much to guess.
 - **Photo ruler, step 3 of 3 (plates only):** after the width, a "Food area ›" button asks for ONE tap on the inner edge of the rim. The plate centre is the midpoint of your width points, so the distance from the centre to that tap gives the food diameter. A dashed ring shows what it measured so you can see it follows the rim, and the point can be nudged or snapped like the others. "Use it" still saves the width only; "Use both" saves width and food area. A food area at least as big as the plate is refused. Mugs, bowls and cutlery still use the 2-step version.
 - **AI portion line** now includes "food area (inside the rim) about N cm across", with an instruction to judge how much of that inner circle is covered rather than the full rim.
@@ -145,7 +149,7 @@ Pete (8 Oct): his plate is 29.1 cm across, but the food sits on a much smaller c
 
 ## v3.10.908 — Tableware: Copy As New
 
-Pete (8 Oct): the place he is staying has several plate sizes (his measured dinner plate came out at 29.1 cm), plus different cutlery and bowls, so he needs more than one of each. "A copy from and forced rename should do it."
+Pete Spence (8 Oct): the place he is staying has several plate sizes (his measured dinner plate came out at 29.1 cm), plus different cutlery and bowls, so he needs more than one of each. "A copy from and forced rename should do it."
 - **"copy as new"** link on every tableware item (plates, bowls, mug, glass, spoons, and your own). It makes a new item that starts with the source's sizes, then you adjust it (📏 for width, type the ml and weight).
 - **Different name required:** an empty name or one already used is refused, so two similar plates can never be confused.
 - Copy from Home: Home gets the copied sizes. Copy while viewing another set (Holiday etc.): that set gets the copied sizes and Home keeps Home's own.
@@ -155,14 +159,14 @@ Pete (8 Oct): the place he is staying has several plate sizes (his measured dinn
 
 ## v3.10.907 — Photo Ruler: Edge Snap
 
-Pete (8 Oct): "Wouldn't a snap to object make this process fool proof?"
+Pete Spence (8 Oct): "Wouldn't a snap to object make this process fool proof?"
 - **Snap to edge:** when a point is placed (or moved), it slides to the strongest light/dark edge within about a thumb-width, searched along the line joining the two points, so rough taps land on the card edge or rim. Flat areas with no clear edge are left exactly where you tapped.
 - **Snap button** (zoom row) turns it off, remembered in `mh_ruler_snap`. Nudge arrows still work on top.
 - Test: p53 extended (tap off the edge lands on it, flat area untouched, toggle works); nudge test runs with snap off.
 
 ## v3.10.906 — Photo Ruler: Pick Up A Point And Nudge It
 
-Pete (8 Oct, screenshot): very difficult to place a point exactly, and a mistake means starting again.
+Pete Spence (8 Oct, screenshot): very difficult to place a point exactly, and a mistake means starting again.
 - **Pick up and nudge:** the newest point is picked automatically (shown with an extra ring). Arrows ◀ ▲ ▼ ▶ appear under the photo and move it one screen pixel at a time, so zooming in makes the steps finer. Hold an arrow to keep moving.
 - **Tap a point to pick it up** (within about a thumb-width) instead of replacing it, then nudge. Tapping elsewhere with both points placed still moves the nearer one there.
 - Undo and Clear keep the picked-point marker in step.
@@ -170,7 +174,7 @@ Pete (8 Oct, screenshot): very difficult to place a point exactly, and a mistake
 
 ## v3.10.905 — Photo Ruler: Pinch To Zoom, Drag To Move, No More Stray Points
 
-Pete (8 Oct, screenshots): trying to zoom put points in and Clear did nothing. The header was shifted off the left edge: pinching had zoomed the whole page, not the photo.
+Pete Spence (8 Oct, screenshots): trying to zoom put points in and Clear did nothing. The header was shifted off the left edge: pinching had zoomed the whole page, not the photo.
 - **Gestures rebuilt:** two fingers pinch-zoom the photo (up to 8×, anchored on your fingers), one finger drags it around, a quick tap places a point. The screen behind can no longer be pinch-zoomed.
 - **Taps and zooms only repaint the photo**, they no longer rebuild the screen, so the buttons stay put and your place in the photo is kept.
 - **Buttons:** Fit / 3× / 6× (centred), **Undo** (last point) and **Clear** (this step's points). Marks stay the same size on screen at any zoom.
@@ -178,26 +182,26 @@ Pete (8 Oct, screenshots): trying to zoom put points in and Clear did nothing. T
 
 ## v3.10.904 — Photo Ruler: Choose An Existing Photo
 
-Pete (8 Oct): no way to choose a photo. The single button used the camera directly, which skips Android's photo picker.
+Pete Spence (8 Oct): no way to choose a photo. The single button used the camera directly, which skips Android's photo picker.
 - Two buttons now: "Take a photo now" (camera) and "Choose a photo I already took" (gallery).
 - Test: p53 extended.
 
 ## v3.10.903 — Photo Ruler: Readable Next Step
 
-Pete (8 Oct): the line at the bottom of the screen was barely readable.
+Pete Spence (8 Oct): the line at the bottom of the screen was barely readable.
 - It was a faded-out "Next" button, disabled until both ends of the reference were tapped. Now the bottom bar always says what to do ("Step 1 of 2: tap both ends of the reference (2 to go)", then "Step 2 of 2: tap both edges of the item"), and the Next / Use it buttons only appear when they work, at full strength.
 - Test: p53 extended.
 
 ## v3.10.902 — Photo Ruler: Clearer Reference Choices, Remembered
 
-Pete (8 Oct, screenshot): the reference list said "Bank card" but cards he has measure around 64 x 40 mm.
+Pete Spence (8 Oct, screenshot): the reference list said "Bank card" but cards he has measure around 64 x 40 mm.
 - Options renamed "Debit/credit card" with a note that those are the standard 85.6 x 54 mm; smaller loyalty or key-fob cards need the last option ("Smaller card or other object") with their length typed in mm.
 - The chosen reference and any typed length are remembered, so it is set once.
 - Test: p53 extended.
 
 ## v3.10.901 — Photo Ruler For Measuring Plates, Bowls And Spoons
 
-Pete (8 Oct): could we build a simple AR ruler for crockery and cutlery?
+Pete Spence (8 Oct): could we build a simple AR ruler for crockery and cutlery?
 - **Settings > Tableware:** a 📏 beside every "Across (cm)" box. Take or choose a photo from straight above with a bank card lying flat beside the item, tap the two ends of the card's long edge (85.6 mm), then tap across the item. The size is worked out from the ratio and goes straight into that box.
 - **Other references:** card short edge, A4 paper, or any object whose length you type in mm.
 - **Accuracy:** zoom 1×/2×/3× to place points precisely; tapping again nudges the nearest point. Expect within a few mm if the photo is taken straight down; a tilted phone gives a wrong answer, and the screen says so. A result under 1 cm or over 60 cm is refused as an obvious mis-tap.
@@ -207,7 +211,7 @@ Pete (8 Oct): could we build a simple AR ruler for crockery and cutlery?
 
 ## v3.10.900 — Sleep Card Spots Time-In-Bed Figures, Type Your Own; One-Tap Bug Report
 
-Pete (8 Oct, three screenshots): the sleep-conflict card offered RingConn 8.7h (23:16-08:01) against Zepp 5.0h. RingConn's own app says 6h55 asleep over that span; Zepp's says 4:25 plus a 0:43 nap (about 5h08), so Zepp's figure was right and RingConn's was the whole time in bed.
+Pete Spence (8 Oct, three screenshots): the sleep-conflict card offered RingConn 8.7h (23:16-08:01) against Zepp 5.0h. RingConn's own app says 6h55 asleep over that span; Zepp's says 4:25 plus a 0:43 nap (about 5h08), so Zepp's figure was right and RingConn's was the whole time in bed.
 - **Flag on the card:** when a source's duration equals its whole start-to-end span (it sent no sleep stages), the card now says so: that figure is time in bed, not time asleep, so check the device's own app first.
 - **Type your own:** a box on the card ("Or type your own, hours") saves your figure for that night through the same manual-entry path as the other choices. The server accepts 0.5-20 hours.
 - **Not fixed (needs the launcher):** RingConn's Health Connect record carries no sleep stages, so the launcher can only see the whole span. Fixing that properly means a launcher change; until then the flag and the typed figure cover it.
@@ -216,7 +220,7 @@ Pete (8 Oct, three screenshots): the sleep-conflict card offered RingConn 8.7h (
 
 ## v3.10.899 — One Cancel Is Enough
 
-Pete (8 Oct): editing one ingredient's portion on a photo-added meal and then cancelling needed a Cancel press per ingredient. I could not reproduce it in the plain pre-log edit (one Cancel works there), so this closes the two places where Cancel could repeat:
+Pete Spence (8 Oct): editing one ingredient's portion on a photo-added meal and then cancelling needed a Cancel press per ingredient. I could not reproduce it in the plain pre-log edit (one Cancel works there), so this closes the two places where Cancel could repeat:
 - **Item edit form:** Cancel now closes every open edit form at once (and clears its scaling baseline), and opening an edit closes any other first.
 - **Save ingredients batch:** Cancel / "Back to edit" / dismissing the "can't physically fit" warning now ends the whole batch with a toast saying how many were skipped, instead of leaving each remaining ingredient to ask again (or leaving a half-finished batch stuck).
 - Still not fixed if you see it elsewhere: a screenshot of the screen where it happens will pin it down.
@@ -224,7 +228,7 @@ Pete (8 Oct): editing one ingredient's portion on a photo-added meal and then ca
 
 ## v3.10.898 — Compare Two Periods: Expected Trend, Travel Day Included, Shorter Spans
 
-Pete (7 Oct, screenshot): baseline now correctly counts 20 days, but the recent period (3-6 Oct, 4 weigh-ins over 3 days) showed no weight trend, so no verdict.
+Pete Spence (7 Oct, screenshot): baseline now correctly counts 20 days, but the recent period (3-6 Oct, 4 weigh-ins over 3 days) showed no weight trend, so no verdict.
 - **Expected trend if logging is accurate:** new row. Your baseline burn (from the baseline weight trend) plus the steps difference, set against the kcal logged recently, predicts a weight trend per week. Compare it with what the scales show: a much bigger loss than predicted points to over-counting in the photos, flat or gaining to under-counting. Works even when the recent period is too short to measure its own trend.
 - **Default recent period** now extends back over adjacent travel/Occasion days (e.g. a travel day before the first Holiday-mode day), so the trip starts where the trip started.
 - A weight trend now needs weigh-ins over 3+ days (was 4+); the verdict still shows its margin of error.
@@ -232,21 +236,21 @@ Pete (7 Oct, screenshot): baseline now correctly counts 20 days, but the recent 
 
 ## v3.10.897 — Compare Two Periods Shows What It Counted, And Reads Scale-File Weights
 
-Pete (7 Oct): still showing 2 days after the window fix.
+Pete Spence (7 Oct): still showing 2 days after the window fix.
 - **"What was counted"** under the card lists, for each period, the exact dates with food logged, the dates with a weight, and the dates with neither, plus the app version. If something is missing, it is now visible which day.
 - **Weights from the scale file:** days that only exist in the imported scale (Withings) file, with no food logged, now count as weigh-ins too (they previously did not, because the card read only the app's own day records).
 - Test: p51 extended.
 
 ## v3.10.896 — Compare Two Periods (And Your Story) Were Limited By The Trends Window
 
-Pete (7 Oct, screenshot): the new card showed 1 logged day and 1 weigh-in for the baseline even though every date had weights.
+Pete Spence (7 Oct, screenshot): the new card showed 1 logged day and 1 weigh-in for the baseline even though every date had weights.
 - **Cause:** `getTrendsData(true)` ("always full history") only skipped the Today view; with Trends set to a numbered window (e.g. 7 days) or a custom range it still cut the data to that window. So the Compare Two Periods card, Your Journey and the drill-downs could silently see only the last week or so.
 - **Fix:** full-history callers now ignore the numbered and custom Trends windows.
 - Test: p51 extended (windowed vs full counts, baseline days counted).
 
 ## v3.10.895 — Compare Two Periods (Photo-Estimate Check)
 
-Pete (7 Oct, home from holiday where meals were photo-logged): wants a comparison with the previous few weeks, since weight is drifting down slightly while logged intake is no higher than usual.
+Pete Spence (7 Oct, home from holiday where meals were photo-logged): wants a comparison with the previous few weeks, since weight is drifting down slightly while logged intake is no higher than usual.
 - **New Trends card "Compare Two Periods"** (Patterns chip; has show/hide and reorder like every card). Defaults: Recent = your latest run of Holiday-mode days, Baseline = the 3 weeks before. Dates are editable and remembered.
 - Shows logged days, avg kcal, protein, carbs, steps, weight trend per week and weigh-ins for each period.
 - **Verdict:** logged kcal minus 7700 x daily weight change = the burn the logging implies. If real burn was similar in both periods (adjusted ~40 kcal per extra 1,000 steps), the gap between the two implied burns is how far the recent logging was off. Always shown with a margin of error; when the gap is inside the noise it says so rather than claiming a bias. Needs 3+ logged days and 3+ weigh-ins over 4+ days per period.
@@ -255,13 +259,13 @@ Pete (7 Oct, home from holiday where meals were photo-logged): wants a compariso
 
 ## v3.10.894 — Weight In The History Day Editor
 
-Pete (7 Oct, screenshot of History → Edit day totals): that screen has water, steps and exercise but no weight, so a missed day could not be fixed there.
+Pete Spence (7 Oct, screenshot of History → Edit day totals): that screen has water, steps and exercise but no weight, so a missed day could not be fixed there.
 - **Edit day totals** now has a WEIGHT box (in your chosen unit, stones + pounds in st mode). Blank means no reading for that day. A corrected weight is also what that day's exercise calories are costed with, and your current weight follows the newest weigh-in. The "Changed:" summary after saving lists a weight change.
 - Test: p51 extended.
 
 ## v3.10.893 — Add Or Fix A Day's Weight From The Charts Too
 
-Pete (7 Oct): "Wouldn't it have been a good idea to update weight for previous days from here too?" (Fair point: the date box only existed behind the dashboard UPDATE button.)
+Pete Spence (7 Oct): "Wouldn't it have been a good idea to update weight for previous days from here too?" (Fair point: the date box only existed behind the dashboard UPDATE button.)
 - **Trends weight card:** new "＋ Add or fix a day's weight" link, opening on the most recent day with no reading.
 - **Your story graph:** tapping a gap marker offers "＋ Add a weight for a missed day" (opens on the first missing date); tapping any weigh-in offers "✏️ Edit this day's weight".
 - **Weight drill-down:** same "＋ Add or fix a day's weight" link.
@@ -270,13 +274,13 @@ Pete (7 Oct): "Wouldn't it have been a good idea to update weight for previous d
 
 ## v3.10.892 — Faint "Last Known" Weight Line Across Gaps
 
-Pete (7 Oct): liked the idea of a faint carried-forward line for days with no weigh-in.
+Pete Spence (7 Oct): liked the idea of a faint carried-forward line for days with no weigh-in.
 - **Your story graph and the Trends weight chart** now draw a faint dotted flat line from your last real weigh-in across any gap to the next reading, so a gap reads as "no new data, last known was X" rather than a slide between two points. Display only: nothing is saved, and averages, rates and exports ignore it. A "last known (carried, not saved)" note appears in the legend when a gap exists.
 - Test: p51 extended (flat across the gap, helper, legend).
 
 ## v3.10.891 — Copy Previous Set, Backdate A Weight, Honest Gaps On Your Story
 
-Pete (7 Oct, on holiday with only gym scales): "Manual weight for days not provided by Withings... a 2 week gap would mean what on the charts?" and "creating a routine set, copy previous line would be useful."
+Pete Spence (7 Oct, on holiday with only gym scales): "Manual weight for days not provided by Withings... a 2 week gap would mean what on the charts?" and "creating a routine set, copy previous line would be useful."
 - **Copy previous set:** in the routine editor each set line has a ⧉ button (copies reps, weight and note into a new line below it), and each exercise has a "⧉ copy previous set" link. The same link is on the Apply (workout) screen. One typed line plus taps gives 3 x 10 @ 40 kg.
 - **Backdate a weight:** the Update Weight popup now has a Date box (defaults to today, can't pick the future). Choosing an earlier day saves that day's reading without changing your current weight unless it is your newest one.
 - **Your story graph shows gaps:** a break of more than 7 days between weigh-ins now stops the line and shows a "⋯ 18d" marker, instead of joining the two ends with a straight line. Also fixed: treatment markers were converted twice in lb/st (v3.10.890).
@@ -285,7 +289,7 @@ Pete (7 Oct, on holiday with only gym scales): "Manual weight for days not provi
 
 ## v3.10.890 — Charts Follow Your Weight Unit, And Food/Water/Exercise Lines On Your Story
 
-Pete (7 Oct): "Today has exercise, food and water... can these be merged into the multiple metrics area? Best added to the Your story graphic. Charts in kg only."
+Pete Spence (7 Oct): "Today has exercise, food and water... can these be merged into the multiple metrics area? Best added to the Your story graphic. Charts in kg only."
 - **Charts in your unit:** the Your Journey chart, the weight / bone mass / hydration drill-down (hero number, stats, chart, day panel), the full-screen chart and Compare Metrics now show lb (or lb for st+lb, same as the Trends weight chart) when that is your unit. Stored data stays kg.
 - **Your Journey overlays:** seven chips above the chart (Calories, Protein, Carbs, Water, Logged exercise, Active calories, Steps). Each draws as a dashed line scaled to its own maximum, so they sit together on one chart; tap a day to see the real figures. Shown on the days you weighed (that is what the chart is built from). Your choice is remembered.
 - **Compare Metrics:** new "Logged exercise" (sum of the exercise you logged that day) and "Active calories (wearable)", both under Exercise. Fat (g) had been missing from every group so you could never pick it; it is now under Nutrition.
@@ -293,18 +297,18 @@ Pete (7 Oct): "Today has exercise, food and water... can these be merged into th
 
 ## v3.10.889 — st + lb Entry, And The Compare-AI Chat Bubble Pulses
 
-Pete (7 Oct, real phone): (1) with the unit set to st + lb the Update Weight popup still asked for pounds; (2) the "Asking Claude, Gemini, and ChatGPT independently about..." chat bubble did not pulse.
+Pete Spence (7 Oct, real phone): (1) with the unit set to st + lb the Update Weight popup still asked for pounds; (2) the "Asking Claude, Gemini, and ChatGPT independently about..." chat bubble did not pulse.
 - **st + lb entry:** the Update Weight popup and the weight target boxes now take stones and pounds in one box, e.g. "14 st 2". It also understands "14st 2lb", "14 stone 2", a lone "198" (40 or more is read as pounds) and a lone "12" (under 40 is read as whole stones). Voice entry keeps both numbers ("fourteen stone two" becomes 14 st 2). The boxes switch back to plain numbers in kg or lbs. Stored value is still kg.
 - **Compare-AI bubble in the Log chat** is now a pulsing "thinking" bubble (the earlier wait-box change covered the edit screens, not this chat bubble). It is removed when the answers arrive, as before.
 - Test: p45 extended (st popup, parsing variants, st targets, back to kg), p47 extended.
 
 ## v3.10.888 — Topic Chips On Settings → Data (Import)
 
-Pete's Data screenshot showed seven sections tucked behind a "Hidden:" strip. Same view-filter chips, so the page needs far less hiding: All · Connect devices (sync wearable data, add new device, advanced/manual pipeline) · History & entry (wearable history, nutrition history, manual entry) · Backup & checks (data & backup, data management, preview & validator). Nothing is moved or un-hidden; search resets the chips to All. Test: p50 extended.
+Pete Spence's Data screenshot showed seven sections tucked behind a "Hidden:" strip. Same view-filter chips, so the page needs far less hiding: All · Connect devices (sync wearable data, add new device, advanced/manual pipeline) · History & entry (wearable history, nutrition history, manual entry) · Backup & checks (data & backup, data management, preview & validator). Nothing is moved or un-hidden; search resets the chips to All. Test: p50 extended.
 
 ## v3.10.887 — Topic Chips On Reports And Settings → Manage
 
-Pete (7 Oct): continue the de-cluttering. Reports had 13 flat sections and Settings → Manage had 19.
+Pete Spence (7 Oct): continue the de-cluttering. Reports had 13 flat sections and Settings → Manage had 19.
 - **Reports chips:** All · Ask & share (Ask AI, Query Builder, Export) · Summaries (Summary, Insights, GBM, Research) · Analysis (activity credit, seasonal, sleep & ketosis, weight vs protocol) · Treatment (analysis, sessions).
 - **Settings → Manage chips:** All · Me & targets (profile, carb ceilings, water, tableware, steps, exercise offset, device precision, formulas) · AI & alerts (AI provider, notifications, idle timeout, carer) · Health tracking (supplements, symptoms, treatments, lab results, report profiles) · About & setup.
 - **View filter only:** nothing is moved, deleted or un-hidden; your own ▲ ▼ 👁 order and hidden cards keep working, and All looks as before. The topic is remembered per screen.
@@ -313,7 +317,7 @@ Pete (7 Oct): continue the de-cluttering. Reports had 13 flat sections and Setti
 
 ## v3.10.886 — Trends "Today" View: Look-Alike Sections Merged, Chips Apply
 
-Pete (7 Oct): continue de-cluttering. Trends opens on the single-day "Today" view, which had its own look-alike cards.
+Pete Spence (7 Oct): continue de-cluttering. Trends opens on the single-day "Today" view, which had its own look-alike cards.
 - **Weight and Body Composition are now one section** ("Weight & Body Composition": weight, fat %, muscle %, bone, hydration). Rows only appear when there is a reading. The weight row opens the weight chart. Bone and hydration now follow your chosen weight unit (they were stuck on kg).
 - **Sleep and Sleep Detail are now one "Sleep" section** (stages, then bedtime, wake time, efficiency and snoring when recorded).
 - **The topic chips now sit above both views** and filter the single-day sections too (Body = weight & body composition; Heart & sleep = activity & vitals and sleep; Food = meal breakdown). Patterns says there is nothing to compare in a single day.
@@ -322,7 +326,7 @@ Pete (7 Oct): continue de-cluttering. Trends opens on the single-day "Today" vie
 
 ## v3.10.885 — Trends: Topic Chips And "What Question Does This Answer" Captions
 
-Pete (7 Oct): the app is so feature-rich that similar-looking cards confuse and overwhelm. First step, on Trends (the worst overlap).
+Pete Spence (7 Oct): the app is so feature-rich that similar-looking cards confuse and overwhelm. First step, on Trends (the worst overlap).
 - **Topic chips** across the top of Trends: All · Body · Heart & sleep · Food · Patterns. Tap one and only that topic's cards show (Body = Body Composition, Journey, weight, fat %, muscle %, bone, hydration; Heart & sleep = HR, SpO2, HRV, sleep, steps, distance; Food = calories, protein, carbs, water, GKI, top foods, day of week; Patterns = wellness balance and patterns). Remembered between visits.
 - **It is only a view filter.** Nothing is moved, deleted or un-hidden, so your own ▲ ▼ 👁 order and hidden cards keep working, and All looks exactly as before.
 - **One-line captions** on Journey, Body Composition, Patterns, Top Foods and Day of Week saying which question each answers, so look-alike cards are told apart at a glance.
@@ -331,14 +335,14 @@ Pete (7 Oct): the app is so feature-rich that similar-looking cards confuse and 
 
 ## v3.10.884 — Photo Estimates: Count Small Items, Fresh vs Jarred, Don't Inflate Small Portions
 
-Pete (7 Oct): a bowl with about seven pitted cherries and a dollop of soft cheese came back as "cherries (fresh) 80g, 51kcal, 12.2g carbs", the worst over-estimate yet.
+Pete Spence (7 Oct): a bowl with about seven pitted cherries and a dollop of soft cheese came back as "cherries (fresh) 80g, 51kcal, 12.2g carbs", the worst over-estimate yet.
 - **Why:** the meal-photo prompt only had plate-sized anchors (a loaded dinner plate is 400-700g) and no way to size small countable items, so a handful of fruit was sized like a serving. It also had nothing to tell fresh fruit from jarred fruit in syrup.
 - **Fix (prompt):** (1) count visible pieces and multiply by a per-piece weight, shown in the message ("7 x ~4g = ~28g") - fresh cherry with stone ~8g, pitted/jarred ~4-5g, plus strawberry, blueberry, grape, olive, almond, walnut, prawn, cherry tomato; (2) pitted/glossy fruit in pooled juice is jarred/tinned, not "fresh" - use the drained weight, say so, and flag the syrup sugar; (3) the 400-700g anchor is for a loaded dinner plate only, a small bowl or dollop is typically 30-120g.
 - Still visual estimates (about +/-20%); the Edit ingredients button remains the quick correction. Test: p48.
 
 ## v3.10.883 — Slow Waits Get The Pulsing Border
 
-Pete (7 Oct): anything that can take a while to populate should show the same flashing box border as the chat's "Analysing photo…" bubble.
+Pete Spence (7 Oct): anything that can take a while to populate should show the same flashing box border as the chat's "Analysing photo…" bubble.
 - **New shared `.mh-wait-box`** — identical pulsing border (the chat thinking bubble's animation); respects reduced-motion.
 - **Compare AI** (library edit, log entry edit, history edit, recipe ingredient add): the "Asking Claude, Gemini and ChatGPT…" placeholder now pulses until the answers replace it.
 - **Report and AI buttons** (Ask AI, full summary, GBM review, oncology narrative, missed-day estimate, wearable sync): a pulsing box appears right under the button while it is working and disappears the moment it finishes, errors, or is re-enabled.
@@ -347,7 +351,7 @@ Pete (7 Oct): anything that can take a while to populate should show the same fl
 
 ## v3.10.882 — Body Composition Card (Trends)
 
-Pete (7 Oct): borrowed the best idea from Withings' Body Composition screen. Weight alone hides what changed; flat weight with fat up and muscle down is a different story from fat down and muscle up.
+Pete Spence (7 Oct): borrowed the best idea from Withings' Body Composition screen. Weight alone hides what changed; flat weight with fat up and muscle down is a different story from fat down and muscle up.
 - **New Trends card "Body Composition"** (with ▲ ▼ 👁 like every card). A plain-words verdict: gaining fat / losing muscle / losing fat, gaining muscle / holding steady and so on.
 - **How it decides:** this week's smart-scale readings (averaged) vs the week before, with a 0.3 kg threshold, so one noisy bioimpedance reading can't flip it. With too little data it compares the latest weigh-in with the one before (0.5 kg threshold) and says so on the card. A single reading makes no claim. A note appears when weight barely moved but composition did.
 - **Stacked share bar** (muscle / fat / bone) from the latest reading, plus **change badges** for weight, muscle and fat (↗ ↙ arrows, change in your chosen weight unit, and change in share as points).
@@ -357,14 +361,14 @@ Pete (7 Oct): borrowed the best idea from Withings' Body Composition screen. Wei
 
 ## v3.10.881 — Tableware Card Gets Show/Hide And Reorder
 
-Pete (7 Oct): every card needs show/hide and reorder. The Tableware & Portion Sizes card was registered for hiding but missing from the Settings ordering list, so it never got the ▲ ▼ 👁 controls.
+Pete Spence (7 Oct): every card needs show/hide and reorder. The Tableware & Portion Sizes card was registered for hiding but missing from the Settings ordering list, so it never got the ▲ ▼ 👁 controls.
 - Tableware now has ▲ ▼ 👁 like the other Settings cards (and starts in the same open/closed state handling as its neighbours).
 - **Side fix:** adding a card to a list used to throw away the order you had arranged (the saved order was only accepted if it matched the live list exactly). Your order is now kept, and a newly added card slots in after its natural neighbour. This protects every future card too.
 - Test: p44 extended (controls present, saved order kept, move works).
 
 ## v3.10.880 — One Weight Unit For The Whole App (kg / lbs / st + lb)
 
-Pete (7 Oct): do the kg/lbs choice from onboarding and profile drive every weight card? They did not. The onboarding choice only converted what you typed, was never remembered, and everything displayed in kg.
+Pete Spence (7 Oct): do the kg/lbs choice from onboarding and profile drive every weight card? They did not. The onboarding choice only converted what you typed, was never remembered, and everything displayed in kg.
 - **New Settings → Profile → Weight unit** (kg / lbs / st + lb). Display only: data is always stored in kg, so switching never changes or loses anything. In st + lb, fields where you type a weight take pounds (labelled lb); everything displayed reads like "14 st 2 lb".
 - **Follows the unit:** dashboard weight card, gap to target and trend rate, target range fields in Settings, the Update Weight popup (and voice entry), Trends weight card/stats/chart, history rows, journey stats, drill-down numbers, weekly report, suggested-targets text, early-warning text, chat weight reply.
 - **Real bug fixed:** onboarding in lbs or st stored the typed number as if it were kg (200 lb became "200 kg"), and the same for the target. Height typed in ft+in was also stored raw and dropped. Both are now converted to kg/cm, and the chosen unit is remembered.
@@ -373,7 +377,7 @@ Pete (7 Oct): do the kg/lbs choice from onboarding and profile drive every weigh
 
 ## v3.10.879 — Tableware & Portion Sizes (Settings)
 
-Pete (7 Oct): a settings list of crockery and cutlery sizes so photo estimates are more accurate, with defaults, overrides, per-item return-to-default, and labelled sets.
+Pete Spence (7 Oct): a settings list of crockery and cutlery sizes so photo estimates are more accurate, with defaults, overrides, per-item return-to-default, and labelled sets.
 - **Settings > Tableware & Portion Sizes:** dinner plate, side plate, bowl, mug, glass, teaspoon, dessertspoon, tablespoon. Each has Across (cm), Holds (ml) and Empty weight (g). Typical sizes are pre-filled; weights are blank by default (never guessed).
 - **Sets:** Home is built in and always the starting set. Add or remove your own (holiday, work, parents' house...). Non-Home sets store only what differs and inherit everything else from Home, so a later change to Home flows through.
 - **Reset:** a ↺ appears beside any changed value. On Home it restores the typical size; on other sets it means "same as Home".
@@ -384,7 +388,7 @@ Pete (7 Oct): a settings list of crockery and cutlery sizes so photo estimates a
 
 ## v3.10.878 — The App Opens With No Connection At All (service worker v2.3)
 
-Pete (6 Oct, 20:24): with WiFi OR mobile data on, the app opens normally; with BOTH off (or airplane mode with WiFi off) it shows the old May screen instead. `/last-hits` proved Chrome never contacted the server in that state, so Chrome was showing something stale it had stored. Reproduced in the test browser: with no connection at all the old code fails to open the page (net::ERR_INTERNET_DISCONNECTED).
+Pete Spence (6 Oct, 20:24): with WiFi OR mobile data on, the app opens normally; with BOTH off (or airplane mode with WiFi off) it shows the old May screen instead. `/last-hits` proved Chrome never contacted the server in that state, so Chrome was showing something stale it had stored. Reproduced in the test browser: with no connection at all the old code fails to open the page (net::ERR_INTERNET_DISCONNECTED).
 - **sw.js v2.3:** the service worker now keeps the last good copy of the app page and serves it only when the server cannot be reached. Whenever the server answers, the page always comes fresh from it (network first, no HTTP cache), so nothing can be out of date while you have a connection. A copy is saved when the worker installs, so the first offline open already works. Other requests (data, sync) still go to the network and fail normally offline, as before.
 - **maxhealth.html:** the page used to delete ALL service workers on every load and re-register one. That would remove the worker holding the offline copy, so it now removes only workers that are not its own `sw.js`.
 - Your saved data is untouched (same address, same storage); offline the app shows what is saved on the phone, and the offline banner/wrapper behaves as before.
@@ -396,34 +400,34 @@ The `Clear-Site-Data: "cache"` header added earlier on 6 Oct (to drop Chrome's s
 
 ## Server — /last-hits Diagnostic For The Fully-Offline Stale Screen (no app version change)
 
-Pete (6 Oct): with airplane mode on AND WiFi off, the old May screen appears again (with WiFi left on inside airplane mode, the real app opens fine; clearing the launcher's cache did not change the fully-offline case). To tell whether Chrome even reaches the server in that state, the server now remembers its last 15 page loads (time, path, client) in memory and shows them at `localhost:5757/last-hits`. Nothing is written to disk.
+Pete Spence (6 Oct): with airplane mode on AND WiFi off, the old May screen appears again (with WiFi left on inside airplane mode, the real app opens fine; clearing the launcher's cache did not change the fully-offline case). To tell whether Chrome even reaches the server in that state, the server now remembers its last 15 page loads (time, path, client) in memory and shows them at `localhost:5757/last-hits`. Nothing is written to disk.
 
 ## v3.10.877 — Ketosis Banner: Controls No Longer Cover The Text
 
-Pete (6 Oct, screenshot): the 👁 hide button sat on top of the end of the ketosis banner ("92.2G REMAINING"), hiding part of the number, and the ▲ ▼ were nearly invisible on the light theme (white at 50%). The three controls now sit on their own row above the banner, in the same grey as every other card's controls. Test: p41 (fails on the old layout).
+Pete Spence (6 Oct, screenshot): the 👁 hide button sat on top of the end of the ketosis banner ("92.2G REMAINING"), hiding part of the number, and the ▲ ▼ were nearly invisible on the light theme (white at 50%). The three controls now sit on their own row above the banner, in the same grey as every other card's controls. Test: p41 (fails on the old layout).
 
 ## v3.10.876 — Typing A Dish No Longer Gets Mistaken For A Suggestion Request
 
-Pete (6 Oct, same screenshot): he typed "Ceaser salad with beef bacon" to log it, and instead of logging it the app answered "Here's what fits, using real items from your library" with a beef burger in the salad. The short-phrase check for "meat and 2 veg" style requests split the text on "with", saw the category word "salad" and a food word, and decided it was a request for suggestions.
+Pete Spence (6 Oct, same screenshot): he typed "Ceaser salad with beef bacon" to log it, and instead of logging it the app answered "Here's what fits, using real items from your library" with a beef burger in the salad. The short-phrase check for "meat and 2 veg" style requests split the text on "with", saw the category word "salad" and a food word, and decided it was a request for suggestions.
 - A bare phrase now only counts as a suggestion request when every word in it is category vocabulary (a category, veg/veggies, a food keyword, a number or a filler word). "Ceaser" is a dish name, so that phrase goes down the normal log path. "meat and 2 veg", "protein and pasta", "chicken and 2 veg" and "meat and veg" work as before.
 - Test: p40 (fails on the old code).
 
 ## v3.10.875 — Swapping A Suggested Item: Online Search Starts From What You Typed
 
-Pete (6 Oct, screenshot): a "Here's what fits" suggestion had Asda Beef Burgers in a Caesar salad with beef bacon. He tapped swap, typed "beef bacon", then went online, and the search box (and Try AI) came up with the old item, "Asda Beef Burger", instead of "beef bacon".
+Pete Spence (6 Oct, screenshot): a "Here's what fits" suggestion had Asda Beef Burgers in a Caesar salad with beef bacon. He tapped swap, typed "beef bacon", then went online, and the search box (and Try AI) came up with the old item, "Asda Beef Burger", instead of "beef bacon".
 - The swap picker now hands what you typed to the online search. The old item's name is only the starting point when nothing was typed. Fixed for suggested-meal items, recipe-builder ingredients and flagged-ingredient searches.
 - Test: p39 (fails on the old code).
 
 ## v3.10.874 — Barcode Scan: QR Codes Ignored, Not-Found Offers To Read The Label
 
-Pete (6 Oct, screenshot of a Luvbiltong beef biltong pack): the scan reported "Barcode 5065015932000 not found" and then "Barcode https://www.instagram.com/luvbiltongsnacks/ not found". The scanner had locked onto the QR code printed on the pack and tried to look the web link up as if it were a product.
+Pete Spence (6 Oct, screenshot of a Luvbiltong beef biltong pack): the scan reported "Barcode 5065015932000 not found" and then "Barcode https://www.instagram.com/luvbiltongsnacks/ not found". The scanner had locked onto the QR code printed on the pack and tried to look the web link up as if it were a product.
 - Only real product barcodes (8-14 digits, EAN/UPC) are now looked up. QR codes and other codes are ignored and the scanner keeps looking; a photo with only a QR code falls through to the AI reader.
 - When a barcode is not in Open Food Facts (or has no nutrition data), the message now carries a **"Read the label with AI instead"** button. It attaches the picture you just took to the meal box, so the normal photo AI reads the label (the 44g protein / 85g on that pack) rather than leaving you at a dead end.
 - Test: p38 (fails on the old code).
 
 ## v3.10.873 — Weather Card: Show / Hide / Reorder, Help Tip, And Documented Formulas
 
-Pete: help tip for which environmental factors affect the app; update the Formulas card?; the usual show/hide/reorder.
+Pete Spence: help tip for which environmental factors affect the app; update the Formulas card?; the usual show/hide/reorder.
 - **Show / hide / reorder:** the weather card now has the same ▲ ▼ 👁 controls as every other Today card (also on the "Add local weather" prompt), joins the "Hidden:" restore strip as "Weather", and sits just above Water by default. Anyone who had already saved a custom Today order keeps it; the weather card is slotted in above Water rather than resetting their layout.
 - **Help tip (?)** on the weather card: what the weather changes (water target, suggested effort, tips), what it does not change (calories, macros, ketosis targets), that your own adjustment wins, and that these are rule-of-thumb guides.
 - **Formulas & Technical Reference** has a new "Water Target & Weather" section: base target + 500ml per exercise hour + heat extra (25-29° +250ml, 30-34° +500ml, 35°+ +750ml), the effort-easing bands, and when tips appear. It is also findable through Settings search (weather, heat, hydration, effort).
@@ -432,28 +436,28 @@ Pete: help tip for which environmental factors affect the app; update the Formul
 
 ## v3.10.872 — HRV Shows Whole Milliseconds; Weather Search Box Fixed
 
-Pete (6 Oct, two screenshots): the weather card's town search was a tiny oval beside a huge Search button, and the HRV card showed 27.29901960784314 overflowing its tile.
+Pete Spence (6 Oct, two screenshots): the weather card's town search was a tiny oval beside a huge Search button, and the HRV card showed 27.29901960784314 overflowing its tile.
 - **HRV:** the Trends card, its Min/Max/status line and the gauge now show whole milliseconds (27ms). The launcher sends averages as long decimals; the Health Connect importer now also keeps one decimal on HRV, heart rate and SpO2 averages (27.3), so new data is stored tidy. Existing stored rows keep their long values, but they now display rounded.
 - **Weather card:** the setup search box and Search button, and the "Not right? Adjust" fields, are now sensibly sized (the app's global input styling had been squeezing the box).
 - Test: p35 (fails on the old code for both problems).
 
 ## v3.10.871 — Tapping A Notification Opens The App On The Right Screen
 
-Pete: reminders showed up on his phone, but tapping them should open the app where the notification was about. The service worker had no click handler at all, so a tap just opened or focused the app wherever it was. Now (sw.js v2.2): tapping closes the notification, focuses the open app and takes it to the screen the reminder belongs to, or, if the app was closed, opens it with `?tab=<screen>` and the page switches itself (and tidies the address). Supplement reminders now go to the Supplements screen (they went to the dashboard); carb alert and end-of-day go to Log; weekly summary goes to Reports. Test: p34 (fails with the old service worker, passes with the new).
+Pete Spence: reminders showed up on his phone, but tapping them should open the app where the notification was about. The service worker had no click handler at all, so a tap just opened or focused the app wherever it was. Now (sw.js v2.2): tapping closes the notification, focuses the open app and takes it to the screen the reminder belongs to, or, if the app was closed, opens it with `?tab=<screen>` and the page switches itself (and tidies the address). Supplement reminders now go to the Supplements screen (they went to the dashboard); carb alert and end-of-day go to Log; weekly summary goes to Reports. Test: p34 (fails with the old service worker, passes with the new).
 
 Also found while testing: a test run that gets killed can leave its server running on port 5757 and make later runs test stale code; clear leftovers by process id before re-running.
 
 ## v3.10.870 — Logging No Longer Crashes When The AI Sends Numbers As Text
 
-Pete, 5 Oct evening, logging "Duck, beef, beef slices, broccoli, carrots": "Something broke processing that response: after.toFixed is not a function." The AI had replied fine, but one or more numbers came back as text (e.g. "72", "12g", "<1") rather than numbers. Text in the totals turns addition into joining ("0" + "650" = "0650"), and the preview then crashed. Reproduced exactly, then fixed: every nutrition number from the AI is now converted to a real number before anything uses it ("12g" -> 12, "<1" -> 0.5, "trace"/blank -> 0). Test: p33.
+Pete Spence, 5 Oct evening, logging "Duck, beef, beef slices, broccoli, carrots": "Something broke processing that response: after.toFixed is not a function." The AI had replied fine, but one or more numbers came back as text (e.g. "72", "12g", "<1") rather than numbers. Text in the totals turns addition into joining ("0" + "650" = "0650"), and the preview then crashed. Reproduced exactly, then fixed: every nutrition number from the AI is now converted to a real number before anything uses it ("12g" -> 12, "<1" -> 0.5, "trace"/blank -> 0). Test: p33.
 
 ## v3.10.869 — Portion Guesses Are Now Visible Per AI (And Work For Whole Meals)
 
-Pete pasted a whole-meal check (omelette, poached egg, halloumi, mushrooms) that showed no portion information. The v3.10.864 change was in, but it only showed portions in a summary line at the bottom, and its comparison used just the first weight in the list (200g), which is wrong for a multi-item meal. Now: each AI's row shows "its own portion guess: ~Xg (kcal)" or says it gave none; for several foods the AIs are asked for the combined weight and it is compared against the sum of all stated weights (480g here). Test: p29 now runs a four-item meal.
+Pete Spence pasted a whole-meal check (omelette, poached egg, halloumi, mushrooms) that showed no portion information. The v3.10.864 change was in, but it only showed portions in a summary line at the bottom, and its comparison used just the first weight in the list (200g), which is wrong for a multi-item meal. Now: each AI's row shows "its own portion guess: ~Xg (kcal)" or says it gave none; for several foods the AIs are asked for the combined weight and it is compared against the sum of all stated weights (480g here). Test: p29 now runs a four-item meal.
 
 ## v3.10.868 — GBM Reports Can Now Actually Be Hidden
 
-Pete: the GBM cards weren't hiding. The two GBM-only reports on Insights (GBM Monthly Summary, GBM Research Digest) have the 👁 hide button, but a routine that shows them for GBM users ran after every render and forced them back on, undoing the hide. It now respects your hide choice (non-GBM users still never see them). Also re-checked right after each hide/show tap. Test: p32 (fails without the fix, passes with it).
+Pete Spence: the GBM cards weren't hiding. The two GBM-only reports on Insights (GBM Monthly Summary, GBM Research Digest) have the 👁 hide button, but a routine that shows them for GBM users ran after every render and forced them back on, undoing the hide. It now respects your hide choice (non-GBM users still never see them). Also re-checked right after each hide/show tap. Test: p32 (fails without the fix, passes with it).
 
 ## v3.10.867 — Weather Card Suggests Today's Exercise Effort
 
@@ -461,7 +465,7 @@ The weather card now says "Suggested effort today": normal, ease about 5% (25°+
 
 ## v3.10.866 — Local Weather: Water And Exercise Tips, With Your Override
 
-Pete: environmental factors for exercise: a quick look at location and a reliable weather source, which can be overridden because forecasts are often wrong, affecting water intake and exercise difficulty.
+Pete Spence: environmental factors for exercise: a quick look at location and a reliable weather source, which can be overridden because forecasts are often wrong, affecting water intake and exercise difficulty.
 - New card above Water on Today: "Add local weather". Pick a place by typing a town (free Open-Meteo geocoding) or "Use my location". Only the rounded coordinates leave the phone, and only to Open-Meteo (free, no account or key).
 - Shows now / high / feels-like max / rain chance / UV, with exercise tips: very hot (35°+), hot (30°+), warm, freezing, cold, wet, high UV. These are rule-of-thumb guidance, not measured.
 - **Water target rises on hot days** on top of the exercise allowance: +250ml from 25°, +500ml from 30°, +750ml from 35° (feels-like high). Shown as "+500ml heat".
@@ -472,7 +476,7 @@ Pete: environmental factors for exercise: a quick look at location and a reliabl
 
 ## v3.10.865 — The Server Now Keeps Its Own Scheduler Alive (Why The App Kept Dropping Offline)
 
-Pete's phone logs (5 Oct): `pgrep crond` returned nothing, and the auto-update log stops dead on 2 Oct 14:05. **crond had silently died.** crond runs the watchdog that restarts this server, so when Android later killed the server nothing brought it back: "Site cannot be reached", and the old May screen was whatever else the home-screen icon could open. (The watchdog log also shows the server being found down about hourly for days, so Android is killing it regularly.)
+Pete Spence's phone logs (5 Oct): `pgrep crond` returned nothing, and the auto-update log stops dead on 2 Oct 14:05. **crond had silently died.** crond runs the watchdog that restarts this server, so when Android later killed the server nothing brought it back: "Site cannot be reached", and the old May screen was whatever else the home-screen icon could open. (The watchdog log also shows the server being found down about hourly for days, so Android is killing it regularly.)
 - While the server is alive it now checks every minute that crond is running and restarts it (logged to `~/mh_watchdog.log`), and re-takes the wake-lock at startup.
 - The watchdog cron line is now self-installed too if missing (the other two already were).
 - Test: p30.
@@ -480,7 +484,7 @@ Pete's phone logs (5 Oct): `pgrep crond` returned nothing, and the auto-update l
 
 ## v3.10.864 — The 3-AI Check Now Judges Portion Size Independently
 
-Pete: "Why doesn't each AI try to work out the portion sizes as well as the whole dish? What if the original AI (you) have not guessed the portion sizes correctly in the first place?" Fair: the checkers were handed my guessed amount ("300g") as fact and only asked for macros, so a bad portion guess was simply confirmed three times.
+Pete Spence: "Why doesn't each AI try to work out the portion sizes as well as the whole dish? What if the original AI (you) have not guessed the portion sizes correctly in the first place?" Fair: the checkers were handed my guessed amount ("300g") as fact and only asked for macros, so a bad portion guess was simply confirmed three times.
 - Each of Claude, Gemini and ChatGPT is now also given your original words and asked for its **own portion estimate** (grams) and the calories for that portion, alongside the macros for the logged amount. Applies to the meal check, the 3-AI estimate and all the edit forms that use it.
 - The card shows each AI's portion guess and warns when they disagree by 25%+ (or two of them are well off the logged amount): "Portion size is the shaky part... weigh it if you can". Averaging still uses the logged amount, so nothing changes silently.
 - "Browse saved prompts" on the Log tab is now centred.
@@ -488,17 +492,17 @@ Pete: "Why doesn't each AI try to work out the portion sizes as well as the whol
 
 ## v3.10.841 — Sleep Conflict Card No Longer Offers To "Add" Two Devices' Sleep Together
 
-Pete: "Looks like the sleeping health connect issue is still apparent" — Trends showed 13h32m total sleep at 11:15am. Screenshots of both apps settled it: RingConn and Zepp each said he'd been asleep **5h17m**, but the raw Health Connect sessions (RingConn 01:23–06:13, RingConn nap 08:03–09:11, Zepp 01:56–09:16) add up to 13h18m — spans include awake time, and two devices were recording the same night.
+Pete Spence: "Looks like the sleeping health connect issue is still apparent" — Trends showed 13h32m total sleep at 11:15am. Screenshots of both apps settled it: RingConn and Zepp each said he'd been asleep **5h17m**, but the raw Health Connect sessions (RingConn 01:23–06:13, RingConn nap 08:03–09:11, Zepp 01:56–09:16) add up to 13h18m — spans include awake time, and two devices were recording the same night.
 
 Web side: the sleep-conflict comparison card had a "Both genuinely happened — add them" button that summed every queued session. That only makes sense for separate periods, which the launcher already sums automatically; the card only ever appears for two devices overlapping in time, where "add them" can only double-count. Removed. The real fix is on the launcher side (v11 — see the launcher's CHANGELOG and TECHNICAL.md's Health Connect section): sleep is now measured in asleep time per source, and two devices that agree within 20 minutes resolve silently without a card at all.
 
 ## v3.10.844 — Extractors Ship In The Repo (No Hand-Copy, New Installs Work)
 
-Pete asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
+Pete Spence asked whether all of this is smooth for new users. It wasn't: `app/extractors/` sits outside the git repo, the launcher's `provision.sh` only creates it empty, and nothing ever filled or updated it, so a brand-new install had no Health Connect extractor at all ("No extractor found") and Health Connect data would never reach combined.csv. `run_extractor()` now prefers an extractor shipped in the repo's own `extractors/` folder and falls back to `app/extractors/` (still used for the withings/ringconn/amazfit ones that only exist on Pete Spence's phone). `health_connect.py` is in the repo, so `git pull` is the whole upgrade. Tested with a sample export.
 
 ## v3.10.863 — The App No Longer Freezes On A Dead Connection (Offline Mode Actually Works)
 
-Pete, abroad: offline mode "obviously doesn't work... the local service seems to want external network access." He was right, and my v3.10.862 test had missed it: it made internet requests fail *instantly*, but a phone with no signal or roaming data makes them *hang*, and the page head loaded four things from the internet as **blocking** resources (Google Fonts, jsPDF, jsPDF-AutoTable, JSZip). The browser waited on them before showing anything, so the app sat there. Reproduced (page never finished loading with hung requests), then fixed:
+Pete Spence, abroad: offline mode "obviously doesn't work... the local service seems to want external network access." He was right, and my v3.10.862 test had missed it: it made internet requests fail *instantly*, but a phone with no signal or roaming data makes them *hang*, and the page head loaded four things from the internet as **blocking** resources (Google Fonts, jsPDF, jsPDF-AutoTable, JSZip). The browser waited on them before showing anything, so the app sat there. Reproduced (page never finished loading with hung requests), then fixed:
 - **jsPDF, its table plugin and JSZip now ship with the app** in `lib/` (pinned to the versions used before: 2.5.1, 3.8.2, 3.10.1), like Chart.js. PDF reports and the one-file zip backup now work with no internet at all. The CDN is only a non-blocking fallback if a local file is missing.
 - **Fonts load without blocking.** The app appears immediately in the system font and swaps to the web fonts if they ever arrive.
 - **Hang check before AI calls.** If the connection is on but silent, the first AI use now spots it in 3 seconds (a small request to gstatic.com, result trusted for 60 s) and goes straight to the offline choices, instead of waiting out the long AI timeout. A quick failure is left to the existing handling.
@@ -507,7 +511,7 @@ Pete, abroad: offline mode "obviously doesn't work... the local service seems to
 
 ## v3.10.862 — Offline Mode: Banner, "Needs Internet" Notes, And Save-For-Later Meals
 
-Pete (travelling, 2 Oct): "I desperately need offline mode. We need to show an offline banner throughout time spent there. Non working items such as AI compare need a note... another function similar to manual / health connect that updates via sync when it comes back online."
+Pete Spence (travelling, 2 Oct): "I desperately need offline mode. We need to show an offline banner throughout time spent there. Non working items such as AI compare need a note... another function similar to manual / health connect that updates via sync when it comes back online."
 
 The app already runs from the phone's own server, so offline here means **no internet**: logging, your library, history and charts keep working; the AI, food database and barcode lookup stop. What's new:
 - **Offline banner** across the top of every screen for as long as there's no connection ("Offline — logging, your library and history still work. AI, food search and barcode need internet."), with a count of saved entries. Detection is not just the phone's Wi-Fi flag: when any request to the internet fails, the app checks for real, then re-checks every 15 seconds until it's back.
@@ -540,7 +544,7 @@ Found by the new recipes persona test (p22).
 
 ## v3.10.858 — Fresh Installs Now Get The Update And Merge Jobs Automatically
 
-Pete's phone runs three cron jobs (watchdog every minute, GitHub auto-update at :05/:35, `update_health.py` every 30 minutes). The launcher's `provision.sh` only ever created the watchdog line, so a fresh install never got app updates or the 30-minute merge. On startup, in Termux only, the server now adds whichever of those two lines is missing and installs `mh_autoupdate.sh` (now kept in the repo) if absent. Existing lines are never changed or removed, a commented-out line doesn't count as present, and the check is a no-op outside Termux. No launcher rebuild needed. Test: p21 (fresh, already-complete, watchdog-only and commented-out crontabs).
+Pete Spence's phone runs three cron jobs (watchdog every minute, GitHub auto-update at :05/:35, `update_health.py` every 30 minutes). The launcher's `provision.sh` only ever created the watchdog line, so a fresh install never got app updates or the 30-minute merge. On startup, in Termux only, the server now adds whichever of those two lines is missing and installs `mh_autoupdate.sh` (now kept in the repo) if absent. Existing lines are never changed or removed, a commented-out line doesn't count as present, and the check is a no-op outside Termux. No launcher rebuild needed. Test: p21 (fresh, already-complete, watchdog-only and commented-out crontabs).
 
 ## v3.10.857 — Server Merges Health Connect Data Itself (No Cron Needed)
 
@@ -548,7 +552,7 @@ The launcher drops `health_connect_export.json` into the inbox every 30 minutes,
 
 ## v3.10.856 — Manual Sleep Correction Sticks, SpO2 Rounded, Midnight Rollover While Open
 
-**Manual correction overwritten (Pete: "sleep still stuck, even though I altered via manual").** Two real holes, both found by reproducing it. (1) Every full sync archived `manual_entry.json` into `inbox/old/`, so a correction saved while a sync was already running was moved away before it was applied, and the Health Connect value came back; if the field-attribution file was ever lost, the device value then won outright. The file now stays in the inbox, is re-applied (manual first) on every run, and is included in the 7-day backups and `--restore`. (2) A manual save during a running sync used to say "will be picked up" but nothing picked it up. It is now queued and runs the moment that sync ends. Test: p19 (fails on the old code, passes now).
+**Manual correction overwritten (Pete Spence: "sleep still stuck, even though I altered via manual").** Two real holes, both found by reproducing it. (1) Every full sync archived `manual_entry.json` into `inbox/old/`, so a correction saved while a sync was already running was moved away before it was applied, and the Health Connect value came back; if the field-attribution file was ever lost, the device value then won outright. The file now stays in the inbox, is re-applied (manual first) on every run, and is included in the 7-day backups and `--restore`. (2) A manual save during a running sync used to say "will be picked up" but nothing picked it up. It is now queued and runs the moment that sync ends. Test: p19 (fails on the old code, passes now).
 
 **SpO2 showed 95.47619047619048%.** The Trends day list and the SpO2 card now round to one decimal (the list's shared formatter, so HR, HRV and calories are covered too).
 
@@ -556,7 +560,7 @@ The launcher drops `health_connect_export.json` into the inbox every 30 minutes,
 
 ## v3.10.855 — Zepp/Amazfit Export Now Opens Without ZArchiver Or pyzipper
 
-Found by replaying Pete's real exports (private test `p16_real_exports.py`).
+Found by replaying Pete Spence's real exports (private test `p16_real_exports.py`).
 
 - Zepp's "Export your data" zip uses WinZip-AES encryption. Python's own zip reader cannot open it ("That compression method is not supported"), so the extractor's `--password` / `ZEPP_PASSWORD` option never worked on a real export, and the in-app password box (`/extract-zepp`) needed the optional `pyzipper` package, which `setup.sh` installs with its errors hidden - a silent failure on any phone where that install fails.
 - New `extractors/_winzip_aes.py` reads these zips with the standard library only (uses `cryptography` if present for speed, otherwise a built-in AES). The Zepp extractor uses it, and `/extract-zepp` falls back to it when `pyzipper` is missing. Wrong password -> clear "password is wrong" message; tampered/corrupt data is refused; extraction never writes outside the inbox.
@@ -600,7 +604,7 @@ Found by the new library persona test (`p11_library.py`).
 
 ## v3.10.850 — Device Setup Now Survives A Lost Browser Or Phone
 
-Raised by Pete: where does extra device/extractor setup live, and is it backed up? It was not.
+Raised by Pete Spence: where does extra device/extractor setup live, and is it backed up? It was not.
 
 - **Custom devices, the retired list and file patterns** used to live only in browser localStorage. They now live on the server in `data/devices.json` (browser copy is just a cache). Existing browser-only setups are uploaded automatically the first time Settings opens.
 - **Device precedence** is restored from `pipeline_prefs.json` when a browser has none stored, so a wiped browser no longer shows defaults (and then overwrites the real order on the next reorder).
@@ -679,11 +683,11 @@ Found by running fake single-device, two-device and messy-data users through a f
 
 ## Launcher v1.4.1 (versionCode 13) — Grant Screen Now Actually Offers The New Permissions
 
-Pete: "Health connect never offered anything." Cause (mine): v1.4 made `hasAllPermissions()` check only the original seven so an upgrade could never stop a working sync, but the "Grant permission & sync now" screen used that same check to decide whether to open Health Connect's permission screen at all. It saw the seven granted, said "already granted", and never asked for the three new ones. Fix: new `hasEveryPermission()` (core + extras) for that screen only; the background service still gates on core. The screen also now syncs as soon as the core seven are granted rather than demanding every optional one. Workaround on v1.4: Android Settings → Apps → Health Connect → App permissions → MaxedHealth Sync.
+Pete Spence: "Health connect never offered anything." Cause (mine): v1.4 made `hasAllPermissions()` check only the original seven so an upgrade could never stop a working sync, but the "Grant permission & sync now" screen used that same check to decide whether to open Health Connect's permission screen at all. It saw the seven granted, said "already granted", and never asked for the three new ones. Fix: new `hasEveryPermission()` (core + extras) for that screen only; the background service still gates on core. The screen also now syncs as soon as the core seven are granted rather than demanding every optional one. Workaround on v1.4: Android Settings → Apps → Health Connect → App permissions → MaxedHealth Sync.
 
 ## v3.10.843 — Launcher v1.4: Far More Health Connect Data, Resting HR Column, Pass-Through Extractor
 
-Pete asked whether we use every metric Health Connect offers ("Health Connect users only would want as much information as possible"). We used seven; this adds the rest that make sense, in one batch.
+Pete Spence asked whether we use every metric Health Connect offers ("Health Connect users only would want as much information as possible"). We used seven; this adds the rest that make sense, in one batch.
 
 **Launcher (APK v1.4, versionCode 12):** now also reads distance, resting heart rate, total calories (written as `calories_passive` = total − active), min/max heart rate, min/max HRV and SpO2, and, for the night that resolved to a single sleep figure, deep/light/REM/awake minutes, bedtime, wake time and sleep efficiency. Stage totals use the SAME source choice as the sleep total (one source; or all if devices recorded separate periods; or the preferred device only if two recorded the same night), so deep+light+REM always agrees with `sleep_duration`. Exercise sessions and BMR were deliberately left out: sessions need their own design, and the app already calculates BMR itself.
 
@@ -695,7 +699,7 @@ Pete asked whether we use every metric Health Connect offers ("Health Connect us
 
 ## v3.10.842 — Manual Always Wins; A Source Can Correct Its Own Earlier Value
 
-**Manual is no longer a rankable source.** Pete asked whether manual needs to be position 1 everywhere. It did, and the Settings editor was quietly undermining that: it appended "Manual" to the bottom of every precedence list except weight (where it sat 2nd, under Withings) and sent all lists to `pipeline_prefs.json`, so a saved order would have made a typed-in correction lose to Health Connect. `get_precedence()` now forces `manual` first for every metric regardless of what was saved, and the editor no longer lists Manual (a one-line note says it always wins; it is also gone from "Manage devices").
+**Manual is no longer a rankable source.** Pete Spence asked whether manual needs to be position 1 everywhere. It did, and the Settings editor was quietly undermining that: it appended "Manual" to the bottom of every precedence list except weight (where it sat 2nd, under Withings) and sent all lists to `pipeline_prefs.json`, so a saved order would have made a typed-in correction lose to Health Connect. `get_precedence()` now forces `manual` first for every metric regardless of what was saved, and the editor no longer lists Manual (a one-line note says it always wins; it is also gone from "Manage devices").
 
 **Same-source correction.**
 
@@ -703,16 +707,16 @@ The 13h32m for 1 Oct survived every later Health Connect sync, including ones fr
 
 ## v3.10.840 — Device Precedence Reorder Bug Fixed (Real Root Cause), Manual Update-Check Button, Launcher Distribution Overhaul
 
-Pete: "device precedence won't reorder, it keeps coming back open on screen and in position 1." Took real investigating to find — every reorder mechanism involved (including device precedence's own drag-reorder) turned out to be working correctly. The actual cause: an unguarded top-level `Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin)` call elsewhere in the file. When the Chart.js CDN load fails (blocked network, offline, flaky connection), the existing fallback swapped in a stub `Chart` object with no `.register` method — so the fallback itself threw, and because it was a top-level throw, it silently killed **all script execution for the rest of that page load**, not just charts. That included the code that reads back saved reorder/precedence state, which is why the section visibly snapped to position 1 and stayed open — it never got the chance to apply the saved order at all. Reproduced directly via a headless test that blocks only the Chart.js CDN request, which alone reproduced the exact symptom with zero reorder-code changes. Fixed by making the `onerror` fallback define a no-op `Chart.register`, and wrapping the real call site in `try/catch` regardless. See TECHNICAL.md's "Generic section reordering" section for the general lesson here — this class of bug (an uncaught top-level exception silently killing everything defined later in this file) can resurface anywhere a third-party script might fail to load.
+Pete Spence: "device precedence won't reorder, it keeps coming back open on screen and in position 1." Took real investigating to find — every reorder mechanism involved (including device precedence's own drag-reorder) turned out to be working correctly. The actual cause: an unguarded top-level `Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin)` call elsewhere in the file. When the Chart.js CDN load fails (blocked network, offline, flaky connection), the existing fallback swapped in a stub `Chart` object with no `.register` method — so the fallback itself threw, and because it was a top-level throw, it silently killed **all script execution for the rest of that page load**, not just charts. That included the code that reads back saved reorder/precedence state, which is why the section visibly snapped to position 1 and stayed open — it never got the chance to apply the saved order at all. Reproduced directly via a headless test that blocks only the Chart.js CDN request, which alone reproduced the exact symptom with zero reorder-code changes. Fixed by making the `onerror` fallback define a no-op `Chart.register`, and wrapping the real call site in `try/catch` regardless. See TECHNICAL.md's "Generic section reordering" section for the general lesson here — this class of bug (an uncaught top-level exception silently killing everything defined later in this file) can resurface anywhere a third-party script might fail to load.
 
-**Also added, same session, at Pete's explicit request ahead of a release:**
+**Also added, same session, at Pete Spence's explicit request ahead of a release:**
 - **Settings → About → 🔄 CHECK FOR UPDATES button** — the PWA already checks for updates automatically via its service worker, but there was no way to check on demand. Button shows "Checking…", then either the existing update banner (if one's available) or a "you're on the latest version" toast, rather than looking like it did nothing.
 - **Launcher APK now distributed from this repo's `apk/` folder** (`apk/MaxedHealth-launcher.apk` + `apk/version.json` + `apk/README.md`), replacing "handed to testers directly." The native launcher app itself gained a matching in-app update-check (`checkForNewerApk()` in `MainActivity.kt`, compares `version.json`'s `versionCode` against the installed build, shows a banner linking back to the folder) — see TECHNICAL.md for the full release process this now requires (bump `versionCode` in `build.gradle.kts`, replace the APK, update `version.json`, all three together).
-- **Launcher's Health Connect button** (loading screen) changed from a 900ms-timed gear icon to a permanent labelled "Health Connect settings" button, then from 900ms to a 6000ms minimum display time after Pete reported it still vanishing before he could tap it on a warm launch — 900ms genuinely wasn't enough time for a human to see, register, and tap the button, not just a tight margin.
+- **Launcher's Health Connect button** (loading screen) changed from a 900ms-timed gear icon to a permanent labelled "Health Connect settings" button, then from 900ms to a 6000ms minimum display time after Pete Spence reported it still vanishing before he could tap it on a warm launch — 900ms genuinely wasn't enough time for a human to see, register, and tap the button, not just a tight margin.
 
 ## v3.10.839 — "7 Days" On Trends Was Only Showing 6
 
-Pete: "This is not 7 days of my data" — the Trends screen's 7-day view (and 30-day, and any other fixed window) was actually showing one fewer day than advertised whenever "Include today" was left off (the default, since an in-progress day can skew an average/trend line).
+Pete Spence: "This is not 7 days of my data" — the Trends screen's 7-day view (and 30-day, and any other fixed window) was actually showing one fewer day than advertised whenever "Include today" was left off (the default, since an in-progress day can skew an average/trend line).
 
 The cutoff date math was already correct — `now - 7 days` genuinely reserves a 7-calendar-day window including today. But today then got silently dropped by the separate today-exclusion filter that runs right after, and nothing compensated for that lost slot — so "7 Days" rendered as 6 (e.g. 23rd–28th, missing both the 29th and effectively one more day of real history than intended).
 
@@ -722,13 +726,13 @@ Fixed `getTrendsData()`: when today is going to be excluded (not `_trendsInclude
 
 ## v3.10.838 — Routine Template kg/lbs Toggle Didn't Visually Update
 
-Pete: "Strength training won't let's me select lbs" — turned out to be specifically the kg/lbs toggle added in v3.10.836 to the routine create/edit template screen. The toggle was actually working correctly underneath the whole time — tapping "lbs" genuinely switched `_routineFormUnit` and converted every displayed weight — but `setRoutineFormUnit()` never updated the two buttons' own styling, unlike the two other kg/lbs toggles in the app (manual-log form, Apply Routine screen), which both explicitly restyle their buttons on switch. So "kg" stayed visually highlighted forever, making it look like the tap did nothing even though it had worked.
+Pete Spence: "Strength training won't let's me select lbs" — turned out to be specifically the kg/lbs toggle added in v3.10.836 to the routine create/edit template screen. The toggle was actually working correctly underneath the whole time — tapping "lbs" genuinely switched `_routineFormUnit` and converted every displayed weight — but `setRoutineFormUnit()` never updated the two buttons' own styling, unlike the two other kg/lbs toggles in the app (manual-log form, Apply Routine screen), which both explicitly restyle their buttons on switch. So "kg" stayed visually highlighted forever, making it look like the tap did nothing even though it had worked.
 
 Fixed `setRoutineFormUnit()` to restyle both buttons on every switch, matching the pattern `setStrengthUnit()`/`setRoutineUnit()` already use. Verified directly: toggling to lbs moves the highlighted border/background from the kg button to the lbs button, and back again on toggling back.
 
 ## v3.10.837 — Portion Wasn't Pre-Filling When Re-Searching a Meal-Preview or Recipe Item
 
-Pete: "Portion not populating for edit" — tapping the 🔍 search icon on an "AI estimate" row in a meal preview (or a flagged recipe ingredient) to pick a proper match, then landing on the amount screen with "Enter grams" blank and "Enter amount above" still showing, even though the item clearly already had an amount (e.g. 470g).
+Pete Spence: "Portion not populating for edit" — tapping the 🔍 search icon on an "AI estimate" row in a meal preview (or a flagged recipe ingredient) to pick a proper match, then landing on the amount screen with "Enter grams" blank and "Enter amount above" still showing, even though the item clearly already had an amount (e.g. 470g).
 
 Root cause: the item's existing `.amount` is stored as a display string almost everywhere in the app — `"470g"`, `"150ml"`, etc. — not a bare number, and the amount screen was assigning that string straight into `foodAmountGrams`, a `type="number"` input. Browsers silently reject a non-numeric value on a number input, so it just stayed empty — no error, no console warning, nothing to see wrong except the blank box.
 
@@ -736,13 +740,13 @@ Added `_fixingIngredientGrams()`, which pulls out the leading number regardless 
 
 ## v3.10.836 — kg/lbs Toggle Was Missing From the Routine Template Editor
 
-Pete: "No lbs switch from kg?" — the routine create/edit template form added in v3.10.835 had no unit toggle at all, unlike the two other places weight gets entered (the Apply Routine screen and the manual "Log a workout" form), which both already have one.
+Pete Spence: "No lbs switch from kg?" — the routine create/edit template form added in v3.10.835 had no unit toggle at all, unlike the two other places weight gets entered (the Apply Routine screen and the manual "Log a workout" form), which both already have one.
 
 Added a kg/lbs toggle to the routine template editor, right under the routine name field. It uses its own independent unit state (`_routineFormUnit`), deliberately separate from the one the Apply Routine screen and manual-log form share (`_strengthUnit`) — so switching units while building a template has no effect on what unit those other forms are showing, and vice versa. As always, weight is stored on the routine as true kg (`weight_kg`) regardless of entry unit; the toggle only changes how the numbers are displayed and typed while the form is open. Switching units converts whatever's currently on screen on the spot (60kg → 132.3lbs), rather than reinterpreting the same digits under a new unit. Reopening a routine to edit or duplicate it always shows kg first, since that's what's actually stored — never whatever unit was last selected.
 
 ## v3.10.835 — Routine Templates Can Now Carry Fixed Sets, Reps, Weight & Notes
 
-Pete's own request, with a real example: "Rowing, 40 x 60kg, Purple band 40-80kg / Rowing, 20 x 60kg, Purple band 40-80kg / Rowing, 10 x 60kg, Purple band 40-80kg" saved as part of the routine template itself, auto-populating when applied — not just an exercise name that pulls numbers from whatever was logged last time.
+Pete Spence's own request, with a real example: "Rowing, 40 x 60kg, Purple band 40-80kg / Rowing, 20 x 60kg, Purple band 40-80kg / Rowing, 10 x 60kg, Purple band 40-80kg" saved as part of the routine template itself, auto-populating when applied — not just an exercise name that pulls numbers from whatever was logged last time.
 
 A saved routine's exercises were previously just plain names (`exercises: ['Rowing', 'Squats']`) — sets/reps/weight always came from `getLastLoggedSets()`, whatever was logged most recently for that name. Now each exercise in a routine template can carry its own fixed sets, each with reps, weight, and a free-text note (e.g. "Purple band 40-80kg") — set when creating or editing a routine, in the same per-exercise +/− row editor as before, now with per-set rows underneath each exercise.
 
@@ -753,13 +757,13 @@ A saved routine's exercises were previously just plain names (`exercises: ['Rowi
 
 Notes carry all the way through: template → the Apply screen's set rows → `state.strengthLog` once logged → the Strength Training card's session summary → `strength.csv` (server backup) and the routines/strength backup-restore CSVs (a `note` column appended at the end of each, so older exported files without it still import correctly). The manual "Log a workout" form (outside routines) also gained a note field per set in the same pass, for consistency.
 
-**Backward compatible:** existing routines saved before this change (plain-string exercise lists) are normalized transparently on load — they behave exactly as before (auto-fill from last session, no template chip) until edited and re-saved, at which point they pick up the new shape. Verified directly: built a routine matching Pete's exact example, applied it with no history (went straight to template), logged it, then re-applied with both template and history now present (correctly offered the choice, switching both ways preserved the data) — and separately confirmed an old plain-string routine still loads and normalizes correctly.
+**Backward compatible:** existing routines saved before this change (plain-string exercise lists) are normalized transparently on load — they behave exactly as before (auto-fill from last session, no template chip) until edited and re-saved, at which point they pick up the new shape. Verified directly: built a routine matching Pete Spence's exact example, applied it with no history (went straight to template), logged it, then re-applied with both template and history now present (correctly offered the choice, switching both ways preserved the data) — and separately confirmed an old plain-string routine still loads and normalizes correctly.
 
 ## v3.10.834 — Demo Personas Get Fixed Themes; Bill Gets Real PEMFiT Branding
 
 Second "shop window" request: every demo persona now has its own fixed, distinct look — base theme, accent colour, icon pack — instead of all 11 sharing one hardcoded Vital theme. Reused the app's own existing theme system entirely (Dark/Aurora/Carbon/Slate/Light bases, Vital/Pulse/Forge icon packs, custom accent colours) rather than inventing new CSS; every accent was run through the app's own dark/light contrast-safety check before being assigned, so nothing renders illegibly. Switching persona mid-demo now switches the whole look, not just the data.
 
-Bill specifically gets real PEMFiT branding: exact colours sampled directly from the logo Pete provided (orange `#f37122`, grey `#8b8c8e` tagline — not guessed), used as both his in-app theme accent and his demo report profile's branding colour, with the actual PEMFiT logo embedded so his exported report PDFs carry it too.
+Bill specifically gets real PEMFiT branding: exact colours sampled directly from the logo Pete Spence provided (orange `#f37122`, grey `#8b8c8e` tagline — not guessed), used as both his in-app theme accent and his demo report profile's branding colour, with the actual PEMFiT logo embedded so his exported report PDFs carry it too.
 
 **Also fixed along the way, found during this work:** switching theme/accent/icon-pack while in demo mode was writing straight to the real account's localStorage keys (`mh_theme`, `mh_custom_accent`, `mh_icon_pack`, and the org-branding keys `mh_org_logo`/`mh_org_name`) with **none of them captured or restored** by demo mode's snapshot/exit/abandoned-session-recovery safety net — the exact same class of gap that caused the v3.10.830 lab-results leak, just waiting to happen the moment persona theming existed to trigger it. All five fields are now captured in `startDemoMode()`'s snapshot, restored on a clean `exitDemoMode()`, and restored by `healFromAbandonedDemoSession()` on next load if the session was left running uncleanly — verified by direct execution testing (not just code review): entering Bill's demo, then simulating both a clean exit and an abandoned session, confirmed the real account's original theme/accent/org-logo values come back exactly, every time.
 
@@ -767,19 +771,19 @@ Bill specifically gets real PEMFiT branding: exact colours sampled directly from
 
 ## v3.10.833 — Alphabetical Sort Now Ignores Leading Icons
 
-Follow-up to v3.10.832: Pete flagged that section titles with a leading emoji — "📐 Formulas & Technical Reference", "🩸 Lab Results + Log Panel" — were sorting by the emoji's Unicode codepoint rather than by the first real letter, landing them in odd spots instead of under F/L where someone scanning alphabetically would look for them. Added a small `_stripLeadingIconForSort()` helper (strips a leading emoji/symbol run and its trailing whitespace, for comparison purposes only) and wired it into both restore-strip sort comparators (`renderGenericRestoreStrip`, `renderDashboardRestoreStrip`). Display is untouched — pills still show their icon — only the sort comparison ignores it now.
+Follow-up to v3.10.832: Pete Spence flagged that section titles with a leading emoji — "📐 Formulas & Technical Reference", "🩸 Lab Results + Log Panel" — were sorting by the emoji's Unicode codepoint rather than by the first real letter, landing them in odd spots instead of under F/L where someone scanning alphabetically would look for them. Added a small `_stripLeadingIconForSort()` helper (strips a leading emoji/symbol run and its trailing whitespace, for comparison purposes only) and wired it into both restore-strip sort comparators (`renderGenericRestoreStrip`, `renderDashboardRestoreStrip`). Display is untouched — pills still show their icon — only the sort comparison ignores it now.
 
 ## v3.10.832 — Collapsed Section Pills Now Alphabetical, Everywhere
 
-Pete's own request: the "Hidden: X + Y + Z" pill row that appears wherever collapsible sections exist (Settings → Manage/Customise/Data, Trends, Reports, Import, the Today dashboard) was ordering pills purely by "whichever order you happened to tap hide in" — which reads as random and made a longer hidden list (like the Settings → Manage screenshot that prompted this) genuinely hard to scan for the one you wanted back. Both restore-strip renderers (`renderGenericRestoreStrip`, covering Manage/Customise/Data/Trends/Reports/Import, and `renderDashboardRestoreStrip`, covering Today) now sort by the section's resolved label at render time — purely a display change, the underlying hidden-list storage and hide/show mechanics are completely untouched. Also alphabetized while in this area, per the same request ("anywhere they are"): Compare Metrics' group pills (Body Composition, Exercise, Lab Results, Nutrition, Symptoms, Treatment, Vitals & Sleep — was an arbitrary hand-written order) and per-item category chips on library edit forms (was insertion order). Left alone deliberately: Manage Categories' "Words" list already offers an explicit alphabetical sort option alongside its default match-priority order, and reordering that default would risk conflating display order with the real keyword-match priority `detectFoodCategory()` depends on; "Next meal idea"'s category pills were already alphabetical (Snack pinned first by design, as a distinct suggestion type, not a category).
+Pete Spence's own request: the "Hidden: X + Y + Z" pill row that appears wherever collapsible sections exist (Settings → Manage/Customise/Data, Trends, Reports, Import, the Today dashboard) was ordering pills purely by "whichever order you happened to tap hide in" — which reads as random and made a longer hidden list (like the Settings → Manage screenshot that prompted this) genuinely hard to scan for the one you wanted back. Both restore-strip renderers (`renderGenericRestoreStrip`, covering Manage/Customise/Data/Trends/Reports/Import, and `renderDashboardRestoreStrip`, covering Today) now sort by the section's resolved label at render time — purely a display change, the underlying hidden-list storage and hide/show mechanics are completely untouched. Also alphabetized while in this area, per the same request ("anywhere they are"): Compare Metrics' group pills (Body Composition, Exercise, Lab Results, Nutrition, Symptoms, Treatment, Vitals & Sleep — was an arbitrary hand-written order) and per-item category chips on library edit forms (was insertion order). Left alone deliberately: Manage Categories' "Words" list already offers an explicit alphabetical sort option alongside its default match-priority order, and reordering that default would risk conflating display order with the real keyword-match priority `detectFoodCategory()` depends on; "Next meal idea"'s category pills were already alphabetical (Snack pinned first by design, as a distinct suggestion type, not a category).
 
 ## v3.10.831 — Demo Picker Visual Polish (Shop-Window Pass, Part 1)
 
-First piece of the "make the demo a proper shop window" work, scoped specifically for an in-person pitch (phone screen broadcast to a room, narrated live) rather than a generic redesign — so this deliberately focuses on the very first thing anyone in the room sees: the demo persona picker and the always-visible demo banner. The picker was previously hardcoding a fixed dark palette (`#1c2230`/`#151a23`/etc.) regardless of the active theme, making it look like an unstyled dev screen bolted onto an otherwise polished app; now fully theme-aware via CSS variables, so it matches whatever visual theme is actually selected. Each of the 10 personas now gets its own icon for fast visual scanning on a small screen from across a room, and cards show only the short tagline rather than the full bio paragraph — a wall of text per card was unreadable at a glance on a mirrored phone display; the full bio remains available for anyone exploring solo later. The demo banner (visible throughout the whole live session) got a small legibility bump — slightly bolder, slightly larger — so it reads as a clear, intentional status rather than fine print. Deliberately left the demo entry point's location alone (Settings → Manage → Try Demo Mode) per Pete's own call — navigation speed isn't the actual problem when the demo gets queued up before the meeting starts.
+First piece of the "make the demo a proper shop window" work, scoped specifically for an in-person pitch (phone screen broadcast to a room, narrated live) rather than a generic redesign — so this deliberately focuses on the very first thing anyone in the room sees: the demo persona picker and the always-visible demo banner. The picker was previously hardcoding a fixed dark palette (`#1c2230`/`#151a23`/etc.) regardless of the active theme, making it look like an unstyled dev screen bolted onto an otherwise polished app; now fully theme-aware via CSS variables, so it matches whatever visual theme is actually selected. Each of the 10 personas now gets its own icon for fast visual scanning on a small screen from across a room, and cards show only the short tagline rather than the full bio paragraph — a wall of text per card was unreadable at a glance on a mirrored phone display; the full bio remains available for anyone exploring solo later. The demo banner (visible throughout the whole live session) got a small legibility bump — slightly bolder, slightly larger — so it reads as a clear, intentional status rather than fine print. Deliberately left the demo entry point's location alone (Settings → Manage → Try Demo Mode) per Pete Spence's own call — navigation speed isn't the actual problem when the demo gets queued up before the meeting starts.
 
 ## v3.10.830 — SERIOUS DATA-SAFETY BUG FIXED: Demo Data Could Overwrite Real Lab Results
 
-Found live on Pete's real device: after exploring the Alex demo persona, Alex's two lab panels (Pre-Block/Post-Block Check) were sitting in Pete's actual Lab Results, not demo data. Root cause: `healFromAbandonedDemoSession()` — the safety net that restores real data on next app load if demo mode was left active uncleanly (app closed/backgrounded/killed mid-demo, rather than tapping "Exit Demo") — restores every other captured field (treatment defs/log, symptom defs/log, report profiles, targets, condition, etc.) but was missing the line for `mh_lab_results` entirely. It was never added when Lab Results demo support was built (v3.10.824). `startDemoMode()`'s backup snapshot does capture real lab results correctly, and a **clean** exit (tapping "Exit Demo") already restored them correctly via `exitDemoMode()` — this only affected the abandoned-session recovery path specifically. Fixed by adding the missing `restore('mh_lab_results', backup.labResults)` line. If you were affected: your real lab results may still be recoverable from `mh_demo_backup` in localStorage IF it hasn't already been cleared by a subsequent app load (the healing function deletes it unconditionally after running, whether or not the restore was complete) — check immediately rather than opening the app further. Everyone should treat any Lab Results entered or reviewed shortly after exploring a demo persona as unverified until confirmed against source records.
+Found live on Pete Spence's real device: after exploring the Alex demo persona, Alex's two lab panels (Pre-Block/Post-Block Check) were sitting in Pete Spence's actual Lab Results, not demo data. Root cause: `healFromAbandonedDemoSession()` — the safety net that restores real data on next app load if demo mode was left active uncleanly (app closed/backgrounded/killed mid-demo, rather than tapping "Exit Demo") — restores every other captured field (treatment defs/log, symptom defs/log, report profiles, targets, condition, etc.) but was missing the line for `mh_lab_results` entirely. It was never added when Lab Results demo support was built (v3.10.824). `startDemoMode()`'s backup snapshot does capture real lab results correctly, and a **clean** exit (tapping "Exit Demo") already restored them correctly via `exitDemoMode()` — this only affected the abandoned-session recovery path specifically. Fixed by adding the missing `restore('mh_lab_results', backup.labResults)` line. If you were affected: your real lab results may still be recoverable from `mh_demo_backup` in localStorage IF it hasn't already been cleared by a subsequent app load (the healing function deletes it unconditionally after running, whether or not the restore was complete) — check immediately rather than opening the app further. Everyone should treat any Lab Results entered or reviewed shortly after exploring a demo persona as unverified until confirmed against source records.
 
 ## v3.10.829 — Real Bug: `updateDashboard()` Was Missing Its Own Closing Brace
 
@@ -839,7 +843,7 @@ The "target reached" toast only ever fired from one of three ways to log water (
 
 ## v3.10.804-807 — Wellness Balance Card: From "Wrong" to "Explained" to Actually Fixed
 
-Reported as the Activity/Vitals scores looking wrong against a wearable app's own same-day numbers. Three passes, each one real: v3.10.804 clarified the card's subtitle was a 7-day average, not "today" (a labelling fix, not the underlying issue); v3.10.805 added a **Wellness Score Debug** panel (Settings) so the raw data behind each of the 4 scores could be checked directly instead of guessed at; v3.10.807 (Pete's own follow-up — "the user specified query period should be reflected, be it custom, 30 days or whatever") fixed the actual bug: Sleep/Activity/Nutrition ignored Trends' own Today/7D/30D/All/Custom selector entirely and always averaged a hardcoded last-7-real-days window. Now they average whatever period is currently selected, with a dynamic subtitle stating the real day-count found. Vitals' HRV baseline deliberately stays a fixed last-30-readings window regardless of period (a personal baseline needs real history a short custom range may not have) — documented explicitly so it isn't mistaken for a leftover bug. The Debug panel was updated to mirror the same selected period, so it's checking the same question the live card answers, not a different one.
+Reported as the Activity/Vitals scores looking wrong against a wearable app's own same-day numbers. Three passes, each one real: v3.10.804 clarified the card's subtitle was a 7-day average, not "today" (a labelling fix, not the underlying issue); v3.10.805 added a **Wellness Score Debug** panel (Settings) so the raw data behind each of the 4 scores could be checked directly instead of guessed at; v3.10.807 (Pete Spence's own follow-up — "the user specified query period should be reflected, be it custom, 30 days or whatever") fixed the actual bug: Sleep/Activity/Nutrition ignored Trends' own Today/7D/30D/All/Custom selector entirely and always averaged a hardcoded last-7-real-days window. Now they average whatever period is currently selected, with a dynamic subtitle stating the real day-count found. Vitals' HRV baseline deliberately stays a fixed last-30-readings window regardless of period (a personal baseline needs real history a short custom range may not have) — documented explicitly so it isn't mistaken for a leftover bug. The Debug panel was updated to mirror the same selected period, so it's checking the same question the live card answers, not a different one.
 
 ## v3.10.808-811 — Copy Diagnostics for Claude Extended, Then Two Real Bugs Found In It
 
@@ -907,7 +911,7 @@ Follow-up work on the native Android launcher app (separate from the web app ver
 - **Real bug, mine**: `MainActivity.kt` referenced `TermuxBridge.runMhstart()` (added during the earlier server-timeout/retry fix) but the function was never actually written into `TermuxBridge.kt` — a genuine "said I fixed it, didn't" compile error. Added it, following the same `RUN_COMMAND` pattern as `runProvisionScript()`, targeting `~/bin/mhstart` directly (it lives in Termux's own private storage, so — unlike `provision.sh` on shared storage — it's already executable and doesn't need the `bash <path>` wrapper).
 - **Second real bug found alongside it**: `MainActivity.kt` called `Intent(...)` in `findInstalledWebApk()` with no `import android.content.Intent` at all — would have been the very next compile error.
 - **`shortcuts.xml` build failure**: `shortcutShortLabel`/`shortcutLongLabel` must be `@string/...` references — Android's resource linker rejects a literal string there, unlike almost every other XML attribute. Fixed by moving the labels into a new `res/values/strings.xml`.
-- **The long-press shortcut itself turned out to be unreachable**: confirmed on Pete's phone that HyperOS's launcher doesn't invoke static app shortcuts at all — no menu appears on long-press, on any app. Rather than depend on a launcher-specific gesture, added a plain tap-target gear icon directly on the loading screen instead, shown only when `HealthConnectBridge.isAvailable()` says Health Connect is actually usable on the device. The shortcut XML is left in place for launchers that do support it.
+- **The long-press shortcut itself turned out to be unreachable**: confirmed on Pete Spence's phone that HyperOS's launcher doesn't invoke static app shortcuts at all — no menu appears on long-press, on any app. Rather than depend on a launcher-specific gesture, added a plain tap-target gear icon directly on the loading screen instead, shown only when `HealthConnectBridge.isAvailable()` says Health Connect is actually usable on the device. The shortcut XML is left in place for launchers that do support it.
 - **`isAvailable()` was stricter than the logic actually proven to work**: it required an exact match to `SDK_AVAILABLE`, while `HealthConnectTestActivity` (tested and working) treats anything that isn't explicitly "unavailable" or "needs a provider update" as usable. Loosened to match.
 - **Edge-to-edge (Android 15 default) hid the gear behind the status bar**: fixed with a real 56dp top margin instead of small internal padding.
 - **A genuine race condition**: tapping the gear opened Health Connect settings, but the coroutine already waiting to auto-open MaxedHealth itself didn't know the user had navigated away — it kept running in the background and fired a moment later regardless, colliding with the screen just opened (this is what "Site cannot be reached" right after tapping the gear actually was). Fixed by cancelling that pending job the moment the gear is tapped.
@@ -920,7 +924,7 @@ Follow-up work on the native Android launcher app (separate from the web app ver
 The single biggest onboarding blocker (every early tester hit the same wall — seeing/manually running Termux) is now solved. A native Android app (`com.maxedhealth.launcher`, separate Android Studio project) walks a new install through Termux, Termux:Boot, and Termux:API installation and permission steps automatically via Termux's `RUN_COMMAND` intent, with a single unavoidable manual step (a one-time clipboard paste inside Termux — Termux blocks external apps from writing `allow-external-apps` to its own settings otherwise).
 
 - **Real bug found and fixed**: `RUN_COMMAND` requires its target to be executable, but a file staged on shared storage can never be marked executable — an Android filesystem limit, not a permissions issue. Fixed by having the launcher run Termux's own `bash` with `provision.sh` as an argument, rather than trying to execute the script directly.
-- **A second, separate real bug found in `provision.sh` itself**: its crontab-restoring line piped `crontab -l | grep -v "mh_watchdog"` into the new crontab — on a genuinely empty crontab (exactly what a fresh Termux install has), `grep -v` on empty input exits 1, its normal "found nothing" signal, but under this script's `set -e` that silently killed the whole step before the actual watchdog line ever got added, leaving crontab empty with no error shown anywhere. Confirmed live: this is exactly what happened after Pete's own Termux F-Droid migration — `crond` wasn't even running, and the self-healing watchdog had silently done nothing for hours. Fixed with a simple `|| true`.
+- **A second, separate real bug found in `provision.sh` itself**: its crontab-restoring line piped `crontab -l | grep -v "mh_watchdog"` into the new crontab — on a genuinely empty crontab (exactly what a fresh Termux install has), `grep -v` on empty input exits 1, its normal "found nothing" signal, but under this script's `set -e` that silently killed the whole step before the actual watchdog line ever got added, leaving crontab empty with no error shown anywhere. Confirmed live: this is exactly what happened after Pete Spence's own Termux F-Droid migration — `crond` wasn't even running, and the self-healing watchdog had silently done nothing for hours. Fixed with a simple `|| true`.
 - **Discovered along the way**: an existing daily-use MaxedHealth icon can be a Chrome-installed WebAPK, which gets its own separate storage from plain Chrome even for the identical URL — the launcher now finds and opens that specific installed app directly, falling back to a plain Chrome tab only if it's missing.
 - Custom app icon (heartbeat/MH mark, adaptive icon set for Android 8+).
 
@@ -1193,7 +1197,7 @@ A long session spanning a full structural bug audit, a category system built fro
 ## Meals Retired in Favour of Recipes
 
 - **"Save as meal" now creates a genuine recipe** with real per-item ingredients (available at save-time), not a flattened single-entry blob.
-- **Existing meals convertible via an explicit, confirmed migration** — preserves exact total macros (individual item macros were never stored for meals in the first place, only the combined total, so a single-ingredient recipe carrying the real total, with the original component list kept as a note, is the honest ceiling of what's recoverable). Button since archived after Pete confirmed the one-time migration was complete.
+- **Existing meals convertible via an explicit, confirmed migration** — preserves exact total macros (individual item macros were never stored for meals in the first place, only the combined total, so a single-ingredient recipe carrying the real total, with the original component list kept as a note, is the honest ceiling of what's recoverable). Button since archived after Pete Spence confirmed the one-time migration was complete.
 - **Logging a saved recipe now opens a real review step** — add, remove, or swap any ingredient (reusing the existing swap-search/scale/add/remove system already built for AI-suggested meals) before it hits the log, instead of logging directly with zero chance to check it.
 - **"Refresh from Library"** added to the recipe builder — updates a recipe's ingredients if the underlying library item has since been corrected, rather than the recipe silently drifting out of sync forever. Confirmed via code inspection that this genuinely never happened automatically before, and that History being the same way (frozen snapshots, no retroactive rewrite) is correct, deliberate behaviour, not a related bug.
 - **Meals section removed from the Library UI entirely.** A real regression was caught and fixed before shipping: `renderLibrary()` had an early-exit guard depending on the now-deleted Meals element, which would have blanked the entire Library tab, Ingredients included.
@@ -1270,7 +1274,7 @@ A long session spanning a full structural bug audit, a category system built fro
 ## Dashboard Fixes
 
 - **Weight trend staleness** — the 14-day trend classification was computed purely from finalized history, which excludes today's entry until midnight rollover, while the headline weight figure above it was already live. The trend label could describe yesterday's rate sitting directly under today's fresh number. Now folds today's live entry into the window whenever it's newer than history's.
-- **Carb Zones tooltip made condition-aware** — was 100% static HTML with "GBM Protocol" and a metformin/MCT assumption hardcoded regardless of who's viewing it. A real cross-user bug: a second user on a different condition (e.g. Jill) would see Pete's own diagnosis-specific framing presented as if it were theirs. Now swaps to generic wording based on the condition setting, matching the existing pattern already used for hiding the Monthly Summary/Research Digest sections from non-GBM users.
+- **Carb Zones tooltip made condition-aware** — was 100% static HTML with "GBM Protocol" and a metformin/MCT assumption hardcoded regardless of who's viewing it. A real cross-user bug: a second user on a different condition (e.g. Jill) would see Pete Spence's own diagnosis-specific framing presented as if it were theirs. Now swaps to generic wording based on the condition setting, matching the existing pattern already used for hiding the Monthly Summary/Research Digest sections from non-GBM users.
 
 ## Fibre/Polyols — Text Search vs. Barcode Parity
 
@@ -1398,7 +1402,7 @@ A single very long session covering three distinct threads: real bug fixes found
 
 # MaxedHealth Changelog — Phase 15 (v3.10.273 – v3.10.450)
 
-Phase 13 and 14's detailed entries were never written up (see Known Outstanding Items below) - this entry starts from where the live version history resumes. A genuinely large session spanning wearable development, several rounds of real-device bug hunting on both Pete's and Jill's phones, and a fair amount of infrastructure most of which won't be visible as a feature but fixes something that was quietly wrong underneath.
+Phase 13 and 14's detailed entries were never written up (see Known Outstanding Items below) - this entry starts from where the live version history resumes. A genuinely large session spanning wearable development, several rounds of real-device bug hunting on both Pete Spence's and Jill's phones, and a fair amount of infrastructure most of which won't be visible as a feature but fixes something that was quietly wrong underneath.
 
 ## Wearable Development
 
@@ -1441,7 +1445,7 @@ Phase 13 and 14's detailed entries were never written up (see Known Outstanding 
 ## Data Import
 
 **Withings import — the same hardcoded name existed in two separate files**
-- `server.py`'s Download-folder scan and `extractors/withings.py`'s own detection both independently checked for the literal filename fragment `data_pet_` — Pete's own name, from testing only ever against his own export
+- `server.py`'s Download-folder scan and `extractors/withings.py`'s own detection both independently checked for the literal filename fragment `data_pet_` — Pete Spence's own name, from testing only ever against his own export
 - Real Withings exports are named `data_{account name}_{timestamp}.zip`, so this silently rejected every other family member's genuinely correctly-formatted export
 - Both fixed to match the real filename shape rather than any specific name; the in-app Sync log now also reports exactly what it found and why when nothing matches (name, size, whether it opens, whether it looks like a genuine export the pattern just missed) rather than a bare "nothing found"
 
@@ -1613,7 +1617,7 @@ The biggest single session in the app's history — roughly 70 versions. Most of
 ## Website
 
 **Donation messaging corrected to be actually honest**
-- "It cost nothing to make it free" was simply false — real API and Claude subscription costs land on Pete, not end users; corrected across `story.html`, and the donation ask on `why-free.html` reframed from "support my costs" to "keep the project running"
+- "It cost nothing to make it free" was simply false — real API and Claude subscription costs land on Pete Spence, not end users; corrected across `story.html`, and the donation ask on `why-free.html` reframed from "support my costs" to "keep the project running"
 
 **Third-person self-reference converted to first person**
 - Across `story.html` and the patient guide's narrative prose — structural elements (bylines, signatures, section headings, table-of-contents entries) deliberately left as-is, since those function as attribution/navigation rather than narrative voice
