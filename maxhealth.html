@@ -6182,7 +6182,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.936'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.937'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -24243,7 +24243,26 @@ function checkTdeeStillAccurate() {
   const msg = goal === 'maintain'
     ? `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Weight has ${dirWord === 'stayed within' ? 'stayed flat' : `${dirWord} ${Math.abs(actualWtChange)}kg`} over the last ${windowDays} days on a Maintain target — if that's not intentional, your real maintenance calories may have shifted. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`
     : `📐 <strong>Worth a look: your confirmed TDEE (${manualTdee}kcal) may need revisiting.</strong> Over the last ${windowDays} days on a ${goal === 'lose' ? 'Lose' : 'Gain'} target, weight has ${dirWord} ${Math.abs(actualWtChange)}kg — expected roughly ${Math.abs(expectedWtChange)}kg ${goal === 'lose' ? 'lost' : 'gained'} in that time. Check Settings → Profile → Suggested Targets when you get a chance, no rush.`;
-  addBubble(msg, 'system');
+  // v3.10.937: a suggested figure with a review-and-confirm step. Rough on purpose: the gap between the expected and actual
+  // weight change, turned into kcal a day with the 7,700 kcal per kg rule of thumb, moved at most 300 either way, nearest 10.
+  // Nothing is changed until the person confirms, and a confirm goes through the normal saveTdee() (re-stamps the date).
+  const _gapKg = actualWtChange - expectedWtChange;
+  let _delta = Math.round(-(_gapKg * 7700 / windowDays) / 10) * 10;
+  _delta = Math.max(-300, Math.min(300, _delta));
+  const _sug = manualTdee + _delta;
+  const _btn = Math.abs(_delta) >= 50
+    ? `<br><button class="modal-btn confirm-new" style="margin-top:8px;font-size:12px;padding:7px 12px;" onclick="mhReviewTdeeSuggestion(${manualTdee}, ${_sug})">Review a suggested TDEE: ${_sug}kcal</button>` : '';
+  addBubble(msg + _btn, 'system');
+}
+
+function mhReviewTdeeSuggestion(current, suggested) {
+  const dir = suggested > current ? 'up' : 'down';
+  appConfirm(`Change your TDEE from ${current} to ${suggested}kcal (${dir} ${Math.abs(suggested - current)})?\n\nThis is a rough estimate from your recent weight trend, using the 7,700 kcal per kg rule of thumb, and weigh-ins are noisy. Treat it as a starting point and re-check in a couple of weeks. Targets that are based on your TDEE will follow it.`, () => {
+    const el = document.getElementById('settingTdee');
+    if (!el) return;
+    el.value = suggested;
+    saveTdee();
+  }, null, false, { confirm: 'Use ' + suggested });
 }
 
 function scaleLogEdit(id, pct) {
