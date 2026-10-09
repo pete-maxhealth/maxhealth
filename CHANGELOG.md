@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.933 — No Meals Card On A Day With No Meals
+
+Pete Spence, with a screenshot of Trends: "Meals by calorie contribution? Nothing displaying. Should there be?" No, there should not. A day with only wearable data (steps, sleep, HRV) is stored with a placeholder entry timed 23:59 and 0 kcal so the day exists in history, and the Meals card was listing that placeholder as if it were a meal ("4,093 steps, 3.6h sleep, HRV 25.6, SpO2 94.7%", 0 kcal, 0%). The placeholder is now left out, and with no real meals the card does not appear at all. Days with real meals are unchanged. New test: `p66_wearable_only_day.py` (fails on the old code, passes on the new).
+
 ## v3.10.932 — Meal Time Can Be Corrected When You Edit An Entry
 
 Pete Spence: "Updating portion sizes would adjust the mealtime, so we'd need an update timestamp or change switch." Checked first: editing a portion (or any value) has never touched the time a meal was eaten, so fasts are not disturbed by portion changes (proved in the new test). The gap was the other way round: a time could never be corrected, and meals logged to a past day without a time stayed "approximate" and were ignored for fasting for ever. Both edit forms (single item and multi-ingredient) now have a **Meal time** field. It is blank for approximate entries, saving without choosing a time leaves them as they were, and choosing one sets the time and clears the approximate flag. Cancel discards it. New test: `p65_edit_meal_time.py`.
