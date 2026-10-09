@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.922 — Wearable Sync Card Says Plainly It Is Not For Cloud Mode
+
+Pete: "How is the wearable sync card dealt with for these users? Is it hidden or carry a message saying that it's not for cloud use?" Checked: it was shown, with the Sync button greyed out, but the text said "Local server not running" and the panel under it told people to open Termux and type `mhstart`, which an iPhone or browser-only user cannot do. Now, on the web (cloud) version the card says "Wearable sync is not available in cloud mode. It needs the local version of MaxedHealth, which runs on an Android phone." and points to Manual Entry, the importers below it and Data Backup; the Termux panel is not shown. On the Android local version the old "server not running" help is unchanged. Test: p57 extended (page served from a non-localhost host with every other request blocked).
+
 ## v3.10.921 — Manual Entry And Missing Data Now Work In Cloud Mode; Bolder Log-Confirm Buttons
 
 Pete: "Yes to the cloud fix" (and a screenshot of the log-confirmation buttons asking for bolder text).

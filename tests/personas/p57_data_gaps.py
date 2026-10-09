@@ -82,6 +82,17 @@ with fresh_server() as root, sync_playwright() as pw:
     if cg2 != 2: f.add('BUG', f'after filling the gap the cloud list should shrink to 2, got {cg2}')
     st = page.evaluate("document.getElementById('manualEntryOutput').textContent")
     if 'Saved' not in st: f.add('BUG', f'cloud save gave no confirmation: {st}')
+    # sync card on the web (cloud) version: plain message, no Termux instructions. Served from a non-localhost host
+    # (cloud.example, page body supplied by the test) with every other request blocked, which is exactly what a cloud visitor has.
+    cctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    html_ = open(os.path.join(root, 'app', 'maxhealth.html'), encoding='utf-8').read()
+    cctx.route(re.compile(r'.*'), lambda r: r.fulfill(status=200, content_type='text/html', body=html_) if r.request.url.rstrip('/') == 'http://cloud.example' else r.abort())
+    cp = cctx.new_page(); cp.goto('http://cloud.example/'); cp.wait_for_timeout(1500)
+    cp.evaluate("checkServer()"); cp.wait_for_timeout(1500)
+    sm = cp.evaluate("document.getElementById('syncStatusMsg').textContent")
+    if 'not available in cloud mode' not in sm: f.add('BUG', f'cloud sync card message wrong: {sm[:120]}')
+    if cp.evaluate("getComputedStyle(document.getElementById('serverOfflineNotice')).display !== 'none'"): f.add('BUG', 'Termux instructions shown to a cloud visitor')
+    cctx.close()
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)
