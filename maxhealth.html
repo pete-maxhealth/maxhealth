@@ -6182,7 +6182,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.935'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.936'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -24270,7 +24270,7 @@ function scaleLogEditToGrams(id, gramsStr) {
   // v3.10.935: a text box, so "8g", "8 g" and "8,5" all work (the number-only box refused the g)
   const g = parseFloat(String(gramsStr).replace(',', '.').replace(/[^0-9.]/g, ''));
   if (isNaN(g) || g <= 0) return;
-  const orig = parseFloat(entry._origAmount || entry.amount) || 0;
+  const orig = parseFloat(entry.amount) || parseFloat(entry._origAmount) || 0;   // the form's numbers are for the amount shown now
   if (!(orig > 0)) { showToast('This entry has no gram size to compare with, so use the % box'); return; }
   const pct = Math.round(g / orig * 1000) / 10;
   const pctEl = document.getElementById('edit-pct-' + id);
@@ -24387,7 +24387,7 @@ function editLogEntry(id) {
         <input id="edit-grams-${id}" class="modal-input" type="text" inputmode="decimal" autocomplete="off" placeholder="8 or 8g"
           style="width:80px;font-size:16px;padding:6px 8px;text-align:center;"
           oninput="scaleLogEditToGrams(${id}, this.value)">
-        <span style="font-size:12px;color:var(--text3);">g${(parseFloat(entry._origAmount || entry.amount) > 0) ? ' (logged as ' + Math.round(parseFloat(entry._origAmount || entry.amount)) + 'g)' : ''}</span>
+        <span style="font-size:12px;color:var(--text3);">g${(parseFloat(entry.amount || entry._origAmount) > 0) ? ' (now ' + Math.round(parseFloat(entry.amount || entry._origAmount)) + 'g)' : ''}</span>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">
@@ -25042,13 +25042,16 @@ function saveLogEdit(id) {
   entry.fibre = Math.round(fibre * 10) / 10;
   entry.polyols = Math.round(polyols * 10) / 10;
 
-  // Badge: ratio of new to original kcal
-  const badgePct = origKcal > 0 ? Math.round(entry.kcal / origKcal * 100) : 100;
-  if (badgePct !== 100) {
-    entry._portionPct = badgePct;
-    if (origAmt > 0) entry.amount = Math.round(origAmt * badgePct / 100) + 'g';
-  } else {
-    delete entry._portionPct;
+  // Badge (v3.10.935): the edit form's numbers are for the amount the entry shows now, so the change is measured against
+  // that. The badge compounds on any earlier one, the amount follows from the current amount (not the first-logged one),
+  // and a save that changes nothing (a time fix, say) leaves the badge and the amount alone.
+  const _ratio = origKcal > 0 ? entry.kcal / origKcal : 1;
+  if (Math.abs(_ratio - 1) > 0.004) {
+    const prevPct = entry._portionPct || 100;
+    const newPct = Math.round(prevPct * _ratio);
+    if (newPct !== 100) entry._portionPct = newPct; else delete entry._portionPct;
+    const curAmt = parseFloat(entry.amount) || origAmt;
+    if (curAmt > 0) entry.amount = Math.round(curAmt * _ratio) + 'g';
   }
   // Also update items array if present
   if (entry.items && entry.items.length === 1) {

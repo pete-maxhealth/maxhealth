@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.936 | 23 | Full detail in CHANGELOG.md (Phase 23). Log-edit portion baseline is the entry's current `amount` (not `_origAmount`); `_portionPct` compounds; unchanged saves leave amount and badge alone. Test `p68_portion_baseline.py`. |
 | v3.10.935 | 23 | Full detail in CHANGELOG.md (Phase 23). Portion-in-grams boxes (`edit-grams-*`, `log-edit-scalegrams-*`) are text inputs that strip units/commas before parsing. `p54_portion_grams.py` extended. |
 | v3.10.934 | 23 | Full detail in CHANGELOG.md (Phase 23). Shared `mhIsDeviceStub(e)` (23:59, 0 kcal, numeric date id) now excludes the wearable placeholder from the Meals card, Top foods, `checkFirstLogNudge` and the AI yesterday list. History list deliberately still shows it. Test `p67_wearable_stub_leaks.py`. |
 | v3.10.933 | 23 | Full detail in CHANGELOG.md (Phase 23). Trends daily view: the wearable-only placeholder log entry (23:59, 0 kcal, numeric date id) is excluded from the Meals card, which is omitted when no real meal exists. Test `p66_wearable_only_day.py`. |
@@ -1051,6 +1052,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p65_edit_meal_time.py` — portion edits keep the meal time; Meal time field sets it and clears the approximate flag
 - `p66_wearable_only_day.py` — no Meals card for a wearable-only day; real meals still listed
 - `p67_wearable_stub_leaks.py` — placeholder excluded from Top foods, first-meal nudge, AI yesterday list; real 23:59 meal kept
+- `p68_portion_baseline.py` — portion edit baseline, compounding badge, time-only save keeps amount/badge
 - `p62_silent_network.py` — server accepts connections but never answers: saved app and landing pages appear in a few seconds, bundled libs do not block the page.
 - `p61_premium_card.py` — Premium card: cloud pitch + link vs local thank-you, show/hide, app makes no request to the page; register-interest page has consent + privacy note, handler requires consent and keeps data private.
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
