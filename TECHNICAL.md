@@ -313,6 +313,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.920 | 23 | Full detail in CHANGELOG.md (Phase 23). `extractors/ringconn._parse_sleep` groups sessions per date: longest = night, short (<180 min) within 120 min of it joins the night, short and farther = `sleep_nap_min` (new combined.csv column, ALL_FIELDS / SOURCE_FIELDS ringconn / METRIC_FIELDS sleep / server FIELD_NAMES; shown in Trends day Sleep card). |
 | v3.10.921 | 23 | Full detail in CHANGELOG.md (Phase 23). Cloud-mode Manual Entry: `mhSaveManualEntryCloud` -> `mhCloudUpsertCsv` + `processCombinedText(mini)` + cache write; `mhCloudHistoryRow`; `loadManualEntryForDate` and `mhLoadDataGaps` branch on `_serverOnline`. Log-confirm buttons font-weight 700. |
 | v3.10.922 | 23 | Full detail in CHANGELOG.md (Phase 23). `checkServer()` offline branch: non-localhost hostname gets the cloud-mode message and hides `#serverOfflineNotice` (Termux help). |
+| v3.10.923 | 23 | Full detail in CHANGELOG.md (Phase 23). New persona `p59_cloud_user.py` (cloud visitor: page served from a non-localhost host, all other requests refused). Test only. |
 | v3.10.913 | 23 | Full detail in CHANGELOG.md (Phase 23). server.py: `sleep_conflicts_resolved.json` + `sleep_conflict_fingerprint`; `GET /sleep-conflicts` drops identical re-queued overlaps for settled nights; skip is not remembered. |
 | v3.10.912 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware item `kind` (plate/bowl/cup/spoon/cutlery/other) drives `fieldsFor` and labels; filled boxes always shown; `mhTwIsLong` for length wording in ruler and AI line. |
 | v3.10.911 | 23 | Full detail in CHANGELOG.md (Phase 23). Notifications card: `refreshNotifUIIfChanged` (load, focus, visibility, 2s poll while visible); clearer not-asked and no-prompt messages. |
@@ -1031,6 +1032,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p16_real_exports.py` — PRIVATE: replays real Withings/RingConn/Zepp exports from `MH_FIXTURES` (default `/root/maxhealth_fixtures`, never committed) and compares against the real phone result. Skips (passes) when the files are absent, e.g. the nightly cloud run.
 - `p17_winzip_aes.py` — WinZip-AES reader (Zepp export): FIPS test vectors, round trip, wrong password, tamper detection.
 - `p18_midnight.py` — midnight rollover: closed-app gaps (1/5/40 days), no duplicates, empty day, app left open across midnight.
+- `p59_cloud_user.py` — a web-only (cloud / iPhone) visitor with no local server: every screen loads without errors or Termux wording, sync card explains cloud mode, Missing Data and Manual Entry work from browser storage and survive a reload.
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
 - `p20_hc_automerge.py` — server merges a launcher-written Health Connect export on its own (no cron).
 - `p21_cron_setup.py` — server adds missing cron jobs (update_health every 30 min, auto-update) on a fresh install; never alters an existing crontab.
