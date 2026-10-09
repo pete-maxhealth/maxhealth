@@ -50,10 +50,38 @@ with fresh_server() as root, sync_playwright() as pw:
     ctrl = page.evaluate("(() => { const c = document.getElementById('title-imp-gaps').closest('.card-unit'); return c ? c.querySelectorAll('[onclick*=\"Generic\"], .mh-reorder, [title=\"Hide\"]').length : -1; })()")
     print('ctrl', ctrl)
     if ctrl <= 0: f.add('BUG', 'no hide / reorder controls injected on the Missing Data card')
-    # cloud mode (no local server): no link to a form that cannot save, and the card explains itself
-    page.evaluate("_serverOnline = false; updateTrendsDayLabel(); mhLoadDataGaps()"); page.wait_for_timeout(300)
-    if page.evaluate("getComputedStyle(document.getElementById('trendsDayEdit')).display !== 'none'"): f.add('BUG', 'edit-this-day link shown without a local server')
-    if 'cloud mode' not in page.evaluate("document.getElementById('mhGapsList').textContent"): f.add('BUG', 'Missing Data card does not explain itself in cloud mode')
+    # cloud mode (no local server): the same card and Manual Entry work from the browser's own data
+    from datetime import date as _d, timedelta as _td
+    isod = lambda n: (_d.today() - _td(days=n)).isoformat()
+    csvtxt = "date,steps,hr_resting,sleep_duration\n" + "\n".join([
+        f"{isod(6)},8000,55,420", f"{isod(5)},8000,55,420",
+        f"{isod(4)},7000,,380",          # no heart rate
+        f"{isod(3)},,57,390",            # no steps
+        f"{isod(2)},7000,57,400",
+    ])
+    ctx.route(re.compile(r"^http://localhost:5757/(?!$|maxhealth|sw\.js|docs)"), lambda r: r.abort())   # no local server from here on
+    page.evaluate("_serverOnline = false; state.history = []")
+    page.evaluate("t => processCombinedText(t, true, null)", csvtxt); page.wait_for_timeout(500)
+    page.evaluate("localStorage.setItem('mh_combined_csv_cache', arguments[0])" if False else "t => localStorage.setItem('mh_combined_csv_cache', t)", csvtxt)
+    page.evaluate("updateTrendsDayLabel(); mhLoadDataGaps()"); page.wait_for_timeout(500)
+    if page.evaluate("getComputedStyle(document.getElementById('trendsDayEdit')).display === 'none'"): f.add('BUG', 'edit-this-day link should stay available in cloud mode')
+    cg = page.evaluate("[...document.querySelectorAll('#mhGapsList > div')].map(d => d.textContent)")
+    # expected gaps: iso(4) heart rate, iso(3) steps, iso(1) everything (no row, after first data day)
+    if len(cg) != 3: f.add('BUG', f'cloud gap list should have 3 days, got {len(cg)}: {cg}')
+    # fix iso(4)'s heart rate by hand, stored in the browser
+    page.evaluate("t => mhOpenManualEntry(t)", isod(4)); page.wait_for_timeout(1200)
+    page.evaluate("document.getElementById('manualField_hr_avg').value = '58'; _manualFieldsTouched.add('hr_avg')")
+    page.evaluate("saveManualEntry()"); page.wait_for_timeout(1000)
+    row = page.evaluate("t => { const r = mhCloudHistoryRow(t); return r ? r.hr_avg : null }", isod(4))
+    if row != 58: f.add('BUG', f'cloud save did not reach the in-app history: hr_avg={row}')
+    cache = page.evaluate("localStorage.getItem('mh_combined_csv_cache')")
+    if f"{isod(4)},7000,,380,58" not in cache: f.add('BUG', f'cloud save did not update the cached csv: {cache[-200:]}')
+    if f"{isod(5)},8000,55,420," not in cache: f.add('BUG', 'cloud save damaged another day in the cache')
+    page.evaluate("mhLoadDataGaps()"); page.wait_for_timeout(400)
+    cg2 = page.evaluate("document.querySelectorAll('#mhGapsList > div').length")
+    if cg2 != 2: f.add('BUG', f'after filling the gap the cloud list should shrink to 2, got {cg2}')
+    st = page.evaluate("document.getElementById('manualEntryOutput').textContent")
+    if 'Saved' not in st: f.add('BUG', f'cloud save gave no confirmation: {st}')
     if errs: f.add('BUG', f'page errors: {errs[:3]}')
     b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)

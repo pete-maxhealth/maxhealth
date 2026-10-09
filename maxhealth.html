@@ -6082,7 +6082,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.920'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.921'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -11914,9 +11914,27 @@ function mhSyncBannerDismiss() { try { localStorage.setItem('mh_syncbanner_dismi
 // v3.10.918: Settings > Import > Missing Data. Asks the server which recent finished days lack steps / heart rate / sleep.
 async function mhLoadDataGaps() {
   const el = document.getElementById('mhGapsList'); if (!el) return;
-  if (!_serverOnline) { el.innerHTML = 'This check reads the data held by the local server (the Termux version). It is not available in cloud mode, where your data lives in this browser only.'; return; }
   try {
-    const j = await (await fetch(`${MH_SERVER}/data-gaps?days=14`, { signal: AbortSignal.timeout(5000) })).json();
+    let j;
+    if (!_serverOnline) {
+      // cloud mode: the same rule, worked out from the data held in this browser
+      const iso = h => { const p = (h.date || '').split('/'); return p.length === 3 ? `20${p[2]}-${p[1]}-${p[0]}` : null; };
+      const has = (h, ...ks) => ks.some(k => parseFloat(h && h[k]) > 0);
+      const byDate = {}; let first = null;
+      (state.history || []).forEach(h => { const d = iso(h); if (!d) return; byDate[d] = h; if (has(h, 'steps', 'hr_resting', 'hr_avg', 'sleep_duration') && (!first || d < first)) first = d; });
+      const gaps = [];
+      if (first) for (let i = 1; i <= 14; i++) {
+        const dt = new Date(); dt.setDate(dt.getDate() - i);
+        const d = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+        if (d < first) break;
+        const h = byDate[d]; const miss = [];
+        if (!has(h, 'steps')) miss.push('steps'); if (!has(h, 'hr_resting', 'hr_avg')) miss.push('heart rate'); if (!has(h, 'sleep_duration')) miss.push('sleep');
+        if (miss.length) gaps.push({ date: d, missing: miss });
+      }
+      j = { gaps };
+    } else {
+      j = await (await fetch(`${MH_SERVER}/data-gaps?days=14`, { signal: AbortSignal.timeout(5000) })).json();
+    }
     if (!j.gaps || !j.gaps.length) { el.innerHTML = '✅ No gaps in the last 14 days.'; return; }
     el.innerHTML = j.gaps.map(g => {
       const dt = new Date(g.date + 'T12:00:00');
@@ -20417,12 +20435,12 @@ function renderMealPreview() {
     ${existingLibCategoriesLine}
     <input id="mealPreviewCategories" list="allKnownCategories" type="text" placeholder="Categories for Save only (optional, comma-separated)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-top:8px;">
     <div style="display:flex;gap:8px;margin-top:4px;">
-      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmMealLog()">Log it ✓</button>
-      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
-      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;" onclick="cancelMealPreview()">Cancel</button>
+      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="confirmMealLog()">Log it ✓</button>
+      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
+      <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="cancelMealPreview()">Cancel</button>
     </div>
     <div style="margin-top:8px;">
-      <button class="copy-btn" style="width:100%;padding:9px;font-size:12px;color:var(--text2);" onclick="runMultiAICheck()">🔍 Verify across 3 AIs — worth it for anything uncertain</button>
+      <button class="copy-btn" style="width:100%;padding:9px;font-size:12px;font-weight:700;color:var(--text2);" onclick="runMultiAICheck()">🔍 Verify across 3 AIs — worth it for anything uncertain</button>
     </div>
   `;
 
@@ -37483,7 +37501,6 @@ function updateTrendsDayLabel() {
   const mon = (d.getMonth()+1).toString().padStart(2,'0');
   const yr  = d.getFullYear().toString().slice(2);
   label.textContent = `${day}/${mon}/${yr}`;
-  const ed = document.getElementById('trendsDayEdit'); if (ed) ed.style.display = _serverOnline ? '' : 'none';   // v3.10.919: Manual Entry saves through the local server, so cloud users do not get a link to a form that cannot save
   relative.textContent = _trendsDayOffset === 0 ? 'Today' : _trendsDayOffset === -1 ? 'Yesterday' : `${Math.abs(_trendsDayOffset)} days ago`;
 }
 
@@ -38299,6 +38316,51 @@ function renderManualEntryFields() {
 // manual_entry.json), which takes priority as the pre-fill source since
 // it's what a person most recently confirmed by hand, ahead of a device's
 // possibly-since-corrected reading.
+// v3.10.921: Manual Entry without the local server (cloud / GitHub Pages / iPhone). Same screen, same fields; the values
+// go into this browser's own data (state.history, the same place a combined.csv import fills) instead of the server.
+function mhCloudHistoryRow(iso) {
+  return (state.history || []).find(h => { const p = (h.date || '').split('/'); return p.length === 3 && `20${p[2]}-${p[1]}-${p[0]}` === iso; }) || null;
+}
+function mhCloudUpsertCsv(iso, values) {
+  // returns the browser's cached combined.csv text with that day's typed values set (row added if the day is new)
+  let text = ''; try { text = localStorage.getItem('mh_combined_csv_cache') || ''; } catch (_) {}
+  let lines = text.replace(/\r/g, '').split('\n').filter(Boolean);
+  if (!lines.length) lines = ['date'];
+  const header = lines[0].split(',').map(h => h.trim());
+  const keys = Object.keys(values).filter(k => values[k] != null);
+  keys.forEach(k => { if (!header.includes(k)) header.push(k); });
+  const di = header.indexOf('date');
+  const rows = lines.slice(1).map(l => l.split(','));
+  let row = rows.find(r => (r[di] || '').trim() === iso);
+  if (!row) { row = []; rows.push(row); }
+  const pad = r => { while (r.length < header.length) r.push(''); return r; };
+  rows.forEach(pad);
+  row[di] = iso;
+  keys.forEach(k => { row[header.indexOf(k)] = String(values[k]); });
+  rows.sort((a, b) => (a[di] || '').localeCompare(b[di] || ''));
+  return [header.join(','), ...rows.map(r => r.join(','))].join('\n') + '\n';
+}
+async function mhSaveManualEntryCloud(date, values, out, btn) {
+  try {
+    const keys = Object.keys(values).filter(k => values[k] != null);
+    const full = mhCloudUpsertCsv(date, values);
+    // merge only this day into the in-app history (a full re-import could touch other days), then keep the full text as the cache
+    const mini = ['date,' + keys.join(','), date + ',' + keys.map(k => values[k]).join(',')].join('\n');
+    processCombinedText(mini, true, null);
+    try { localStorage.setItem('mh_combined_csv_cache', full.slice(0, 4900000)); } catch (_) {}
+    const labels = keys.map(k => MANUAL_FIELD_META[k]?.label || k).join(', ');
+    if (out) { out.className = 'output-box success'; out.textContent = `✓ Saved for ${date}: ${labels}. Stored in this browser (cloud mode).`; }
+    showToast(`✓ Saved ${labels} for ${date}`);
+    try { updateDashboard(); } catch (_) {}
+    await loadManualEntryForDate(date);
+  } catch (e) {
+    if (out) { out.className = 'output-box error'; out.textContent = `✗ ${e.message}`; }
+    showToast('Could not save manual entry');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 SAVE & SYNC'; }
+  }
+}
+
 async function loadManualEntryForDate(date) {
   const wrap = document.getElementById('manualEntryFieldsWrap');
   const note = document.getElementById('manualEntrySourceNote');
@@ -38315,6 +38377,13 @@ async function loadManualEntryForDate(date) {
     el.value = meta.store === 'minutes-to-hours' ? (parseFloat(val) / 60).toFixed(1) : val;
   };
 
+  if (!_serverOnline) {
+    const row = mhCloudHistoryRow(date);
+    for (const key of fields) setField(key, row && row[key] != null ? row[key] : null);
+    if (wrap) wrap.style.display = 'block';
+    if (note) note.textContent = row ? 'Showing values already held in this browser for this date, for reference only. Nothing is re-saved unless you edit a field (edited fields highlight green).' : 'Nothing recorded for this date yet. Enter what you have; it is stored in this browser.';
+    return;
+  }
   try {
     const res = await fetch(`${MH_SERVER}/manual-entry?date=${encodeURIComponent(date)}`);
     if (!res.ok) throw new Error('lookup failed');
@@ -38385,6 +38454,7 @@ async function saveManualEntry() {
 
   if (out) { out.style.display = 'block'; out.className = 'output-box'; out.textContent = 'Saving…'; }
   if (btn) { btn.disabled = true; btn.textContent = '⟳ SAVING…'; }
+  if (!_serverOnline) return mhSaveManualEntryCloud(date, values, out, btn);
 
   try {
     const res = await fetch(`${MH_SERVER}/save-manual-entry`, {

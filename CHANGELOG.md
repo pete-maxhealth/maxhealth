@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.921 — Manual Entry And Missing Data Now Work In Cloud Mode; Bolder Log-Confirm Buttons
+
+Pete: "Yes to the cloud fix" (and a screenshot of the log-confirmation buttons asking for bolder text).
+- **Cloud / GitHub Pages / iPhone users can now use Manual Entry.** With no local server, the same screen saves into this browser's own data (the same place a combined.csv import fills): the day is merged into the in-app history, and the browser's cached combined.csv is updated so it survives a reload. Only the typed fields are written, other days are untouched, and a day you open shows what the browser already holds for it. Local (Termux) behaviour is unchanged and still goes through the server.
+- **Missing Data card** now works in cloud mode too: it works out the same gaps (no steps, heart rate or sleep on a finished day in the last 14) from the browser's data. The "Edit this day by hand" link on Trends is back for everyone (the v3.10.919 hiding is removed because it is no longer needed).
+- **Bolder buttons:** "Log it ✓", "Save only", "Cancel" and "Verify across 3 AIs" in the log-confirmation panel now use bold text.
+- Honest limit: in cloud mode there is no wearable sync, so data in the browser only exists from imports you do by hand, and clearing the browser's site data clears it (use Data Backup). Test: p57 extended with a cloud phase (server blocked: gaps, save, cache, shrinking list).
+
 ## v3.10.920 — RingConn Second Sleep Session: Broken Nights Joined, Naps Kept Separately
 
 Pete: "Yes to Ringconn second period." RingConn can record several sleep sessions under one date, and until now only the longest was kept; the rest were silently dropped (73 dates in the old export had this). Rule, per date: the longest session is the night. A short extra session (under 3 hours) that starts or ends within 2 hours of the night is a broken night (woke, got up, slept again), so its minutes and stages are **added to the night**. A short extra session further away than that is a **nap**, stored in a new field `sleep_nap_min` and shown as "Nap (separate)" in the day's Sleep card; it does not change the night's total. A long second session (3 hours or more) is a different night under the same date label and is ignored as before.
