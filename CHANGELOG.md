@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.924 — Hide "Push To Local Server" For Cloud Users
+
+Pete: "Yes please" (the leftover found by the cloud persona). The Import tab's "🔄 Push this app's data to the local server" button is hidden when there is no local server, and shown again as soon as one is found. p59 now checks it.
+
 ## v3.10.923 — Cloud-User Persona (Daily Watch)
 
 Pete: "We probably need to do a full test as a cloud user. Could this be simulated and added as persona so we can keep a daily watch?" New `tests/personas/p59_cloud_user.py`, picked up automatically by the nightly run (it runs every `p[0-9]*.py`). It simulates a web-only visitor (iPhone or browser, no local server) by serving the page from a non-localhost host with every other request refused, then: onboards; confirms the app knows there is no server; walks all 10 screens checking for page errors and for Termux / `mhstart` wording outside the Import tab; checks the Sync card explains cloud mode, the Sync button is off and no background-sync banner shows; imports a CSV, checks Missing Data lists the right days, fills one gap and a brand-new day with Manual Entry; reloads the page and checks the hand-entered values and imported rows survived. No app change in this release.

@@ -43,6 +43,7 @@ with sync_playwright() as pw:
     # 2. Settings > Import for a cloud user
     page.evaluate("switchTab('settings'); switchSubTab('settings','import')"); page.wait_for_timeout(1200)
     sm = page.evaluate("document.getElementById('syncStatusMsg').textContent")
+    if page.evaluate("getComputedStyle(document.getElementById('pushToServerBtn')).display !== 'none'"): f.add('BUG', 'Push-to-local-server button shown to a cloud user')
     if 'not available in cloud mode' not in sm: f.add('BUG', f'sync card does not explain cloud mode: {sm[:100]}')
     if page.evaluate("getComputedStyle(document.getElementById('serverOfflineNotice')).display !== 'none'"): f.add('BUG', 'Termux restart panel shown to a cloud user')
     if page.evaluate("document.getElementById('syncBtn').disabled !== true"): f.add('BUG', 'Sync Now button should be disabled in cloud mode')
