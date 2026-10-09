@@ -6182,7 +6182,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.933'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.934'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -17424,8 +17424,9 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
     const y = new Date(); y.setDate(y.getDate() - 1);
     return d.toDateString() === y.toDateString();
   });
-  const _yesterdayEatenText = _yesterdayEntry?.log?.length
-    ? _yesterdayEntry.log.map(e => `${e.time || '??:??'} - ${e.description || 'meal'}`).join('\n')
+  const _yMeals = (_yesterdayEntry?.log || []).filter(e => !mhIsDeviceStub(e));
+  const _yesterdayEatenText = _yMeals.length
+    ? _yMeals.map(e => `${e.time || '??:??'} - ${e.description || 'meal'}`).join('\n')
     : '(no data for yesterday)';
 
   const habits = getEatingHabitsSummary();
@@ -23369,7 +23370,7 @@ function checkFirstLogNudge() {
   const firstLogTimes = [];
   recentDays.forEach(day => {
     if (day.log && day.log.length > 0) {
-      const times = day.log.map(e => e.time).filter(Boolean).sort(); // "HH:MM" strings sort correctly as plain strings
+      const times = day.log.filter(e => !mhIsDeviceStub(e)).map(e => e.time).filter(Boolean).sort(); // "HH:MM" strings sort correctly as plain strings
       if (times.length) firstLogTimes.push(times[0]);
     }
   });
@@ -24291,6 +24292,8 @@ function updateEditNetCarbLine(id) {
   }
 }
 
+// The placeholder entry a wearable-only day carries (23:59, 0 kcal, id = the date as a number) is not a meal (v3.10.934).
+function mhIsDeviceStub(e) { return !!e && e.time === '23:59' && !(e.kcal > 0) && Number(e.id) < 1e10; }
 // Meal time in the edit forms (v3.10.931). Editing a portion never moves the time a meal was eaten; this lets the time be
 // corrected on purpose, and a time chosen here replaces the "approximate" flag so the entry counts for fasting.
 window._logEditTime = window._logEditTime || {};
@@ -34217,6 +34220,7 @@ function getTopFoodsData(period) {
       if (dateObj < cutoff) return;
     }
     (d.log || []).forEach(entry => {
+      if (mhIsDeviceStub(entry)) return;
       const foods = (entry.items && entry.items.length) ? entry.items : [entry];
       foods.forEach(f => {
         const rawName = f.name || entry.description || 'Unknown';
@@ -37808,7 +37812,7 @@ function renderDailyView(data) {
   // nothing new needs tracking, this was just never surfaced before.
   // v3.10.933: a day with only wearable data carries a placeholder entry ("4,093 steps, 3.6h sleep...", 23:59, 0 kcal, id is
   // the date as a number) so the day exists in history. It is not a meal, so it is left out; with no real meal, no card.
-  const _mealRows = (d.log || []).filter(e => !(e.time === '23:59' && !(e.kcal > 0) && Number(e.id) < 1e10));
+  const _mealRows = (d.log || []).filter(e => !mhIsDeviceStub(e));
   if (_mealRows.length) {
     const dayKcalTotal = kcal || _mealRows.reduce((a,e) => a + (e.kcal||0), 0) || 1;
     const sortedMeals = [..._mealRows].sort((a,b) => (b.kcal||0) - (a.kcal||0));
