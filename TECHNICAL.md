@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.928 | 23 | Full detail in CHANGELOG.md (Phase 23). `set-premium` card (Settings > Manage; registered in GENERIC_SECTION_IDS/DEFAULT_ORDER/applySectionState/MH_TOPIC_SCOPES/site search), `MH_PREMIUM_URL`, `mhShowPremiumCard()` (cloud pitch + link vs local thank-you). `premium-site/` (index.html + register.php). New persona `p61_premium_card.py`. |
 | v3.10.927 | 23 | Full detail in CHANGELOG.md (Phase 23). `exportAll({share:true})` / `exportAllShare()` via Web Share API (`navigator.canShare({files})`), `mhCanShareBackup`, `.mhShareBackupBtn` buttons (Data & Backup, backup banner); AbortError = cancelled, not a backup. |
 | v3.10.913 | 23 | Full detail in CHANGELOG.md (Phase 23). server.py: `sleep_conflicts_resolved.json` + `sleep_conflict_fingerprint`; `GET /sleep-conflicts` drops identical re-queued overlaps for settled nights; skip is not remembered. |
 | v3.10.912 | 23 | Full detail in CHANGELOG.md (Phase 23). Tableware item `kind` (plate/bowl/cup/spoon/cutlery/other) drives `fieldsFor` and labels; filled boxes always shown; `mhTwIsLong` for length wording in ruler and AI line. |
@@ -1038,6 +1039,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p18_midnight.py` — midnight rollover: closed-app gaps (1/5/40 days), no duplicates, empty day, app left open across midnight.
 - `p59_cloud_user.py` — a web-only (cloud / iPhone) visitor with no local server: every screen loads without errors or Termux wording, sync card explains cloud mode, Missing Data and Manual Entry work from browser storage and survive a reload.
 - `p60_prompt_rules.py` — guards key AI meal-prompt rules (cooking-fat note, no sauce double-counting, ambiguity, text overrides photo).
+- `p61_premium_card.py` — Premium card: cloud pitch + link vs local thank-you, show/hide, app makes no request to the page; register-interest page has consent + privacy note, handler requires consent and keeps data private.
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
 - `p20_hc_automerge.py` — server merges a launcher-written Health Connect export on its own (no cron).
 - `p21_cron_setup.py` — server adds missing cron jobs (update_health every 30 min, auto-update) on a fresh install; never alters an existing crontab.
