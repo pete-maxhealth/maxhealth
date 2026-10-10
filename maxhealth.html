@@ -6182,7 +6182,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.937'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.938'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -39963,6 +39963,7 @@ function generateOncologyView() {
     <div style="margin-bottom:16px;">
       <div style="font-size:11px;font-weight:700;color:#333;margin-bottom:6px;">FASTING (LAST 30 DAYS)</div>
       <div style="font-size:11px;color:#333;">Average overnight fast ${mhFastFmt(_fs.avgFastH)} over ${_fs.nFasts} fasts (longest ${mhFastFmt(_fs.longestH)}; ${_fs.pctGoal}% at the ${mhFastFmt(_fs.goal)} goal). Average eating window ${mhFastFmt(_fs.avgWindowH)}${_fs.avgFirst ? `, usually ${_fs.avgFirst} to ${_fs.avgLast}` : ''}.</div>
+      ${(() => { const a = mhFastingStats(0); return a.nFasts > _fs.nFasts ? `<div style="font-size:11px;color:#333;margin-top:4px;">All time: average ${mhFastFmt(a.avgFastH)} over ${a.nFasts} fasts (longest ${mhFastFmt(a.longestH)}; ${a.pctGoal}% at goal).</div>` : ''; })()}
       <div style="font-size:9px;color:#999;margin-top:4px;">Measured from the times on logged meals; entries under ${mhFastThresholdKcal()} kcal do not break a fast.</div>
     </div>` : '';
 
@@ -40209,6 +40210,51 @@ function computeChemoCycleAnalysis() {
   };
 }
 
+// Fasting history (v3.10.938): every measured fast since logging began, newest first. Built from the same
+// meal times as everything else, so a fast only appears when both the meal before it and the meal after it
+// were logged with a real time. Nothing is estimated; days that cannot be measured are counted, not guessed.
+window._fastHist = window._fastHist || { filter: 'all', all: false };
+function mhFastingHistoryRows() {
+  const goal = mhFastGoalH(), recs = [...mhFastingMap().values()];
+  const fasts = recs.filter(r => r.fastH != null).map(r => ({
+    date: r.date, startMs: r.firstMs - r.fastH * 3600000, endMs: r.firstMs, hours: r.fastH,
+    met: r.fastH >= goal, extended: !!r.extended, windowH: r.windowH
+  })).sort((a, b) => b.endMs - a.endMs);
+  return { goal, fasts, unmeasured: recs.length - fasts.length };
+}
+function mhFastStamp(ms) { const d = new Date(ms); return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + mhFastClock(ms); }
+function mhRenderFastHistory() {
+  const el = document.getElementById('fast-history'); if (!el) return;
+  const { goal, fasts, unmeasured } = mhFastingHistoryRows(), st = window._fastHist;
+  const f = st.filter;
+  const shown = fasts.filter(r => f === 'extended' ? r.extended : f === 'goal' ? r.met : f === 'under' ? !r.met : true);
+  const rows = st.all ? shown : shown.slice(0, 20);
+  const chip = (k, label) => `<button onclick="mhSetFastHistFilter('${k}')" style="background:${f === k ? '#4d9fff' : 'var(--surface2)'};color:${f === k ? '#fff' : 'var(--text2)'};border:none;border-radius:14px;padding:5px 11px;font-size:11px;cursor:pointer;">${label}</button>`;
+  const longest = fasts.length ? Math.max(...fasts.map(r => r.hours)) : null;
+  el.innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin:16px 0 4px;">Every fast</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${fasts.length} measured since you started logging${longest != null ? ` · longest ${mhFastFmt(longest)}` : ''} · goal ${mhFastFmt(goal)}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${chip('all', 'All')}${chip('extended', 'Extended')}${chip('goal', 'At goal')}${chip('under', 'Under goal')}</div>
+    ${rows.length ? rows.map(r => `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-top:1px solid var(--border,rgba(128,128,128,0.2));font-size:12px;">
+        <span style="color:var(--text2);">${mhFastStamp(r.startMs)} → ${mhFastStamp(r.endMs)}${r.extended ? ' <span style="color:#4d9fff;font-size:10px;">extended</span>' : ''}</span>
+        <span style="color:${r.met ? 'var(--accent)' : 'var(--text2)'};font-weight:700;white-space:nowrap;">${mhFastFmt(r.hours)}${r.met ? ' ✓' : ''}</span></div>`).join('')
+      : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No fasts match that filter.</div>'}
+    ${shown.length > 20 ? `<button onclick="mhToggleFastHistAll()" style="margin-top:8px;background:none;border:none;color:#4d9fff;font-size:12px;cursor:pointer;padding:4px 0;">${st.all ? 'Show fewer' : `Show all ${shown.length}`}</button>` : ''}
+    ${unmeasured > 0 ? `<div style="font-size:10px;color:var(--text3);margin-top:8px;">${unmeasured} logged day${unmeasured === 1 ? '' : 's'} could not be measured (no logged meal time the evening before), so they are not in this list.</div>` : ''}
+    <button onclick="mhDownloadFastingCsv()" style="margin-top:10px;background:var(--surface2);color:var(--text2);border:none;border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer;">Download all fasts (CSV)</button>`;
+}
+function mhSetFastHistFilter(k) { window._fastHist.filter = k; window._fastHist.all = false; mhRenderFastHistory(); }
+function mhToggleFastHistAll() { window._fastHist.all = !window._fastHist.all; mhRenderFastHistory(); }
+function mhDownloadFastingCsv() {
+  const { fasts, goal } = mhFastingHistoryRows();
+  if (!fasts.length) { showToast('No measured fasts to export'); return; }
+  const iso = ms => { const d = new Date(ms), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const csv = ['fast_start,fast_end,hours,met_goal_' + goal + 'h,extended,eating_window_hours_that_day']
+    .concat(fasts.slice().reverse().map(r => [iso(r.startMs), iso(r.endMs), (Math.round(r.hours * 100) / 100), r.met ? 'yes' : 'no', r.extended ? 'yes' : 'no', r.windowH != null ? Math.round(r.windowH * 100) / 100 : ''].join(','))).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' }), url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = `fasting_history_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
+  showToast('Fasting history saved to Downloads ✓');
+}
 // Fasting report (v3.10.930). Shows summary figures and, once there is enough data, how days that followed a
 // fast at or above your goal compared with the rest. It is an association, never a cause, and says so.
 function renderFastingReport() {
@@ -40250,7 +40296,9 @@ function renderFastingReport() {
       <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Days that ended a fast at or above your goal, compared with the rest:</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">${grp('FAST ≥ GOAL', hi, 'var(--accent)')}${grp('FAST < GOAL', lo, 'var(--text2)')}</div>
       <div style="font-size:10px;color:var(--text3);">An association in your own data, not proof one caused the other.</div>` : `<div style="font-size:11px;color:var(--text3);">A comparison of days above and below your goal appears once there are at least 3 of each.</div>`}
-    ${cn ? `<div style="font-size:11px;color:${cn.tone === 'caution' ? 'var(--yellow,#f5c542)' : 'var(--text3)'};margin-top:10px;line-height:1.5;">${cn.text}</div>` : ''}`;
+    ${cn ? `<div style="font-size:11px;color:${cn.tone === 'caution' ? 'var(--yellow,#f5c542)' : 'var(--text3)'};margin-top:10px;line-height:1.5;">${cn.text}</div>` : ''}
+    <div id="fast-history"></div>`;
+  mhRenderFastHistory();
 }
 
 function renderSleepKetosisCorrelation() {

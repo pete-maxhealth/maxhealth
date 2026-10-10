@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.938 | 23 | Full detail in CHANGELOG.md (Phase 23). Fasting report gains "Every fast" (`mhFastingHistoryRows`, `mhRenderFastHistory`, filters via `window._fastHist`, `mhDownloadFastingCsv`): one row per measured fast from `mhFastingMap()` (start = firstMs - fastH), newest first, 20 shown then Show all, unmeasured days counted not guessed; clinician report adds an all-time line. Lives inside the existing `rpt-fasting` card so show/hide and reorder apply. Persona p70. |
 | v3.10.937 | 23 | Full detail in CHANGELOG.md (Phase 23). `checkTdeeStillAccurate()` adds a "Review a suggested TDEE" button (`mhReviewTdeeSuggestion`): suggestion = TDEE - (actual - expected change) x 7700 / days, clamped to +/-300, nearest 10, hidden under 50; appConfirm then `saveTdee()`. Test `p69_tdee_suggestion.py`. |
 | v3.10.936 | 23 | Full detail in CHANGELOG.md (Phase 23). Log-edit portion baseline is the entry's current `amount` (not `_origAmount`); `_portionPct` compounds; unchanged saves leave amount and badge alone. Test `p68_portion_baseline.py`. |
 | v3.10.935 | 23 | Full detail in CHANGELOG.md (Phase 23). Portion-in-grams boxes (`edit-grams-*`, `log-edit-scalegrams-*`) are text inputs that strip units/commas before parsing. `p54_portion_grams.py` extended. |
@@ -1055,6 +1056,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p67_wearable_stub_leaks.py` — placeholder excluded from Top foods, first-meal nudge, AI yesterday list; real 23:59 meal kept
 - `p68_portion_baseline.py` — portion edit baseline, compounding badge, time-only save keeps amount/badge
 - `p69_tdee_suggestion.py` — TDEE nudge suggestion, cap, confirm/cancel, date re-stamp
+- `p70_fasting_history.py` — Fasting report full-history list: reach beyond 30 days, durations, order, filters, unmeasured note, CSV
 - `p62_silent_network.py` — server accepts connections but never answers: saved app and landing pages appear in a few seconds, bundled libs do not block the page.
 - `p61_premium_card.py` — Premium card: cloud pitch + link vs local thank-you, show/hide, app makes no request to the page; register-interest page has consent + privacy note, handler requires consent and keeps data private.
 - `p19_manual_sticks.py` — manual corrections survive device re-syncs, lost attribution, and saves made during a running sync.
