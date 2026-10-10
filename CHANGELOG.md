@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.940 — One Switch For The "Hidden:" Restore Buttons
+
+Pete Spence: "a single hide and show on the hidden pills for all appropriate screens". There are five separate "Hidden:" strips (Dashboard, Trends, the generic Reports/Settings/Import screens, the multi-metric sections and the multi-metric legend), each showing a button per hidden card. Settings, in the Setup card, now has **Show the "Hidden:" restore buttons**: one switch that hides or shows all of them together (a body class, so no screen needed changing). It defaults to on, so nothing changes until you turn it off. Turning it off hides only the buttons; hidden cards stay hidden and come back with the switch. The choice survives a reload. Persona p71 checks default, off, on, reload, and that hiding the strip never un-hides a card.
+
 ## v3.10.939 — Fasting Exports Record The Calorie Limit Used
 
 Pete Spence asked whether a 100 kcal fasting limit would be acceptable instead of 50. It is already a setting (0 to 500), but changing it silently rewrites every past fast, so an export could not say which limit it was measured with. The Every fast list now states the limit in use, and the CSV gains a `meal_counts_from_kcal` column on every row. The clinician report already carried the limit in its footnote. Persona p70 now checks the column at the default and after the limit is changed to 100.
