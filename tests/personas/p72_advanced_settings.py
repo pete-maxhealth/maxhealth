@@ -28,6 +28,14 @@ with fresh_server() as root, sync_playwright() as pw:
         page.evaluate("(g) => mhTopicSet('manage', g)", g)
         for k in ADV:
             if not hid(k): f.add('BUG', f'{k} leaked into the {g} chip')
+    # Troubleshooting Tools belong to Advanced: shown under All and Advanced, hidden under other chips, always last
+    trouble = lambda: page.evaluate("() => { const h = document.getElementById('advToolsHeader'), w = document.getElementById('advanced-tools-wrap'); return {hdr: getComputedStyle(h).display !== 'none', last: h.parentNode.lastElementChild === w && w.previousElementSibling === h}; }")
+    for g, want in [('all', True), ('adv', True), ('me', False), ('ai', False), ('tracking', False), ('about', False)]:
+        page.evaluate("(g) => mhTopicSet('manage', g)", g); r = trouble()
+        if r['hdr'] != want: f.add('BUG', f'Troubleshooting header visible={r["hdr"]} under {g}, expected {want}')
+        if not r['last']: f.add('BUG', f'Troubleshooting block should be the last thing on the screen (under {g})')
+    page.evaluate("mhTopicSet('manage','all'); moveGenericSection('manage','set-profile','down')"); page.wait_for_timeout(200)
+    if not trouble()['last']: f.add('BUG', 'reordering a card pushed Troubleshooting out of last place')
     page.evaluate("siteSearchOpenSettings('set-formulas','manage','settings','')"); page.wait_for_timeout(600)
     if hid('set-formulas'): f.add('BUG', 'a settings search must still reveal an advanced card')
     if errs: f.add('BUG', f'page errors: {errs[:2]}')

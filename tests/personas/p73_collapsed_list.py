@@ -26,6 +26,15 @@ with fresh_server() as root, sync_playwright() as pw:
     if not page.evaluate("[...document.querySelectorAll('#title-set-symptoms button')].some(b => getComputedStyle(b).display !== 'none')"): f.add('BUG', 'Add / Clear all buttons should return when expanded')
     page.evaluate("document.getElementById('title-set-symptoms').click()"); page.wait_for_timeout(200)
     if not page.evaluate("document.getElementById('title-set-symptoms').classList.contains('mh-collapsed')"): f.add('BUG', 'tapping a header to collapse should shrink it too')
+    # A collapsed row must still obey the chip filter and the eye (hide) button
+    page.evaluate("[...document.querySelectorAll('#view-manage .mh-pills-toolbar button')].find(b => b.innerText === 'Close all').click()"); page.wait_for_timeout(200)
+    page.evaluate("mhTopicSet('manage','adv')"); page.wait_for_timeout(200)
+    shown = page.evaluate("[...document.querySelectorAll('#view-manage .section-title.mh-collapsed')].filter(t => !t.closest('#advanced-tools-wrap') && getComputedStyle(t).display !== 'none').map(t => t.id)")
+    want = {'title-set-formulas','title-set-deviceprec','title-set-exoffset','title-set-stepsbaseline','title-set-reportprofiles','title-set-idletimeout'}
+    if set(shown) != want: f.add('BUG', f'collapsed rows ignored the Advanced chip filter: showing {sorted(shown)}')
+    page.evaluate("mhTopicSet('manage','all'); saveGenericHidden('manage', ['set-profile']); applyGenericOrder('manage');"); page.wait_for_timeout(200)
+    if page.evaluate("getComputedStyle(document.getElementById('title-set-profile')).display") != 'none': f.add('BUG', 'a hidden (eye) card must stay hidden when collapsed')
+    page.evaluate("saveGenericHidden('manage', []); applyGenericOrder('manage');")
     page.reload(); page.wait_for_timeout(1500)
     page.evaluate("switchTab('settings'); switchSubTab('settings','manage'); mhTopicSet('manage','all');"); page.wait_for_timeout(500)
     if not page.evaluate("document.getElementById('title-set-symptoms').classList.contains('mh-collapsed')"): f.add('BUG', 'collapsed row state should persist across reload')
