@@ -40,7 +40,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # hide, restore strip, persistence, show
     page.evaluate("toggleDashboardSectionHidden('weather')"); page.wait_for_timeout(300)
     if page.evaluate("getComputedStyle(document.getElementById('mhWxCard')).display") != 'none': f.add('BUG', 'weather card not hidden')
-    if 'Weather' not in page.evaluate("document.getElementById('dashboardRestoreStrip').innerText"): f.add('BUG', 'no Weather pill in the hidden strip')
+    if 'Weather' not in page.evaluate("document.getElementById('dashboardRestoreStrip').textContent"): f.add('BUG', 'no Weather pill in the hidden strip')
     page.reload(wait_until='domcontentloaded'); page.wait_for_timeout(2500)
     if page.evaluate("getComputedStyle(document.getElementById('mhWxCard')).display") != 'none': f.add('BUG', 'hidden weather card came back after reload')
     page.evaluate("toggleDashboardSectionHidden('weather')"); page.wait_for_timeout(300)

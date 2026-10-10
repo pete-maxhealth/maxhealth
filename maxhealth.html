@@ -686,9 +686,12 @@
   /* v3.10.885: Trends topic filter + one-line "what question does this answer" captions */
   .mh-grp-hide { display: none !important; }
   .mh-adv-hide { display: none !important; }
-  /* One switch for every "Hidden: …" restore strip (v3.10.940) */
-  body.mh-no-restore-pills #dashboardRestoreStrip, body.mh-no-restore-pills #trendCardsRestoreStrip, body.mh-no-restore-pills #mmSectionRestoreStrip,
-  body.mh-no-restore-pills [id^="genericRestoreStrip-"], body.mh-no-restore-pills .mh-restore-strip { display: none !important; }
+  /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
+  body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
+  body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
+  .mh-pills-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+  .mh-pills-toolbar button { background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--text2); cursor: pointer; touch-action: manipulation; }
+  .mh-pills-toolbar button.main { color: var(--accent); border-color: var(--accent); }
   .mh-qline { font-size: 11px; color: var(--text3); line-height: 1.45; margin: -2px 0 10px; }
   .mh-topic-bar { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
   .mh-topic-bar .mh-grp-chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--text3); font-size: 12px; cursor: pointer; font-family: 'Space Mono', monospace; touch-action: manipulation; }
@@ -5164,10 +5167,6 @@
     <div class="section-title" id="title-set-setup" style="cursor:pointer;" onclick="toggleSection('set-setup','set-setup-wrap','set-setup-icon')">Setup <span id="set-setup-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-setup-wrap">
     <div class="settings-card">
-      <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--text);margin-bottom:12px;cursor:pointer;">
-        <span>Show the "Hidden:" restore buttons<br><span style="font-size:11px;color:var(--text3);">One switch for every screen. Turn it off for a cleaner look; hidden cards stay hidden and come back when you turn it on again.</span></span>
-        <input type="checkbox" id="settingShowRestorePills" onchange="mhSetRestorePills(this.checked)" style="width:20px;height:20px;flex:none;">
-      </label>
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="previewOnboarding()">🔍 Preview setup wizard (safe — nothing is saved)</button>
       <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;" onclick="resetOnboarding()">↺ Redo setup wizard</button>
     </div>
@@ -6190,7 +6189,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.941'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.942'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -12229,7 +12228,7 @@ function initSettings() {
   const waterTargetInput = document.getElementById('settingWaterTarget');
   if (waterTargetInput) waterTargetInput.value = localStorage.getItem('mh_target_water') || 2000;
   try { mhLoadFastingSettings(); } catch (_) {}
-  try { mhApplyRestorePills(); } catch (_) {}
+  try { mhEnsurePillsToolbars(); } catch (_) {}
   const stepsBaselineInput = document.getElementById('settingStepsBaseline');
   if (stepsBaselineInput) stepsBaselineInput.value = localStorage.getItem('mh_steps_baseline') || 7500;
   // Render supplement settings
@@ -36678,7 +36677,7 @@ function renderMMLegend(perMetricData, rangeInfoByKey) {
     }).join('');
 
   const restoreStrip = hiddenHere.length
-    ? `<div class="mh-restore-strip" style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+    ? `<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
         <span style="font-size:10px;color:var(--text3);">Hidden:</span>
         ${hiddenHere.map(pm => `<button onclick='toggleMMLegendHidden(${JSON.stringify(pm.metric.key)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${pm.metric.icon || '●'} ${pm.metric.title} +</button>`).join('')}
       </div>`
@@ -40219,14 +40218,43 @@ function computeChemoCycleAnalysis() {
   };
 }
 
-// Single switch for every "Hidden:" restore strip (v3.10.940). On by default; off hides the strips, never the hidden cards' state.
-function mhRestorePillsOn() { try { return localStorage.getItem('mh_show_restore_pills') !== '0'; } catch (_) { return true; } }
-function mhApplyRestorePills() {
-  document.body.classList.toggle('mh-no-restore-pills', !mhRestorePillsOn());
-  const cb = document.getElementById('settingShowRestorePills'); if (cb) cb.checked = mhRestorePillsOn();
+// One toolbar per screen (v3.10.942): "☰ Filters & hidden (N)" shows or hides every chip row and "Hidden:" strip (one
+// global state, closed by default); "Open all" / "Close all" expand or collapse every collapsible card on that screen.
+// The pills themselves are unchanged and still do exactly what they did.
+function mhPillsOpen() { try { return localStorage.getItem('mh_pills_open') === '1'; } catch (_) { return false; } }
+const MH_PILL_SEL = '.mh-topic-bar, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
+function mhPillsRoot(el) { return el.closest('.subview, .view') || el.parentNode; }
+function mhEnsurePillsToolbars() {
+  document.body.classList.toggle('mh-pills-open', mhPillsOpen());
+  const roots = new Map();
+  document.querySelectorAll(MH_PILL_SEL).forEach(el => { const r = mhPillsRoot(el); if (r && !roots.has(r)) roots.set(r, el); });
+  roots.forEach((first, root) => {
+    let tb = root.querySelector(':scope > .mh-pills-toolbar, :scope .mh-pills-toolbar');
+    const nHidden = [...root.querySelectorAll('[id$="RestoreStrip"] button, [id^="genericRestoreStrip-"] button')].length;
+    const open = mhPillsOpen();
+    const html = `<button class="main" onclick="mhTogglePills()">☰ Filters &amp; hidden${nHidden ? ` (${nHidden})` : ''} ${open ? '▾' : '▸'}</button>`
+      + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button>`;
+    if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
+    if (tb.dataset.sig !== html) { tb.innerHTML = html; tb.dataset.sig = html; }
+  });
 }
-function mhSetRestorePills(on) { try { localStorage.setItem('mh_show_restore_pills', on ? '1' : '0'); } catch (_) {} mhApplyRestorePills(); }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mhApplyRestorePills); else mhApplyRestorePills();
+function mhTogglePills() { try { localStorage.setItem('mh_pills_open', mhPillsOpen() ? '0' : '1'); } catch (_) {} mhEnsurePillsToolbars(); }
+function mhSectionsAll(btn, open) {
+  // Every collapsible card announces itself with a header that calls toggleSection('key','wrapId','iconId', ...)
+  const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), seen = new Set(); let n = 0;
+  root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => {
+    const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2])) return; seen.add(m[2]);
+    const wrap = document.getElementById(m[2]); if (!wrap || !root.contains(wrap)) return;
+    wrap.style.display = open ? 'block' : 'none'; n++;
+    const icon = document.getElementById(m[3]); if (icon) icon.textContent = open ? '▾ hide' : '▸ show';
+    try { localStorage.setItem('mh_collapse_' + m[1], open ? 'open' : 'closed'); } catch (_) {}
+  });
+  showToast(n ? (open ? 'Opened ' : 'Closed ') + n + ' sections' : 'Nothing to ' + (open ? 'open' : 'close') + ' here');
+}
+(function () { let t = 0; const run = () => { t = 0; try { mhEnsurePillsToolbars(); } catch (_) {} };
+  const kick = () => { if (!t) t = requestAnimationFrame(run); };
+  const start = () => { run(); new MutationObserver(kick).observe(document.body, { childList: true, subtree: true }); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start(); })();
 // Fasting history (v3.10.938): every measured fast since logging began, newest first. Built from the same
 // meal times as everything else, so a fast only appears when both the meal before it and the meal after it
 // were logged with a real time. Nothing is estimated; days that cannot be measured are counted, not guessed.
@@ -45482,7 +45510,7 @@ const MH_TOPIC_SCOPES = {
 // Simple / Advanced (v3.10.941). Settings -> Manage shows the everyday cards; the rarely-touched ones sit behind one
 // "Advanced" chip. Nothing is removed or disabled: an advanced setting keeps working while hidden, a settings search
 // reveals it, and the choice is remembered.
-const MH_ADVANCED = { manage: ['set-formulas', 'set-deviceprec', 'set-exoffset', 'set-tableware', 'set-stepsbaseline', 'set-reportprofiles', 'set-carer', 'set-idletimeout'] };
+const MH_ADVANCED = { manage: ['set-formulas', 'set-deviceprec', 'set-exoffset', 'set-stepsbaseline', 'set-reportprofiles', 'set-idletimeout'] };
 function mhAdvOn(scope) { try { return localStorage.getItem('mh_adv_' + scope) === '1'; } catch (_) { return false; } }
 function mhAdvToggle(scope) { try { localStorage.setItem('mh_adv_' + scope, mhAdvOn(scope) ? '0' : '1'); } catch (_) {} mhTopicApply(scope); }
 function mhTopicGet(scope) { try { return localStorage.getItem('mh_topic_' + scope) || 'all'; } catch (_) { return 'all'; } }
@@ -45505,7 +45533,8 @@ function mhTopicApply(scope) {
   const chips = [['all', 'All']].concat(Object.keys(defs).map(k => [k, defs[k].label]));
   const advKeys = MH_ADVANCED[scope] || [], advOn = mhAdvOn(scope);
   bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}')">${l}</span>`).join('')
-    + (advKeys.length ? `<span class="mh-grp-chip${advOn ? ' active' : ''}" onclick="mhAdvToggle('${scope}')">⚙ Advanced ${advOn ? 'on' : 'off'}</span>` : '');
+    + (advKeys.length ? `<span class="mh-grp-chip${advOn ? ' active' : ''}" onclick="mhAdvToggle('${scope}')">⚙ Advanced ${advOn ? '▾' : '▸'}</span>
+       <div style="flex-basis:100%;font-size:11px;color:var(--text3);line-height:1.45;">${advOn ? 'Showing advanced settings: technical options (calculation formulas, which device wins, calorie offsets, timeouts) that most people can leave alone.' : 'Technical options (calculation formulas, which device wins, calorie offsets, timeouts) are tucked away under Advanced. Everyday settings are all here.'}</div>` : '');
   allUnits.forEach(([k, el]) => el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k));
   advKeys.forEach(key => genericUnitFor(scope, key).forEach(el => el.classList.toggle('mh-adv-hide', !advOn)));
 }
