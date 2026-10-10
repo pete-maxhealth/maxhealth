@@ -688,6 +688,13 @@
   /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
   body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
   body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
+  /* A collapsed card shrinks to one tidy list row: title left, position / hide / move controls right, action buttons tucked away (v3.10.944) */
+  .section-title.mh-collapsed { display: flex !important; align-items: center; flex-wrap: nowrap; gap: 8px; font-size: 15px !important; line-height: 1.25; padding: 9px 0 !important; margin: 0 !important; border-top: 1px solid var(--border); }
+  .section-title.mh-collapsed > span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-title.mh-collapsed button, .section-title.mh-collapsed .copy-btn, .section-title.mh-collapsed .settings-save-btn { display: none !important; }
+  .section-title.mh-collapsed > span:not(:first-child):not(:last-child) { display: none !important; }
+  .section-title.mh-collapsed[data-reorder-injected] > span:last-child { flex: none; margin-left: auto; display: flex !important; flex-direction: row-reverse; align-items: center; gap: 2px; }
+  .section-title.mh-collapsed[data-reorder-injected] > span:last-child > span { float: none !important; margin: 0 !important; white-space: nowrap; }
   .mh-pills-toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
   .mh-pills-toolbar button { background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--text2); cursor: pointer; touch-action: manipulation; }
   .mh-pills-toolbar button.main { color: var(--accent); border-color: var(--accent); }
@@ -6188,7 +6195,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.943'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.944'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40272,7 +40279,7 @@ function mhSectionsAll(btn, open) {
     const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1])) return; seen.add(m[2]);
     const wrap = document.getElementById(m[2]); if (!wrap || !root.contains(wrap)) return;
     wrap.style.display = open ? 'block' : 'none'; n++;
-    const icon = document.getElementById(m[3]); if (icon) icon.textContent = open ? '▾ hide' : '▸ show';
+    const icon = document.getElementById(m[3]); if (icon) { icon.textContent = open ? '▾ hide' : '▸ show'; mhMarkCollapsed(icon, !open); }
     try { localStorage.setItem('mh_collapse_' + m[1], open ? 'open' : 'closed'); } catch (_) {}
   });
   const where = keys ? 'in this group' : 'on this screen';
@@ -41618,7 +41625,19 @@ function toggleSection(storageKey, wrapId, iconId, defaultOpen) {
   const newOpen = !currentlyOpen;
   wrap.style.display = newOpen ? 'block' : 'none';
   if (icon) icon.textContent = newOpen ? '▾ hide' : '▸ show';
+  mhMarkCollapsed(icon, !newOpen);
   try { localStorage.setItem('mh_collapse_' + storageKey, newOpen ? 'open' : 'closed'); } catch(e) {}
+}
+// Flags a collapsed card's header so CSS can shrink it to a one-line list row
+function mhMarkCollapsed(icon, collapsed) {
+  const t = icon && icon.closest ? icon.closest('.section-title') : null; if (!t) return;
+  // Some headers hold bare title text beside the icon; wrap it once so the row can truncate it instead of wrapping to two lines
+  if (collapsed && t.firstChild && t.firstChild.nodeType === 3 && t.firstChild.textContent.trim()) {
+    const w = document.createElement('span'); let n = t.firstChild;
+    while (n && (n.nodeType === 3 || (n.nodeType === 1 && /-icon$/.test(n.id || '')))) { const nx = n.nextSibling; w.appendChild(n); n = nx; }
+    t.insertBefore(w, n);
+  }
+  t.classList.toggle('mh-collapsed', !!collapsed);
 }
 
 // Call once per collapsible box, after its HTML exists, to apply the saved state.
@@ -41632,6 +41651,7 @@ function applySectionState(storageKey, wrapId, iconId, defaultOpen) {
   const open = saved === 'open' ? true : saved === 'closed' ? false : !!defaultOpen;
   wrap.style.display = open ? 'block' : 'none';
   if (icon) icon.textContent = open ? '▾ hide' : '▸ show';
+  mhMarkCollapsed(icon, !open);
 }
 
 // Applies saved state to every collapsible box currently registered. Called once
