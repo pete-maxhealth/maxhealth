@@ -5152,6 +5152,7 @@
            feedback for the "nothing new" case, which the automatic path
            never needed to handle out loud. -->
       <button class="copy-btn" id="checkUpdateBtn" onclick="manualCheckForUpdate()" style="margin-top:12px;">🔄 CHECK FOR UPDATES</button>
+      <div class="settings-hint" id="mhBehindNote" style="margin-top:6px;color:var(--warn,#f5a623);"></div>
       <div class="settings-hint" style="margin-top:6px;">MaxedHealth normally checks for a new version on its own — use this if you want to check right now instead of waiting.</div>
       <div class="settings-hint" style="margin-top:8px;line-height:1.7;">
         Built by a GBM patient who needed it. Given freely to everyone who does.
@@ -6196,7 +6197,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.945'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.946'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -42873,7 +42874,7 @@ function manualCheckForUpdate() {
       clearInterval(watcherInterval);
       if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
       if (!bannerShown && !document.getElementById('swUpdateBanner')) {
-        showToast("You're on the latest version ✓");
+        mhBehindCheck(true).then(() => { if (mhBehindState().behind) showToast('This phone is behind ' + mhBehindState().latest + ' - see the update note'); else showToast("You're on the latest version ✓"); });
       }
     }, 500);
   }).catch(() => {
@@ -42881,6 +42882,48 @@ function manualCheckForUpdate() {
     if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
     showToast("Couldn't check for updates — check your connection and try again");
   });
+}
+
+// Behind-GitHub check (v3.10.946). The service-worker banner only notices a newer copy from this
+// phone's OWN server, so a phone whose server never pulled the latest release says "latest version"
+// while being hundreds behind. This reads the published README's Version line straight from GitHub
+// (small, CORS-open, fails quietly offline) and compares it with APP_VERSION. It never changes
+// anything; the banner just says how to update. Checked at most every 6 hours; dismissing hides
+// that particular version until a newer one appears.
+function mhVerNum(v) { const m = /v?(\d+)\.(\d+)\.(\d+)/.exec(v || ''); return m ? (+m[1]) * 1e8 + (+m[2]) * 1e4 + (+m[3]) : 0; }
+function mhBehindState() {
+  try {
+    const latest = localStorage.getItem('mh_latest_ver') || '';
+    return { latest, behind: mhVerNum(latest) > mhVerNum(APP_VERSION) };
+  } catch (e) { return { latest: '', behind: false }; }
+}
+async function mhBehindCheck(force) {
+  try {
+    const last = +localStorage.getItem('mh_behind_checked') || 0;
+    if (!force && Date.now() - last < 6 * 3600 * 1000) { mhBehindRender(); return; }
+    const r = await fetch('https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/README.md', { cache: 'no-store' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const m = /\*\*Version:\*\*\s*(v\d+\.\d+\.\d+)/.exec(await r.text());
+    if (!m) throw new Error('no version line');
+    localStorage.setItem('mh_latest_ver', m[1]);
+    localStorage.setItem('mh_behind_checked', String(Date.now()));
+  } catch (e) { /* offline or blocked: say nothing */ }
+  mhBehindRender();
+}
+function mhBehindRender() {
+  const st = mhBehindState();
+  const old = document.getElementById('mhBehindBanner'); if (old) old.remove();
+  const note = document.getElementById('mhBehindNote');
+  if (note) note.textContent = st.behind ? `⚠ This phone is on ${APP_VERSION}; ${st.latest} is out. Run the update command in Termux.` : '';
+  let dismissed = ''; try { dismissed = localStorage.getItem('mh_behind_dismissed') || ''; } catch (e) {}
+  if (!st.behind || dismissed === st.latest) return;
+  const b = document.createElement('div');
+  b.id = 'mhBehindBanner';
+  b.style.cssText = 'position:fixed;left:12px;right:12px;top:12px;z-index:9998;background:var(--surface2,#1c222b);color:var(--text,#e8edf2);border:1px solid var(--accent,#7cc4ff);padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+  b.innerHTML = `<div><b>Update waiting:</b> this phone is on ${APP_VERSION}, ${st.latest} is out. In Termux run <code>bash ~/mh_autoupdate.sh</code> then reopen the app.</div><div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;"><button class="copy-btn" id="mhBehindCopy" style="padding:4px 10px;">Copy command</button><button class="copy-btn" id="mhBehindClose" style="padding:4px 10px;">Dismiss</button></div>`;
+  document.body.appendChild(b);
+  document.getElementById('mhBehindClose').onclick = () => { try { localStorage.setItem('mh_behind_dismissed', st.latest); } catch (e) {} b.remove(); };
+  document.getElementById('mhBehindCopy').onclick = () => { try { navigator.clipboard.writeText('bash ~/mh_autoupdate.sh'); showToast('Command copied'); } catch (e) { showToast('Copy failed - type it in Termux'); } };
 }
 
 function showUpdateAvailableBanner(newWorker) {
@@ -45070,6 +45113,7 @@ try {
   // dialogs firing on the same startup tick - see RECIPE_DRAFT_KEY comment.
   setTimeout(_maybeOfferRecipeDraftRestore, 800);
   registerServiceWorker();
+  setTimeout(() => mhBehindCheck(false), 6000);
   // Genuinely run the server check (and everything nested inside it - library/
   // recipes/routines/strength/supplements restore, and critically the
   // two-way master.csv sync) on real app startup, not just when someone
