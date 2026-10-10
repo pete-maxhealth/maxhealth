@@ -685,7 +685,6 @@
   @media (prefers-reduced-motion: reduce) { .mh-wait-box { animation: none; } }
   /* v3.10.885: Trends topic filter + one-line "what question does this answer" captions */
   .mh-grp-hide { display: none !important; }
-  .mh-adv-hide { display: none !important; }
   /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
   body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
   body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
@@ -6189,7 +6188,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.942'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.943'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40239,17 +40238,45 @@ function mhEnsurePillsToolbars() {
   });
 }
 function mhTogglePills() { try { localStorage.setItem('mh_pills_open', mhPillsOpen() ? '0' : '1'); } catch (_) {} mhEnsurePillsToolbars(); }
+// Which part of the screen the toolbar acts on: everything when "All" is selected, otherwise only the chosen group.
+function mhScopeOf(root) {
+  const id = root.id || '';
+  if (id === 'view-manage') return { name: 'manage', generic: 'manage' };
+  if (id === 'view-reports') return { name: 'reports', generic: 'reports' };
+  if (id === 'view-import') return { name: 'import', generic: 'import' };
+  if (id === 'view-trends') return { name: 'trends' };
+  if (id === 'view-today') return { name: 'today' };
+  if (root.querySelector && root.querySelector('#mmSectionRestoreStrip')) return { name: 'mm' };
+  return { name: id };
+}
+function mhScopeKeys(sc) {   // null = everything on the screen
+  if (sc.generic) { const cur = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[cur]; return cur !== 'all' && g ? g.keys.slice() : null; }
+  if (sc.name === 'trends') { const cur = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[cur]; return cur !== 'all' && g ? g.ids.slice() : null; }
+  return null;
+}
 function mhSectionsAll(btn, open) {
-  // Every collapsible card announces itself with a header that calls toggleSection('key','wrapId','iconId', ...)
-  const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), seen = new Set(); let n = 0;
+  const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), sc = mhScopeOf(root), keys = mhScopeKeys(sc), inScope = k => !keys || keys.includes(k);
+  const seen = new Set(); let n = 0, restored = 0;
+  // 1. Open all also brings back cards that were hidden with the eye button; Close all only collapses, it never hides anything.
+  if (open) {
+    const un = (hidden, save, apply) => { const keep = hidden.filter(k => !inScope(k)); restored = hidden.length - keep.length; if (restored) { save(keep); apply(); } };
+    try {
+      if (sc.generic) un(getGenericHidden(sc.generic), h => saveGenericHidden(sc.generic, h), () => applyGenericOrder(sc.generic));
+      else if (sc.name === 'trends') un(getTrendCardsHidden(), saveTrendCardsHidden, () => renderTrends());
+      else if (sc.name === 'today') un(getDashboardHidden(), saveDashboardHidden, applyDashboardOrder);
+      else if (sc.name === 'mm') un(getMMSectionHidden(), saveMMSectionHidden, applyMMSectionOrderAndVisibility);
+    } catch (_) {}
+  }
+  // 2. Expand or collapse every collapsible card in scope (each announces itself with toggleSection('key','wrapId','iconId'))
   root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => {
-    const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2])) return; seen.add(m[2]);
+    const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1])) return; seen.add(m[2]);
     const wrap = document.getElementById(m[2]); if (!wrap || !root.contains(wrap)) return;
     wrap.style.display = open ? 'block' : 'none'; n++;
     const icon = document.getElementById(m[3]); if (icon) icon.textContent = open ? '▾ hide' : '▸ show';
     try { localStorage.setItem('mh_collapse_' + m[1], open ? 'open' : 'closed'); } catch (_) {}
   });
-  showToast(n ? (open ? 'Opened ' : 'Closed ') + n + ' sections' : 'Nothing to ' + (open ? 'open' : 'close') + ' here');
+  const where = keys ? 'in this group' : 'on this screen';
+  showToast(open ? `Opened ${n} section${n === 1 ? '' : 's'}${restored ? ` and restored ${restored} hidden` : ''} ${where}` : (n ? `Closed ${n} section${n === 1 ? '' : 's'} ${where}` : `Nothing to close ${where}`));
 }
 (function () { let t = 0; const run = () => { t = 0; try { mhEnsurePillsToolbars(); } catch (_) {} };
   const kick = () => { if (!t) t = requestAnimationFrame(run); };
@@ -45496,10 +45523,11 @@ const MH_TOPIC_SCOPES = {
     treat:    { label: 'Treatment',   keys: ['rpt-treatment', 'rpt-sessions'] },
   } },
   manage: { view: 'view-manage', groups: {
-    me:       { label: 'Me & targets',     keys: ['set-profile', 'set-carbceilings', 'set-water', 'set-fasting', 'set-tableware', 'set-stepsbaseline', 'set-exoffset', 'set-deviceprec', 'set-formulas'] },
-    ai:       { label: 'AI & alerts',      keys: ['set-aiprovider', 'set-notifications', 'set-idletimeout', 'set-carer'] },
-    tracking: { label: 'Health tracking',  keys: ['set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'] },
+    me:       { label: 'Me & targets',     keys: ['set-profile', 'set-carbceilings', 'set-water', 'set-fasting', 'set-tableware'] },
+    ai:       { label: 'AI & alerts',      keys: ['set-aiprovider', 'set-notifications', 'set-carer'] },
+    tracking: { label: 'Health tracking',  keys: ['set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults'] },
     about:    { label: 'About & setup',    keys: ['set-premium', 'set-about', 'set-setup'] },
+    adv:      { label: '⚙ Advanced',       keys: ['set-formulas', 'set-deviceprec', 'set-exoffset', 'set-stepsbaseline', 'set-reportprofiles', 'set-idletimeout'], note: 'Technical options most people can leave alone: calculation formulas, which device wins, calorie offsets, timeouts.' },
   } },
   import: { view: 'view-import', groups: {
     connect:  { label: 'Connect devices',  keys: ['imp-sync', 'imp-adddevice', 'imp-advanced'] },
@@ -45507,16 +45535,10 @@ const MH_TOPIC_SCOPES = {
     backup:   { label: 'Backup & checks',  keys: ['set-databackup', 'imp-databulk', 'imp-preview'] },
   } },
 };
-// Simple / Advanced (v3.10.941). Settings -> Manage shows the everyday cards; the rarely-touched ones sit behind one
-// "Advanced" chip. Nothing is removed or disabled: an advanced setting keeps working while hidden, a settings search
-// reveals it, and the choice is remembered.
-const MH_ADVANCED = { manage: ['set-formulas', 'set-deviceprec', 'set-exoffset', 'set-stepsbaseline', 'set-reportprofiles', 'set-idletimeout'] };
-function mhAdvOn(scope) { try { return localStorage.getItem('mh_adv_' + scope) === '1'; } catch (_) { return false; } }
-function mhAdvToggle(scope) { try { localStorage.setItem('mh_adv_' + scope, mhAdvOn(scope) ? '0' : '1'); } catch (_) {} mhTopicApply(scope); }
 function mhTopicGet(scope) { try { return localStorage.getItem('mh_topic_' + scope) || 'all'; } catch (_) { return 'all'; } }
 function mhTopicSet(scope, k) { try { localStorage.setItem('mh_topic_' + scope, k); } catch (_) {} mhTopicApply(scope); }
 function mhTopicResetAll() {
-  Object.keys(MH_TOPIC_SCOPES).forEach(sc => { try { localStorage.setItem('mh_topic_' + sc, 'all'); if (MH_ADVANCED[sc]) localStorage.setItem('mh_adv_' + sc, '1'); } catch (_) {} mhTopicApply(sc); });
+  Object.keys(MH_TOPIC_SCOPES).forEach(sc => { try { localStorage.setItem('mh_topic_' + sc, 'all'); } catch (_) {} mhTopicApply(sc); });
   try { mhTrendsGroupSet('all'); } catch (_) {}
 }
 function mhTopicApply(scope) {
@@ -45531,12 +45553,9 @@ function mhTopicApply(scope) {
   let bar = document.getElementById(barId);
   if (!bar) { bar = document.createElement('div'); bar.id = barId; bar.className = 'mh-topic-bar'; parent.insertBefore(bar, parent.firstChild); }
   const chips = [['all', 'All']].concat(Object.keys(defs).map(k => [k, defs[k].label]));
-  const advKeys = MH_ADVANCED[scope] || [], advOn = mhAdvOn(scope);
-  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}')">${l}</span>`).join('')
-    + (advKeys.length ? `<span class="mh-grp-chip${advOn ? ' active' : ''}" onclick="mhAdvToggle('${scope}')">⚙ Advanced ${advOn ? '▾' : '▸'}</span>
-       <div style="flex-basis:100%;font-size:11px;color:var(--text3);line-height:1.45;">${advOn ? 'Showing advanced settings: technical options (calculation formulas, which device wins, calorie offsets, timeouts) that most people can leave alone.' : 'Technical options (calculation formulas, which device wins, calorie offsets, timeouts) are tucked away under Advanced. Everyday settings are all here.'}</div>` : '');
+  const note = cur !== 'all' && defs[cur].note ? `<div style="flex-basis:100%;font-size:11px;color:var(--text3);line-height:1.45;">${defs[cur].note}</div>` : '';
+  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}')">${l}</span>`).join('') + note;
   allUnits.forEach(([k, el]) => el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k));
-  advKeys.forEach(key => genericUnitFor(scope, key).forEach(el => el.classList.toggle('mh-adv-hide', !advOn)));
 }
 
 // ── GLOBAL WEIGHT UNIT (v3.10.880) ────────────────────────
