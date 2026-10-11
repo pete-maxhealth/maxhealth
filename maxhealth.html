@@ -5088,6 +5088,11 @@
     <div id="set-stepsbaseline-wrap">
     <div class="settings-card" style="padding:14px 16px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:12px;"><span class="help-slot" data-id="stepsbaseline" data-text='If your TDEE was calculated assuming a "Moderate" or more active lifestyle, that figure already includes an assumed amount of daily incidental movement. To avoid double-counting, Daily Steps only credits extra calories for non-walk steps above this baseline — a sedentary TDEE assumption would mean a lower baseline (or 0), while Moderate/Active assumes more is already covered.'></span></div>
+      <label style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;cursor:pointer;">
+        <span><span style="font-size:13px;color:var(--text);">Automatic</span><br><span id="stepsBaselineAutoNote" style="font-size:11px;color:var(--text3);line-height:1.5;"></span></span>
+        <input type="checkbox" id="settingStepsBaselineAuto" onchange="setStepsBaselineAuto(this.checked)" style="margin-top:3px;accent-color:var(--accent);">
+      </label>
+      <div id="stepsBaselineManual">
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Lifestyle changed? Pick the level that matches your TDEE assumption now, not when you first set it:</div>
       <div style="display:flex;gap:6px;margin-bottom:12px;">
         <div onclick="setStepsBaselinePreset('easy')" style="flex:1;text-align:center;padding:8px 4px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid var(--border);color:var(--text3);font-size:11px;font-family:Space Mono,monospace;">Easy<br><span style="font-size:9px;opacity:0.8;">~5,000</span></div>
@@ -5097,6 +5102,7 @@
       <div style="display:flex;gap:10px;align-items:center;">
         <input class="settings-input" type="number" id="settingStepsBaseline" placeholder="7500" style="flex:1;" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingStepsBaseline', 'Incidental Steps Baseline', saveStepsBaseline)">
         <span style="font-size:13px;color:var(--text3);">steps/day</span>
+      </div>
       </div>
       <div style="font-size:10px;color:var(--text3);margin-top:8px;"><span class="help-slot" data-id="stepsbaselinelevels" data-text='Easy = sedentary-to-lightly-active TDEE assumption (occasional movement, little structured exercise). Moderate = regular training plus reasonable daily movement — matches a "Moderate" TDEE multiplier. Hard = very active lifestyle, daily exercise plus an active job or lifestyle on top.'></span></div>
     </div>
@@ -6144,7 +6150,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.949'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.951'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -12183,7 +12189,8 @@ function initSettings() {
   try { mhLoadFastingSettings(); } catch (_) {}
   try { mhEnsurePillsToolbars(); } catch (_) {}
   const stepsBaselineInput = document.getElementById('settingStepsBaseline');
-  if (stepsBaselineInput) stepsBaselineInput.value = localStorage.getItem('mh_steps_baseline') || 7500;
+  if (stepsBaselineInput) stepsBaselineInput.value = getStepsBaseline();
+  try { mhRenderStepsBaselineCard(); } catch (_) {}
   // Render supplement settings
   renderSupplementSettings();
   renderSymptomSettings();
@@ -12916,6 +12923,7 @@ function saveStepsBaseline() {
   const val = parseInt(document.getElementById('settingStepsBaseline')?.value);
   if (!isNaN(val) && val >= 0) {
     localStorage.setItem('mh_steps_baseline', val);
+    localStorage.setItem('mh_steps_baseline_mode', 'manual');
     updateDashboard();
     showToast(`Steps baseline saved: ${val.toLocaleString()}/day`);
   }
@@ -14846,7 +14854,7 @@ function calcNonWalkingStepsKcal(remainder) {
   // double-count against that assumption. mh_steps_baseline represents "how many
   // incidental steps does my TDEE setting already assume," editable in Settings
   // since not everyone's TDEE was calculated the same way.
-  const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+  const baseline = getStepsBaseline();
   const aboveBaseline = Math.max(0, (remainder || 0) - baseline);
   if (aboveBaseline <= 0) return 0;
   const approxMiles = aboveBaseline / getPersonalStepsPerMile();
@@ -23219,7 +23227,7 @@ function renderDailyStepsHeadline() {
   const stepsDetailEl = document.getElementById('stepsDetailLine');
   if (!stepsHeadlineEl || !stepsDetailEl) return;
   const hasRealEntry = !!(localStorage.getItem('mh_steps_today') || '').trim();
-  const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+  const baseline = getStepsBaseline();
   if (hasRealEntry) {
     const breakdown = getNonWalkingStepsToday();
     const remainderKcal = calcNonWalkingStepsKcal(breakdown.remainder);
@@ -23748,64 +23756,85 @@ function checkWeightPhaseAutoSwitch() {
 // Reuses the exact same step thresholds as the existing TDEE activity
 // multiplier for internal consistency - one definition of what counts as
 // each tier, not two that could quietly disagree with each other.
+// Incidental steps baseline (v3.10.950). The TDEE activity level already assumes some daily incidental movement,
+// so by default the baseline simply follows the Activity Level (sedentary/light = Easy 5,000, moderate 7,500,
+// very active 9,500, the same three presets as before), and the Activity Level follows real weekly steps below.
+// Anyone who had typed their own baseline keeps it (manual) until they switch Automatic on.
+const MH_STEPS_TIER_BASELINE = { sedentary: 5000, light: 5000, moderate: 7500, active: 9500 };
+const MH_ACT_LABEL = { sedentary: 'Sedentary', light: 'Lightly active', moderate: 'Moderately active', active: 'Very active' };
+function mhStepsBaselineIsAuto() {
+  const m = localStorage.getItem('mh_steps_baseline_mode');
+  return m === 'auto' || (m !== 'manual' && !localStorage.getItem('mh_steps_baseline'));
+}
+function mhAutoStepsBaseline() { return MH_STEPS_TIER_BASELINE[localStorage.getItem('mh_activity_level') || 'moderate'] || 7500; }
+function getStepsBaseline() { return mhStepsBaselineIsAuto() ? mhAutoStepsBaseline() : (parseInt(localStorage.getItem('mh_steps_baseline')) || 7500); }
+function setStepsBaselineAuto(on) {
+  if (on) localStorage.setItem('mh_steps_baseline_mode', 'auto');
+  else { localStorage.setItem('mh_steps_baseline', String(getStepsBaseline())); localStorage.setItem('mh_steps_baseline_mode', 'manual'); }
+  mhRenderStepsBaselineCard(); try { updateDashboard(); } catch (_) {}
+  showToast(on ? `Steps baseline is automatic: ${getStepsBaseline().toLocaleString()}/day` : 'Steps baseline is now yours to set');
+}
+function mhRenderStepsBaselineCard() {
+  const cb = document.getElementById('settingStepsBaselineAuto'); if (!cb) return;
+  const auto = mhStepsBaselineIsAuto(); cb.checked = auto;
+  const lvl = localStorage.getItem('mh_activity_level') || 'moderate';
+  const note = document.getElementById('stepsBaselineAutoNote');
+  const st = localStorage.getItem('mh_activity_autoswitch_status');
+  if (note) note.textContent = auto ? `${mhAutoStepsBaseline().toLocaleString()} steps/day, from your Activity Level (${MH_ACT_LABEL[lvl] || lvl}), which follows your real steps week by week.${st ? ' ' + st : ''}` : 'You set this yourself. Switch Automatic on to let it follow your real weekly steps.';
+  const man = document.getElementById('stepsBaselineManual'); if (man) man.style.display = auto ? 'none' : 'block';
+  const input = document.getElementById('settingStepsBaseline'); if (input && !auto) input.value = getStepsBaseline();
+}
+
+// Same idea as checkWeightPhaseAutoSwitch() above, but on WEEKS of steps (v3.10.950): the average of each of the last
+// N whole weeks (N = your auto-switch days / 7, at least 2, at most 4) is compared with the same step thresholds the TDEE
+// activity multiplier uses. If every one of those weeks points to the same different tier, the Activity Level moves to
+// it (and, when the baseline is automatic, the baseline moves with it). A week counts only with 5 or more days of steps.
+function mhActivityWeeks(todayDate, weeks) {
+  const hist = (state.history || []).map(d => ({ dt: parseDateStr(d.date), steps: d.steps || 0 })).filter(d => d.dt && d.steps > 0);
+  const t0 = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate()).getTime(), out = [];
+  for (let w = 0; w < weeks; w++) {
+    const hi = t0 - (w * 7) * 86400000, lo = t0 - (w * 7 + 7) * 86400000;    // days 1..7 ago, 8..14 ago ... (today left out)
+    const days = hist.filter(d => { const x = new Date(d.dt.getFullYear(), d.dt.getMonth(), d.dt.getDate()).getTime(); return x >= lo && x < hi; });
+    out.push({ n: days.length, avg: days.length ? days.reduce((a, d) => a + d.steps, 0) / days.length : 0 });
+  }
+  return out;
+}
 function checkActivityLevelAutoSwitch() {
   const today = todayStr();
   if (localStorage.getItem('mh_last_auto_activity_check') === today) return; // already checked today
   localStorage.setItem('mh_last_auto_activity_check', today);
-
   const currentLevel = localStorage.getItem('mh_activity_level') || 'moderate';
   const autoSwitchDays = parseInt(localStorage.getItem('mh_autoswitch_days')) || 14;
-
-  const sortedHistory = [...(state.history || [])].sort((a, b) => {
-    const da = parseDateStr(a.date), db = parseDateStr(b.date);
-    return (db ? db.getTime() : 0) - (da ? da.getTime() : 0); // newest first
-  });
-
+  const weeks = Math.max(2, Math.min(4, Math.ceil(autoSwitchDays / 7)));
   const tierForSteps = avg => avg > 12000 ? 'active' : avg > 8000 ? 'moderate' : avg > 5000 ? 'light' : 'sedentary';
-
-  const suggestedTiers = [];
-  for (let i = 0; i < autoSwitchDays; i++) {
-    const windowSlice = sortedHistory.slice(i, i + 30).map(d => d.steps || 0).filter(s => s > 0);
-    if (windowSlice.length < 20) {
-      localStorage.setItem('mh_activity_autoswitch_status', `Not enough step history yet to check reliably (need close to 30 days of real data).`);
-      return;
-    }
-    const avg = windowSlice.reduce((a, b) => a + b, 0) / windowSlice.length;
-    suggestedTiers.push(tierForSteps(avg));
-  }
-
-  const allSame = suggestedTiers.every(t => t === suggestedTiers[0]);
-  const suggested = suggestedTiers[0];
-
-  if (!allSame || suggested === currentLevel) {
-    localStorage.setItem('mh_activity_autoswitch_status', !allSame
-      ? `Your step average hasn't consistently suggested one activity tier for all ${autoSwitchDays} days — mixed results, no switch triggered.`
-      : `Checked — your real steps still match your current Activity Level, no switch needed.`);
+  const wk = mhActivityWeeks(new Date(), weeks);
+  if (wk.some(w => w.n < 5)) {
+    localStorage.setItem('mh_activity_autoswitch_status', `Needs 5 or more days of steps in each of the last ${weeks} weeks to check (so far ${wk.map(w => w.n).join(', ')}).`);
+    try { mhRenderStepsBaselineCard(); } catch (_) {}
     return;
   }
-
+  const tiers = wk.map(w => tierForSteps(w.avg)), suggested = tiers[0], allSame = tiers.every(t => t === suggested);
+  if (!allSame || suggested === currentLevel) {
+    localStorage.setItem('mh_activity_autoswitch_status', !allSame
+      ? `Your last ${weeks} weeks of steps haven't all pointed to the same activity tier, so nothing changed.`
+      : `Checked: your last ${weeks} weeks of steps (about ${Math.round(wk.reduce((a, w) => a + w.avg, 0) / weeks).toLocaleString()} a day) still match your Activity Level.`);
+    try { mhRenderStepsBaselineCard(); } catch (_) {}
+    return;
+  }
   localStorage.removeItem('mh_activity_autoswitch_status');
-
   const tierOrder = ['sedentary', 'light', 'moderate', 'active'];
   const improving = tierOrder.indexOf(suggested) > tierOrder.indexOf(currentLevel);
-  const labelMap = { sedentary: 'Sedentary', light: 'Lightly active', moderate: 'Moderately active', active: 'Very active' };
-
   localStorage.setItem('mh_activity_level', suggested);
   appendActivityLevelHistory(suggested);
   if (typeof renderSuggestedTargets === 'function') renderSuggestedTargets();
-
-  // Toggleable in Settings > Notifications, matching mh_notif_autoswitch's
-  // own pattern - a real, meaningful change to walking-effort calibration
-  // and calorie targets, so most people would want to know it happened
-  // even without asking for it, but should be able to turn the toast off.
+  try { mhRenderStepsBaselineCard(); } catch (_) {}
+  const bl = mhStepsBaselineIsAuto() ? ` Steps baseline is now ${mhAutoStepsBaseline().toLocaleString()}.` : '';
   if (localStorage.getItem('mh_notif_activity_autoswitch') !== 'off') {
     if (improving) {
-      addBubble(`🎉 <strong>Activity level up to ${labelMap[suggested]}.</strong> Your real steps have consistently supported this for ${autoSwitchDays} days straight — walking effort (Easy/Moderate/Hard) and calorie targets now reflect it.`, 'system');
-      showToast(`🎉 Activity level up to ${labelMap[suggested]}!`);
+      addBubble(`🎉 <strong>Activity level up to ${MH_ACT_LABEL[suggested]}.</strong> Your steps have pointed that way for ${weeks} weeks running, so walking effort (Easy/Moderate/Hard) and targets now follow it.${bl}`);
+      showToast(`🎉 Activity level up to ${MH_ACT_LABEL[suggested]}!${bl}`);
     } else {
-      // No celebration for a decline, as agreed - just a plain, factual
-      // notification. Still informed, just not framed as an achievement.
-      showToast(`Activity level adjusted to ${labelMap[suggested]} — your recent steps have been lower for ${autoSwitchDays} days straight. Walking effort and targets updated to match.`);
+      showToast(`Activity level adjusted to ${MH_ACT_LABEL[suggested]}: your steps have been lower for ${weeks} weeks running. Walking effort and targets updated to match.${bl}`);
     }
   }
 }
@@ -34818,7 +34847,7 @@ function renderTrends() {
     // hardcoded 10000 regardless - someone with a genuinely different
     // personal baseline would see their gauge agree with their real
     // target while every other element on the same card disagreed with it.
-    const stepsBaseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+    const stepsBaseline = getStepsBaseline();
     const stepsGoal = stepsBaseline + 2500; // same +2500 spread getDrillConfig already uses
     document.getElementById('mcStepsVal').textContent = avgSteps.toLocaleString();
     document.getElementById('statStepsAvg').textContent = avgSteps.toLocaleString();
@@ -35444,7 +35473,7 @@ function getDrillConfig(metric) {
     return Object.assign({}, cfg, { title: 'Carb Target Adherence' });
   }
   if (metric !== 'steps') return cfg;
-  const baseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+  const baseline = getStepsBaseline();
   return Object.assign({}, cfg, { ref: [baseline, baseline + 2500] }); // same +2500 spread as the original hardcoded 7500-10000
 }
 const DRILL_CONFIG = {
@@ -37455,7 +37484,7 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
     // fallback default. 10,000 and 5,000 below are left as-is - those are
     // recognisable universal public-health benchmarks, not meant to be
     // personal, so this fix doesn't touch them.
-    const stepsBaseline = parseInt(localStorage.getItem('mh_steps_baseline')) || 7500;
+    const stepsBaseline = getStepsBaseline();
     const daysOver10k = vals.filter(v => v >= 10000).length;
     const daysOverBaseline = vals.filter(v => v >= stepsBaseline).length;
     el.innerHTML += `
@@ -40445,12 +40474,16 @@ function mhEnsurePillsToolbars() {
     let tb = root.querySelector(':scope > .mh-pills-toolbar, :scope .mh-pills-toolbar');
     const nHidden = [...root.querySelectorAll('[id$="RestoreStrip"] button, [id^="genericRestoreStrip-"] button')].length;
     const open = mhPillsOpen();
-    const html = `<button class="main" onclick="mhTogglePills()">☰ Filters &amp; hidden${nHidden ? ` (${nHidden})` : ''} ${open ? '▾' : '▸'}</button>`
+    let cur = ''; try { const sc = mhScopeOf(root);
+      if (sc.generic) { const k = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[k]; if (k !== 'all' && g) cur = g.label; }
+      else if (sc.name === 'trends') { const k = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[k]; if (k !== 'all' && g) cur = g.label; } } catch (_) {}
+    const html = `<button class="main" onclick="mhTogglePills()">☰ Filter${cur ? ': ' + cur : ''}${nHidden ? ` · ${nHidden} hidden` : ''} ${open ? '▾' : '▸'}</button>`
       + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button>`;
     if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
     if (tb.dataset.sig !== html) { tb.innerHTML = html; tb.dataset.sig = html; }
   });
 }
+function mhClosePills() { try { localStorage.setItem('mh_pills_open', '0'); } catch (_) {} mhEnsurePillsToolbars(); }   // a filter is set once, so choosing one tucks the panel away
 function mhTogglePills() { try { localStorage.setItem('mh_pills_open', mhPillsOpen() ? '0' : '1'); } catch (_) {} mhEnsurePillsToolbars(); }
 // Which part of the screen the toolbar acts on: everything when "All" is selected, otherwise only the chosen group.
 function mhScopeOf(root) {
@@ -40471,16 +40504,8 @@ function mhScopeKeys(sc) {   // null = everything on the screen
 function mhSectionsAll(btn, open) {
   const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), sc = mhScopeOf(root), keys = mhScopeKeys(sc), inScope = k => !keys || keys.includes(k);
   const seen = new Set(); let n = 0, restored = 0;
-  // 1. Open all also brings back cards that were hidden with the eye button; Close all only collapses, it never hides anything.
-  if (open) {
-    const un = (hidden, save, apply) => { const keep = hidden.filter(k => !inScope(k)); restored = hidden.length - keep.length; if (restored) { save(keep); apply(); } };
-    try {
-      if (sc.generic) un(getGenericHidden(sc.generic), h => saveGenericHidden(sc.generic, h), () => applyGenericOrder(sc.generic));
-      else if (sc.name === 'trends') un(getTrendCardsHidden(), saveTrendCardsHidden, () => renderTrends());
-      else if (sc.name === 'today') un(getDashboardHidden(), saveDashboardHidden, applyDashboardOrder);
-      else if (sc.name === 'mm') un(getMMSectionHidden(), saveMMSectionHidden, applyMMSectionOrderAndVisibility);
-    } catch (_) {}
-  }
+  // 1. Open all / Close all only expand or collapse. What is hidden or filtered out is set once in the Filter panel and is never touched here.
+
   // 2. Expand or collapse every collapsible card in scope (each announces itself with toggleSection('key','wrapId','iconId'))
   root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => {
     const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1])) return; seen.add(m[2]);
@@ -45770,7 +45795,7 @@ function mhTrendsGroupApply() {
     first.parentNode.insertBefore(bar, first);
   }
   const chips = [['all', 'All']].concat(Object.keys(defs).map(k => [k, defs[k].label]));
-  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTrendsGroupSet('${k}')">${l}</span>`).join('');
+  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTrendsGroupSet('${k}'); mhClosePills()">${l}</span>`).join('');
   Object.keys(defs).forEach(k => defs[k].ids.forEach(id => {
     const el = document.getElementById(id); if (!el) return;
     el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k);
@@ -45824,7 +45849,7 @@ function mhTopicApply(scope) {
   if (!bar) { bar = document.createElement('div'); bar.id = barId; bar.className = 'mh-topic-bar'; parent.insertBefore(bar, parent.firstChild); }
   const chips = [['all', 'All']].concat(Object.keys(defs).map(k => [k, defs[k].label]));
   const note = cur !== 'all' && defs[cur].note ? `<div style="flex-basis:100%;font-size:11px;color:var(--text3);line-height:1.45;">${defs[cur].note}</div>` : '';
-  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}')">${l}</span>`).join('') + note;
+  bar.innerHTML = chips.map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhTopicSet('${scope}','${k}'); mhClosePills()">${l}</span>`).join('') + note;
   allUnits.forEach(([k, el]) => el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k));
   if (scope === 'manage') mhPlaceTroubleshooting(cur);
 }

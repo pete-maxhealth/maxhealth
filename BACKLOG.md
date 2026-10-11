@@ -9,10 +9,10 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.949 Restore from backup is its own card (server daily backups, or a backup file).
 - [x] v3.10.949 Advanced / Manual Pipeline is a hideable section inside Sync Wearable Data.
 - [x] v3.10.949 Data Preview & Validator = coverage across history; now inside Missing Data & Coverage.
-- [ ] Filters & hidden pill: filter out only, tucked away once set, never affected by Open all / Close all; show/hide to reduce clutter per section.
+- [x] v3.10.951 Filter pill: just "Filter", closes itself after a choice, Open all / Close all never touch hidden cards.
 
 ## Other
-- [ ] Incidental Steps Baseline automation: pick up enough weekly activity to adjust itself.
+- [x] v3.10.950 Incidental Steps Baseline automatic; Activity Level reads real weekly steps.
 - [ ] Strength Log CSV import still replaces (now asks first).
 
 ## Deferred until home
