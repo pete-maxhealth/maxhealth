@@ -842,7 +842,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 if not fields:
                     self.send_json({'error': 'Nothing saved: ' + '; '.join(problems or ['no usable values'])}, 400)
                     return
-                cleaned = save_manual_entry(date_str, fields)
+                cleaned = save_manual_entry(date_str, fields, provisional=bool(body.get('provisional')))
                 triggered = run_manual_pipeline()
                 self.send_json({'status': 'ok', 'date': date_str, 'saved': cleaned, 'rejected': problems, 'pipeline_triggered': triggered})
             except Exception as e:
@@ -1900,7 +1900,7 @@ def prepare_manual_entry(date_str, fields):
     return clean, problems
 
 
-def save_manual_entry(date_str, fields):
+def save_manual_entry(date_str, fields, provisional=False):
     """
     Writes/replaces MANUAL_ENTRY_JSON's entry for date_str with `fields`
     (only keys in FIELD_NAMES with a non-None value are kept — an omitted or
@@ -1922,6 +1922,8 @@ def save_manual_entry(date_str, fields):
             continue  # dropped — replaced by the new entry below
         kept.append(entry)
     new_entry = {'date': date_str, **cleaned}
+    if provisional and 'steps' in cleaned:
+        new_entry['provisional'] = ['steps']   # v3.10.966: same-day catch-up (floor), not a correction - see merge_with_precedence
     kept.append(new_entry)
     with open(MANUAL_ENTRY_JSON, 'w', encoding='utf-8') as f:
         json.dump(kept, f, indent=2)

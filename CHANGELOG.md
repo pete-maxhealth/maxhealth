@@ -2,9 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
-## v3.10.966 — Typing Your Steps On Today Now Beats The Devices
+## v3.10.966 — Typed Steps Are A Same-Day Catch-Up, Not An Override
 
-The Today **Daily Steps** box says "your real total - overrides any estimate" but only fed the calorie estimate (a local value, not tied to a date); Trends kept showing the watch's figure (Zepp 4277) because nothing typed there ever reached the pipeline. Typing or changing the total now also saves it as **today's manual steps** (through `/save-manual-entry`, the same route as the Manual Entry screen), so it becomes the top-priority source for that day's steps, shows "typed in" as the row's source, and the page re-reads the data a few seconds later. Local server only; silent otherwise. Note: a manual figure outranks later device syncs for that day. Test: p87.
+The Today **Daily Steps** box says "your real total" but only fed the calorie estimate; nothing typed there reached the pipeline, so Trends kept showing the watch's stale figure (Zepp 4277 all afternoon while Health Connect, RingConn and Zepp had not synced). Typing or changing the total now also saves it as today's manual steps, marked **provisional**, with these rules (`merge_with_precedence`):
+- **Today:** it is a floor. It shows while it is greater than what Zepp, RingConn, Withings or Garmin report; a device figure equal to or above it takes over (source flips from "typed in" to the device).
+- **Health Connect can never beat it** (it double-counts phone + watch).
+- **After midnight** the devices win outright; the typed figure only fills a day no device reported.
+- **Manual Entry screen** values (and CSV template uploads) are not provisional and stay absolute.
+The page re-reads a few seconds after saving. Local server only. Test: p87 (end to end plus the merge rules).
 
 ## v3.10.965 — Tableware Chip Shares The Saved-Prompts Row
 

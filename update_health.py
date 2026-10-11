@@ -505,7 +505,22 @@ def validate_row(row, device):
 
 # ── Source precedence merge ───────────────────────────────────────────────────
 
-def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_sources=None):
+def load_provisional_manual():
+    """{date: {field, ...}} for manual entries saved as a same-day catch-up ("provisional": [fields]) - see
+    merge_with_precedence(). Missing or unreadable file means none."""
+    out = {}
+    try:
+        with open(os.path.join(INBOX, 'manual_entry.json'), 'r', encoding='utf-8') as f:
+            for e in json.load(f):
+                pf = e.get('provisional') if isinstance(e, dict) else None
+                if pf and e.get('date'):
+                    out[e['date']] = set(pf) if isinstance(pf, list) else set()
+    except Exception:
+        pass
+    return out
+
+
+def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_sources=None, provisional=None, today_iso=None):
     """
     Merge new data into existing rows using source precedence rules.
 
@@ -524,8 +539,15 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
     - If existing row has a value: only overwrite if a higher-priority source provides it
     - Never leave a field empty if any source has data for it
 
+    provisional: {date: {field, ...}} - manual values typed as a same-day catch-up (the Today "Daily Steps" box), not as a
+        deliberate correction. v3.10.966: for these, on today_iso the manual value is only a FLOOR - it shows while it is
+        greater than what the devices report, and a device figure equal to or above it takes over; Health Connect (which
+        double-counts phone + watch) can never beat it. On any earlier date the devices win outright and the manual
+        value only fills a field no device reported. Manual Entry screen values are not provisional and stay absolute.
+
     Returns (merged rows dict, field_sources dict).
     """
+    provisional = provisional or {}
     merged = dict(existing_rows)
     field_sources = field_sources if field_sources is not None else {}
 
@@ -550,9 +572,19 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
 
             for field in fields:
                 existing_val = row.get(field)
+                _prov = field in provisional.get(date, ()) and 'manual' in prio_sources
+                _prov_manual = None
+                if _prov:
+                    _prov_manual = (new_rows_by_source.get('manual', {}).get(date) or {}).get(field)
+                    if date_field_sources.get(field) == 'manual':
+                        date_field_sources.pop(field, None)   # an earlier provisional value: any device may replace it now
 
                 # Try sources in priority order
                 for source in prio_sources:
+                    if _prov and source == 'manual':
+                        continue                                  # handled as a floor below, never as the top source
+                    if _prov and _prov_manual and source == 'health_connect' and date == today_iso:
+                        continue                                  # HC double-counts: it must not beat a same-day catch-up
                     source_rows = new_rows_by_source.get(source, {})
                     if date not in source_rows:
                         continue
@@ -590,6 +622,18 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
                             sources_used.add(source)
                             date_field_sources[field] = source
                         break  # Don't check lower-priority sources for this field
+
+                # Provisional manual value: floor on today, gap-filler on earlier days.
+                if _prov and _prov_manual:
+                    try:
+                        cur = float(row.get(field) or 0); man = float(_prov_manual)
+                    except (TypeError, ValueError):
+                        cur, man = 0.0, 0.0
+                    if man > 0 and ((date == today_iso and man > cur) or not row.get(field)
+                                    or (field not in date_field_sources and cur == man)):
+                        row[field] = _prov_manual
+                        sources_used.add('manual')
+                        date_field_sources[field] = 'manual'
 
         row['source'] = '+'.join(sorted(sources_used)) if sources_used else row.get('source', '')
         merged[date] = row
@@ -849,7 +893,8 @@ def main():
         return
 
     # Merge with precedence
-    merged, field_sources = merge_with_precedence(existing, new_rows_by_source, precedence, field_sources)
+    merged, field_sources = merge_with_precedence(existing, new_rows_by_source, precedence, field_sources,
+                                                  provisional=load_provisional_manual(), today_iso=datetime.now().strftime('%Y-%m-%d'))
 
     new_dates = len(merged) - len(existing)
     log('pipeline', 'merge', 'ok',

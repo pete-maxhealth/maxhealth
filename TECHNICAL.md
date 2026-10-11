@@ -317,7 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
-| v3.10.966 | 23 | Full detail in CHANGELOG.md (Phase 23). `saveDailySteps` also POSTs `/save-manual-entry` {date, steps} (`mhSaveTodayStepsAsManual`). |
+| v3.10.966 | 23 | Full detail in CHANGELOG.md (Phase 23). `saveDailySteps` also POSTs `/save-manual-entry` {date, steps, provisional:true}; manual_entry.json entry gets `provisional:['steps']`; `merge_with_precedence(..., provisional, today_iso)` treats it as a same-day floor (devices at/above take over, HC never beats it, past days device wins). |
 | v3.10.965 | 23 | Full detail in CHANGELOG.md (Phase 23). `#mhTwChip` moved into `#mhQueryRow` beside `#quickBtnsQuery`; short pill text. |
 | v3.10.964 | 23 | Full detail in CHANGELOG.md (Phase 23). `REPO_PREFERRED_EXTRACTORS` now includes ringconn and withings. |
 | v3.10.963 | 23 | Full detail in CHANGELOG.md (Phase 23). `extractors/ringconn.py` groups sessions into nights (gap < 2 h joins), files by wake date; per-row `mhRowSourceTag` replaces card footer. |
@@ -1095,7 +1095,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
 - `p84_today_sleep.py` — today's own sleep wins over yesterday's row
 - `p85_field_sources.py` — day cards show per-field data source
-- `p87_daily_steps_manual.py` — typed Daily Steps total becomes today's manual steps
+- `p87_daily_steps_manual.py` — typed Daily Steps total is a provisional same-day floor (merge rules)
 - `p86_ringconn_nap_only.py` — RingConn sessions joined into nights, filed by wake date; nap-only day has no night
 - `p83_auto_refresh.py` — open app re-reads combined.csv on return to front
 - `p82_period_compare_merged.py` — single period comparison with weight/sleep/HRV/SpO2 rows
