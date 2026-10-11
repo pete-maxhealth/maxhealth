@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.955 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhScrollTopOf` called from `mhTopicSet` and Close all. |
 | v3.10.954 | 23 | Full detail in CHANGELOG.md (Phase 23). `updateGlobalScrollNav` thresholds 90 px (top) / 200 px (bottom). |
 | v3.10.953 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhSectionsAll` skips `getGenericHidden(scope)` keys; `showAllGenericHidden(scope)` + Show all button in `renderGenericRestoreStrip`. |
 | v3.10.952 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhWeeklySummaryMsg()`, `mhRenderCurrentTargets()`, `#targetsManualWrap`, `mhFastIsMedItem()` (`mh_fasting_med_item`, `mh_fasting_med_kcal`), `MH_BUILTIN_FILE_RULES`, `snapshotDevicePatterns/restoreDevicePatterns` (`mh_device_patterns_history`), `previewDevicePattern`, server `preview_download_files` + `GET /devices/preview`. |

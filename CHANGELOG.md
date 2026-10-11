@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.955 — Back To The Top After Filter Change Or Close All
+
+Choosing a Filter group or pressing Close all shortens the screen, which could leave you scrolled past the tabs and Filter bar with nothing to tap to get back. Both now return you to the top of the screen automatically (the ↑ button also appears sooner since v3.10.954).
+
 ## v3.10.954 — Back-To-Top Button Appears Sooner
 
 The ↑ button on Settings, Insights and other long screens only appeared after scrolling 300 px, so on a filtered, short screen you could be scrolled away from the tabs with only ↓ showing and no way back. It now appears after 90 px, and ↓ appears while more than 200 px remains.
