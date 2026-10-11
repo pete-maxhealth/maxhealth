@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.964 — The Phone Now Uses The Repo's RingConn And Withings Readers
+
+The pipeline preferred an older RingConn and Withings reader kept in the phone's own `app/extractors/` folder (outside git), so the RingConn night-grouping fix and the Withings no-longer-claims-RingConn fix of v3.10.962-963 never ran there: a RingConn nap still replaced Zepp's night and Withings still read RingConn's zip. Both now come from the repo like Health Connect and manual do. A reader of your own in `data/extractors/` still wins over both.
+
 ## v3.10.963 — RingConn Nights Joined And Filed By Wake Date; Source On Every Row
 
 - **RingConn sleep.** One night recorded as several sessions (for example 22:18-04:25, then 05:30-08:18) was filed by each session's own start date, so a night was split across two days and its second half, alone on the wake day, replaced Zepp's real sleep (2h07 instead of 8h25). Sessions are now sorted and any starting less than 2 hours after the previous one ended are joined (durations and stages added); a night is filed under the day you **woke**, like every other source; a short daytime session (08:00-18:59, under 3 h) is a nap in `sleep_nap_min`. Your real 10-11 Oct file now gives 7h42 on 11 Oct. Re-importing an export corrects the days it covers; older RingConn nights outside it keep their old (bedtime) date. This supersedes the v3.10.962 nap rule. Tests p58 (two separate nights now each keep their own date), p86 (real pattern).

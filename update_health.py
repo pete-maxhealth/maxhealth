@@ -599,7 +599,10 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
 
 # ── Device extractors ─────────────────────────────────────────────────────────
 
-REPO_PREFERRED_EXTRACTORS = {'health_connect', 'manual'}
+# v3.10.964: ringconn and withings joined the list. A phone's own app/extractors/ringconn.py (outside git) kept
+# winning, so repo fixes to how RingConn nights are grouped never ran there (a nap replaced Zepp's night) and the
+# old withings.py went on claiming RingConn's zip. A person's own data/extractors/<device>.py still beats both.
+REPO_PREFERRED_EXTRACTORS = {'health_connect', 'manual', 'ringconn', 'withings'}
 BUILTIN_DEVICES = ['withings', 'ringconn', 'garmin', 'amazfit', 'health_connect', 'manual']
 
 

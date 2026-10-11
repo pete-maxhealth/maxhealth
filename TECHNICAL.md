@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.964 | 23 | Full detail in CHANGELOG.md (Phase 23). `REPO_PREFERRED_EXTRACTORS` now includes ringconn and withings. |
 | v3.10.963 | 23 | Full detail in CHANGELOG.md (Phase 23). `extractors/ringconn.py` groups sessions into nights (gap < 2 h joins), files by wake date; per-row `mhRowSourceTag` replaces card footer. |
 | v3.10.962 | 23 | Full detail in CHANGELOG.md (Phase 23). `extractors/ringconn.py` daytime short session = nap; `extractors/withings.py` skips `Data Export-` zips. |
 | v3.10.961 | 23 | Full detail in CHANGELOG.md (Phase 23). `GET /field-sources`; `mhFieldSourceNote` footer on day cards; off-phone backup docs. |
