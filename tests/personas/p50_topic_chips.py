@@ -10,7 +10,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     for scope, tab, sub, topic, shown, hidden in [
-        ('reports', 'insights', 'reports', 'ask', ['rpt-askai', 'rpt-export'], ['rpt-summary', 'rpt-treatment', 'seasonal']),
+        ('reports', 'insights', 'reports', 'ask', ['rpt-askai', 'rpt-export'], ['rpt-summary', 'rpt-treatment', 'rpt-sleepketo']),
         ('import', 'settings', 'import', 'backup', ['set-databackup', 'imp-restore'], ['imp-sync', 'imp-manual', 'imp-combined']),
         ('manage', 'settings', 'manage', 'tracking', ['set-supplements', 'set-labresults'], ['set-profile', 'set-aiprovider', 'set-about']),
     ]:

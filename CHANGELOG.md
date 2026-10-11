@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.957 — One Period Comparison, Big-Text Overflow
+
+- **Two period comparisons are now one.** Seasonal Compare (Reports) is gone. **Compare Two Periods** (Insights → Trends) now also shows average weight, sleep, HRV and SpO2 alongside logged days, kcal, protein, carbs, steps and the weight-trend verdict. Old saved order or hidden entries for Seasonal Compare are simply ignored.
+- **Large text**: with Android's large text setting, date boxes in side-by-side columns pushed past the card edge. Grid columns can now shrink and date, time and number boxes never exceed their container.
+- Tests p82 (merged comparison); p50 updated.
+
 ## v3.10.956 — Top-Left Back Button
 
 Every other back button in the app sits top-left, but the main screens had none, so once you had scrolled past the tabs there was no obvious way back. The app now remembers the screen you came from, and a round ← appears top-left once you scroll down; it takes you back one screen (press again to return). It is hidden on screens that already have their own ← (such as the metric detail pages) and sits below the offline banner when that shows. Test: p81.

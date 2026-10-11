@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.957 | 23 | Full detail in CHANGELOG.md (Phase 23). Seasonal Compare / `runSeasonalCompare` removed; `mhPcmpStats` adds `wAvg, sleepH, hrvAvg, spo2Avg`; global CSS `div[style*="grid-template-columns"] > * {min-width:0}`. |
 | v3.10.956 | 23 | Full detail in CHANGELOG.md (Phase 23). `#globalBackBtn`, `_navPrev`, `_navSnap`, `mhNavBack`; `switchTab`/`switchSubTab` wrapped (outermost call only) to record the previous screen. |
 | v3.10.955 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhScrollTopOf` called from `mhTopicSet` and Close all. |
 | v3.10.954 | 23 | Full detail in CHANGELOG.md (Phase 23). `updateGlobalScrollNav` thresholds 90 px (top) / 200 px (bottom). |
@@ -1083,6 +1084,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p76_data_tab.py` — Data tab: one export card, select/unselect all, zip and separate export, zip round trip, restore card and file restore, nested pipeline, coverage
 - `p77_steps_baseline_auto.py` — steps baseline follows activity level; activity level follows consistent weekly steps; manual baseline preserved
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
+- `p82_period_compare_merged.py` — single period comparison with weight/sleep/HRV/SpO2 rows
 - `p81_back_button.py` — back button remembers previous screen, appears when scrolled, returns
 - `p80_open_close_scope.py` — Open/Close all scoped to the Filter group, never reveal hidden cards, Show all recovers
 - `p79_batch_oct11.py` — weekly summary message, targets tucked away, med companion vs fast, supplement spacer, device pattern preview/restore
