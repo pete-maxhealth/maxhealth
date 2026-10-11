@@ -6197,7 +6197,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.947'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.948'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19531,21 +19531,41 @@ function bulkImportMultipleFiles(input) {
   if (!files.length) return;
   const results = [];
   let remaining = files.length;
-
+  const csvPack = { mhpack: 1, app: 'CSV files', fromCsv: true, sets: {} };
+  const done = () => {
+    remaining--;
+    if (remaining > 0) return;
+    if (Object.keys(csvPack.sets).length) mhPackPreview(csvPack);
+    finishBulkImport(results);
+  };
   files.forEach(file => {
-    if (/\.json$/i.test(file.name)) { mhPackImportFile(file); results.push(`📦 ${file.name} — opened as a setup pack`); remaining--; if (remaining === 0) finishBulkImport(results); return; }
+    if (/\.json$/i.test(file.name)) { mhPackImportFile(file); results.push(`📦 ${file.name} — opened as a setup pack`); done(); return; }
     const key = matchFilenameToDatasetKey(file.name);
-    if (!key) {
-      results.push(`✗ ${file.name} — couldn't match to a known dataset`);
-      remaining--;
-      if (remaining === 0) finishBulkImport(results);
+    if (!key) { results.push(`✗ ${file.name} — couldn't match to a known dataset`); done(); return; }
+    if (PACK_SETS[key]) {
+      // Same safe route as a pack: preview first, add-what's-missing by default, Replace behind a confirmation.
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const cfg = DATA_CONFIGS[key];
+          const lines = String(e.target.result).trim().split('\n');
+          const headers = lines[0].split('|');
+          const dl = lines.slice(1).filter(l => l.trim());
+          const items = cfg.multiRow ? cfg.fromLines(dl) : dl.map(l => cfg.fromLine(l.split('|'), headers)).filter(cfg.filterValid);
+          if (!items.length) results.push(`✗ ${file.name} — No data found in file`);
+          else { csvPack.sets[key] = { label: cfg.label, count: items.length, data: items }; results.push(`👀 ${cfg.label}: ${items.length} item${items.length === 1 ? '' : 's'} read from ${file.name}, check the preview`); }
+        } catch (err) { results.push(`✗ ${file.name} — couldn't read it`); }
+        done();
+      };
+      reader.readAsText(file);
       return;
     }
+    // Strength Log is personal history, not setup: it keeps its replace behaviour, now with a confirmation.
+    if (!confirm(`Replace your ${DATA_CONFIGS[key].label} with the contents of ${file.name}?`)) { results.push(`– ${file.name} skipped`); done(); return; }
     importSingleCSVFile(key, file, (count, error) => {
       if (error) results.push(`✗ ${file.name} — ${error}`);
       else results.push(`✓ ${DATA_CONFIGS[key].label}: ${count} item${count===1?'':'s'} (from ${file.name})`);
-      remaining--;
-      if (remaining === 0) finishBulkImport(results);
+      done();
     });
   });
 }
@@ -19623,8 +19643,24 @@ const PACK_SETS = {
   treatments:  { label: 'Treatment list',  hint: 'treatment types, no sessions',  get: () => loadTreatmentDefs(), list: true },
   reports:     { label: 'Report profiles', hint: 'layout and schedule, never sent dates', get: () => loadReportProfiles().map(r => ({ ...r, lastSent: null })), list: true },
   tableware:   { label: 'Tableware',       hint: 'plate, bowl and spoon sizes',   get: () => _pkTw(), list: false },
+  devices:     { label: 'Wearable devices', hint: 'device names and file patterns, no data', get: () => _pkDev(), list: false },
 };
-const PACK_ORDER = ['library', 'supplements', 'recipes', 'routines', 'symptoms', 'treatments', 'reports', 'tableware'];
+const PACK_ORDER = ['library', 'supplements', 'recipes', 'routines', 'symptoms', 'treatments', 'reports', 'tableware', 'devices'];
+function _pkDev() {
+  const g = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
+  const o = { custom: g('mh_custom_devices', []), retired: g('mh_retired_devices', []), patterns: g('mh_device_patterns', []), precedence: g('mh_device_precedence', {}) };
+  return (o.custom.length || o.retired.length || o.patterns.length || Object.keys(o.precedence).length) ? o : null;
+}
+// A pack can come from anyone, and some lists show names without escaping them, so every text value is
+// stripped of angle brackets and capped before it is stored. Names never need them.
+function _pkClean(v, depth) {
+  depth = depth || 0;
+  if (typeof v === 'string') return v.replace(/[<>]/g, '').slice(0, 2000);
+  if (Array.isArray(v)) return depth > 6 ? [] : v.slice(0, 5000).map(x => _pkClean(x, depth + 1));
+  if (v && typeof v === 'object') { const o = {}; Object.keys(v).slice(0, 200).forEach(k => { if (k !== '__proto__' && k !== 'constructor') o[k.replace(/[<>]/g, '')] = _pkClean(v[k], depth + 1); }); return o; }
+  return v;
+}
+const _pkEsc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 function mhPackBuild(keys) {
   const sets = {};
   keys.filter(k => PACK_SETS[k]).forEach(k => {
@@ -19636,11 +19672,13 @@ function mhPackBuild(keys) {
 }
 function mhPackLoadCurrent(k) {   // the person's OWN data, untouched (never the unlocked export copy)
   if (k === 'tableware') return _pkTw();
+  if (k === 'devices') return _pkDev();
   return ({ library: loadLibrary, supplements: loadSupplementDefs, recipes: loadRecipes, routines: loadRoutines,
             symptoms: loadSymptomDefs, treatments: loadTreatmentDefs, reports: loadReportProfiles })[k]();
 }
 // Returns {add:[items], dup:n} for a list set, or {add:n,dup:n} summary for tableware.
 function mhPackPlan(k, incoming) {
+  incoming = _pkClean(incoming);
   if (k === 'tableware') {
     const mine = _pkTw() || { sets: [], custom: [] };
     const haveSet = new Set((mine.sets || []).map(x => String(x.name).toLowerCase()));
@@ -19648,6 +19686,12 @@ function mhPackPlan(k, incoming) {
     const ns = (incoming.sets || []).filter(x => x.id !== 'home' && !haveSet.has(String(x.name).toLowerCase())).length;
     const ni = (incoming.custom || []).filter(x => !haveItem.has(x.id)).length;
     return { add: ns + ni, dup: 0, text: `${ns} new set${ns === 1 ? '' : 's'}, ${ni} new item${ni === 1 ? '' : 's'}; your Home sizes are only filled where empty` };
+  }
+  if (k === 'devices') {
+    const mine = _pkDev() || { custom: [], retired: [], patterns: [] };
+    const nc = (incoming.custom || []).filter(x => !(mine.custom || []).includes(x)).length;
+    const np = (incoming.patterns || []).filter(x => !(mine.patterns || []).some(y => y.contains === x.contains && y.device === x.device)).length;
+    return { add: nc + np, dup: 0, text: `${nc} new device${nc === 1 ? '' : 's'}, ${np} new file pattern${np === 1 ? '' : 's'}` };
   }
   const have = new Set(mhPackLoadCurrent(k).map(x => k === 'library' ? normalizeFoodName(x.name || '').toLowerCase() : _pkKey(x)));
   let add = 0, dup = 0;
@@ -19658,7 +19702,20 @@ function mhPackApply(pack, picked, mode, idMaps) {
   const out = [];
   const maps = idMaps || { symptoms: {}, treatments: {} };
   PACK_ORDER.filter(k => picked.includes(k) && pack.sets[k]).forEach(k => {
-    const inc = pack.sets[k].data;
+    const inc = _pkClean(pack.sets[k].data);
+    if (k === 'devices') {
+      const g = (key, d) => { try { return JSON.parse(localStorage.getItem(key) || 'null') || d; } catch (e) { return d; } };
+      const set = (key, v) => localStorage.setItem(key, JSON.stringify(v));
+      if (mode === 'replace') { set('mh_custom_devices', inc.custom || []); set('mh_retired_devices', inc.retired || []); set('mh_device_patterns', inc.patterns || []); if (inc.precedence) set('mh_device_precedence', inc.precedence); }
+      else {
+        const c = g('mh_custom_devices', []); (inc.custom || []).forEach(x => { if (!c.includes(x)) c.push(x); }); set('mh_custom_devices', c);
+        const pt = g('mh_device_patterns', []); (inc.patterns || []).forEach(x => { if (!pt.some(y => y.contains === x.contains && y.device === x.device)) pt.push(x); }); set('mh_device_patterns', pt);
+        if (!localStorage.getItem('mh_device_precedence') && inc.precedence) set('mh_device_precedence', inc.precedence);
+      }
+      try { if (typeof pushDevicesToServer === 'function') pushDevicesToServer(); } catch (e) {}
+      out.push(`✓ Wearable devices ${mode === 'replace' ? 'replaced' : 'merged'}`);
+      return;
+    }
     if (k === 'tableware') {
       const mine = _pkTw() || { activeId: 'home', revertOn: null, sets: [{ id: 'home', name: 'Home', vals: {} }], custom: [] };
       let res;
@@ -19680,7 +19737,7 @@ function mhPackApply(pack, picked, mode, idMaps) {
       return;
     }
     let list = inc.map(x => ({ ...x }));
-    if (k === 'library') list = list.map(f => ({ ...f, locked: false, source: 'from pack' }));
+    if (k === 'library' && !pack.keepLocks) list = list.map(f => ({ ...f, locked: false, source: 'from pack' }));
     if (k === 'reports') list = list.map(r => ({ ...r, lastSent: null,
       treatmentId: r.treatmentId ? (maps.treatments[r.treatmentId] || r.treatmentId) : r.treatmentId,
       symptomIds: (r.symptomIds || []).map(i => maps.symptoms[i] || i) }));
@@ -19699,8 +19756,31 @@ function mhPackApply(pack, picked, mode, idMaps) {
        symptoms: saveSymptomDefs, treatments: saveTreatmentDefs, reports: saveReportProfiles })[k](cur);
     out.push(`✓ ${PACK_SETS[k].label}: ${added} added` + (mode === 'replace' ? ' (replaced)' : `, ${skipped} already there`));
   });
-  ['renderLibrary', 'renderSupplementSettings', 'renderSymptomSettings', 'renderTreatmentSettings', 'renderReportProfileList', 'mhTwRender', 'mhTwRefreshChips'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} });
+  ['renderLibrary', 'renderDeviceSettings', 'renderSupplementSettings', 'renderSymptomSettings', 'renderTreatmentSettings', 'renderReportProfileList', 'mhTwRender', 'mhTwRefreshChips'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} });
   return out;
+}
+async function mhStarterPacks() {
+  document.getElementById('mhPackModal')?.remove();
+  const m = document.createElement('div'); m.id = 'mhPackModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  m.innerHTML = '<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:4px;">Starter packs</div><div id="mhStarterBody" style="font-size:13px;color:var(--text3);">Looking…</div><button class="copy-btn" id="mhStarterClose" style="width:100%;margin-top:12px;">Close</button></div>';
+  document.body.appendChild(m);
+  document.getElementById('mhStarterClose').onclick = () => m.remove();
+  const body = document.getElementById('mhStarterBody');
+  const base = 'https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/starter_packs/';
+  try {
+    const r = await fetch(base + 'index.json', { cache: 'no-store' }); if (!r.ok) throw 0;
+    const idx = await r.json(); if (!Array.isArray(idx.packs)) throw 0;
+    body.innerHTML = idx.packs.slice(0, 20).map((p, i) => `<div style="padding:10px 0;border-bottom:1px solid var(--border);"><div style="color:var(--text);font-weight:600;">${_pkEsc(p.title)}</div><div style="font-size:12px;margin:2px 0 6px;">${_pkEsc(p.description)}</div><button class="copy-btn" data-i="${i}" style="font-size:12px;">Preview</button></div>`).join('') || 'No starter packs yet.';
+    body.querySelectorAll('button[data-i]').forEach(btn => btn.onclick = async () => {
+      const p = idx.packs[+btn.dataset.i];
+      try {
+        const rr = await fetch(base + String(p.file).replace(/[^A-Za-z0-9_.-]/g, ''), { cache: 'no-store' }); const pack = await rr.json();
+        if (!pack || pack.mhpack !== 1 || !pack.sets) throw 0;
+        pack.title = p.title; mhPackPreview(pack);
+      } catch (e) { showToast("Couldn't open that pack"); }
+    });
+  } catch (e) { body.textContent = "Couldn't reach the starter packs (needs a connection). Try again later."; }
 }
 async function mhPackShare(forceDownload) {
   const sel = getBulkSelectedDatasets().filter(k => PACK_SETS[k]);
@@ -19740,7 +19820,7 @@ function mhPackPreview(pack) {
   m.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   m.innerHTML = `<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Setup pack</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">From ${pack.app || 'MaxedHealth'} ${pack.version || ''}, made ${String(pack.created || '').slice(0, 10)}. Contains setup only, no entries or personal details.</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">${pack.title ? '<b>' + _pkEsc(pack.title) + '</b>. ' : ''}From ${_pkEsc(pack.app || 'MaxedHealth')} ${_pkEsc(pack.version || '')}${pack.created ? ', made ' + _pkEsc(String(pack.created).slice(0, 10)) : ''}. ${pack.fromCsv ? 'Read from a CSV file.' : 'Setup only: no entries or personal details.'}</div>${pack.fromCsv && pack.sets.library ? '<label style="display:block;font-size:12px;margin-bottom:6px;"><input type="checkbox" id="mhPackKeepLocks"> These are my own foods: keep their locks</label>' : ''}
     ${rows}
     <div style="margin:12px 0 4px;font-size:13px;"><label><input type="radio" name="mhPackMode" value="merge" checked> <b>Add what's missing</b> (keeps everything you have)</label></div>
     <div style="margin-bottom:12px;font-size:13px;"><label><input type="radio" name="mhPackMode" value="replace"> <b>Replace</b> my version of the ticked items</label></div>
@@ -19753,6 +19833,7 @@ function mhPackPreview(pack) {
     const mode = m.querySelector('input[name=mhPackMode]:checked').value;
     if (!picked.length) { showToast('Tick at least one'); return; }
     if (mode === 'replace' && !confirm('Replace your own version of the ticked items with the ones in this pack?')) return;
+    const kl = document.getElementById('mhPackKeepLocks'); if (kl && kl.checked) pack.keepLocks = true;
     const res = mhPackApply(pack, picked, mode);
     const el = document.getElementById('mhPackResult'); el.textContent = res.join('\n'); el.style.display = 'block';
     document.getElementById('mhPackGo').style.display = 'none'; document.getElementById('mhPackCancel').textContent = 'Done';
@@ -19766,6 +19847,7 @@ function setBulkActionMode(mode) {
   const select = document.getElementById('bulkDatasetSelect');
   if (exportBtn) exportBtn.style.display = isImport ? 'none' : 'block';
   const packBtn = document.getElementById('bulkPackBtn'); if (packBtn) packBtn.style.display = isImport ? 'none' : 'block';
+  const stBtn = document.getElementById('bulkStarterBtn'); if (stBtn) stBtn.style.display = isImport ? 'block' : 'none';
   if (importBtn) importBtn.style.display = isImport ? 'block' : 'none';
   // The list stays visible either way for consistency, but only actually
   // drives behaviour in Export mode - Import always auto-matches by
@@ -19776,7 +19858,7 @@ function setBulkActionMode(mode) {
 }
 
 function buildBulkDataActionsCard() {
-  const labels = { library: 'Food Library', supplements: 'Supplements', recipes: 'Recipes', routines: 'Routines', symptoms: 'Symptom list (setup only)', treatments: 'Treatment list (setup only)', reports: 'Report profiles', tableware: 'Tableware sizes', strength: 'Strength Log', fullstate: 'Full App State (export only)' };
+  const labels = { library: 'Food Library', supplements: 'Supplements', recipes: 'Recipes', routines: 'Routines', symptoms: 'Symptom list (setup only)', treatments: 'Treatment list (setup only)', reports: 'Report profiles', tableware: 'Tableware sizes', devices: 'Wearable devices (setup only)', strength: 'Strength Log', fullstate: 'Full App State (export only)' };
   const options = Object.keys(labels).map(key => `<option value="${key}" selected>${labels[key]}</option>`).join('');
   // No longer wraps itself in its own import-card/toggleSection - the
   // caller (dataImportCardsContainer) now provides that as a stable outer
@@ -19798,6 +19880,7 @@ function buildBulkDataActionsCard() {
       </select>
       <button id="bulkExportBtn" class="copy-btn" onclick="bulkExportAndSaveSelected()" style="width:100%;font-size:12px;display:block;">💾 Export selected (Downloads + server)</button>
       <button id="bulkPackBtn" class="copy-btn" onclick="mhPackShare()" style="width:100%;font-size:12px;display:block;margin-top:8px;">📦 Share setup as one file (no personal data)</button>
+      <button id="bulkStarterBtn" class="copy-btn" onclick="mhStarterPacks()" style="width:100%;font-size:12px;display:none;margin-top:8px;">🌱 Starter packs (ready-made lists to begin from)</button>
       <input type="file" id="bulkImportFileInput" accept=".csv,.json" multiple style="display:none" onchange="bulkImportMultipleFiles(this)">
       <button id="bulkImportBtn" class="copy-btn" onclick="document.getElementById('bulkImportFileInput').click()" style="width:100%;font-size:12px;background:var(--green-dim);color:var(--green);border:1px solid rgba(45,235,143,0.3);display:none;">📂 Select files to import</button>
       <div id="bulkImportStatus" style="display:none;font-size:11px;color:var(--text3);margin-top:10px;line-height:1.7;white-space:pre-wrap;font-family:'Space Mono',monospace;"></div>
@@ -33451,10 +33534,15 @@ function mhFastDayEvents(dateStr, log, notes) {
     if (!e || e.timeApprox) return;
     if ((parseFloat(e.kcal) || 0) < Math.max(thr, 0.0001)) return;
     const m = mhFastMinutes(e.time); if (m == null) return;
-    mins.push(m < 240 ? m + 1440 : m);
+    mins.push(m);
   });
   const b = new Date(base);
   const at = m => new Date(b.getFullYear(), b.getMonth(), b.getDate(), 0, m).getTime();
+  // Before 04:00 counts as the late end of this day (25:00 = 01:00 next morning), as a 01:00 snack on a past day's
+  // log means. But if that would land in the FUTURE it is plainly an entry made just now after midnight, so it keeps
+  // its real clock time. Without this a 02:00 snack logged in "Today" blanked the live timer (v3.10.948).
+  const now = Date.now();
+  for (let i = 0; i < mins.length; i++) { if (mins[i] < 240 && at(mins[i] + 1440) <= now + 60000) mins[i] += 1440; }
   return mins.length
     ? { date: dateStr, base, first: at(Math.min(...mins)), last: at(Math.max(...mins)), n: mins.length, tag: mhFastHasTag(notes) }
     : (mhFastHasTag(notes) ? { date: dateStr, base, first: null, last: null, n: 0, tag: true } : null);

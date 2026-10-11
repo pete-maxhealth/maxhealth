@@ -78,4 +78,40 @@ with fresh_server() as root, sync_playwright() as pw:
         if k not in opts: f.add('BUG', f'picker missing {k}')
     if errs: f.add('BUG', f'page errors: {errs[:2]}')
     b.close()
+
+# --- v948: hostile pack, devices, CSV preview, starter packs
+with fresh_server() as root, sync_playwright() as pw:
+    b, page, errs = mk(pw)
+    evil = {'mhpack': 1, 'app': '<img src=x onerror=window.__pwn=1>', 'version': 'v1', 'sets': {'symptoms': {'data': [{'id': 'z1', 'name': '<img src=x onerror=window.__pwn=1>Cough', 'active': True}]},
+            'devices': {'data': {'custom': ['Ring<b>'], 'retired': [], 'patterns': [{'device': 'Ring', 'contains': 'ring', 'ext': '.csv'}], 'precedence': {}}}}}
+    page.evaluate("p => mhPackPreview(p)", evil); page.wait_for_timeout(300)
+    if page.evaluate("!!window.__pwn"): f.add('BUG', 'hostile pack ran script from its header')
+    page.click('#mhPackGo'); page.wait_for_timeout(400)
+    if page.evaluate("!!window.__pwn"): f.add('BUG', 'hostile name ran script')
+    sy = page.evaluate("loadSymptomDefs()")
+    if any('<' in x['name'] or '>' in x['name'] for x in sy): f.add('BUG', f'angle brackets survived import: {sy}')
+    if page.evaluate("JSON.parse(localStorage.getItem('mh_custom_devices')||'[]')") != ['Ringb']: f.add('BUG', 'device name not cleaned/merged')
+    if page.evaluate("_pkDev().patterns.length") != 1: f.add('BUG', 'device pattern not imported')
+    # CSV goes through the preview, merge by default, own locks kept only when ticked
+    page.evaluate("saveLibrary([{id:'a',name:'Oats',kcal:1,protein:1,carbs:1,fat:1,locked:true,source:'x'}])")
+    page.evaluate("""() => { const csv = 'id|name|kcal|protein|carbs|fat|portion|per100g|locked|source\\nb|Rice|100|2|20|1||0|1|mine\\nc|Oats|5|5|5|5||0|0|x'; const dt = new DataTransfer(); dt.items.add(new File([csv], 'library.csv', {type:'text/csv'})); const inp = document.getElementById('bulkImportFileInput') || (function(){const i=document.createElement('input'); i.type='file'; i.id='bulkImportFileInput'; document.body.appendChild(i); return i;})(); inp.files = dt.files; bulkImportMultipleFiles(inp); }""")
+    page.wait_for_timeout(500)
+    if not page.query_selector('#mhPackModal'): f.add('BUG', 'CSV import skipped the preview')
+    elif not page.query_selector('#mhPackKeepLocks'): f.add('BUG', 'CSV preview has no keep-locks choice')
+    else:
+        page.click('#mhPackKeepLocks'); page.click('#mhPackGo'); page.wait_for_timeout(300)
+        lib = page.evaluate("loadLibrary()")
+        if sorted(x['name'] for x in lib) != ['Oats', 'Rice'] or [x for x in lib if x['name'] == 'Oats'][0]['kcal'] != 1: f.add('BUG', f'CSV merge changed or duplicated my own food: {lib}')
+        if not [x for x in lib if x['name'] == 'Rice'][0]['locked']: f.add('BUG', 'keep-locks tick ignored')
+    # starter packs: files are valid packs
+    import os
+    base = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'starter_packs')
+    idx = json.load(open(os.path.join(base, 'index.json')))
+    for p in idx['packs']:
+        d = json.load(open(os.path.join(base, p['file'])))
+        if d.get('mhpack') != 1 or not d.get('sets'): f.add('BUG', f"starter pack {p['file']} invalid")
+        page.evaluate("p => mhPackPreview(p)", d); page.wait_for_timeout(200)
+        if not page.query_selector('#mhPackGo'): f.add('BUG', f"starter pack {p['file']} does not preview")
+    if errs: f.add('BUG', f'page errors: {errs[:2]}')
+    b.close()
 print('findings', len(f)); sys.exit(1 if f else 0)

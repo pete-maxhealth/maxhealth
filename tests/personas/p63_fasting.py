@@ -62,6 +62,15 @@ with fresh_server() as root, sync_playwright() as pw:
     z = page.evaluate("mhFastingMap().get(arguments[0])", dmy(9)) if False else page.evaluate("d => mhFastingMap().get(d).fastH", dmy(9))
     if not near(z, (24 - 19.5) + 7): f.add('BUG', f'threshold 0 should let the 5 kcal coffee count: {z}')
     page.evaluate("localStorage.removeItem('mh_fasting_kcal_threshold')")
+    # ---- 3b. a snack just after midnight, logged now, must keep its real clock time (v3.10.948) ----
+    chk = page.evaluate("""() => {
+        const d = todayStr(), base = mhFastDayBase(d), realNow = Date.now.bind(Date), at = (m) => new Date(new Date(base).getFullYear(), new Date(base).getMonth(), new Date(base).getDate(), 0, m).getTime();
+        const ev = () => mhFastDayEvents(d, [{time: '01:30', kcal: 400}], '');
+        Date.now = () => at(2 * 60); const during = ev().first - at(0);
+        Date.now = () => at(1440 + 12 * 60); const later = ev().first - at(0);
+        Date.now = realNow; return {during: during / 60000, later: later / 60000}; }""")
+    if chk['during'] != 90: f.add('BUG', f"a 01:30 snack logged at 02:00 should stay at 01:30, got minute {chk['during']}")
+    if chk['later'] != 1440 + 90: f.add('BUG', f"a 01:30 entry on a past day should still count as the late end of that day, got {chk['later']}")
     # ---- 3. Today card, live ----
     page.evaluate("""() => { const d = new Date(Date.now() - 5*60000); const t = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
         state.todayLog = [{id: 5001, time: t, description: 'x', kcal: 400, protein: 20, fat: 20, carbs: 5}]; saveState(); updateDashboard(); }""")
