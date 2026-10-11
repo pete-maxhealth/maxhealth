@@ -4,7 +4,7 @@
 
 ## v3.10.962 — RingConn Nap No Longer Replaces The Night
 
-A RingConn nap (11:00, 2h07) was the only session filed under today, so it became today's whole "night" and, because RingConn outranks Zepp for sleep, it replaced Zepp's real 8h25m. Two fixes: (1) a short RingConn session that starts in daytime (08:00-18:59, under 3 h) is now a nap and goes to `sleep_nap_min`, never the night; a day with only a nap has no night from RingConn, so Zepp's stands. (2) The Withings reader also claimed RingConn's "Data Export-<name>-<dates>.zip" through its "any other zip" fallback and filled the gaps RingConn had left; it now leaves those to RingConn. Re-upload the same export after updating to correct the day. Test: p86.
+A RingConn nap (11:00, 2h07) was the only session filed under today, so it became today's whole "night" and, because RingConn outranks Zepp for sleep, it replaced Zepp's real 8h25m. Two fixes: (1) a short RingConn session that starts in daytime (08:00-18:59, under 3 h) is now a nap and goes to `sleep_nap_min`, never the night; a day with only a nap has no night from RingConn, so Zepp's stands. (2) The Withings reader also claimed RingConn's "Data Export-<name>-<dates>.zip" through its "any other zip" fallback and filled the gaps RingConn had left; it now leaves those to RingConn. Re-upload the same export after updating to correct the day. Because a value already attributed to RingConn can't be overridden by Zepp, a new helper `clear_day_sleep.py [YYYY-MM-DD]` blanks one day's sleep figures and their attribution (with backups) so the right exports can refill them. Test: p86.
 
 ## v3.10.961 — Day Cards Say Where Their Figures Came From; Off-Phone Backup Advice
 
