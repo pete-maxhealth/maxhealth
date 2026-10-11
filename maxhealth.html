@@ -2623,7 +2623,7 @@
           <input type="text" id="dailyStepsInput" placeholder="e.g. 5000 or 5k"
             style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;font-family:'Space Mono',monospace;"
             onblur="saveDailySteps(this.value)" onchange="saveDailySteps(this.value)">
-          <span style="font-size:11px;color:var(--text3);">your real total — overrides any estimate</span>
+          <span style="font-size:11px;color:var(--text3);">your real total — overrides any estimate and any device figure for today</span>
         </div>
         <div id="stepsHeadline" style="display:none;font-size:12px;color:var(--text2);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);cursor:pointer;" onclick="toggleSection('steps-detail','stepsDetailLine','steps-detail-icon')"></div>
         <div id="stepsDetailLine" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;"></div>
@@ -6145,7 +6145,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.965'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.966'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -31707,6 +31707,20 @@ function saveDailySteps(rawVal) {
   if (isNaN(normalized) || normalized < 0) { showToast('Enter a number, e.g. 5000 or 5k'); return; }
   if (input) input.value = normalized; // reflect the normalized value back into the box
   updateStepsTag(String(normalized));
+  mhSaveTodayStepsAsManual(normalized);
+}
+
+// v3.10.965: the box says "your real total - overrides any estimate", but it only fed the calorie estimate, so a typed
+// total never beat the watch/ring figures in Trends. It now also goes in as TODAY's manual steps (the pipeline's
+// top-priority source), exactly like the Manual Entry screen. Local server only; silent if it cannot be reached.
+let _mhStepsManualLast = null;
+async function mhSaveTodayStepsAsManual(n) {
+  try {
+    if (!_serverOnline || !(n > 0) || _mhStepsManualLast === n) return;
+    const d = new Date(); const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const res = await fetch(`${MH_SERVER}/save-manual-entry`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: iso, steps: n }) });
+    if (res.ok) { _mhStepsManualLast = n; try { showToast('Saved as today\u2019s steps (typed in)'); } catch (_) {} setTimeout(() => { try { autoImportCombinedIfStale(); } catch (_) {} }, 6000); }
+  } catch (_) {}
 }
 
 function updateStepsTag(val) {
