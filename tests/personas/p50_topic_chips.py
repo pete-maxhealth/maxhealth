@@ -11,7 +11,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     for scope, tab, sub, topic, shown, hidden in [
         ('reports', 'insights', 'reports', 'ask', ['rpt-askai', 'rpt-export'], ['rpt-summary', 'rpt-treatment', 'seasonal']),
-        ('import', 'settings', 'import', 'backup', ['set-databackup', 'imp-preview'], ['imp-sync', 'imp-manual', 'imp-master']),
+        ('import', 'settings', 'import', 'backup', ['set-databackup', 'imp-restore'], ['imp-sync', 'imp-manual', 'imp-combined']),
         ('manage', 'settings', 'manage', 'tracking', ['set-supplements', 'set-labresults'], ['set-profile', 'set-aiprovider', 'set-about']),
     ]:
         page.evaluate(f"switchTab('{tab}'); switchSubTab('{tab}','{sub}')"); page.wait_for_timeout(900)

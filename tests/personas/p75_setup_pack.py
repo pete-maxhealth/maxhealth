@@ -73,7 +73,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if page.query_selector('#mhPackModal'): f.add('BUG', 'a non-pack JSON opened the preview')
     # Picker lists the new sets
     page.evaluate("switchTab('import')"); page.wait_for_timeout(500)
-    opts = page.evaluate("[...document.querySelectorAll('#bulkDatasetSelect option')].map(o => o.value)")
+    opts = page.evaluate("[...document.querySelectorAll('#bulkDsList .bulkDs')].map(o => o.value)")
     for k in ('symptoms', 'treatments', 'reports', 'tableware'):
         if k not in opts: f.add('BUG', f'picker missing {k}')
     if errs: f.add('BUG', f'page errors: {errs[:2]}')
