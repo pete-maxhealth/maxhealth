@@ -59,7 +59,7 @@ def write_ringconn_zip(root, per_day):
     act = mk(['Date', 'Steps', 'Calories(kcal)'], [[d, v['steps'], v['kcal']] for d, v in per_day.items()])
     slp = mk(['Start Time', 'Time Asleep(min)', 'Sleep Stages - Awake(min)', 'Sleep Stages - REM(min)',
               'Sleep Stages - Light Sleep(min)', 'Sleep Stages - Deep Sleep(min)'],
-             [[f'{d} 23:10:00', v['sleep_min'], v['awake'], v['rem'], v['light'], v['deep']] for d, v in per_day.items()])
+             [[f'{d} 00:30:00', v['sleep_min'], v['awake'], v['rem'], v['light'], v['deep']] for d, v in per_day.items()])
     vit = mk(['Date', 'Avg. Heart Rate(bpm)', 'Min. Heart Rate(bpm)', 'Max. Heart Rate(bpm)', 'Avg. HRV(ms)', 'Avg. Spo2(%)'],
              [[d, v['hr'], v['hrmin'], v['hrmax'], v['hrv'], v['spo2']] for d, v in per_day.items()])
     with zipfile.ZipFile(os.path.join(root, 'data', 'inbox', 'Data Export-Test-2026-01-01-2026-12-31.zip'), 'w') as z:

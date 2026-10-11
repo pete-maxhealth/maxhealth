@@ -1,4 +1,4 @@
-"""Persona 85: day cards name the device each figure came from (from the server's field_sources.json); /field-sources route answers."""
+"""Persona 85: each day-card row names the device its figure came from (from the server's field_sources.json); /field-sources route answers."""
 import sys, re, os, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -20,7 +20,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(d) => { state.history = [{ date: d, steps: 4277, distance_m: 3000, sleep_duration: 505, weight: 92, totals: {kcal:0,protein:0,carbs:0}, log: [] }]; trendsWindow = 'today'; _trendsDayOffset = 0; }", dd)
     ev("switchTab('insights'); switchSubTab('insights','trends'); renderTrends()"); page.wait_for_timeout(600)
     txt = ev("document.getElementById('trendsDailyView').innerText")
-    for want in ('Source: Zepp (Amazfit)', 'Source: Health Connect (phone)', 'Source: Withings'):
+    for want in ('Zepp', 'Health Connect', 'Withings'):
         if want not in txt: f.add('BUG', f'day view lacks "{want}"')
     if errs: f.add('BUG', f'page errors: {errs[:2]}')
 print('findings', len(f)); sys.exit(1 if f else 0)

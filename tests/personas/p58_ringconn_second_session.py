@@ -14,7 +14,8 @@ sessions = [
     # 2026-09-03: night plus an afternoon nap 14:00-15:00 (hours away): nap
     ['2026-09-03 00:30:00', '2026-09-03 06:30:00', 350, 10, 80, 200, 70],
     ['2026-09-03 14:00:00', '2026-09-03 15:00:00', 55, 5, 5, 40, 10],
-    # 2026-09-04: a second LONG session (a different night under the same date label): ignored, longest kept, no nap
+    # 2026-09-04 / 05: two separate long nights; since v3.10.962 a night is filed under the day you WOKE, so the 23:10
+    # night lands on 09-05 and each date keeps its own night (nothing ignored, no nap)
     ['2026-09-04 00:10:00', '2026-09-04 05:00:00', 280, 10, 60, 160, 60],
     ['2026-09-04 23:10:00', '2026-09-05 06:00:00', 400, 10, 90, 230, 80],
 ]
@@ -34,5 +35,5 @@ with fresh_server() as root:
     if g('2026-09-02', 'sleep_deep') != '65' or g('2026-09-02', 'sleep_rem') != '75': f.add('BUG', f"joined stages wrong: deep={g('2026-09-02','sleep_deep')} rem={g('2026-09-02','sleep_rem')}")
     if g('2026-09-02', 'sleep_nap_min') not in ('', None): f.add('BUG', 'broken night must not also be a nap')
     if g('2026-09-03', 'sleep_duration') != '350' or g('2026-09-03', 'sleep_nap_min') != '55': f.add('BUG', f"nap day wrong: night={g('2026-09-03','sleep_duration')} nap={g('2026-09-03','sleep_nap_min')}")
-    if g('2026-09-04', 'sleep_duration') != '400' or g('2026-09-04', 'sleep_nap_min') not in ('', None): f.add('BUG', f"long second session should leave the longest only: {g('2026-09-04','sleep_duration')} nap={g('2026-09-04','sleep_nap_min')}")
+    if g('2026-09-04', 'sleep_duration') != '280' or g('2026-09-05', 'sleep_duration') != '400' or g('2026-09-04', 'sleep_nap_min') not in ('', None): f.add('BUG', f"two long nights should each keep their own date: {g('2026-09-04','sleep_duration')} nap={g('2026-09-04','sleep_nap_min')}")
 print('findings', len(f)); sys.exit(1 if f else 0)
