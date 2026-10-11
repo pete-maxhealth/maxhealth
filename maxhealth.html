@@ -4557,6 +4557,9 @@
         </div>
         <button id="applySuggestedBtn" onclick="applySuggestedTargets()" style="display:none;margin-top:12px;width:100%;background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:700;font-family:Space Mono,monospace;cursor:pointer;touch-action:manipulation;">Apply these targets →</button>
       </div>
+      <div id="currentTargetsLine" style="font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;"></div>
+      <div style="font-size:12px;color:var(--text3);margin:6px 0 2px;cursor:pointer;" onclick="toggleSection('set-targets-manual','targetsManualWrap','targetsManualIcon')">✏️ Set my own numbers instead (advanced, e.g. from a dietitian) <span id="targetsManualIcon" style="font-size:10px;margin-left:6px;float:right;">▸ show</span></div>
+      <div id="targetsManualWrap" style="display:none;">
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:4px;">
         <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;">
           <div class="settings-label">Daily calorie target</div>
@@ -4572,6 +4575,7 @@
           <input class="modal-input" type="number" id="settingFatTarget" style="width:100%;font-size:16px;padding:8px;" placeholder="e.g. 247" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingFatTarget', 'Daily Fat Target', saveMacroTargets)">
           <div id="fatTargetAdvice" style="font-size:11px;color:#a78bfa;line-height:1.5;margin-top:2px;"></div>
         </div>
+      </div>
       </div>
 
       <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:12px;background:var(--surface2);">
@@ -5074,7 +5078,17 @@
         <input class="settings-input" type="number" id="settingFastThr" min="0" max="500" step="10" style="width:90px;" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingFastThr', 'Fasting threshold', mhSaveFastingSettings)">
         <span style="font-size:13px;color:var(--text3);">kcal</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Anything logged under this (a black coffee, a supplement) does not break a fast.</div>
+      <div id="settingFastThrHint" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">Anything logged under this (a black coffee, a supplement) does not break a fast.</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:12px;line-height:1.5;">Do you take medication with fat or food (for example MCT oil to help tablets absorb)? Name it here and it will not break your fast. Never delay a dose to protect a fast.</div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
+        <span style="font-size:13px;color:var(--text2);flex:1;">Taken with meds</span>
+        <input class="settings-input" type="text" id="settingFastMedName" maxlength="80" placeholder="e.g. MCT oil" style="width:130px;" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingFastMedName', 'Fasting med companion', mhSaveFastingSettings)">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:8px;">
+        <span style="font-size:13px;color:var(--text2);flex:1;">Usual amount (from your food log)</span>
+        <input class="settings-input" type="number" id="settingFastMedKcal" min="0" max="500" step="5" style="width:90px;" onfocus="settingsInputCapture(this)" onchange="logAndSave('settingFastMedKcal', 'Fasting med amount', mhSaveFastingSettings)">
+        <span style="font-size:13px;color:var(--text3);">kcal</span>
+      </div>
       <div id="settingFastNote" style="display:none;font-size:11px;color:var(--yellow,#f5c542);margin-top:10px;line-height:1.5;"></div>
     </div>
     </div>
@@ -5239,7 +5253,7 @@
          instead of being stranded as a fixed sibling at the page's original
          bottom. Ensures scrollIntoView can still bring this section flush
          to the top even when its own content is short. -->
-    <div style="min-height:50vh;" aria-hidden="true"></div>
+    <div style="min-height:16px;" aria-hidden="true"></div>
   </div>
 
 
@@ -6150,7 +6164,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.951'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.952'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -11541,6 +11555,22 @@ function applySuggestedSingle(which) {
   showToast(`${which === 'kcal' ? 'Calorie' : which === 'protein' ? 'Protein' : 'Fat'} target updated to ${_suggestedTargets[which]}${which === 'kcal' ? 'kcal' : 'g'}`);
 }
 
+// One plain line stating the targets in force, so the three boxes can stay tucked away (v3.10.952)
+function mhRenderCurrentTargets() {
+  const el = document.getElementById('currentTargetsLine'); if (!el) return;
+  const v = id => parseInt(document.getElementById(id)?.value) || 0;
+  const k = v('settingKcalTarget'), p = v('settingProteinTarget'), f = v('settingFatTarget');
+  el.innerHTML = k ? `<strong style="color:var(--text);">Your targets now:</strong> ${k} kcal · ${p || '–'} g protein · ${f || '–'} g fat` : '';
+}
+function mhWeeklySummaryMsg() {
+  const week=(state.history||[]).filter(e=>e&&e.date&&e.log&&e.log.length).slice()
+    .sort((a,b)=>ddmmyySortKey(a.date)<ddmmyySortKey(b.date)?1:-1).slice(0,7);
+  if (!week.length) return null;
+  const ceil=Math.round((getTargets().standard||{}).carbs)||0;
+  const avgC=Math.round(week.reduce((a,e)=>a+getEffectiveCarbsForDay(e),0)/week.length);
+  return !ceil?`7-day avg carbs: ${avgC}g. Check Reports.`
+    :avgC<=ceil?`7-day avg carbs: ${avgC}g — within your ${ceil}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${ceil}g ceiling. Check Reports.`;
+}
 function applySuggestedTargets() {
   if (!_suggestedTargets) return;
   const { kcal, protein, fat } = _suggestedTargets;
@@ -11551,6 +11581,7 @@ function applySuggestedTargets() {
   if (protEl) protEl.value = protein;
   if (fatEl)  fatEl.value  = fat;
   saveMacroTargets();
+  mhRenderCurrentTargets();
   showToast(`Targets applied: ${kcal}kcal · ${protein}g P · ${fat}g F`);
 }
 
@@ -12102,6 +12133,7 @@ function initSettings() {
   if (kcalEl) kcalEl.value = localStorage.getItem('mh_target_kcal') || '3670';
   const tdeeInput = document.getElementById('settingTdee');
   if (tdeeInput) tdeeInput.value = localStorage.getItem('mh_tdee') || '3420';
+  try { mhRenderCurrentTargets(); } catch(_) {}
   // Highlight current goal
   const currentGoal = localStorage.getItem('mh_goal') || 'gain';
   const activeGoalBtn = document.getElementById('goalBtn' + currentGoal.charAt(0).toUpperCase() + currentGoal.slice(1));
@@ -12289,6 +12321,7 @@ function setGoal(goal) {
   // calculated from the old kcal/fat values and would otherwise show stale
   // guidance until Settings happens to be reloaded
   updateFatTargetAdvice(kcal, newFat);
+  try { mhRenderCurrentTargets(); } catch(_) {}
   updateDashboard();
   showToast(`Goal updated: ${goal} (${kcal} kcal, ${newFat}g fat)`);
   // Same gap as the earlier condition-change bug: this updates the active
@@ -12507,6 +12540,7 @@ function showKcalDelta(newValStr) {
 }
 
 function saveMacroTargets() {
+  setTimeout(() => { try { mhRenderCurrentTargets(); } catch(_) {} }, 0);
   const kcal = parseInt(document.getElementById('settingKcalTarget')?.value);
   const prot = parseInt(document.getElementById('settingProteinTarget')?.value);
   const fat  = parseInt(document.getElementById('settingFatTarget')?.value);
@@ -19633,6 +19667,7 @@ function mhPackApply(pack, picked, mode, idMaps) {
     if (k === 'devices') {
       const g = (key, d) => { try { return JSON.parse(localStorage.getItem(key) || 'null') || d; } catch (e) { return d; } };
       const set = (key, v) => localStorage.setItem(key, JSON.stringify(v));
+      try { snapshotDevicePatterns('before setup pack'); } catch (_) {}
       if (mode === 'replace') { set('mh_custom_devices', inc.custom || []); set('mh_retired_devices', inc.retired || []); set('mh_device_patterns', inc.patterns || []); if (inc.precedence) set('mh_device_precedence', inc.precedence); }
       else {
         const c = g('mh_custom_devices', []); (inc.custom || []).forEach(x => { if (!c.includes(x)) c.push(x); }); set('mh_custom_devices', c);
@@ -32068,6 +32103,7 @@ function switchSubTab(parent, tab, el) {
         // never wired up at all (not caught by the earlier fix above, which
         // only covered the 14 sections known at the time).
         ['dash-macroadvice',  'macroAdviceWrap',        'macroAdviceIcon',        false],
+        ['set-targets-manual',  'targetsManualWrap',        'targetsManualIcon',        false],
         ['set-changelog',     'set-changelog-wrap',     'set-changelog-icon',     true],
         ['set-jserrors',      'set-jserrors-wrap',      'set-jserrors-icon',      true],
         ['set-manuallog',     'set-manuallog-wrap',     'set-manuallog-icon',     true],
@@ -33509,6 +33545,18 @@ function mhMissingWeightDate() {
 const MH_FAST_GOAL_KEY = 'mh_fasting_goal_h', MH_FAST_THR_KEY = 'mh_fasting_kcal_threshold';
 function mhFastGoalH() { const v = parseFloat(localStorage.getItem(MH_FAST_GOAL_KEY)); return v > 0 && v <= 72 ? v : 12; }
 function mhFastThresholdKcal() { const v = parseFloat(localStorage.getItem(MH_FAST_THR_KEY)); return v >= 0 && v <= 500 ? v : 50; }
+// What the person takes with their tablets (e.g. MCT oil to help absorption) can be set so it never breaks a fast,
+// as long as the entry is no bigger than their usual amount (v3.10.952). Matching is on the entry's description.
+const MH_FAST_MED_NAME_KEY = 'mh_fasting_med_item', MH_FAST_MED_KCAL_KEY = 'mh_fasting_med_kcal';
+function mhFastMedNames() { return String(localStorage.getItem(MH_FAST_MED_NAME_KEY) || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean); }
+function mhFastMedKcal() { const v = parseFloat(localStorage.getItem(MH_FAST_MED_KCAL_KEY)); return v > 0 && v <= 500 ? v : 0; }
+function mhFastIsMedItem(e) {
+  const names = mhFastMedNames(); if (!names.length || !e) return false;
+  const txt = String(e.description || e.name || '').toLowerCase();
+  if (!names.some(n => txt.includes(n))) return false;
+  const cap = mhFastMedKcal();
+  return !cap || (parseFloat(e.kcal) || 0) <= cap * 1.2;
+}
 function mhFastDayBase(str) { const m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(str || ''); return m ? new Date(2000 + (+m[3]), (+m[2]) - 1, +m[1]).getTime() : null; }
 function mhFastMinutes(t) { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); if (!m) return null; const h = +m[1], mi = +m[2]; return (h < 24 && mi < 60) ? h * 60 + mi : null; }
 function mhFastHasTag(notes) { return /\bfasting\b/i.test(notes || ''); }
@@ -33518,6 +33566,7 @@ function mhFastDayEvents(dateStr, log, notes) {
   (Array.isArray(log) ? log : []).forEach(e => {
     if (!e || e.timeApprox) return;
     if ((parseFloat(e.kcal) || 0) < Math.max(thr, 0.0001)) return;
+    if (mhFastIsMedItem(e)) return;
     const m = mhFastMinutes(e.time); if (m == null) return;
     mins.push(m);
   });
@@ -33622,12 +33671,23 @@ function mhSaveFastingSettings() {
   const g = parseFloat(document.getElementById('settingFastGoal')?.value), t = parseFloat(document.getElementById('settingFastThr')?.value);
   if (g > 0 && g <= 72) localStorage.setItem(MH_FAST_GOAL_KEY, String(g));
   if (t >= 0 && t <= 500) localStorage.setItem(MH_FAST_THR_KEY, String(t));
-  mhRenderFastingCard(); try { renderTrends(); } catch (_) {}
+  const mn = document.getElementById('settingFastMedName'), mk = parseFloat(document.getElementById('settingFastMedKcal')?.value);
+  if (mn) localStorage.setItem(MH_FAST_MED_NAME_KEY, mn.value.trim().slice(0, 80));
+  if (mk > 0 && mk <= 500) localStorage.setItem(MH_FAST_MED_KCAL_KEY, String(mk)); else if (document.getElementById('settingFastMedKcal')?.value === '') localStorage.removeItem(MH_FAST_MED_KCAL_KEY);
+  mhFastThrHint(); mhRenderFastingCard(); try { renderTrends(); } catch (_) {}
   showToast(`Fasting saved: goal ${mhFastFmt(mhFastGoalH())}, breaks at ${mhFastThresholdKcal()} kcal`);
+}
+function mhFastThrHint() {
+  const el = document.getElementById('settingFastThrHint'); if (!el) return;
+  const thr = mhFastThresholdKcal(), n = mhFastMedNames(), k = mhFastMedKcal();
+  el.textContent = `Right now: anything under ${thr} kcal is ignored; ${thr} kcal or more starts your eating window.` + (n.length ? ` Your "${n.join(', ')}"${k ? ` (up to about ${k} kcal)` : ''} is also ignored, because it is taken with medication.` : '');
 }
 function mhLoadFastingSettings() {
   const g = document.getElementById('settingFastGoal'), t = document.getElementById('settingFastThr');
   if (g) g.value = mhFastGoalH(); if (t) t.value = mhFastThresholdKcal();
+  const mn = document.getElementById('settingFastMedName'), mk = document.getElementById('settingFastMedKcal');
+  if (mn) mn.value = localStorage.getItem(MH_FAST_MED_NAME_KEY) || ''; if (mk) mk.value = mhFastMedKcal() || '';
+  mhFastThrHint();
   const cn = mhFastingConditionNote(), n = document.getElementById('settingFastNote');
   if (n) { n.style.display = cn ? 'block' : 'none'; n.textContent = cn ? cn.text : ''; }
 }
@@ -37900,22 +37960,82 @@ function renderDevicePatternChips(device) {
 // File patterns: tells the phone's Downloads sweep "a file whose name contains X (and
 // ends .zip, say) belongs to this device". For when a maker changes how it names its
 // exports, or for a device you've added yourself.
+// Built-in file-name rules, shown read-only so you can see what is already picked up before adding your own.
+const MH_BUILTIN_FILE_RULES = {
+  'Withings': 'zip named export_…, data_export…, withings…, healthmate… or data_name_123.zip',
+  'RingConn': 'zip starting "Data Export"',
+  'Garmin': 'zip containing a Garmin data folder, or garmin….json',
+  'Amazfit': 'zip starting with a number (Zepp export)',
+  'Zepp': 'zip starting with a number (Zepp export)',
+  'Health Connect': 'health_connect_export_….json'
+};
+// Every change to the patterns first stores the previous list (last 8), so an accidental edit can be undone.
+const DEVICE_PATTERNS_HISTORY_KEY = 'mh_device_patterns_history';
+function getDevicePatternHistory() { try { const r = JSON.parse(localStorage.getItem(DEVICE_PATTERNS_HISTORY_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch(e) { return []; } }
+function snapshotDevicePatterns(why) {
+  try {
+    const cur = getDevicePatterns(), hist = getDevicePatternHistory();
+    if (hist.length && JSON.stringify(hist[0].patterns) === JSON.stringify(cur)) return;
+    hist.unshift({ at: Date.now(), why: why || 'change', patterns: cur });
+    localStorage.setItem(DEVICE_PATTERNS_HISTORY_KEY, JSON.stringify(hist.slice(0, 8)));
+  } catch(e) {}
+}
+function restoreDevicePatterns(i) {
+  const h = getDevicePatternHistory()[i]; if (!h) return;
+  snapshotDevicePatterns('before restore');
+  localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(h.patterns));
+  pushDevicesToServer(); renderPrecedenceEditor();
+  showToast(`Restored ${h.patterns.length} file pattern${h.patterns.length === 1 ? '' : 's'} ✓`);
+}
+function renderDevicePatternHistory() {
+  const h = getDevicePatternHistory(); if (!h.length) return '';
+  return `<div style="margin-top:10px;font-size:11px;color:var(--text3);">Earlier file patterns (tap to restore):
+    ${h.map((x, i) => `<button onclick="restoreDevicePatterns(${i})" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;margin:4px 4px 0 0;font-size:11px;color:var(--text3);cursor:pointer;">${new Date(x.at).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})} · ${x.patterns.length} pattern${x.patterns.length === 1 ? '' : 's'}</button>`).join('')}</div>`;
+}
+// Asks the phone's own server which files in Downloads this pattern would pick up. Read-only: nothing is moved.
+async function previewDevicePattern(contains, ext) {
+  try {
+    const r = await fetch(`${MH_SERVER}/devices/preview?contains=${encodeURIComponent(contains)}&ext=${encodeURIComponent(ext || '')}`);
+    if (!r.ok) return null; return await r.json();
+  } catch(e) { return null; }
+}
+function _dpEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function devicePreviewSummary(pv, contains) {
+  if (!pv) return 'Could not reach the phone to look in Downloads, so the pattern is saved without a test.';
+  if (!pv.folder_readable) return 'Could not read the Downloads folder (has Termux storage access been allowed?), so the pattern is saved without a test.';
+  const hits = pv.files.filter(f => f.new_pattern);
+  if (!hits.length) return `Nothing in Downloads has “${_dpEsc(contains)}” in its name right now. It will still work when a matching file arrives.`;
+  return `Would pick up ${pv.would_match} file${pv.would_match === 1 ? '' : 's'} in Downloads:<br>` + hits.slice(0, 8).map(f => `• ${_dpEsc(f.name)} (${_fmtSize(f.size)})${f.builtin ? ' - already matched by ' + _dpEsc(f.builtin) : ''}`).join('<br>');
+}
+async function testDevicePattern(device) {
+  const pats = getDevicePatterns().filter(p => p.device === device);
+  if (!pats.length) { showToast('No file patterns to test yet. Tap 📁 to add one.'); return; }
+  let lines = [];
+  for (const p of pats) { const pv = await previewDevicePattern(p.contains, p.ext); lines.push(`<strong>“${_dpEsc(p.contains)}${p.ext ? ' ' + _dpEsc(p.ext) : ''}”</strong><br>` + devicePreviewSummary(pv, p.contains)); }
+  appConfirm(lines.join('<br><br>'), () => {}, null, false, { confirm: 'OK', cancel: 'Close' });
+}
 function editDevicePattern(device) {
-  appPrompt(`File name pattern for ${device}`, 'Part of the file name, e.g. oura  (add an extension after a space, e.g. oura .zip)', (txt) => {
+  appPrompt(`File name pattern for ${device}`, 'Part of the file name, e.g. oura  (add an extension after a space, e.g. oura .zip)', async (txt) => {
     if (!txt || !txt.trim()) return;
     const parts = txt.trim().split(/\s+/);
     const ext = parts.length > 1 && parts[parts.length - 1].startsWith('.') ? parts.pop() : '';
     const contains = parts.join(' ').toLowerCase();
     if (!contains) return;
-    const pats = getDevicePatterns();
-    pats.push({ device, contains, ext });
-    localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(pats));
-    pushDevicesToServer();
-    renderPrecedenceEditor();
-    showToast(`Files with “${contains}” in the name will now be picked up for ${device} ✓`);
+    const pv = await previewDevicePattern(contains, ext);
+    appConfirm(`${devicePreviewSummary(pv, contains)}<br><br>Save this pattern for ${_dpEsc(device)}?`, () => {
+      snapshotDevicePatterns('before adding ' + contains);
+      const pats = getDevicePatterns();
+      pats.push({ device, contains, ext });
+      localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(pats));
+      pushDevicesToServer();
+      renderPrecedenceEditor();
+      showToast(`Files with “${contains}” in the name will now be picked up for ${device} ✓`);
+    }, null, false, { confirm: 'Save pattern', cancel: 'Cancel' });
   });
 }
 function removeDevicePattern(i) {
+  snapshotDevicePatterns('before removing a pattern');
   const pats = getDevicePatterns();
   pats.splice(i, 1);
   localStorage.setItem(DEVICE_PATTERNS_KEY, JSON.stringify(pats));
@@ -37929,7 +38049,8 @@ function renderDeviceManageList() {
   return (overrides.length ? `<div style="margin-top:12px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--text2);">⚠️ Using your own extractor instead of the built-in one for: ${overrides.map(x => x.key).join(', ')}. Delete it from data/extractors/ to go back to the built-in.</div>` : '') + `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
       <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;">MANAGE DEVICES</div>
       ${devices.filter(d => d !== 'Manual').map(d => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-        <span style="flex:1;font-size:12px;color:var(--text2);">${d}${renderDevicePatternChips(d)}</span>
+        <span style="flex:1;font-size:12px;color:var(--text2);">${d}${MH_BUILTIN_FILE_RULES[d] ? `<div style="font-size:10px;color:var(--text3);margin-top:2px;">Built in: ${MH_BUILTIN_FILE_RULES[d]}</div>` : ''}${renderDevicePatternChips(d)}</span>
+        <span onclick="testDevicePattern(${JSON.stringify(d).replace(/"/g,'&quot;')})" title="Test ${d}'s file patterns against what is in Downloads now" style="cursor:pointer;font-size:13px;padding:0 4px;">🔍</span>
         <span onclick="editDevicePattern(${JSON.stringify(d).replace(/"/g,'&quot;')})" title="Teach the phone which downloaded files belong to ${d}" style="cursor:pointer;font-size:13px;padding:0 4px;">📁</span>
         <span onclick="retireDevice('${d}')" title="Stop using ${d} for precedence — history is kept" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>
       </div>`).join('')}
@@ -37937,6 +38058,7 @@ function renderDeviceManageList() {
         <span style="font-size:10px;color:var(--text3);">Retired:</span>
         ${retired.map(d => `<button onclick='restoreDevice(${JSON.stringify(d)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;">${d} ↺</button>`).join('')}
       </div>` : ''}
+      ${renderDevicePatternHistory()}
     </div>`;
 }
 function movePrecedenceDevice(metricKey, device, direction) {
@@ -43281,11 +43403,8 @@ function checkNotifications() {
   if (prefs.weekly && day===0 && hour>=8) {
     const weekKey=`mh_notif_weekly_${todayKey}`;
     if (!localStorage.getItem(weekKey)) {
-      const week=(state.history||[]).slice(0,7);
-      if (week.length>0) {
-        const t=getTargets();
-        const avgC=Math.round(week.reduce((a,e)=>a+getEffectiveCarbsForDay(e),0)/week.length);
-        const msg=avgC<=t.carbs?`7-day avg carbs: ${avgC}g — within your ${t.carbs}g ceiling.`:`7-day avg carbs: ${avgC}g — above your ${t.carbs}g ceiling. Check Reports.`;
+      const msg=mhWeeklySummaryMsg();
+      if (msg) {
         sendLocalNotif('MaxedHealth — Weekly Summary',msg,'reports').then(sent => {
           if (sent) localStorage.setItem(weekKey,'1');
         });

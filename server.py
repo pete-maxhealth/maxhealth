@@ -248,6 +248,60 @@ def _matches_user_pattern(lower):
     return None
 
 
+def _builtin_device_for(name, src):
+    """Which built-in rule (if any) would pick up this Download file. Mirrors move_exports_to_inbox, read-only (v3.10.952)."""
+    lower = name.lower()
+    try:
+        if (lower.endswith('.zip') and _is_garmin_zip(src)) or (lower.endswith('.json') and 'garmin' in lower):
+            return 'Garmin'
+    except Exception:
+        pass
+    if name[:1].isdigit() and lower.endswith('.zip'):
+        return 'Zepp / Amazfit'
+    if lower.startswith('data export') and lower.endswith('.zip'):
+        return 'RingConn'
+    if (any(lower.startswith(p) for p in ('export_', 'data_export', 'withings', 'healthmate')) and lower.endswith('.zip')) \
+            or re.match(r'^data_[a-z]+_\d+\.zip$', lower):
+        return 'Withings'
+    if re.match(r'^health_connect_export_.*\.json$', lower):
+        return 'Health Connect'
+    return None
+
+
+def preview_download_files(contains='', ext='', limit=60):
+    """Read-only: list the files sitting in Download and what would pick each one up. Never moves anything."""
+    contains = (contains or '').strip().lower()[:80]
+    ext = (ext or '').strip().lower()[:10]
+    if ext and not ext.startswith('.'):
+        ext = '.' + ext
+    out = {'folder_readable': True, 'files': [], 'would_match': 0, 'total': 0}
+    try:
+        names = sorted(os.listdir(DOWNLOAD))
+    except Exception:
+        out['folder_readable'] = False
+        return out
+    for name in names:
+        src = os.path.join(DOWNLOAD, name)
+        if not os.path.isfile(src):
+            continue
+        lower = name.lower()
+        if not (lower.endswith(('.zip', '.json', '.csv')) or (contains and contains in lower)):
+            continue
+        out['total'] += 1
+        builtin = _builtin_device_for(name, src)
+        mine = bool(contains and contains in lower and (not ext or lower.endswith(ext)))
+        saved = _matches_user_pattern(lower)
+        if mine:
+            out['would_match'] += 1
+        if len(out['files']) < limit and (mine or builtin or saved or not contains):
+            try:
+                size = os.path.getsize(src)
+            except Exception:
+                size = 0
+            out['files'].append({'name': name[:120], 'size': size, 'new_pattern': mine, 'builtin': builtin, 'saved_pattern': saved})
+    return out
+
+
 def move_exports_to_inbox():
     """
     Scan Download folder for wearable exports and move to inbox.
@@ -1287,6 +1341,9 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json(_sc.run_selfcheck())
             except Exception as ex:
                 self.send_json({'error': str(ex)}, 500)
+
+        elif path == '/devices/preview':
+            self.send_json(preview_download_files((params.get('contains') or [''])[0], (params.get('ext') or [''])[0]))
 
         elif path == '/devices':
             d = _load_devices()

@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.952 — Weekly Summary Fix, Targets Tidied, Meds Don't Break A Fast, Device File Patterns You Can Test
+
+- **Weekly summary notification** said "over your undefined carb limit". It now reads your real Standard ceiling, uses the latest seven logged days (newest by date), and says so plainly if no ceiling is set.
+- **Settings → targets**: the daily calorie, protein and fat boxes duplicated the Suggested Targets card. They now sit behind "Set my own numbers instead (advanced, e.g. from a dietitian)", with a one-line "Your targets now: …" summary above. Nothing was removed.
+- **Fasting**: new "Taken with meds" setting (for example MCT oil, which helps some tablets absorb) plus your usual amount. A matching entry no larger than about 20% over that amount no longer breaks a fast, and a live line under the threshold explains exactly what is ignored. Never delay a dose to protect a fast.
+- **Supplements**: removed a half-screen blank spacer under the list.
+- **Manage devices**: each device shows its built-in file-name rules; 🔍 tests your saved patterns against what is in Downloads right now; adding a pattern first shows which files it would pick up (read-only, nothing is moved, file names escaped). Every pattern change keeps a restore point (last 8) and the list shows "Earlier file patterns (tap to restore)". Server: new `GET /devices/preview`.
+- Added a regression test for hide-then-reorder on every screen (could not reproduce the reported problem; Pete to say which screen).
+
 ## v3.10.951 — Filter Is Set Once: Tucked Away, and Open/Close All Leave It Alone
 
 The "Filters & hidden" button is now just **Filter**. It names the filter you have chosen and the number of hidden cards, for example "☰ Filter: Backup & restore · 2 hidden ▸", so you can see the state without opening anything. Because a filter is set once and rarely changed, **choosing a filter chip now closes the panel by itself**. **Open all and Close all no longer touch hidden cards**: they only expand or collapse sections. Restoring a hidden card is done from the Filter panel, where the Hidden strip lives. This reverses v3.10.941, where Open all also restored hidden cards; the new rule is that hidden and filtered-out cards are a decision made once and never undone by an unrelated button. Evidence label: not applicable (app plumbing). Persona p71 updated.
