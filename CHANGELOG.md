@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.961 — Day Cards Say Where Their Figures Came From; Off-Phone Backup Advice
+
+- Each Trends → Today / day-view card now ends with a small **Source:** line (for example "Source: Zepp (Amazfit) + Health Connect (phone)"), built from the pipeline's per-field attribution. New server endpoint `GET /field-sources` serves it. A figure that falls back to yesterday's sleep is marked as such. The app re-renders when the source changes after a sync (so a RingConn upload that outranks Zepp shows up).
+- User guide gains a monthly **Keep a copy off your phone** step, and Settings → Storage shows a one-line hint. Test: p85.
+
 ## v3.10.960 — Today's Sleep Is Today's Night
 
 Trends → Today showed sleep from **yesterday's** row (3h) over today's own (8h25m). The pipeline files a night under the day you woke (bedtime 22:35 → wake 08:18 sits on the wake date), so today's own sleep figures are last night's. Today's row now wins, and yesterday's only fills in when today has none yet. Test: p84.

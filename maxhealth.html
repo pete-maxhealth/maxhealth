@@ -5455,6 +5455,7 @@
     <div class="settings-card" style="background:rgba(245,197,66,0.05);border-color:rgba(245,197,66,0.2);">
       <div id="dataBackupStatusBlock">
         <div id="mhStorageStatus" style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:10px;"></div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px;">A backup that only lives on this phone is lost with the phone. Every so often, share a copy to your email, a cloud drive or your computer.</div>
         <button class="copy-btn mhShareBackupBtn" style="display:none;width:100%;margin-bottom:10px;" onclick="exportAllShare()">📤 Share backup to Files / Drive / iCloud</button>
         <div id="dataBackupWarningHeadline" style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">⚠ Your data lives in browser storage<span class="help-slot" data-id="databackupwarning" data-text="Unlike the wearable data pipeline (which backs itself up automatically), everything here — today's log, your full history, library, recipes, routines, supplements, symptoms and treatments — exists only in this browser. Nothing backs it up unless you use Export All Data on the Import tab. If Chrome ever clears site data, it's gone without a trace."></span></div>
         <div class="settings-row" style="margin-bottom:12px;">
@@ -6142,7 +6143,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.960'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.961'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -33231,6 +33232,7 @@ function getTrendsData(forceFullHistory) {
         // so today's own sleep is last night's. Yesterday's row only fills in when today has none yet. It used to win,
         // which showed a 3h figure from yesterday's row instead of today's 8h25m night.
         if (!base.sleep_duration) {
+          base._sleepFrom = prevEntry.date;
           base.sleep_duration = prevEntry.sleep_duration || base.sleep_duration;
           base.sleep_deep = prevEntry.sleep_deep || base.sleep_deep;
           base.sleep_light = prevEntry.sleep_light || base.sleep_light;
@@ -38133,6 +38135,22 @@ function toggleKetosisTooltip() {
 
 let _trendsDayOffset = 0; // 0 = today, -1 = yesterday etc
 
+// Where each figure on a day card came from (v3.10.961). The pipeline records, per date and field, which device set it
+// (data/field_sources.json); the app reads it from the server and names the device under each card.
+window._mhFieldSources = window._mhFieldSources || null;
+const MH_SOURCE_NAMES = { amazfit: 'Zepp (Amazfit)', health_connect: 'Health Connect (phone)', ringconn: 'RingConn', withings: 'Withings', garmin: 'Garmin', manual: 'typed in by you' };
+async function mhLoadFieldSources() {
+  try { const r = await fetch(`${MH_SERVER}/field-sources`, { cache: 'no-store' }); if (r.ok) { window._mhFieldSources = await r.json(); } } catch (_) {}
+}
+function mhFieldSourceNote(dateStr, fields) {
+  try {
+    const m = /^(\d{2})\/(\d{2})\/(\d{2})$/.exec(dateStr || ''); if (!m || !window._mhFieldSources) return '';
+    const day = window._mhFieldSources[`20${m[3]}-${m[2]}-${m[1]}`]; if (!day) return '';
+    const seen = [];
+    fields.forEach(f => { const s = day[f]; if (s && !seen.includes(s)) seen.push(s); });
+    return seen.length ? 'Source: ' + seen.map(s => MH_SOURCE_NAMES[s] || s).join(' + ') : '';
+  } catch (_) { return ''; }
+}
 function renderDailyView(data) {
   const el = document.getElementById('trendsDailyView');
   if (!el) return;
@@ -38166,7 +38184,7 @@ function renderDailyView(data) {
     return div;
   }
 
-  function makeSection(title, rows, drillMetric, key) {
+  function makeSection(title, rows, drillMetric, key, srcFields, srcDate) {
     const sec = document.createElement('div');
     sec.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;';
     if (key) { sec.className = 'card-unit'; sec.id = key + '-wrap'; }
@@ -38178,6 +38196,7 @@ function renderDailyView(data) {
     const titleIdAttr = key ? ' id="title-' + key + '"' : '';
     sec.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><div' + titleIdAttr + ' style="font-family:\'Syne\',sans-serif;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">' + title + '</div>' + drillArrow + '</div>';
     rows.forEach(r => sec.appendChild(makeRow(r[0], r[1], r[2], r[3], r[4])));
+    if (srcFields) { const note = mhFieldSourceNote(srcDate || d.date, srcFields); if (note) { const n = document.createElement('div'); n.style.cssText = 'font-size:10px;color:var(--text3);margin-top:8px;'; n.textContent = note; sec.appendChild(n); } }
     return sec;
   }
 
@@ -38193,7 +38212,7 @@ function renderDailyView(data) {
     ['\uD83D\uDC9C', 'HRV', fmt(d.hrv, ' ms'), 'var(--text)', 'hrv'],
     ['\uD83E\uDEB1', 'SpO2', fmt(d.spo2, '%'), col(d.spo2, 97, 95), 'spo2'],
     ['\uD83D\uDD25', 'Active Cal', fmt(d.calories_active, ' kcal'), 'var(--text)'],
-  ], null, 'dv-activity'));
+  ], null, 'dv-activity', ['steps', 'distance_m', 'hr_avg']));
 
   // Sleep (v3.10.885: bedtime / wake / efficiency / snoring folded in - they were a second, look-alike "Sleep Detail" card)
   const _sleepRows = [
@@ -38208,7 +38227,7 @@ function renderDailyView(data) {
   if (d.sleep_efficiency) _sleepRows.push(['\uD83D\uDCCA', 'Efficiency', d.sleep_efficiency.toFixed(0) + '%', d.sleep_efficiency >= 85 ? 'var(--accent)' : d.sleep_efficiency >= 75 ? 'var(--yellow)' : 'var(--red)']);
   if (d.sleep_nap_min) _sleepRows.push(['\uD83D\uDE34', 'Nap (separate)', Math.floor(d.sleep_nap_min / 60) + 'h ' + (d.sleep_nap_min % 60) + 'm', 'var(--text2)']);
   if (d.snoring_min) _sleepRows.push(['\uD83D\uDD07', 'Snoring', d.snoring_min + ' min', d.snoring_min > 30 ? 'var(--red)' : 'var(--text3)']);
-  const sleepSec = makeSection('Sleep', _sleepRows, null, 'dv-sleep');
+  const sleepSec = makeSection('Sleep', _sleepRows, null, 'dv-sleep', ['sleep_duration'], d._sleepFrom || d.date);
   el.appendChild(sleepSec);
 
   // Nutrition card deliberately removed (28/09/2026, Pete Spence's call) - it only
@@ -38258,7 +38277,7 @@ function renderDailyView(data) {
     if (d.muscle_pct) _bRows.push(['\uD83D\uDCAA', 'Muscle %', d.muscle_pct.toFixed(1) + '%', d.muscle_pct > 45 ? 'var(--accent)' : 'var(--yellow)']);
     if (d.bone_mass_kg) _bRows.push(['\uD83E\uDDB4', 'Bone mass', mhWtText(d.bone_mass_kg, 2), 'var(--text)']);
     if (d.hydration_kg) _bRows.push(['\uD83D\uDCA7', 'Hydration', mhWtText(d.hydration_kg), 'var(--blue)']);
-    if (_bRows.length) el.appendChild(makeSection(_bRows.length > 1 ? 'Weight & Body Composition' : 'Weight', _bRows, null, 'dv-weight'));
+    if (_bRows.length) el.appendChild(makeSection(_bRows.length > 1 ? 'Weight & Body Composition' : 'Weight', _bRows, null, 'dv-weight', ['weight']));
   }
 
   // Hide/reorder controls for this day's sections - a fresh scope
@@ -45304,14 +45323,16 @@ async function autoImportCombinedIfStale() {
     // resume cycle, which is what was happening here - server.py always
     // returns the true current file (confirmed via curl and direct read),
     // but the app kept importing an older cached copy of it.
+    const _srcBefore = JSON.stringify(window._mhFieldSources); await mhLoadFieldSources(); const _srcChanged = _srcBefore !== JSON.stringify(window._mhFieldSources);
     const res = await fetch(`${MH_SERVER}/combined`, { cache: 'no-store' });
     if (!res.ok) return;
     const text = await res.text();
     if (!text || !text.trim()) return;
     const cached = localStorage.getItem('mh_combined_csv_cache');
-    if (cached === text) return; // already imported, nothing to do
+    if (cached === text) { if (_srcChanged) { try { renderTrends(); } catch (_) {} } return; } // already imported, nothing to do
     _syncedCsvText = text;
     importCombinedCSVText(text, /*silent=*/true);
+    if (_srcChanged) { try { renderTrends(); } catch (_) {} }
   } catch(e) {
     // Local server unreachable or a transient fetch error - not worth
     // surfacing here, checkServer()'s own online/offline handling (and

@@ -1424,6 +1424,13 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             })
 
         # ── Serve combined.csv ────────────────────────────────────────────
+        elif path == '/field-sources':
+            try:
+                with open(FIELD_SOURCES_JSON, 'r', encoding='utf-8') as f:
+                    self.send_json(json.load(f))
+            except Exception:
+                self.send_json({})
+
         elif path == '/combined':
             if not os.path.exists(COMBINED):
                 self.send_json({'error': 'combined.csv not found — run sync first'}, 404)
