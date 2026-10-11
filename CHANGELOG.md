@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.965 — Tableware Chip Shares The Saved-Prompts Row
+
+The "Tableware: <set> · back to Home on <date> change" banner took a whole line above the Log buttons. It is now a short pill (🍽 set name · dd/mm) on the same row as "Browse saved prompts"; the name shortens with "…" if space is tight, and tapping it still opens the tableware settings (the full wording is its tooltip). Test: p44.
+
 ## v3.10.964 — The Phone Now Uses The Repo's RingConn And Withings Readers
 
 The pipeline preferred an older RingConn and Withings reader kept in the phone's own `app/extractors/` folder (outside git), so the RingConn night-grouping fix and the Withings no-longer-claims-RingConn fix of v3.10.962-963 never ran there: a RingConn nap still replaced Zepp's night and Withings still read RingConn's zip. Both now come from the repo like Health Connect and manual do. A reader of your own in `data/extractors/` still wins over both.
