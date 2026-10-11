@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.962 — RingConn Nap No Longer Replaces The Night
+
+A RingConn nap (11:00, 2h07) was the only session filed under today, so it became today's whole "night" and, because RingConn outranks Zepp for sleep, it replaced Zepp's real 8h25m. Two fixes: (1) a short RingConn session that starts in daytime (08:00-18:59, under 3 h) is now a nap and goes to `sleep_nap_min`, never the night; a day with only a nap has no night from RingConn, so Zepp's stands. (2) The Withings reader also claimed RingConn's "Data Export-<name>-<dates>.zip" through its "any other zip" fallback and filled the gaps RingConn had left; it now leaves those to RingConn. Re-upload the same export after updating to correct the day. Test: p86.
+
 ## v3.10.961 — Day Cards Say Where Their Figures Came From; Off-Phone Backup Advice
 
 - Each Trends → Today / day-view card now ends with a small **Source:** line (for example "Source: Zepp (Amazfit) + Health Connect (phone)"), built from the pipeline's per-field attribution. New server endpoint `GET /field-sources` serves it. A figure that falls back to yesterday's sleep is marked as such. The app re-renders when the source changes after a sync (so a RingConn upload that outranks Zepp shows up).

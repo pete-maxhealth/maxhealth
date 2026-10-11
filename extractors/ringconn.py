@@ -185,6 +185,17 @@ def _parse_sleep(content):
             sessions.setdefault(date, []).append({'start': dt, 'end': end, 'dur': duration, 'st': stages})
 
         for date, lst in sessions.items():
+            # v3.10.962: a short session that STARTS in daytime (08:00-18:59) is a nap, never the night. Before this, a
+            # day with only a nap on it (the night having been filed under the previous bedtime date) made the nap the
+            # whole "night" for that date and, because RingConn outranks Zepp for sleep, wiped out Zepp's real night.
+            def _is_day_nap(x):
+                return bool(x['start'] and x['dur'] and x['dur'] < NAP_MAX_MIN and 8 <= x['start'].hour < 19)
+            day_naps = [x for x in lst if _is_day_nap(x)]
+            lst = [x for x in lst if not _is_day_nap(x)]
+            if not lst:
+                result[date] = {'sleep_duration': None, 'sleep_wake': None, 'sleep_rem': None, 'sleep_light': None,
+                                'sleep_deep': None, 'sleep_nap_min': sum(x['dur'] for x in day_naps) or None}
+                continue
             lst.sort(key=lambda x: x['dur'] or 0, reverse=True)   # longest first = the night
             main = lst[0]
             night = {'sleep_duration': main['dur'], **main['st']}
@@ -201,6 +212,7 @@ def _parse_sleep(content):
                         if v: night[k] = (night.get(k) or 0) + v
                 else:
                     nap += ex['dur']
+            nap += sum(x['dur'] for x in day_naps)
             night['sleep_nap_min'] = nap or None
             result[date] = night
         print(f"  [ringconn] Sleep: {len(result)} days", file=sys.stderr)

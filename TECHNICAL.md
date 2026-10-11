@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.962 | 23 | Full detail in CHANGELOG.md (Phase 23). `extractors/ringconn.py` daytime short session = nap; `extractors/withings.py` skips `Data Export-` zips. |
 | v3.10.961 | 23 | Full detail in CHANGELOG.md (Phase 23). `GET /field-sources`; `mhFieldSourceNote` footer on day cards; off-phone backup docs. |
 | v3.10.960 | 23 | Full detail in CHANGELOG.md (Phase 23). `getTrendsData` today branch: own `sleep_*` first, previous day's only as fallback. |
 | v3.10.959 | 23 | Full detail in CHANGELOG.md (Phase 23). `autoImportCombinedIfStale` now also called on `visibilitychange` (20 s debounce) and every 120 s while visible. |
@@ -1090,6 +1091,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
 - `p84_today_sleep.py` — today's own sleep wins over yesterday's row
 - `p85_field_sources.py` — day cards show per-field data source
+- `p86_ringconn_nap_only.py` — nap-only RingConn day has no night; Withings ignores RingConn zip
 - `p83_auto_refresh.py` — open app re-reads combined.csv on return to front
 - `p82_period_compare_merged.py` — single period comparison with weight/sleep/HRV/SpO2 rows
 - `p81_back_button.py` — back button remembers previous screen, appears when scrolled, returns

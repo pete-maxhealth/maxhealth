@@ -103,6 +103,11 @@ def run(inbox, password=None, dry_run=False):
 
     # ── Find Withings zip ────────────────────────────────────
     zips = glob.glob(os.path.join(inbox, '*.zip'))
+    # v3.10.962: 'Data Export-<name>-<dates>.zip' (space, hyphen) is RingConn's export name. Withings used to claim it too
+    # (via the "any other zip" fallback), so RingConn's data was also read as Withings and filled gaps the RingConn
+    # extractor had left on purpose (e.g. a nap-only day got its nap as the night). Leave those to RingConn.
+    zips = [z for z in zips if not os.path.basename(z).lower().startswith('data export-')
+            or 'withings' in os.path.basename(z).lower()]
 
     # Priority 1: name clearly identifies Withings
     withings_zips = [z for z in zips if
