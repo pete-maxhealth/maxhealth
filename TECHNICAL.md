@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.958 | 23 | Full detail in CHANGELOG.md (Phase 23). `chatScroll` added to `GLOBAL_SCROLL_NAV_IDS` (arrows positioned top:150/206px in chat); `globalScrollToTop` also resets ancestor scrollers. |
 | v3.10.957 | 23 | Full detail in CHANGELOG.md (Phase 23). Seasonal Compare / `runSeasonalCompare` removed; `mhPcmpStats` adds `wAvg, sleepH, hrvAvg, spo2Avg`; global CSS `div[style*="grid-template-columns"] > * {min-width:0}`. |
 | v3.10.956 | 23 | Full detail in CHANGELOG.md (Phase 23). `#globalBackBtn`, `_navPrev`, `_navSnap`, `mhNavBack`; `switchTab`/`switchSubTab` wrapped (outermost call only) to record the previous screen. |
 | v3.10.955 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhScrollTopOf` called from `mhTopicSet` and Close all. |

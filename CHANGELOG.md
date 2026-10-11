@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.958 — Up/Down Arrows In Chat; Up Arrow Reaches The Menu
+
+The Log chat screen had no ↑/↓ arrows (they were left out because they sat on top of the send button). With large text the docked composer is tall and the tabs scroll out of reach, so chat now gets the arrows too, placed up the right-hand side clear of the send button. ↑ now also scrolls every outer container back up, so it brings the top menu back into view, not just the inner list. Test: p81.
+
 ## v3.10.957 — One Period Comparison, Big-Text Overflow
 
 - **Two period comparisons are now one.** Seasonal Compare (Reports) is gone. **Compare Two Periods** (Insights → Trends) now also shows average weight, sleep, HRV and SpO2 alongside logged days, kcal, protein, carbs, steps and the weight-trend verdict. Old saved order or hidden entries for Seasonal Compare are simply ignored.
