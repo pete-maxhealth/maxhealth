@@ -6164,7 +6164,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.952'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.953'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -8089,6 +8089,7 @@ function _stripLeadingIconForSort(label) {
   return (label || '').replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}️\s]+/u, '');
 }
 
+function showAllGenericHidden(scopeKey) { saveGenericHidden(scopeKey, []); applyGenericOrder(scopeKey); showToast('All cards shown again'); }
 function renderGenericRestoreStrip(scopeKey, hidden) {
   const el = document.getElementById('genericRestoreStrip-' + scopeKey);
   if (!el) return;
@@ -8103,6 +8104,7 @@ function renderGenericRestoreStrip(scopeKey, hidden) {
   el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;">
       <span style="font-size:10px;color:var(--text3);">Hidden:</span>
       ${sortedKeys.map(k => `<button onclick='toggleGenericSectionHidden(${JSON.stringify(scopeKey)},${JSON.stringify(k)})' style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${genericSectionLabel(scopeKey, k)} +</button>`).join('')}
+    ${hidden.length > 1 ? `<button data-showall="1" onclick='showAllGenericHidden(${JSON.stringify(scopeKey)})' style="background:none;border:1px dashed var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--accent);cursor:pointer;touch-action:manipulation;">Show all</button>` : ''}
     </div>`;
 }
 
@@ -40594,7 +40596,7 @@ function mhEnsurePillsToolbars() {
   document.querySelectorAll(MH_PILL_SEL).forEach(el => { const r = mhPillsRoot(el); if (r && !roots.has(r)) roots.set(r, el); });
   roots.forEach((first, root) => {
     let tb = root.querySelector(':scope > .mh-pills-toolbar, :scope .mh-pills-toolbar');
-    const nHidden = [...root.querySelectorAll('[id$="RestoreStrip"] button, [id^="genericRestoreStrip-"] button')].length;
+    const nHidden = [...root.querySelectorAll('[id$="RestoreStrip"] button, [id^="genericRestoreStrip-"] button')].filter(b => !b.dataset.showall).length;
     const open = mhPillsOpen();
     let cur = ''; try { const sc = mhScopeOf(root);
       if (sc.generic) { const k = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[k]; if (k !== 'all' && g) cur = g.label; }
@@ -40626,11 +40628,12 @@ function mhScopeKeys(sc) {   // null = everything on the screen
 function mhSectionsAll(btn, open) {
   const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), sc = mhScopeOf(root), keys = mhScopeKeys(sc), inScope = k => !keys || keys.includes(k);
   const seen = new Set(); let n = 0, restored = 0;
+  const hiddenKeys = sc.generic ? getGenericHidden(sc.generic) : [];   // hidden cards stay hidden: Open all must not reveal their content
   // 1. Open all / Close all only expand or collapse. What is hidden or filtered out is set once in the Filter panel and is never touched here.
 
   // 2. Expand or collapse every collapsible card in scope (each announces itself with toggleSection('key','wrapId','iconId'))
   root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => {
-    const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1])) return; seen.add(m[2]);
+    const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1]) || hiddenKeys.includes(m[1])) return; seen.add(m[2]);
     const wrap = document.getElementById(m[2]); if (!wrap || !root.contains(wrap)) return;
     wrap.style.display = open ? 'block' : 'none'; n++;
     const icon = document.getElementById(m[3]); if (icon) { icon.textContent = open ? '▾ hide' : '▸ show'; mhMarkCollapsed(icon, !open); }
