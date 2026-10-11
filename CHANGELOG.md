@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.959 — Open App Re-Reads Fresh Sync Data
+
+The app only re-read combined.csv when it first found the server. A screen left open, or a phone app resumed, after a sync or Zepp merge finished kept showing the older figures (for example Sleep 3h after the pipeline had written 8h25m) until a full reload. It now re-checks whenever it comes back to the front and every 2 minutes while on screen; when nothing changed the check is silent. Test: p83.
+
 ## v3.10.958 — Up/Down Arrows In Chat; Up Arrow Reaches The Menu
 
 The Log chat screen had no ↑/↓ arrows (they were left out because they sat on top of the send button). With large text the docked composer is tall and the tabs scroll out of reach, so chat now gets the arrows too, placed up the right-hand side clear of the send button. ↑ now also scrolls every outer container back up, so it brings the top menu back into view, not just the inner list. Test: p81.
