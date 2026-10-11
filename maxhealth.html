@@ -2122,6 +2122,7 @@
 
   /* ── OFFLINE MODE (v3.10.863) ───────────────────────────── */
   #mhNetBar{display:none;position:fixed;top:0;left:0;right:0;z-index:99990;padding:calc(env(safe-area-inset-top,0px) + 6px) 12px 6px;font-size:12px;line-height:1.4;text-align:center;font-family:'DM Sans',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);}
+  body:has(#mhNetBar.off) #globalBackBtn, body:has(#mhNetBar.back) #globalBackBtn{top:56px !important;}
   #mhNetBar.off{display:block;background:#3a2f0b;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.5);}
   #mhNetBar.back{display:block;background:#0e2e22;color:#4ade80;border-bottom:1px solid rgba(74,222,128,.5);}
   #mhNetBar button{margin-left:8px;padding:3px 10px;border-radius:12px;border:1px solid currentColor;background:transparent;color:inherit;font-size:11px;font-weight:600;}
@@ -6164,7 +6165,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.955'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.956'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -7729,13 +7730,39 @@ function updateGlobalScrollNav() {
   if (!scrollEl || !topBtn || !bottomBtn) {
     if (topBtn) topBtn.style.display = 'none';
     if (bottomBtn) bottomBtn.style.display = 'none';
+    const bb0 = document.getElementById('globalBackBtn'); if (bb0) bb0.style.display = 'none';
     return;
   }
   topBtn.style.display = scrollEl.scrollTop > 90 ? 'flex' : 'none';
+  const bb = document.getElementById('globalBackBtn'); if (bb) bb.style.display = (scrollEl.scrollTop > 90 && window._navPrev && scrollEl.id !== 'multiMetricScroll') ? 'flex' : 'none';
   const remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
   bottomBtn.style.display = remaining > 200 ? 'flex' : 'none';
 }
 
+
+// ── Back button (v3.10.956) ─ remembers the screen you came from and shows a top-left ← once you have scrolled down,
+// where every other back button in the app lives. It goes back one screen; pressing it again returns you.
+window._navPrev = null; window._navDepth = 0;
+function _navSnap() { const a = document.querySelector('#mainTabRow .tab.active'); const tab = a && a.id ? a.id.replace('maintab-', '') : null; return tab ? { tab, sub: _activeSubTab[tab] || null } : null; }
+(function () {
+  ['switchTab', 'switchSubTab'].forEach(name => {
+    const orig = window[name]; if (typeof orig !== 'function') return;
+    window[name] = function () {
+      const outer = window._navDepth === 0, before = outer ? _navSnap() : null;
+      window._navDepth++;
+      try { return orig.apply(this, arguments); }
+      finally {
+        window._navDepth--;
+        if (outer) { try { const after = _navSnap(); if (before && after && (before.tab !== after.tab || before.sub !== after.sub)) window._navPrev = before; updateGlobalScrollNav(); } catch (_) {} }
+      }
+    };
+  });
+})();
+function mhNavBack() {
+  const prev = window._navPrev; if (!prev) { globalScrollToTop(); return; }
+  if (prev.sub) _activeSubTab[prev.tab] = prev.sub;
+  switchTab(prev.tab, document.getElementById('maintab-' + prev.tab));
+}
 function globalScrollToTop() {
   const scrollEl = window._activeScrollContainerId ? document.getElementById(window._activeScrollContainerId) : null;
   if (scrollEl) scrollEl.scrollTo({ top: 0, behavior: 'smooth' });
@@ -47550,6 +47577,8 @@ function dismissInsight() {
      own pre-existing pair) - see trackScrollNav/updateGlobalScrollNav for
      how these get pointed at whichever container is currently visible.
      Same visual style/position as Library's own pair for consistency. -->
+<button id="globalBackBtn" onclick="mhNavBack()" aria-label="Back" title="Back"
+  style="display:none;position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:20px;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:60;cursor:pointer;touch-action:manipulation;">←</button>
 <button id="globalScrollTopBtn" onclick="globalScrollToTop()"
   style="display:none;position:fixed;bottom:90px;right:20px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#000;border:none;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.4);z-index:50;cursor:pointer;align-items:center;justify-content:center;">↑</button>
 <button id="globalScrollBottomBtn" onclick="globalScrollToBottom()"
