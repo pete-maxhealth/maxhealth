@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1008 — Fair Tap Size
+
+- Every button is now at least 34px tall (the small chips, Open all / Close all, Edit, On, delete and similar were about 29px at large text). The sweep at 1.5x text size on two demo personas now finds no small buttons, no clipped text and no unlabelled buttons. The chat-bar buttons keep their theme styling by design.
+
 ## v3.10.1007 — mhstart Comes Back By Itself
 
 - Pete's phone had lost the `mhstart` command (probably a Termux package upgrade), so the "Local server not running" box told him to type something that did not exist. On startup (Termux only) the server now writes `mhstart` again if it is missing; it never overwrites an existing one. Until the server is up once, start it with `bash ~/mh_watchdog.sh`. Tests: `p123`; also `p74` and `p107` were updated (a hard-coded old version, and a step-count tag that no longer counts as a tag).
