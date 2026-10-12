@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.983 | 23 | starter pack `type3c_diabetes_tracking`. |
 | v3.10.982 | 23 | `mhFocusOpen/Preview/Apply/Summary` (layout `replace` + lists `merge` via `mhPackApply`), `MH_PACK_BASE`; `starter_packs/muscle_growth_tracking.json`. |
 | v3.10.981 | 23 | `MH_CHIP_SEL` (view chips stay outside `.mh-filter-panel`, placed right after the toolbar; only restore strips go inside); `.hist-filter` no longer in `MH_PILL_SEL`; `#libraryCategory` + `mhLibFillCategories` (uses `getLibraryCategoriesInUse`), applied in `renderLibrary` before the list split; `MH_LIB_GROUPS[k][3]` chip icons. |
 | v3.10.980 | 23 | `mhTcGet/Set/Apply/All` (Trends metric-card fold bars, reuse `.mh-dc-bar`/`.mh-dc-closed`), `mh_collapse_tc_<id>`; `mhSectionsAll` calls `mhTcAll` on `view-trends`; `mhLayoutKeys` includes the tc keys. |
