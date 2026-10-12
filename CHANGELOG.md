@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.989 — Tag Manager
+
+- **Manage tags** (link under the occasion picker on Today): every tag with how many days it was used; ✎ renames it on every day (renaming onto an existing name merges them, ignoring capitals), 🗑 removes it from every day. Activity summaries and your per-tag notes are kept. This keeps "massage", "Massage" and "Massage session" from splitting the before/after and Compare Metrics numbers. Test: `p109`.
+
 ## v3.10.988 — Condition Labels, Condition Filter, Add Another Focus
 
 - **Condition labels.** When a pack adds symptoms or treatments it stamps its condition on them (`conds`). If another pack shares a symptom, it carries both labels. Things you already had or typed yourself carry no label and so always show.

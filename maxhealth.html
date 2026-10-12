@@ -2536,6 +2536,7 @@
         <span class="occasion-tag" onclick="toggleOccasionTag('Fasting')">⏱ Fasting</span>
       </div>
       <div id="occasionTreatChips" style="margin-top:4px;"></div>
+      <div style="margin-top:4px;"><span onclick="mhTagsManage()" style="font-size:11px;color:var(--text3);cursor:pointer;border-bottom:1px solid var(--text3);">Manage tags (rename, merge, delete)</span></div>
       <div style="display:flex;gap:6px;margin-top:6px;">
         <input id="customOccasionInput" class="settings-input" placeholder="Custom occasion…" style="flex:1;font-size:13px;padding:7px 10px;">
         <button onclick="setCustomOccasion()" style="padding:6px 12px;background:var(--yellow);color:#080a0d;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Add</button>
@@ -6235,7 +6236,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.988'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.989'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -41764,6 +41765,57 @@ function mhTagDays() {
   (state.history || []).forEach(d => add(d.notes, d.date));
   add(state.notes, todayStr());
   return out;
+}
+// ── Tag manager: rename / merge / delete a tag on every day it was used ─────
+function mhTagsMap(fn) { // fn(tagString) -> new string | null (drop). Applied to history notes, today's notes and tag notes.
+  const fix = notes => {
+    const keepSuffix = /\(today, in progress\)\s*$/i.test(notes || '') ? ' (today, in progress)' : '';
+    const seen = new Set(), out = [];
+    String(notes || '').replace(/\(today, in progress\)/i, '').split(',').map(t => t.trim()).filter(Boolean).forEach(t => {
+      const r = /^\d+min /i.test(t) ? t : fn(t); if (r == null || r === '') return;
+      if (!seen.has(r.toLowerCase())) { seen.add(r.toLowerCase()); out.push(r); }
+    });
+    return out.join(', ') + keepSuffix;
+  };
+  (state.history || []).forEach(d => { if (d.notes != null) d.notes = fix(d.notes).replace(/ \(today, in progress\)$/, ''); if (d.tagNotes) { const n = {}; Object.keys(d.tagNotes).forEach(k => { const r = fn(k); if (r) n[r] = d.tagNotes[k]; }); d.tagNotes = n; } });
+  if (state.notes && !['standard', 'occasion', 'holiday'].includes(state.notes)) state.notes = fix(state.notes);
+  if (state.tagNotes) { const n = {}; Object.keys(state.tagNotes).forEach(k => { const r = fn(k); if (r) n[r] = state.tagNotes[k]; }); state.tagNotes = n; }
+  try { localStorage.setItem('mh_today_notes', state.notes || ''); } catch (_) {}
+  saveState();
+  try { renderOccasionTags(); } catch (_) {} try { updateDashboard(); } catch (_) {} try { updateOccasionBanner(); } catch (_) {}
+}
+function mhTagRename(oldName, newName) {
+  newName = String(newName || '').replace(/[<>,]/g, '').trim().slice(0, 60);
+  if (!newName) return false;
+  const lo = String(oldName).toLowerCase();
+  mhTagsMap(t => t.toLowerCase() === lo ? newName : t);
+  return true;
+}
+function mhTagDelete(name) { const lo = String(name).toLowerCase(); mhTagsMap(t => t.toLowerCase() === lo ? null : t); }
+function mhTagsManage() {
+  document.getElementById('mhTagsModal')?.remove();
+  const m = document.createElement('div'); m.id = 'mhTagsModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  const draw = () => {
+    const days = mhTagDays(); const keys = Object.keys(days).sort((a, b) => days[b].dates.size - days[a].dates.size || a.localeCompare(b));
+    m.innerHTML = `<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Manage tags</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Rename a tag to fix it on every day it was used. Renaming to a name that already exists merges the two. Deleting removes it from every day. Nothing else you logged changes.</div>
+      ${keys.length ? keys.map(k => `<div class="mh-tag-row" data-k="${_pkEsc(k)}" style="display:flex;gap:6px;align-items:center;padding:8px 0;border-top:1px solid var(--border);">
+        <div style="flex:1;font-size:13px;">${_pkEsc(days[k].name)} <span style="color:var(--text3);font-size:11px;">${days[k].dates.size} day${days[k].dates.size === 1 ? '' : 's'}</span></div>
+        <button class="copy-btn mh-tag-ren" style="padding:6px 10px;font-size:12px;">✎</button><button class="copy-btn mh-tag-del" style="padding:6px 10px;font-size:12px;">🗑</button></div>`).join('') : '<div style="font-size:12px;color:var(--text3);">No tags yet.</div>'}
+      <button class="copy-btn" id="mhTagsClose" style="width:100%;margin-top:12px;">Done</button></div>`;
+    m.querySelector('#mhTagsClose').onclick = () => m.remove();
+    m.querySelectorAll('.mh-tag-row').forEach(row => {
+      const k = row.dataset.k;
+      row.querySelector('.mh-tag-del').onclick = () => { mhTagDelete(k); draw(); };
+      row.querySelector('.mh-tag-ren').onclick = () => {
+        row.innerHTML = `<input class="mh-tag-new" value="${_pkEsc(days[k].name)}" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:14px;"><button class="copy-btn mh-tag-save" style="padding:6px 10px;font-size:12px;">Save</button>`;
+        row.querySelector('.mh-tag-save').onclick = () => { if (mhTagRename(k, row.querySelector('.mh-tag-new').value)) draw(); };
+      };
+    });
+  };
+  document.body.appendChild(m); draw();
 }
 function mhAnchorDefs() {
   const defs = loadTreatmentDefs().filter(t => t.active !== false && mhCondMatch(t));
