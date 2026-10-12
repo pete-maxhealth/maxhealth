@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.976 — AI Check No Longer Sends Guessed Grams, Layout By Voice, Half-Written Page Guard
+
+- **The 3-AI comparison on a logged meal sent the first AI's guessed grams to all three checkers** (Pete Spence's screenshot: clotted cream 90g, raspberries 35g... then every AI "independently" guessed ~160g, the exact total). An amount is now sent only if it appears in the person's own words; guessed amounts are left out, so each AI judges the portion itself. Because their macros are then for their own portion, they are scaled to the logged amount before comparing and averaging (raw figures stay on the card, and the card says no amounts were sent). Library, History and Recipe edit forms still send the amount you entered. Test: `p95`.
+- **"JS ERROR ... reading 'style'" (08:22) and the older "Invalid or unexpected token / missing )" entries**: the auto-update rewrites `maxhealth.html` in place, and a page load landing mid-write received half a file. The server now only serves a file that ends with `</html>`, retrying briefly and falling back to the last complete copy. The metric drill-down also no longer throws if its overlay is missing; it asks for a refresh. Test: `p96`.
+- **Layout by voice or typing**: "Hide the fasting card", "Show the ketosis card", "Close all cards", "Open all cards", "Reset my layout" (confirms first). Only short phrases ending in card/cards/section are matched, so ordinary questions are never hijacked. Listed under "What can I ask". Test: `p97`.
+- **Nudge card has Read aloud (🔊)**.
+- **Documentation**: user guide gained "Make it yours" (Filter row, fold, Default, starter packs, nudges, voice); in-app Guides gained "Layout, Filter & Starter Packs" and the "Verify across 3 AIs" note now describes when amounts are sent.
+
 ## v3.10.975 — Gentle Nudges, And Three More Starter Packs
 
 - **Optional nudges on Today.** If a starter pack tucked a card away (hidden, or folded into a bar), then a week after the pack was applied the app offers it back once: *Show it / Not now / Don't ask again*. One at a time, a week apart; "Not now" asks again in a week; cards you hid yourself are never offered; nothing appears without a tap. "Show it" also updates your pack layout so Default keeps it. Offered in order: Macro ratio, Goal check, Day mode, Fasting, Ketosis.

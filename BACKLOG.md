@@ -11,6 +11,16 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.949 Data Preview & Validator = coverage across history; now inside Missing Data & Coverage.
 - [x] v3.10.951 Filter pill: just "Filter", closes itself after a choice, Open all / Close all never touch hidden cards.
 
+## Layout, packs and nudges (v3.10.967 - 975)
+- [x] v3.10.967 Every Today card folds to a one-line bar; v3.10.968 live values on bars and ↺ Default.
+- [x] v3.10.971 Starter packs carry a screen layout; Default returns to the pack layout.
+- [x] v3.10.972 First-run "What would you like to start with?" step.
+- [x] v3.10.973-974 One Filter panel holding chips and Hidden pills; toolbar always first; one pill size.
+- [x] v3.10.975 Optional nudges; epilepsy, type 2 diabetes and migraine starter packs.
+- [x] v3.10.976 Layout by voice; AI check no longer sends guessed grams; half-written page guard.
+- [ ] Filter row on Supplements, Log, History, Library and Customise (they have no hide/reorder system today).
+- [ ] Starter packs per remaining condition (strict keto, type 1 diabetes, cluster headache).
+
 ## Other
 - [x] v3.10.950 Incidental Steps Baseline automatic; Activity Level reads real weekly steps.
 - [ ] Strength Log CSV import still replaces (now asks first).

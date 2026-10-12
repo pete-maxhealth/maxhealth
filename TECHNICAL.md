@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.976 | 23 | `mhAmountStatedByPerson`, `mhMultiCheckPrompt(...,{amountsGiven})`, `p.cmp` scaled figures in `runMultiAICheck`/`applyMultiAIAverage`; `read_complete_app_html()` in server.py; `handleLayoutQuery`/`MH_CARD_WORDS`. |
 | v3.10.975 | 23 | `mhNudgeCandidate/Render/Act` (`mh_nudge_v1`, `mh_layout_base_at`), `.mhNudgeBtn`; starter packs `epilepsy_tracking`, `type2_diabetes_tracking`, `migraine_headache_tracking`. |
 | v3.10.974 | 23 | `mhPillsRoot` unwraps `.mh-filter-panel` (fixed runaway toolbars); toolbar forced to be first child of its list; meal picker uses `.mh-mealpicker(-live)` + `data-cat`/`data-count-for` instead of shared ids. |
 | v3.10.973 | 23 | `.mh-filter-panel` created in `mhEnsurePillsToolbars` (chips + Hidden strips moved into it); `--mh-pill-fs` shared by toolbar, chips, `.trends-filter-btn`, `.occasion-tag`. |
@@ -1104,6 +1105,9 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
 - `p84_today_sleep.py` — today's own sleep wins over yesterday's row
 - `p85_field_sources.py` — day cards show per-field data source
+- `p97_layout_voice.py` — voice/typed layout commands, no hijacking of ordinary questions
+- `p96_half_written_html.py` — server never serves a half-written page
+- `p95_ai_compare_no_guessed_grams.py` — guessed grams not sent to the checkers; stated ones are; answers scaled to the logged amount
 - `p94_nudges.py` — nudge waits a week, snoozes, dismisses, offers hidden and folded cards, updates the pack layout
 - `p93_toolbar_order_meal_picker.py` — one toolbar per screen, first and in the same order; meal picker highlights the live picker only
 - `p92_first_run_choice.py` — wizard step 5b: pre-selection, pack + layout applied, everything/preview apply nothing, embedded packs match files

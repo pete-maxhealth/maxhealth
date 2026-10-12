@@ -154,6 +154,22 @@ MAX_MANUAL_LOG_ENTRIES = 200  # trimmed on every write - see save_manual_entry()
 FIELD_SOURCES_JSON = os.path.join(DATA_DIR, 'field_sources.json')
 
 TRACKER    = os.path.join(APP_DIR, 'maxhealth.html')
+
+_LAST_GOOD_HTML = None
+def read_complete_app_html():
+    """The auto-update rewrites maxhealth.html in place (git reset --hard). A page load that lands mid-write used to get half a
+    file: scripts cut off, and errors like "Invalid or unexpected token" or a missing element. Only serve a file that ends with
+    </html>; wait briefly and retry if it does not, and fall back to the last complete copy this server saw."""
+    global _LAST_GOOD_HTML
+    body = b''
+    for attempt in range(6):
+        with open(TRACKER, 'rb') as f:
+            body = f.read()
+        if body.rstrip().endswith(b'</html>'):
+            _LAST_GOOD_HTML = body
+            return body
+        time.sleep(0.4)
+    return _LAST_GOOD_HTML or body
 LOG_FILE   = os.path.join(LOGS_DIR, 'pipeline.log')
 PORT       = 5757
 
@@ -1664,8 +1680,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             if not os.path.exists(TRACKER):
                 self.send_json({'error': 'maxhealth.html not found at ' + TRACKER}, 404)
                 return
-            with open(TRACKER, 'rb') as f:
-                body = f.read()
+            body = read_complete_app_html()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
