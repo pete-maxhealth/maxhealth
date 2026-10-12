@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.970 | 23 | Library "Reset section order" link removed (covered by `mhResetScreen`). |
 | v3.10.969 | 23 | Full detail in CHANGELOG.md. `mhPruneHidden` drops stale hidden keys; themed `.mh-pills-toolbar button`; Filter-nested chips (`body.mh-pills-open`). |
 | v3.10.968 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhResetScreen`/`mhResetAllLayout`/`mhLayoutKeys` (+ `mh_resume_tab` sessionStorage), `mhDcSummary` live bar values, toolbar `↺ Default`. |
 | v3.10.967 | 23 | Full detail in CHANGELOG.md (Phase 23). `MH_DASH_CARDS` + `mhDcApply`/`mhDcAll`: Today cards collapse to `.mh-dc-bar`; `mhSectionsAll` calls `mhDcAll` on `#view-dash`; toggle count only counts on-screen changes. |

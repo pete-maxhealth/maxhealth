@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.970 — Library Reset Link Removed
+
+- Removed the "Reset section order to default" link at the top of the Library; the toolbar's **↺ Default** (and Settings → Reset layout on every screen) already restore Library order.
+
 ## v3.10.969 — Filter Count Fix, Themed Toolbar, Quieter Pills
 
 - **"1 hidden" with nothing to restore fixed.** Hidden-card lists could keep keys for cards that no longer exist; they were counted in the Filter badge but never listed. `mhPruneHidden` now drops them on read (generic, dashboard, trend cards).
