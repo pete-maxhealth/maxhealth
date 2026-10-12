@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.971 — Starter Packs Carry A Screen Layout
+
+- **Setup packs can now include a "Screen layout"**: which cards start open, folded or hidden. Shown in the pack preview as its own tick-box; importing never touches logged data.
+- **Only layout settings are accepted** from a pack (anything else, including settings and keys, is refused). "Add what's missing" never overrides a screen you have arranged; "Replace" does.
+- **Default buttons return to the pack's layout** once one has been applied (the confirm says so).
+- **Both starter packs now ship a layout**: General wellbeing hides the advanced metabolic cards; Brain tumour tracking folds them into one-line bars and keeps symptoms/treatment open.
+- Settings: **Redo setup wizard** moved into an "Advanced" fold so it can't be hit by accident.
+- Export/share: "Screen layout" is a tick-box alongside the other setup items.
+- Test: `p91_pack_layout.py`.
+
 ## v3.10.970 — Library Reset Link Removed
 
 - Removed the "Reset section order to default" link at the top of the Library; the toolbar's **↺ Default** (and Settings → Reset layout on every screen) already restore Library order.

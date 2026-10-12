@@ -5180,8 +5180,10 @@
     <div id="set-setup-wrap">
     <div class="settings-card">
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="previewOnboarding()">🔍 Preview setup wizard (safe — nothing is saved)</button>
-      <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;" onclick="resetOnboarding()">↺ Redo setup wizard</button>
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-top:8px;" onclick="mhResetAllLayout()">↺ Reset layout on every screen</button>
+      <details style="margin-top:10px;"><summary style="font-size:11px;color:var(--text3);cursor:pointer;">Advanced</summary>
+        <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;margin-top:8px;" onclick="resetOnboarding()">↺ Redo setup wizard (replaces your settings)</button>
+      </details>
       <div class="settings-hint" style="margin-top:6px;">Lost your way? This puts the cards back to their standard open/closed state, order and visibility on every screen. Nothing you have logged is touched. Each screen also has its own ↺ Default button beside Open all / Close all.</div>
     </div>
     </div>
@@ -6151,7 +6153,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.970'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.971'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19629,9 +19631,23 @@ const PACK_SETS = {
   treatments:  { label: 'Treatment list',  hint: 'treatment types, no sessions',  get: () => loadTreatmentDefs(), list: true },
   reports:     { label: 'Report profiles', hint: 'layout and schedule, never sent dates', get: () => loadReportProfiles().map(r => ({ ...r, lastSent: null })), list: true },
   tableware:   { label: 'Tableware',       hint: 'plate, bowl and spoon sizes',   get: () => _pkTw(), list: false },
+  layout:      { label: 'Screen layout',   hint: 'which cards start open, hidden or reordered', get: () => mhLayoutSnapshot(), list: false },
   devices:     { label: 'Wearable devices', hint: 'device names and file patterns, no data', get: () => _pkDev(), list: false },
 };
-const PACK_ORDER = ['library', 'supplements', 'recipes', 'routines', 'symptoms', 'treatments', 'reports', 'tableware', 'devices'];
+const PACK_ORDER = ['library', 'supplements', 'recipes', 'routines', 'symptoms', 'treatments', 'reports', 'tableware', 'devices', 'layout'];
+// A pack's screen layout is a small map of layout settings (which cards start open, hidden, in what order). Only keys that
+// look like layout keys are ever read or written, and values must be short text. It is also remembered as the person's
+// "base" layout, so the Default buttons return to the pack's starting point rather than the bare standard one.
+function mhLayoutSnapshot() {
+  const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (MH_LAYOUT_ALL_RE.test(k) && k !== 'mh_pills_open') o[k] = localStorage.getItem(k); } } catch (_) {}
+  return Object.keys(o).length ? o : null;
+}
+function mhLayoutClean(inc) {
+  const o = {}; if (!inc || typeof inc !== 'object') return o;
+  Object.keys(inc).slice(0, 300).forEach(k => { const v = inc[k]; if (MH_LAYOUT_ALL_RE.test(k) && k !== 'mh_pills_open' && typeof v === 'string' && v.length <= 20000) o[k] = v; });
+  return o;
+}
+function mhLayoutBase() { try { return mhLayoutClean(JSON.parse(localStorage.getItem('mh_layout_base') || 'null')); } catch (_) { return {}; } }
 function _pkDev() {
   const g = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
   const o = { custom: g('mh_custom_devices', []), retired: g('mh_retired_devices', []), patterns: g('mh_device_patterns', []), precedence: g('mh_device_precedence', {}) };
@@ -19659,6 +19675,7 @@ function mhPackBuild(keys) {
 function mhPackLoadCurrent(k) {   // the person's OWN data, untouched (never the unlocked export copy)
   if (k === 'tableware') return _pkTw();
   if (k === 'devices') return _pkDev();
+  if (k === 'layout') return mhLayoutSnapshot();
   return ({ library: loadLibrary, supplements: loadSupplementDefs, recipes: loadRecipes, routines: loadRoutines,
             symptoms: loadSymptomDefs, treatments: loadTreatmentDefs, reports: loadReportProfiles })[k]();
 }
@@ -19672,6 +19689,10 @@ function mhPackPlan(k, incoming) {
     const ns = (incoming.sets || []).filter(x => x.id !== 'home' && !haveSet.has(String(x.name).toLowerCase())).length;
     const ni = (incoming.custom || []).filter(x => !haveItem.has(x.id)).length;
     return { add: ns + ni, dup: 0, text: `${ns} new set${ns === 1 ? '' : 's'}, ${ni} new item${ni === 1 ? '' : 's'}; your Home sizes are only filled where empty` };
+  }
+  if (k === 'layout') {
+    const inc = mhLayoutClean(incoming), mine = mhLayoutSnapshot() || {}, n = Object.keys(inc).length, fresh = Object.keys(inc).filter(x => !(x in mine)).length;
+    return { add: fresh, dup: n - fresh, text: `${n} layout setting${n === 1 ? '' : 's'}: which cards start open, hidden or in what order. Your logged data is never touched. Add-what's-missing only sets screens you have not arranged yourself` };
   }
   if (k === 'devices') {
     const mine = _pkDev() || { custom: [], retired: [], patterns: [] };
@@ -19689,6 +19710,16 @@ function mhPackApply(pack, picked, mode, idMaps) {
   const maps = idMaps || { symptoms: {}, treatments: {} };
   PACK_ORDER.filter(k => picked.includes(k) && pack.sets[k]).forEach(k => {
     const inc = _pkClean(pack.sets[k].data);
+    if (k === 'layout') {
+      const lay = mhLayoutClean(inc); let n = 0;
+      try {
+        if (mode === 'replace') { const cur = mhLayoutSnapshot() || {}; Object.keys(cur).forEach(x => localStorage.removeItem(x)); }
+        Object.keys(lay).forEach(x => { if (mode === 'replace' || localStorage.getItem(x) == null) { localStorage.setItem(x, lay[x]); n++; } });
+        localStorage.setItem('mh_layout_base', JSON.stringify(lay));
+      } catch (_) {}
+      out.push(`✓ Screen layout: ${n} setting${n === 1 ? '' : 's'} applied (the Default buttons now return to this layout). The app refreshes when you tap Done`);
+      return;
+    }
     if (k === 'devices') {
       const g = (key, d) => { try { return JSON.parse(localStorage.getItem(key) || 'null') || d; } catch (e) { return d; } };
       const set = (key, v) => localStorage.setItem(key, JSON.stringify(v));
@@ -19824,6 +19855,7 @@ function mhPackPreview(pack) {
     const res = mhPackApply(pack, picked, mode);
     const el = document.getElementById('mhPackResult'); el.textContent = res.join('\n'); el.style.display = 'block';
     document.getElementById('mhPackGo').style.display = 'none'; document.getElementById('mhPackCancel').textContent = 'Done';
+    if (picked.includes('layout') && pack.sets.layout) document.getElementById('mhPackCancel').onclick = () => { try { const tabEl = document.querySelector('#mainTabRow .tab.active'); const tab = tabEl ? (tabEl.id || '').replace(/^maintab-/, '') : ''; if (tab) sessionStorage.setItem('mh_resume_tab', JSON.stringify({ tab, sub: '' })); } catch (_) {} location.reload(); };
   };
 }
 
@@ -19837,7 +19869,7 @@ function buildBulkDataActionsCard() {
     ['library', 'Food Library', 'csv'], ['recipes', 'Recipes', 'csv'], ['routines', 'Routines', 'csv'],
     ['supplements', 'Supplements', 'csv'], ['strength', 'Strength Log', 'csv'],
     ['symptoms', 'Symptom list', 'setup'], ['treatments', 'Treatment list', 'setup'], ['reports', 'Report profiles', 'setup'],
-    ['tableware', 'Tableware sizes', 'setup'], ['devices', 'Wearable devices', 'setup'],
+    ['tableware', 'Tableware sizes', 'setup'], ['devices', 'Wearable devices', 'setup'], ['layout', 'Screen layout', 'setup'],
     ['fullstate', 'Full app backup (all of the above plus logs, labs and settings)', 'one .json file'],
   ];
   const boxes = rows.map(([k, l, t]) => `<label style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:13px;color:var(--text2);"><input type="checkbox" class="bulkDs" value="${k}" checked style="margin-top:3px;accent-color:var(--accent);"><span>${l} <span style="color:var(--text3);font-size:11px;">${t}</span></span></label>`).join('');
@@ -19899,7 +19931,7 @@ async function mhExportSelected(share) {
   ['library', 'recipes', 'routines', 'supplements', 'strength'].filter(k => sel.includes(k)).forEach(k => {
     const g = genericCsvText(k); if (g.count) files.push({ name: g.name, text: g.text, type: 'text/csv' }); try { genericSaveToServerNow(k, true); } catch (e) {}
   });
-  const packKeys = ['symptoms', 'treatments', 'reports', 'tableware', 'devices'].filter(k => sel.includes(k));
+  const packKeys = ['symptoms', 'treatments', 'reports', 'tableware', 'devices', 'layout'].filter(k => sel.includes(k));
   if (packKeys.length) { const pk = mhPackBuild(packKeys); if (Object.keys(pk.sets).length) files.push({ name: `maxedhealth_setup_${dateStr}.json`, text: JSON.stringify(pk, null, 1), type: 'application/json' }); }
   if (sel.includes('fullstate')) { files.push({ name: `maxhealth_backup_${dateStr}.json`, text: JSON.stringify(buildFullBackupPayload(), null, 2), type: 'application/json' }); try { saveFullBackupToServer(false); } catch (e) {} }
   if (!files.length) { showToast('Nothing set up in those yet, so there is nothing to export'); return; }
@@ -40748,6 +40780,7 @@ function mhLayoutKeys(root) {
 }
 function mhDoResetLayout(keys) {
   try { keys.forEach(k => localStorage.removeItem(k)); } catch (_) {}
+  try { const base = mhLayoutBase(); keys.forEach(k => { if (k in base) localStorage.setItem(k, base[k]); }); } catch (_) {}   // a pack's starting layout, if one was applied
   try {
     const tabEl = document.querySelector('#mainTabRow .tab.active'); const tab = tabEl ? (tabEl.id || '').replace(/^maintab-/, '') : '';
     if (tab) sessionStorage.setItem('mh_resume_tab', JSON.stringify({ tab, sub: (typeof _activeSubTab !== 'undefined' && _activeSubTab[tab]) || '' }));
@@ -40756,10 +40789,10 @@ function mhDoResetLayout(keys) {
 }
 function mhResetScreen(btn) {
   const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn);
-  appConfirm('Put this screen back to its standard layout? Open/closed cards, hidden cards, their order and the filter go back to default. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(root)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
+  appConfirm('Put this screen back to its standard layout? Open/closed cards, hidden cards, their order and the filter go back to ' + (Object.keys(mhLayoutBase()).length ? 'your starter pack layout' : 'default') + '. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(root)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
 }
 function mhResetAllLayout() {
-  appConfirm('Put every screen back to its standard layout? Open/closed cards, hidden cards, their order and filters all go back to default. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(null)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
+  appConfirm('Put every screen back to its standard layout? Open/closed cards, hidden cards, their order and filters all go back to ' + (Object.keys(mhLayoutBase()).length ? 'your starter pack layout' : 'default') + '. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(null)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
 }
 window.addEventListener('load', () => setTimeout(() => {
   try { const r = JSON.parse(sessionStorage.getItem('mh_resume_tab') || 'null'); if (r && r.tab) { sessionStorage.removeItem('mh_resume_tab'); switchTab(r.tab); if (r.sub) switchSubTab(r.tab, r.sub); } } catch (_) {}
