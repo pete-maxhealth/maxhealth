@@ -6238,7 +6238,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.998'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.999'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -20151,11 +20151,11 @@ function buildBulkDataActionsCard() {
         <label><input type="radio" name="bulkFmt" value="separate" style="accent-color:var(--accent);"> Separate files</label>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="copy-btn" onclick="mhExportSelected(false)" style="flex:1;font-size:12px;">💾 Export</button>
-        <button class="copy-btn" onclick="mhExportSelected(true)" style="flex:1;font-size:12px;">📤 Share</button>
+        <button class="copy-btn" onclick="mhExportSelected(false)" style="flex:1;font-size:12px;">💾 Save to Downloads</button>
+        <button class="copy-btn" onclick="mhExportSelected(true)" style="flex:1;font-size:12px;">📤 Share…</button>
       </div>
       <button class="copy-btn" onclick="mhPackShare()" style="width:100%;font-size:12px;margin-top:8px;">📦 Share my setup only (no entries or personal details)</button>
-      <div class="settings-hint" style="margin-bottom:14px;">Export also saves a copy to the phone's server. The setup button sends only the lists ticked above that are setup, as one small file someone else can import.</div>
+      <div class="settings-hint" style="margin-bottom:14px;">Save to Downloads honours the zip or separate files choice. Share… always makes one zip and opens your phone's share menu (Drive, email, WhatsApp, Files). Saving also keeps a copy on the phone's server. The setup button sends only the lists ticked above that are setup, as one small file someone else can import.</div>
 
       <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin:6px 0;">Import</div>
       <input type="file" id="bulkImportFileInput" accept=".csv,.txt,.json,.zip" multiple style="display:none" onchange="bulkImportMultipleFiles(this)">
@@ -20170,6 +20170,23 @@ function buildBulkDataActionsCard() {
         <button class="copy-btn" id="pushToServerBtn" onclick="syncAllNutritionToServer()" style="width:100%;font-size:12px;">🔄 Push this app's nutrition history to the phone's server</button>
         <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;">Overwrites the server's master.csv to match this app. Use it if the server's copy has fallen behind.</div>
       </details>`;
+}
+function mhShareRetryModal(file, blob, name, why) {
+  document.getElementById('mhShareRetry')?.remove();
+  const m = document.createElement('div'); m.id = 'mhShareRetry';
+  m.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:400px;width:100%;">
+    <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:10px;">📤 Ready to share</div>
+    <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px;">Your zip is ready. The phone wants a fresh tap before it opens the share menu, so tap the button below.</div>
+    <div style="display:flex;gap:10px;"><button class="modal-btn cancel" id="mhShRNo" style="flex:1;padding:12px;">Cancel</button><button class="modal-btn" id="mhShRGo" style="flex:1;padding:12px;">Share…</button></div>
+    <button class="copy-btn" id="mhShRSave" style="width:100%;font-size:12px;margin-top:10px;">💾 Save to Downloads instead</button></div>`;
+  document.body.appendChild(m);
+  document.getElementById('mhShRNo').onclick = () => m.remove();
+  document.getElementById('mhShRSave').onclick = () => { m.remove(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); showToast('Saved to Downloads ✓'); };
+  document.getElementById('mhShRGo').onclick = async () => {
+    try { await navigator.share({ files: [file], title: 'MaxedHealth export' }); m.remove(); try { localStorage.setItem('mh_last_export_nudge', localISODate(new Date())); } catch (e) {} showToast('Shared ✓'); }
+    catch (e) { if (e && e.name === 'AbortError') return; m.remove(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); showToast("The share menu wouldn't open (" + (e && e.name || 'error') + '), so the zip was saved to Downloads.'); }
+  };
 }
 function mhBulkSelect(on) { document.querySelectorAll('#bulkDsList .bulkDs').forEach(c => { c.checked = !!on; }); }
 function getBulkSelectedDatasets() { return [...document.querySelectorAll('#bulkDsList .bulkDs:checked')].map(c => c.value); }
@@ -20208,7 +20225,17 @@ async function mhExportSelected(share) {
       const zip = new JSZip(); files.forEach(f => zip.file(f.name, f.text));
       const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }); const name = `maxedhealth_export_${dateStr}.zip`;
       if (share) {
-        try { const file = new File([blob], name, { type: 'application/zip' }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'MaxedHealth export' }); stamp(); showToast('Shared ✓'); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+        const file = new File([blob], name, { type: 'application/zip' });
+        const canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+        if (canShare) {
+          try { await navigator.share({ files: [file], title: 'MaxedHealth export' }); stamp(); showToast('Shared ✓'); return; }
+          catch (e) {
+            if (e && e.name === 'AbortError') return;
+            // Most often the browser refuses because too long passed since the tap. A fresh tap on a button works.
+            mhShareRetryModal(file, blob, name, e && e.name); return;
+          }
+        }
+        showToast("This browser can't open the share menu, so the zip was saved to Downloads instead. Open it from your Files app to send it.");
       }
       save(blob, name, 'application/zip'); stamp(); showToast(`Saved one zip with ${files.length} file${files.length === 1 ? '' : 's'} ✓`); return;
     }

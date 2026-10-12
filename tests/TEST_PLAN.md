@@ -62,6 +62,7 @@ Do this once at large text and once at small text.
 4h. **Translate this screen.** In French, open a screen with leftover English, tap ✨ next to the flag, confirm: the English becomes French and stays so after reopening; Forget my AI translations undoes it.
 4i. **Score on a no-food day.** Score a symptom and add a tag today without logging food; next day History/Compare Metrics still show that day. In Reports, ask the analyst about a symptom: the answer can mention your scores.
 4j. **Score a past day.** Under How are you today?, tap ＋ Score a past day, pick 3 days ago, score, Save; Compare Metrics shows that day.
+4k. **Share vs Save.** Settings > Data, tick one thing, tap Share…: the phone's share menu opens (or a 'Ready to share' box appears first; tap Share… in it). Save to Downloads puts the file in Downloads and does not open a menu.
 4b. **Close all really closes.** On Trends (7 Days) tap Close all: the Weight, Heart rate and other metric cards fold to one-line bars (tap a bar to open just that one); Open all opens them. Same on Today and the Library.
 5. **No regressions.** Log a meal by typing, run the 3-AI check (the grams must not be echoed unless you typed them), tap a Trends chart, use the Next meal idea buttons (each tapped pill stays highlighted).
 6. **Jill's phone.** Fresh install of the web version: the first-run "what do you want to track?" choice appears once, then the chosen layout.

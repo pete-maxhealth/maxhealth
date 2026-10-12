@@ -4,13 +4,13 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.998
+**Version:** v3.10.999
 
 ---
 
 ## What it does
 
-**Newest (v3.10.981 – 998):**
+**Newest (v3.10.981 – 999):**
 
 - **Starter packs and "Change my focus"** — 27 ready-made symptom, treatment and screen-layout starting points (brain tumour, epilepsy, migraine, cluster headache, diabetes, MS, Parkinson's, asthma, high blood pressure, menopause, IBS, muscle growth and more). Packs carry lists only, never advice or personal data. Switch focus, or **add another focus** to combine layouts and keep both sets of lists. Nothing is overwritten without a preview.
 - **Several conditions at once** — symptoms and treatments carry condition labels; chips filter Compare Metrics, Treatment Sessions and report building by condition.
@@ -83,7 +83,7 @@
 - **Slow-wait pulsing border** — AI and report waits show the same pulsing box as the chat's "Analysing photo" bubble.
 - **Self-monitoring** — Settings → About → System health summarises data freshness, pipeline errors, recorded app errors and backup age.
 - **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Health Connect (Android) also supported — steps, heart rate, weight, and sleep read directly from Android's own health data hub, deliberately last in precedence behind any dedicated device's own reading. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
-- **Demo mode, now with real personas** — "Try a demo first" opens a picker of genuinely different starting points (currently seventeen: two goal-based — general weight loss, body recomposition with real training-block/HRV progression data — and one persona for each of the seven supported conditions, including two deliberately contrasting outcomes on the same evidence base, and a nutrition/effort-focused "still struggling" case with no medical condition at all). Nutrition history, weight trend, and (for several) treatment sessions/symptoms/a ready-made Report Profile are generated to genuinely match that persona's stated targets and story, not a single fixed dataset relabelled. Entirely in memory — never touches real storage during a session, and now self-heals automatically on the next load even if the session ends without an explicit "Exit demo" (closing the tab, switching apps, or the phone locking no longer leaves demo data stuck in a real account).
+- **Demo mode, now with real personas** — "Try a demo first" opens a picker of genuinely different starting points (currently eighteen: two goal-based — general weight loss, body recomposition with real training-block/HRV progression data — and one persona for each of the seven supported conditions, including two deliberately contrasting outcomes on the same evidence base, and a nutrition/effort-focused "still struggling" case with no medical condition at all). Nutrition history, weight trend, and (for several) treatment sessions/symptoms/a ready-made Report Profile are generated to genuinely match that persona's stated targets and story, not a single fixed dataset relabelled. Entirely in memory — never touches real storage during a session, and now self-heals automatically on the next load even if the session ends without an explicit "Exit demo" (closing the tab, switching apps, or the phone locking no longer leaves demo data stuck in a real account).
 - **Log food to a past day** — from History, add a forgotten or mis-logged item to any previous day through the exact same AI-parsing pipeline used for today (text, photo, barcode, library). Recalculates that day's totals from its full log automatically, no manual arithmetic.
 - **Multi-AI consensus check** — verify any logged item against Claude, Gemini, and ChatGPT independently, one tap. Three estimates agreeing is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as worth finding a real label rather than trusting any of them. Each provider's own numbers are checked for internal consistency before comparing. Per-provider checkboxes let you exclude an outlier before applying an average to a single item.
 - **Activity Credit Balance** — rolling-window tracking (Insights → Trends) of exercise calorie credit earned vs actually eaten back, built from real stored history. A single day under an exercise-boosted target is harmless; this surfaces the pattern if it's happening often enough to compound into something real, with interpretation tailored to your actual Goal/Phase setting.

@@ -6,6 +6,11 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.999 — Share Really Shares
+
+- Pete noticed Share seemed identical to Export. Cause (inferred from the code, confirmed by the new behaviour): Share always builds a zip, and the phone's share menu only opens if the tap is still "fresh". After the zip is built that can have expired, and the old code then silently saved a download, so it looked like Export. Now a refused share opens a small "Ready to share" box with a fresh **Share…** button (plus Cancel and "Save to Downloads instead"). If the browser has no share menu at all, the toast says so plainly instead of pretending.
+- Buttons relabelled **💾 Save to Downloads** and **📤 Share…**, with a hint saying what each does (Share always makes one zip). Five-language strings added. Test: `p118`.
+
 ## v3.10.998 — Score a Past Day
 
 - **＋ Score a past day** under the "How are you today?" card: pick any of the last 14 days, tap 1-5 for each symptom (tap a score again to clear it), Save. It goes into that day's history entry (a small food-less one is created, in date order, if the day has none; food data is never touched). Good for a day you forgot to score, or one you want filled in after a clinic visit. Appears in Compare Metrics, before/after, reports and the analyst like any other score. Test: `p117`.
