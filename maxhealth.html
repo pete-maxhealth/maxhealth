@@ -4876,6 +4876,18 @@
       <button class="copy-btn" style="width:100%;margin-top:8px;background:var(--surface2);color:var(--text2);" onclick="clearLabelReadLog()">Clear log</button>
     </div>
     </div>
+    <div class="section-title" style="cursor:pointer;border:1px solid rgba(245,197,66,0.2);border-top:none;border-radius:0 0 8px 8px;" onclick="toggleSection('set-pipelinelog','set-pipelinelog-wrap','set-pipelinelog-icon')">🧾 Pipeline &amp; Health Connect Log <span id="set-pipelinelog-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+    <div id="set-pipelinelog-wrap">
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;line-height:1.6;">What the background import actually did: each run, which source filled which day, errors. Shows every log file the server keeps, where each one lives and when it was last written, so a log that has gone quiet is obvious.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="copy-btn" style="flex:1 1 120px;" onclick="mhRenderPipelineLog('')">🔍 View latest</button>
+        <button class="copy-btn" style="flex:1 1 120px;" onclick="mhRenderPipelineLog('health_connect')">📲 Health Connect only</button>
+        <button class="copy-btn" style="flex:1 1 120px;" onclick="mhRenderPipelineLog('steps')">👟 Steps only</button>
+      </div>
+      <div id="pipelineLogOutput" style="display:none;font-family:'Space Mono',monospace;font-size:10px;color:var(--text2);line-height:1.7;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word;"></div>
+    </div>
+    </div>
     </div><!-- end advanced-tools-wrap -->
 
     <div class="card-unit" style="margin-top:16px;">
@@ -6268,7 +6280,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1003'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1004'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -12420,6 +12432,7 @@ function initSettings() {
     ['set-jserrors',      'set-jserrors-wrap',      'set-jserrors-icon',      false],
     ['set-manuallog',     'set-manuallog-wrap',     'set-manuallog-icon',     false],
     ['set-labelread',     'set-labelread-wrap',     'set-labelread-icon',     false],
+    ['set-pipelinelog',   'set-pipelinelog-wrap',   'set-pipelinelog-icon',   false],
     ['set-formulas',      'set-formulas-wrap',      'set-formulas-icon',      false],
     ['set-databackup',    'set-databackup-wrap',    'set-databackup-icon',    false],
     ['set-carer',         'set-carer-wrap',         'set-carer-icon',         false],
@@ -12928,6 +12941,24 @@ function clearJSErrorLog() {
     if (out) out.style.display = 'none';
     showToast('Error log cleared');
   });
+}
+
+
+async function mhRenderPipelineLog(q) {
+  const out = document.getElementById('pipelineLogOutput'); if (!out) return;
+  out.style.display = 'block'; out.textContent = 'Reading the server logs…';
+  try {
+    const r = await fetch(`${MH_SERVER}/logs?n=150${q ? '&q=' + encodeURIComponent(q) : ''}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json(); const parts = [`Server time now: ${d.now}${q ? `   (showing only lines containing "${q}")` : ''}`];
+    const fmtAge = s => s < 3600 ? Math.round(s / 60) + ' min' : s < 172800 ? Math.round(s / 3600) + ' h' : Math.round(s / 86400) + ' days';
+    (d.files || []).forEach(f => {
+      if (!f.exists) { parts.push(`\n── ${f.name}: not found\n   ${f.path}`); return; }
+      const stale = f.age_s > 172800 ? '   ⚠ STALE, nothing written for ' + fmtAge(f.age_s) : '';
+      parts.push(`\n── ${f.name}: last written ${f.mtime} (${fmtAge(f.age_s)} ago), ${Math.round(f.size / 1024 * 10) / 10} KB${stale}\n   ${f.path}\n${(f.lines || []).length ? f.lines.join('\n') : '   (no matching lines)'}`);
+    });
+    out.textContent = parts.join('\n');
+  } catch (e) { out.textContent = 'Could not read the logs: ' + (e && e.message || e) + '. This needs the phone server running (Local mode).'; }
 }
 
 function renderLabelReadLog() {
@@ -18072,6 +18103,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'JS Error Log', key: 'set-jserrors', subtab: 'manage', keywords: 'javascript bug troubleshooting console' },
   { label: 'Manual Entry Log', key: 'set-manuallog', subtab: 'manage', keywords: 'manual entry audit history changes weight steps hr hrv spo2 sleep' },
   { label: 'Label Read Log', key: 'set-labelread', subtab: 'manage', keywords: 'fibre polyols AI debug' },
+  { label: 'Pipeline & Health Connect Log', key: 'set-pipelinelog', subtab: 'manage', keywords: 'import log steps sync health connect cron debug stale' },
   { label: 'Premium (local version)', key: 'set-premium', subtab: 'manage', keywords: 'premium upgrade paid local android health connect register interest' },
   { label: 'About', key: 'set-about', subtab: 'manage', keywords: 'version feedback bug demo mode github' },
   { label: '💗 Wellness Score Debug', key: 'set-wellnessdebug', subtab: 'manage', keywords: 'wellness score debug steps spo2 hrv vitals activity raw data' },
@@ -22008,7 +22040,7 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 // Injected next to the output, never inside it, so what gets copied is exactly the output text.
 const MH_OUT_SEL = ['.output-box', '.command-box', '#rpt-ask-output', '#rpt-ask-text', '#gbm-summary-output', '#gbm-summary-text', '#missedDayAIResult', '#tdeeResult',
   '#oncologyOutput', '#treatmentSessionsResult', '#fasting-report-content', '#rpt-query-result', '#mhPackResult', '#weeklyExportOutput', '#exportOutput',
-  '#appHealthCheckOutput', '#jsErrorLogOutput', '#diagnosticsCopyOutput', '#settingsChangeLogOutput', '#carerLinkOutput', '#suggestedTargetsContent',
+  '#appHealthCheckOutput', '#pipelineLogOutput', '#jsErrorLogOutput', '#diagnosticsCopyOutput', '#settingsChangeLogOutput', '#carerLinkOutput', '#suggestedTargetsContent',
   '#researchDigestHistory', '#bulkImportStatus', '#drillResultText', '.mh-output'].join(',');
 function mhOutText(el) { return (el.innerText || el.textContent || '').replace(/\n{3,}/g, '\n\n').trim(); }
 function mhOutSelectAll(el) { try { const r = document.createRange(); r.selectNodeContents(el); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } catch (_) {} }
@@ -22033,12 +22065,12 @@ function mhOutRefresh() {
       bar.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; ev.stopPropagation(); b.dataset.a === 'sel' ? mhOutSelectAll(el) : mhOutCopy(el); };
       el.insertAdjacentElement('afterend', bar);
     }
-    bar.style.display = shown ? 'flex' : 'none';
+    const want = shown ? 'flex' : 'none'; if (bar.style.display !== want) bar.style.display = want;
   });
 }
 function mhOutSchedule() { if (!_mhOutTimer) _mhOutTimer = setTimeout(mhOutRefresh, 500); }
 (function () {
-  const go = () => { try { new MutationObserver(mhOutSchedule).observe(document.body, { childList: true, subtree: true, characterData: true }); mhOutSchedule(); } catch (_) {} };
+  const go = () => { try { new MutationObserver(mhOutSchedule).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] }); mhOutSchedule(); } catch (_) {} };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
 })();
 
@@ -33098,6 +33130,7 @@ function switchSubTab(parent, tab, el) {
         ['set-jserrors',      'set-jserrors-wrap',      'set-jserrors-icon',      true],
         ['set-manuallog',     'set-manuallog-wrap',     'set-manuallog-icon',     true],
         ['set-labelread',     'set-labelread-wrap',     'set-labelread-icon',     true],
+        ['set-pipelinelog',   'set-pipelinelog-wrap',   'set-pipelinelog-icon',   true],
         ['set-logmutation',   'set-logmutation-wrap',   'set-logmutation-icon',   true],
         ['set-savedebug',     'set-savedebug-wrap',     'set-savedebug-icon',     true],
         // Found via a direct user report (Symptom Tracking left open despite

@@ -6,6 +6,11 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1004 — Pipeline & Health Connect Log
+
+- New card in Settings → Advanced: **🧾 Pipeline & Health Connect Log**. Reads every log the server keeps (`pipeline.log`, `cron_pipeline.log`, the watchdog and auto-update logs, plus the other places a pipeline log could have ended up), shows where each lives and when it was last written, flags one that has been silent for 2+ days as STALE, and can show only the Health Connect lines or only the steps lines. Has Select all and Copy. Server: `GET /logs?n=150&q=text`. Added after Pete's `pipeline.log` turned out to end in July while data was still arriving: a silent log is now visible instead of misleading. Test: `p121`.
+- The Select all / Copy bar now also appears for an output that becomes visible after it was filled (opened section, switched topic).
+
 ## v3.10.1003 — Typed Steps Survive the Night
 
 - Pete's rule for steps: during the day Health Connect gives the snapshot, the typed total is the fallback when Health Connect is not reporting, and at the end of the day RingConn / Zepp supply the true figure. The old code did not match: today the typed total beat Health Connect, and from midnight the (double-counted) Health Connect figure replaced the typed one, so typed entries seemed to vanish. Now: **today** a typed total is a floor (it shows while it is above what the devices report; Health Connect and ring/watch figures at or above it take over). **After the day ends** Health Connect can no longer replace a typed total, only a real device (RingConn, Zepp, Garmin, Withings) can, and a typed total also replaces a Health Connect figure already stored for that day. Entries from the Manual Entry screen are unchanged (always absolute). Test: `p87` (merge rules).

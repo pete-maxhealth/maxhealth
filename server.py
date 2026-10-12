@@ -1363,6 +1363,36 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         # Newest health_connect_export*.json the launcher has written, whether
         # still in inbox/ or already archived to inbox/old/. Lets the app say
         # "last data 3h ago" so a silently stalled background sync is visible.
+        # ── Log viewer (v3.10.1004): the tail of every log file the pipeline and helpers write, with where each one
+        # lives and how old it is, so a stale log (or one written somewhere unexpected) is visible instead of silent.
+        elif path == '/logs':
+            try:
+                n = max(10, min(500, int((params.get('n') or ['150'])[0])))
+                q = ((params.get('q') or [''])[0] or '').lower()[:40]
+                home = os.path.expanduser('~')
+                cands = [('pipeline.log', LOG_FILE), ('cron_pipeline.log', os.path.join(LOGS_DIR, 'cron_pipeline.log')),
+                         ('watchdog', os.path.join(home, 'mh_watchdog.log')), ('autoupdate', os.path.join(home, 'mh_autoupdate.log')),
+                         ('pipeline.log (app folder)', os.path.join(APP_DIR, 'pipeline.log')),
+                         ('pipeline.log (home)', os.path.join(home, 'logs', 'pipeline.log'))]
+                seen, files = set(), []
+                for name, pth in cands:
+                    if pth in seen: continue
+                    seen.add(pth)
+                    info = {'name': name, 'path': pth, 'exists': os.path.isfile(pth)}
+                    if info['exists']:
+                        st = os.stat(pth); info['size'] = st.st_size; info['mtime'] = datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+                        info['age_s'] = int(time.time() - st.st_mtime)
+                        try:
+                            with open(pth, 'r', encoding='utf-8', errors='replace') as fh: lines = fh.read().splitlines()
+                        except Exception as ex:
+                            lines = ['(could not read: %s)' % ex]
+                        if q: lines = [l for l in lines if q in l.lower()]
+                        info['lines'] = lines[-n:]
+                    files.append(info)
+                self.send_json({'now': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 'files': files})
+            except Exception as ex:
+                self.send_json({'error': str(ex)}, 500)
+
         elif path == '/selfcheck':
             try:
                 import selfcheck as _sc
