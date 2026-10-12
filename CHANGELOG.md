@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.975 — Gentle Nudges, And Three More Starter Packs
+
+- **Optional nudges on Today.** If a starter pack tucked a card away (hidden, or folded into a bar), then a week after the pack was applied the app offers it back once: *Show it / Not now / Don't ask again*. One at a time, a week apart; "Not now" asks again in a week; cards you hid yourself are never offered; nothing appears without a tap. "Show it" also updates your pack layout so Default keeps it. Offered in order: Macro ratio, Goal check, Day mode, Fasting, Ketosis.
+- **New starter packs** (symptom list and layout only, nothing here is advice): Epilepsy tracking, Type 2 diabetes tracking, Migraine & headache tracking. Available from Settings → Data → Starter packs.
+- Tests: `p94_nudges.py`.
+
 ## v3.10.974 — Toolbar Always First, Meal Picker Fix, Pill Sweep
 
 - **Filter toolbar fix on Trends**: the panel change in v973 made Trends pile up hundreds of hidden duplicate toolbars and left the real one far down the page, so the category chips looked like they had vanished. Fixed, with a test that counts toolbars per screen.

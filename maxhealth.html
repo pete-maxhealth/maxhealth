@@ -708,6 +708,8 @@
   /* v3.10.973: everything the Filter opens (topic chips, "Hidden:" lists) lives in ONE panel under the toolbar, and every pill on every main
      screen shares one size, set here. */
   :root { --mh-pill-fs: 10.5px; }
+  .mhNudgeBtn { background: transparent; border: 1px solid var(--accent-glow); color: var(--accent); border-radius: 999px; padding: 4px 11px; font-size: calc(var(--mh-pill-fs) + 0.5px); cursor: pointer; }
+  .mhNudgeBtn:first-child { background: var(--accent-dim); font-weight: 700; }
   .mealPillEl.mh-meal-on::before { content: '\2713 '; }
   /* one pill size for every pill-style button on the main pages (icons stay as they are) */
   .quick-btn, .provider-btn, .drill-period, .hist-filter-btn, .trends-filter-btn, .occasion-tag { font-size: calc(var(--mh-pill-fs) + 0.5px); padding: 4px 11px; }
@@ -6211,7 +6213,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.974'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.975'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19780,7 +19782,7 @@ function mhPackApply(pack, picked, mode, idMaps) {
       try {
         if (mode === 'replace') { const cur = mhLayoutSnapshot() || {}; Object.keys(cur).forEach(x => localStorage.removeItem(x)); }
         Object.keys(lay).forEach(x => { if (mode === 'replace' || localStorage.getItem(x) == null) { localStorage.setItem(x, lay[x]); n++; } });
-        localStorage.setItem('mh_layout_base', JSON.stringify(lay));
+        localStorage.setItem('mh_layout_base', JSON.stringify(lay)); localStorage.setItem('mh_layout_base_at', localISODate(new Date())); try { const ns = JSON.parse(localStorage.getItem('mh_nudge_v1') || '{}'); delete ns.done; delete ns.snoozeUntil; localStorage.setItem('mh_nudge_v1', JSON.stringify(ns)); } catch (_) {}
       } catch (_) {}
       out.push(`✓ Screen layout: ${n} setting${n === 1 ? '' : 's'} applied (the Default buttons now return to this layout). The app refreshes when you tap Done`);
       return;
@@ -40795,6 +40797,7 @@ function mhEnsurePillsToolbars() {
     if (panel.previousElementSibling !== tb) tb.parentNode.insertBefore(panel, tb.nextSibling);
     root.querySelectorAll(MH_PILL_SEL).forEach(el => { if (el.parentNode !== panel) panel.appendChild(el); });
   });
+  try { mhNudgeRender(); } catch (_) {}
 }
 function mhClosePills() { try { localStorage.setItem('mh_pills_open', '0'); } catch (_) {} mhEnsurePillsToolbars(); }   // a filter is set once, so choosing one tucks the panel away
 function mhTogglePills() { try { localStorage.setItem('mh_pills_open', mhPillsOpen() ? '0' : '1'); } catch (_) {} mhEnsurePillsToolbars(); }
@@ -40925,6 +40928,68 @@ function mhSectionsAll(btn, open) {
   const kick = () => { if (!t) t = requestAnimationFrame(run); };
   const start = () => { run(); new MutationObserver(kick).observe(document.body, { childList: true, subtree: true }); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start(); })();
+// ── Gentle nudges (v3.10.975) ───────────────────────────────────────────────────────────────────────────────
+// If a starter pack tucked a Today card away (hidden, or folded into a bar), then after a week of use the app offers it back once,
+// politely: Show it / Not now (asks again in a week) / Don't ask again. Never more than one at a time, never for cards the person
+// hid themselves, and nothing is ever shown without a tap.
+const MH_NUDGES = [
+  ['macroratio', 'Macro ratio', 'your protein / fat / carb split for today, so you can see how a meal shifts it.'],
+  ['goalcheck', 'Goal check', 'a one-glance check of whether today is on track against your targets.'],
+  ['daymode', 'Day mode', 'switch between standard, occasion and holiday targets when your day is different.'],
+  ['fasting', 'Fasting', 'a timer for your overnight fast, built from the meal times you log.'],
+  ['ketosis', 'Ketosis', 'your ketone / GKI zone, if you are following a ketogenic or low-carb approach.'],
+];
+function mhNudgeState() { try { return JSON.parse(localStorage.getItem('mh_nudge_v1') || '{}') || {}; } catch (_) { return {}; } }
+function mhNudgeSave(st) { try { localStorage.setItem('mh_nudge_v1', JSON.stringify(st)); } catch (_) {} }
+function mhNudgeAddDays(iso, n) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return localISODate(d); }
+// Which pack-tucked card (if any) is worth offering right now. Returns {key, kind:'hidden'|'folded'} or null.
+function mhNudgeCandidate() {
+  const st = mhNudgeState(); if (st.never) return null;
+  const base = mhLayoutBase(); if (!Object.keys(base).length) return null;
+  const today = localISODate(new Date());
+  let since = localStorage.getItem('mh_layout_base_at'); if (!since) { since = today; try { localStorage.setItem('mh_layout_base_at', since); } catch (_) {} }   // layouts set before nudges existed start their week now
+  if (today < mhNudgeAddDays(since, 7)) return null;
+  if (st.snoozeUntil && today < st.snoozeUntil) return null;
+  let bh = []; try { bh = JSON.parse(base.mh_dashboard_hidden || '[]') || []; } catch (_) {}
+  const nowHidden = getDashboardHidden();
+  for (const [k] of MH_NUDGES) {
+    if ((st.done || []).includes(k)) continue;
+    if (bh.includes(k) && nowHidden.includes(k)) return { key: k, kind: 'hidden' };
+    if (base['mh_collapse_dc_' + k] === 'closed' && mhDcGet(k)) return { key: k, kind: 'folded' };
+  }
+  return null;
+}
+function mhNudgeRender() {
+  const scroll = document.getElementById('dashScroll'); if (!scroll) return;
+  const cand = mhNudgeCandidate(); let card = document.getElementById('mhNudgeCard');
+  if (!cand) { if (card) card.remove(); return; }
+  if (card && card.dataset.key === cand.key) return;
+  const info = MH_NUDGES.find(n => n[0] === cand.key);
+  if (!card) { card = document.createElement('div'); card.id = 'mhNudgeCard'; card.style.cssText = 'margin:0 0 12px;padding:12px 14px;border:1px solid var(--accent-glow);background:var(--accent-dim);border-radius:12px;font-size:12px;line-height:1.5;color:var(--text2);'; }
+  card.dataset.key = cand.key;
+  card.innerHTML = `<div style="font-weight:700;color:var(--accent);margin-bottom:3px;">Optional: bring back ${_pkEsc(info[1])}?</div>
+    <div style="margin-bottom:8px;">${_pkEsc(info[1])} is ${_pkEsc(info[2])} It was tucked away to keep Today simple. No rush.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="mhNudgeBtn" onclick="mhNudgeAct('show')">Show it</button><button class="mhNudgeBtn" onclick="mhNudgeAct('later')">Not now</button><button class="mhNudgeBtn" onclick="mhNudgeAct('never')">Don't ask again</button></div>`;
+  const tb = scroll.querySelector(':scope > .mh-pills-toolbar'), panel = scroll.querySelector(':scope > .mh-filter-panel');
+  const after = panel || tb; if (after) scroll.insertBefore(card, after.nextSibling); else scroll.insertBefore(card, scroll.firstChild);
+}
+function mhNudgeAct(what) {
+  const cand = mhNudgeCandidate(); const st = mhNudgeState(); const today = localISODate(new Date());
+  if (what === 'never') { st.never = true; mhNudgeSave(st); showToast("Okay, no more suggestions. Everything is still in the Filter."); }
+  else if (what === 'later') { st.snoozeUntil = mhNudgeAddDays(today, 7); mhNudgeSave(st); showToast('Okay, I will ask again in a week'); }
+  else if (what === 'show' && cand) {
+    const base = mhLayoutBase();
+    if (cand.kind === 'hidden') {
+      saveDashboardHidden(getDashboardHidden().filter(x => x !== cand.key));
+      try { const bh = JSON.parse(base.mh_dashboard_hidden || '[]').filter(x => x !== cand.key); base.mh_dashboard_hidden = JSON.stringify(bh); } catch (_) {}
+      try { applyDashboardOrder(); } catch (_) {}
+    } else { mhDcSet(cand.key, false); base['mh_collapse_dc_' + cand.key] = 'open'; try { mhDcApply(); } catch (_) {} }
+    try { localStorage.setItem('mh_layout_base', JSON.stringify(base)); } catch (_) {}   // Default now keeps it too
+    st.done = (st.done || []).concat(cand.key); st.snoozeUntil = mhNudgeAddDays(today, 7); mhNudgeSave(st);
+    showToast('Added to Today. You can hide it again any time from the Filter.');
+  }
+  mhNudgeRender();
+}
 // Fasting history (v3.10.938): every measured fast since logging began, newest first. Built from the same
 // meal times as everything else, so a fast only appears when both the meal before it and the meal after it
 // were logged with a real time. Nothing is estimated; days that cannot be measured are counted, not guessed.
