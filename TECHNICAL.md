@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.974 | 23 | `mhPillsRoot` unwraps `.mh-filter-panel` (fixed runaway toolbars); toolbar forced to be first child of its list; meal picker uses `.mh-mealpicker(-live)` + `data-cat`/`data-count-for` instead of shared ids. |
 | v3.10.973 | 23 | `.mh-filter-panel` created in `mhEnsurePillsToolbars` (chips + Hidden strips moved into it); `--mh-pill-fs` shared by toolbar, chips, `.trends-filter-btn`, `.occasion-tag`. |
 | v3.10.972 | 23 | Wizard step `5b` (`obSetStart`, `_obStart`), `MH_FIRST_RUN_PACKS` embedded, applied in `onboardFinish` then reload; `mh_offer_local_switch` flag. |
 | v3.10.971 | 23 | Packs carry `layout` (`mhLayoutSnapshot`/`mhLayoutClean`/`mhLayoutBase`, `mh_layout_base`); `mhDoResetLayout` restores the base. |
@@ -1102,6 +1103,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
 - `p84_today_sleep.py` — today's own sleep wins over yesterday's row
 - `p85_field_sources.py` — day cards show per-field data source
+- `p93_toolbar_order_meal_picker.py` — one toolbar per screen, first and in the same order; meal picker highlights the live picker only
 - `p92_first_run_choice.py` — wizard step 5b: pre-selection, pack + layout applied, everything/preview apply nothing, embedded packs match files
 - `p91_pack_layout.py` — pack layout is applied layout-keys-only, merge respects the person's own screens, Default returns to the pack layout
 - `p90_stale_hidden.py` — stale hidden keys are pruned and not counted in the Filter badge

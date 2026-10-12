@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.974 — Toolbar Always First, Meal Picker Fix, Pill Sweep
+
+- **Filter toolbar fix on Trends**: the panel change in v973 made Trends pile up hundreds of hidden duplicate toolbars and left the real one far down the page, so the category chips looked like they had vanished. Fixed, with a test that counts toolbars per screen.
+- **Same controls, same order, same place on every page**: Filter / Open all / Close all / Default is now always the first thing on Today, Trends, Reports, Settings → Manage and Settings → Data (it used to land wherever the first chip was created).
+- **Next meal idea**: each picker now keeps its own selection. Opening the picker a second time retires the old one (their buttons shared ids, so taps could highlight the wrong copy). Selected categories show a tick as well as the colour, stay at full strength after Send, and **Snack** is now a clearly separate action ("Snack ideas →", dashed) rather than looking permanently selected.
+- **Pill sizing swept across the remaining pill-style buttons**: Log quick buttons, History range pills, Reports ranges, provider pills, drill-down periods, tableware chip. Icons are unchanged.
+- Test: `p93_toolbar_order_meal_picker.py`.
+
 ## v3.10.973 — One Filter Panel, One Pill Size
 
 - **Hidden lists now sit inside the Filter.** Opening Filter shows one panel under the toolbar holding the topic chips and the "Hidden:" pills together (divided by a dotted line), instead of loose rows below. Works on Today, Trends, Reports and every Settings screen.

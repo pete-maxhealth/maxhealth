@@ -708,6 +708,10 @@
   /* v3.10.973: everything the Filter opens (topic chips, "Hidden:" lists) lives in ONE panel under the toolbar, and every pill on every main
      screen shares one size, set here. */
   :root { --mh-pill-fs: 10.5px; }
+  .mealPillEl.mh-meal-on::before { content: '\2713 '; }
+  /* one pill size for every pill-style button on the main pages (icons stay as they are) */
+  .quick-btn, .provider-btn, .drill-period, .hist-filter-btn, .trends-filter-btn, .occasion-tag { font-size: calc(var(--mh-pill-fs) + 0.5px); padding: 4px 11px; }
+  .quick-btns { gap: 6px; }
   body:not(.mh-pills-open) .mh-filter-panel { display: none !important; }
   .mh-filter-panel { margin: -4px 0 14px; padding: 10px 12px; border: 1px solid var(--accent-glow); border-radius: 12px; background: var(--surface2); }
   .mh-filter-panel:not(:has(> :not(:empty))) { display: none; }
@@ -2948,7 +2952,7 @@
       <div class="quick-btn" style="border-color:var(--accent);" onclick="quickPrompt('show today summary')">Today summary</div>
     </div>
     <div id="mhQueryRow" style="display:flex;flex-wrap:nowrap;justify-content:center;align-items:center;gap:6px;margin-bottom:6px;">
-    <div id="mhTwChip" onclick="mhTwOpenSettings()" style="display:none;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:8px 10px;border:1px solid var(--accent-glow);background:var(--accent-dim);color:var(--accent);border-radius:20px;font-size:12px;cursor:pointer;"></div>
+    <div id="mhTwChip" onclick="mhTwOpenSettings()" style="display:none;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 11px;border:1px solid var(--accent-glow);background:var(--accent-dim);color:var(--accent);border-radius:20px;font-size:calc(var(--mh-pill-fs) + 0.5px);cursor:pointer;"></div>
     <div class="quick-btns" id="quickBtnsQuery" style="margin-bottom:0;overflow:visible;flex:none;"></div>
     </div>
     <div id="photoPreviewWrap" style="display:none;margin-bottom:8px;position:relative;">
@@ -6207,7 +6211,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.973'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.974'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -16958,14 +16962,17 @@ function startNextMealFlow() {
   // Reset fresh every time the picker opens - a stale selection from a
   // previous, already-sent request should never silently carry into a new one.
   window._mealPillSelections = {};
+  // Any earlier picker still on screen is retired, so only one picker is ever live (their buttons used to share ids and could
+  // highlight the wrong copy).
+  document.querySelectorAll('.mh-mealpicker').forEach(p => { p.querySelectorAll('button,input,.mealPillEl').forEach(b => { if (!b.classList.contains('mealPillReset')) { b.disabled = true; b.style.pointerEvents = 'none'; b.style.opacity = '0.5'; } }); p.classList.remove('mh-mealpicker-live'); });
   // Reset button deliberately excluded from this selector (its own id,
   // not the shared .mealPillEl/button/input classes) - the whole point of
   // it is to stay usable after Send so several combinations can be tried
   // in one sitting, rather than reopening Next meal idea each time.
-  const disableAll = `this.closest('.chat-bubble').querySelectorAll('button,input,.mealPillEl').forEach(b=>{if(b.id!=='mealPillResetBtn'){b.disabled=true;b.style.pointerEvents='none';b.style.opacity='0.5';}});`;
+  const disableAll = `this.closest('.chat-bubble').querySelectorAll('button,input,.mealPillEl').forEach(b=>{if(!b.classList.contains('mealPillReset')){b.disabled=true;b.style.pointerEvents='none';if(!b.classList.contains('mh-meal-on'))b.style.opacity='0.5';}});`;
 
   const quickPill = (kind, label, emoji, color) =>
-    `<button onclick="${disableAll}suggestMealFromLibrary('${kind}')" style="padding:6px 12px;background:var(--surface2);border:1px solid ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label}</button>`;
+    `<button onclick="${disableAll}suggestMealFromLibrary('${kind}')" style="padding:6px 12px;background:transparent;border:1px dashed ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label} →</button>`;
 
   // Pete Spence's exact spec: each category pill gets its own count, hidden/0
   // until the pill itself is tapped (which sets it to 1 and reveals the
@@ -16974,19 +16981,19 @@ function startNextMealFlow() {
     const emoji = CATEGORY_EMOJI[c] || '🍽';
     const label = c.charAt(0).toUpperCase() + c.slice(1);
     return `<div style="display:inline-flex;align-items:center;gap:4px;">
-      <span class="mealPillEl" id="mealPill-${c}" onclick="toggleMealPillSelection('${c}')" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--text2);border-radius:20px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;user-select:none;">${emoji} ${label}</span>
-      <input class="mealPillEl" id="mealPillCount-${c}" type="number" min="1" value="1" onclick="event.stopPropagation()" oninput="updateMealPillCount('${c}', this.value)" style="display:none;width:34px;padding:4px;text-align:center;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-size:12px;">
+      <span class="mealPillEl" data-cat="${c}" role="button" aria-pressed="false" onclick="toggleMealPillSelection('${c}', this)" style="padding:6px 12px;background:var(--surface2);border:1px solid var(--text2);border-radius:20px;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;user-select:none;">${emoji} ${label}</span>
+      <input class="mealPillEl" data-count-for="${c}" type="number" min="1" value="1" onclick="event.stopPropagation()" oninput="updateMealPillCount('${c}', this.value)" style="display:none;width:34px;padding:4px;text-align:center;background:var(--surface2);border:1px solid var(--accent);border-radius:6px;color:var(--text);font-size:12px;">
     </div>`;
   }).join('');
 
-  bubble.innerHTML += `
+  bubble.innerHTML += `<div class="mh-mealpicker mh-mealpicker-live">
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
-      ${quickPill('snack', 'Snack', '🍿', '#f59e0b')}
       ${catPills}
     </div>
-    <button id="mealPillSendBtn" onclick="${disableAll}sendMealPillSelections()" disabled style="width:100%;margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;">Select at least one category above</button>
-    <button id="mealPillResetBtn" onclick="resetMealPillPicker(this)" style="width:100%;margin-top:8px;padding:8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;">🔄 Reset — try a different combination</button>
-  `;
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11px;color:var(--text3);">Or just a quick bite: ${quickPill('snack', 'Snack ideas', '🍿', '#f59e0b')}</div>
+    <button class="mealPillSendBtn" onclick="${disableAll}sendMealPillSelections()" disabled style="width:100%;margin-top:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;">Select at least one category above</button>
+    <button class="mealPillReset" onclick="resetMealPillPicker(this)" style="width:100%;margin-top:8px;padding:8px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:10px;font-size:12px;cursor:pointer;">🔄 Reset — try a different combination</button>
+  </div>`;
 }
 
 // Selecting toggles a pill on (defaulting to count 1, revealing the number
@@ -16994,23 +17001,20 @@ function startNextMealFlow() {
 // deselection only ever happens via tapping the pill itself, never by
 // clearing the number field, so typing in it can't accidentally drop a
 // selection the user still wants.
-function toggleMealPillSelection(cat) {
-  const pillEl = document.getElementById('mealPill-' + cat);
-  const countEl = document.getElementById('mealPillCount-' + cat);
-  if (!pillEl || !countEl) return;
+function toggleMealPillSelection(cat, pillEl) {
+  const root = pillEl && pillEl.closest('.mh-mealpicker'); if (!root || !root.classList.contains('mh-mealpicker-live')) return;
+  const countEl = [...root.querySelectorAll('input[data-count-for]')].find(x => x.dataset.countFor === cat);
+  if (!countEl) return;
   if (window._mealPillSelections[cat]) {
     delete window._mealPillSelections[cat];
-    pillEl.style.background = 'var(--surface2)';
-    pillEl.style.color = 'var(--text2)';
-    pillEl.style.borderColor = 'var(--text2)';
+    pillEl.classList.remove('mh-meal-on'); pillEl.setAttribute('aria-pressed', 'false');
+    pillEl.style.background = 'var(--surface2)'; pillEl.style.color = 'var(--text2)'; pillEl.style.borderColor = 'var(--text2)';
     countEl.style.display = 'none';
   } else {
     window._mealPillSelections[cat] = 1;
-    pillEl.style.background = 'var(--accent)';
-    pillEl.style.color = '#080a0d';
-    pillEl.style.borderColor = 'var(--accent)';
-    countEl.style.display = 'inline-block';
-    countEl.value = 1;
+    pillEl.classList.add('mh-meal-on'); pillEl.setAttribute('aria-pressed', 'true');
+    pillEl.style.background = 'var(--accent)'; pillEl.style.color = '#080a0d'; pillEl.style.borderColor = 'var(--accent)';
+    countEl.style.display = 'inline-block'; countEl.value = 1;
   }
   updateMealSendButtonState();
 }
@@ -17023,7 +17027,8 @@ function updateMealPillCount(cat, value) {
 }
 
 function updateMealSendButtonState() {
-  const btn = document.getElementById('mealPillSendBtn');
+  const live = document.querySelector('.mh-mealpicker-live');
+  const btn = live && live.querySelector('.mealPillSendBtn');
   if (!btn) return;
   const count = Object.keys(window._mealPillSelections || {}).length;
   if (count > 0) {
@@ -17072,18 +17077,21 @@ function resetMealPillPicker(btn) {
   document.querySelectorAll('[data-meal-suggestion-result="true"]').forEach(el => el.remove());
   const wrap = btn.closest('.chat-bubble');
   if (!wrap) return;
+  document.querySelectorAll('.mh-mealpicker-live').forEach(p => { if (!wrap.contains(p)) p.classList.remove('mh-mealpicker-live'); });
+  const me = btn.closest('.mh-mealpicker'); if (me) me.classList.add('mh-mealpicker-live');
   wrap.querySelectorAll('button,input,.mealPillEl').forEach(el => {
-    if (el.id === 'mealPillResetBtn') return;
+    if (el.classList.contains('mealPillReset')) return;
     el.disabled = false;
     el.style.pointerEvents = '';
     el.style.opacity = '';
   });
-  wrap.querySelectorAll('.mealPillEl[id^="mealPill-"]').forEach(pillEl => {
+  wrap.querySelectorAll('.mealPillEl[data-cat]').forEach(pillEl => {
+    pillEl.classList.remove('mh-meal-on'); pillEl.setAttribute('aria-pressed', 'false');
     pillEl.style.background = 'var(--surface2)';
     pillEl.style.color = 'var(--text2)';
     pillEl.style.borderColor = 'var(--text2)';
   });
-  wrap.querySelectorAll('.mealPillEl[id^="mealPillCount-"]').forEach(countEl => {
+  wrap.querySelectorAll('input[data-count-for]').forEach(countEl => {
     countEl.style.display = 'none';
     countEl.value = 1;
   });
@@ -40759,7 +40767,10 @@ function computeChemoCycleAnalysis() {
 // The pills themselves are unchanged and still do exactly what they did.
 function mhPillsOpen() { try { return localStorage.getItem('mh_pills_open') === '1'; } catch (_) { return false; } }
 const MH_PILL_SEL = '.mh-topic-bar, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
-function mhPillsRoot(el) { return el.closest('.subview, .view') || el.parentNode; }
+function mhPillsRoot(el) {
+  let p = el.parentNode; if (p && p.classList && p.classList.contains('mh-filter-panel')) p = p.parentNode;   // chips live inside the panel; the screen is the panel's parent
+  return el.closest('.subview, .view') || p;
+}
 function mhEnsurePillsToolbars() {
   document.body.classList.toggle('mh-pills-open', mhPillsOpen());
   const roots = new Map();
@@ -40775,6 +40786,9 @@ function mhEnsurePillsToolbars() {
       + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button><button onclick="mhResetScreen(this)" title="Put this screen back to its standard layout">\u21BA Default</button>`;
     if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
     if (tb.dataset.sig !== html) { tb.innerHTML = html; tb.dataset.sig = html; }
+    // The toolbar is always the FIRST thing in its screen's list, so Filter / Open all / Close all / Default sit in the same place on every page
+    // (it used to land wherever the first chip happened to be created, which put it at the bottom of Trends).
+    if (tb.parentNode && tb.parentNode.firstElementChild !== tb) tb.parentNode.insertBefore(tb, tb.parentNode.firstChild);
     // One panel under the toolbar holds the chips and the Hidden list, so they visibly sit inside the Filter.
     let panel = root.querySelector('.mh-filter-panel');
     if (!panel) { panel = document.createElement('div'); panel.className = 'mh-filter-panel'; }
