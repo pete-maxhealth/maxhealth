@@ -129,7 +129,7 @@ with fresh_server() as root, sync_playwright() as pw:
     for sub in ('customise', 'import', 'manage'):
         try: tap(pg4, 'settings', sub)
         except Exception as e: f.add('BUG', f'settings/{sub} not tappable'); continue
-        sel = pg4.evaluate("""() => [...document.querySelectorAll('#maintab-content-settings select, [id^="settings"] select, select')].filter(s => s.offsetParent !== null && !s.disabled).map(s => s.id || s.name || '')""")
+        sel = pg4.evaluate("""() => [...document.querySelectorAll('#maintab-content-settings select, [id^="settings"] select, select')].filter(s => s.offsetParent !== null && !s.disabled).filter(s => !/^mhLang/.test(s.id)).map(s => s.id || s.name || '')""")
         for sid in [x for x in sel if x][:25]:
             opts = pg4.evaluate("(id) => [...document.getElementById(id).options].map(o => o.value)", sid)
             for v in opts[:6]:

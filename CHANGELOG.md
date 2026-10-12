@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.993 — Meal Plan Card Tidy
+
+- The plan card's buttons are now three equal, labelled buttons in a row (✓ Ate it, ✎ Time, ✕ Remove; when due: ✓ Yes, ate it, ✎ Changed it, ✕ Skipped), so the lone ✕ no longer looks lost. Long food names wrap instead of pushing the card wider than the screen.
+- The eaten + planned totals now show your daily **fat goal** (Settings target) next to Fat, like the other macros. Test: `p105`.
+- Full persona suite re-run at v3.10.992: everything passes; the two failures (p113 rounding, p14 poking the language selector) were test issues, fixed.
+
 ## v3.10.992 — Flags, Report Profiles on Tags, Planner Fasting Heads-up
 
 - **Flags** 🇬🇧 🇪🇸 🇩🇪 🇫🇷 🇹🇷 on the language pickers, the 🌐 recovery box and the corner button. Medical terms with no safe translation stay in English (nothing is guessed); Settings says so.

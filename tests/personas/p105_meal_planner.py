@@ -45,6 +45,10 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("updateDashboard()"); page.wait_for_timeout(300)
     t = ev("document.getElementById('mhPlanTotals') && document.getElementById('mhPlanTotals').textContent") or ''
     if '150' not in t or '= 150' not in t.replace('  ', ' ') and '= 150 kcal' not in t: f.add('BUG', f'totals {t[:200]!r}')
+    ev("localStorage.setItem('mh_target_fat','200')"); ev("mhPlanRender()")
+    if '/ 200g' not in (ev("document.getElementById('mhPlanTotals').textContent") or ''): f.add('BUG', 'fat target not shown in plan totals')
+    ws = ev("[...document.querySelectorAll('.mh-plan-row button')].map(b=>Math.round(b.getBoundingClientRect().width))")
+    if ws and (max(ws) - min(ws) > 2 or ev("document.documentElement.scrollWidth") > 392): f.add('BUG', f'plan buttons not uniform / page overflows {ws}')
     # over ceiling warning
     ev("localStorage.setItem('mh_target_carbs','10')")
     ev("(()=>{ const a=mhPlanLoad(); a.push({id:'pbig',date:localISODate(),time:'23:58',text:'Rice',foods:[{name:'Rice',kcal:200,protein:4,fat:1,carbs:45}],createdAt:1}); mhPlanSave(a); mhPlanRender(); })()")

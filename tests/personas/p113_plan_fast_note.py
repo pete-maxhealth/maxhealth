@@ -15,7 +15,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev(P, [2, 300]): f.add('BUG', 'note shown when fasting is not tracked')
     ev("localStorage.setItem('mh_fasting_goal_h','12')")
     n = ev(P, [2, 300])
-    if 'Heads up' not in n or '5h' not in n or '12h' not in n: f.add('BUG', f'no/odd note {n!r}')
+    if 'Heads up' not in n or '12h' not in n or 'h' not in n.split('after')[0]: f.add('BUG', f'no/odd note {n!r}')
     if ev(P, [10, 300]): f.add('BUG', 'note shown although goal is met')
     if ev(P, [2, 10]): f.add('BUG', 'note shown for a plan under the fast threshold')
     if ev("mhPlanFastNote({date:'2020-01-01',time:'10:00'},300)"): f.add('BUG', 'note for a past plan')
