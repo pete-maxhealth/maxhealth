@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.988 — Condition Labels, Condition Filter, Add Another Focus
+
+- **Condition labels.** When a pack adds symptoms or treatments it stamps its condition on them (`conds`). If another pack shares a symptom, it carries both labels. Things you already had or typed yourself carry no label and so always show.
+- **Condition filter** (chips at the top of Compare Metrics and the Treatment Sessions picker, shown once you have two or more conditions): tick one or several, none means everything. It filters the symptom and treatment pills and anchors.
+- **Add as another focus** in Change my focus: keeps your lists, adds the pack's symptoms and treatments with its label, and combines the two layouts so a card stays tucked away or folded only if both focuses do. Switch still replaces. Test: `p108`.
+
 ## v3.10.987 — Tags As Before/During/After Anchors And Compare Metrics Pills
 
 - **Treatment Sessions analysis** (before / day of / after) can now be anchored on a **day tag**, not just a logged treatment: pick a tag such as "Treatment: Acupuncture" or "Exercise: 10k steps", or "Any Treatment" / "Any Exercise" for every tag in that category. Same window, same 3-day minimum, CSV, share and saved queries. Tags are listed after your treatments and are never selected by default.

@@ -6235,7 +6235,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.987'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.988'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19903,6 +19903,8 @@ function mhPackApply(pack, picked, mode, idMaps) {
     if (k === 'reports') list = list.map(r => ({ ...r, lastSent: null,
       treatmentId: r.treatmentId ? (maps.treatments[r.treatmentId] || r.treatmentId) : r.treatmentId,
       symptomIds: (r.symptomIds || []).map(i => maps.symptoms[i] || i) }));
+    const _cond = (pack._cond && (k === 'symptoms' || k === 'treatments')) ? pack._cond : null;
+    if (_cond) mhCondRegister(_cond);
     const cur = mode === 'replace' ? [] : mhPackLoadCurrent(k).slice();
     const keyOf = x => k === 'library' ? normalizeFoodName(x.name || '').toLowerCase() : _pkKey(x);
     const byKey = new Map(cur.map(x => [keyOf(x), x]));
@@ -19910,8 +19912,9 @@ function mhPackApply(pack, picked, mode, idMaps) {
     let added = 0, skipped = 0;
     list.forEach(x => {
       const kk = keyOf(x); if (!kk) return;
-      if (byKey.has(kk)) { skipped++; if (maps[k]) maps[k][x.id] = byKey.get(kk).id; return; }
+      if (byKey.has(kk)) { skipped++; if (maps[k]) maps[k][x.id] = byKey.get(kk).id; if (_cond) { const ex = byKey.get(kk); if (Array.isArray(ex.conds) && ex.conds.length && !ex.conds.includes(_cond.id)) ex.conds.push(_cond.id); } return; }
       if (!x.id || ids.has(x.id)) { const nid = _pkNewId(k.slice(0, 3)); if (maps[k] && x.id) maps[k][x.id] = nid; x.id = nid; }
+      if (_cond) x.conds = [_cond.id];
       ids.add(x.id); byKey.set(kk, x); cur.push(x); added++;
     });
     ({ library: saveLibrary, supplements: saveSupplementDefs, recipes: saveRecipes, routines: saveRoutines,
@@ -19981,7 +19984,7 @@ async function mhFocusOpen() {
       let pack;
       if (p.embedded) pack = JSON.parse(JSON.stringify(MH_FIRST_RUN_PACKS[p.embedded]));
       else { const rr = await fetch(MH_PACK_BASE + String(p.file).replace(/[^A-Za-z0-9_.-]/g, ''), { cache: 'no-store' }); pack = await rr.json(); }
-      if (!pack || !pack.sets) throw 0; pack.title = p.title; mhFocusPreview(pack);
+      if (!pack || !pack.sets) throw 0; pack.title = p.title; pack._cond = { id: String(p.embedded || String(p.file || p.title).replace(/\.json$/, '').replace(/_tracking$/, '')).replace(/[^A-Za-z0-9_-]/g, ''), name: String(p.title).replace(/ tracking$/i, '') }; mhFocusPreview(pack);
     } catch (_) { showToast("Couldn't open that one"); }
   });
 }
@@ -19991,9 +19994,62 @@ function mhFocusPreview(pack) {
   if (pack.everything) txt = '<div style="margin-bottom:6px;">Every card comes back to its standard place and order on every screen. Your own lists stay as they are.</div>';
   else { const s = mhFocusSummary(pack);
     txt = `<div style="margin-bottom:6px;"><b>Tucked away on Today:</b> ${list(s.hidden)}</div><div style="margin-bottom:6px;"><b>Folded to a one-line bar:</b> ${list(s.folded)}</div><div style="margin-bottom:6px;"><b>Hidden on Trends:</b> ${list(s.trend)}</div><div style="margin-bottom:6px;"><b>Added to your lists</b> (only what you do not have already): ${s.syms} symptom${s.syms === 1 ? '' : 's'}${s.tr ? ', ' + s.tr + ' treatment' + (s.tr === 1 ? '' : 's') : ''}. Nothing is removed from your lists.</div>`; }
-  const m = mhFocusModal(`<div style="font-weight:700;font-size:15px;margin-bottom:6px;">${_pkEsc(pack.title || 'Focus')}</div><div style="font-size:12px;color:var(--text3);line-height:1.5;">${txt}<div style="margin-top:8px;">Your own card arrangement on every screen is replaced by this one. Nothing you have logged is touched, and hidden cards stay one tap away under Filter.</div><div style="margin-top:8px;font-size:11px;">Starting lists of things people commonly track. They are not medical advice, and nothing here replaces your own clinician.</div></div><div style="display:flex;gap:8px;margin-top:12px;"><button class="copy-btn" id="mhFocusBack" style="flex:1;">Back</button><button class="copy-btn" id="mhFocusGo" style="flex:1;background:var(--green-dim);color:var(--green);">Switch</button></div>`);
+  const m = mhFocusModal(`<div style="font-weight:700;font-size:15px;margin-bottom:6px;">${_pkEsc(pack.title || 'Focus')}</div><div style="font-size:12px;color:var(--text3);line-height:1.5;">${txt}<div style="margin-top:8px;">Your own card arrangement on every screen is replaced by this one. Nothing you have logged is touched, and hidden cards stay one tap away under Filter.</div><div style="margin-top:8px;font-size:11px;">Starting lists of things people commonly track. They are not medical advice, and nothing here replaces your own clinician.</div></div><div style="display:flex;gap:8px;margin-top:12px;"><button class="copy-btn" id="mhFocusBack" style="flex:1;">Back</button><button class="copy-btn" id="mhFocusGo" style="flex:1;background:var(--green-dim);color:var(--green);">Switch</button></div>${pack.everything ? '' : '<button class="copy-btn" id="mhFocusAdd" style="width:100%;margin-top:8px;">Add as another focus (keep what I have, show both)</button>'}`);
   document.getElementById('mhFocusBack').onclick = () => { m.remove(); mhFocusOpen(); };
   document.getElementById('mhFocusGo').onclick = () => { m.remove(); mhFocusApply(pack); };
+  const _fa = document.getElementById('mhFocusAdd'); if (_fa) _fa.onclick = () => { m.remove(); mhFocusAdd(pack); };
+}
+// ── Conditions: labels on symptoms / treatments, and a filter for the pickers ──
+// A pack stamps its condition (id + name) on the symptoms and treatments it ADDS; things you already had
+// (no label) are never narrowed, so they show under every filter. Several conditions can be ticked at
+// once; none ticked means everything. Registry: mh_conditions, filter: mh_cond_filter.
+function mhCondList() { try { const a = JSON.parse(localStorage.getItem('mh_conditions') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+function mhCondFilter() { try { const a = JSON.parse(localStorage.getItem('mh_cond_filter') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+function mhCondRegister(c) {
+  if (!c || !c.id) return; const a = mhCondList();
+  if (!a.some(x => x.id === c.id)) { a.push({ id: String(c.id), name: String(c.name || c.id) }); try { localStorage.setItem('mh_conditions', JSON.stringify(a)); } catch (_) {} }
+}
+function mhCondMatch(item) {
+  const f = mhCondFilter(); if (!f.length) return true;
+  const c = item && item.conds; if (!Array.isArray(c) || !c.length) return true;
+  return c.some(x => f.includes(x));
+}
+function mhCondToggle(id) {
+  const f = mhCondFilter(); const i = f.indexOf(id); if (i >= 0) f.splice(i, 1); else f.push(id);
+  try { localStorage.setItem('mh_cond_filter', JSON.stringify(f)); } catch (_) {}
+  try { if (document.getElementById('mmMetricPicker')) renderMMMetricPicker(); } catch (_) {}
+  try { renderTreatmentSessionsPicker(); } catch (_) {}
+}
+function mhCondChipsHtml() {
+  const list = mhCondList(); if (list.length < 2) return '';
+  const f = mhCondFilter();
+  return `<div class="mh-cond-chips" style="margin:0 0 10px;"><div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">CONDITION (tap one or several; none = everything)</div><div style="display:flex;flex-wrap:wrap;gap:6px;">` +
+    list.map(c => `<button data-cond="${_pkEsc(c.id)}" onclick="mhCondToggle(this.dataset.cond)" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;border:1px solid ${f.includes(c.id) ? 'var(--accent)' : 'var(--border)'};background:${f.includes(c.id) ? 'var(--accent-dim)' : 'transparent'};color:${f.includes(c.id) ? 'var(--accent)' : 'var(--text3)'};">${_pkEsc(c.name)}</button>`).join('') + `</div></div>`;
+}
+// "Add as another focus": union of two layouts. A card stays tucked away or folded only if BOTH focuses
+// do that; anything either focus uses is shown. Your own lists are untouched.
+function mhFocusAdd(pack) {
+  try {
+    const lay = pack.sets.layout ? mhLayoutClean(_pkClean(pack.sets.layout.data)) : {};
+    const base = mhLayoutBase(); const snap = mhLayoutSnapshot() || {};
+    const arr = v => { try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } };
+    const apply = (store, set, del) => {
+      Object.keys(lay).forEach(k => {
+        if (lay[k].charAt(0) === '[') {
+          const keep = arr(store(k)).filter(x => arr(lay[k]).includes(x));
+          if (keep.length) set(k, JSON.stringify(keep)); else del(k);
+        }
+      });
+      Object.keys(base).forEach(k => { if (/^mh_collapse_(dc|tc)_/.test(k) && store(k) === 'closed' && lay[k] !== 'closed') del(k); });
+    };
+    apply(k => localStorage.getItem(k), (k, v) => localStorage.setItem(k, v), k => localStorage.removeItem(k));
+    const nb = Object.assign({}, base);
+    apply(k => nb[k], (k, v) => { nb[k] = v; }, k => { delete nb[k]; });
+    localStorage.setItem('mh_layout_base', JSON.stringify(nb)); localStorage.setItem('mh_layout_base_at', localISODate(new Date()));
+    const lists = ['symptoms', 'treatments'].filter(k => pack.sets[k]); if (lists.length) mhPackApply(pack, lists, 'merge');
+    try { const tabEl = document.querySelector('#mainTabRow .tab.active'); const tab = tabEl ? (tabEl.id || '').replace(/^maintab-/, '') : ''; if (tab) sessionStorage.setItem('mh_resume_tab', JSON.stringify({ t: tab })); } catch (_) {}
+    location.reload();
+  } catch (e) { showToast("Couldn't add that focus just now"); }
 }
 function mhFocusApply(pack) {
   try {
@@ -36559,7 +36615,7 @@ function getAllOverlayableMetrics() {
   // each time rather than hardcoded, since the list changes as symptoms are
   // added/removed in Settings.
   const symptomColors = ['#f97316', '#38bdf8', '#e879f9', '#facc15', '#4ade80', '#fb7185'];
-  const symptomDefs = (typeof loadSymptomDefs === 'function' ? loadSymptomDefs() : []).filter(s => s.active !== false);
+  const symptomDefs = (typeof loadSymptomDefs === 'function' ? loadSymptomDefs() : []).filter(s => s.active !== false && mhCondMatch(s));
   const symptoms = symptomDefs.map((s, i) => ({
     key: 'symptom_' + s.id, title: s.name, color: symptomColors[i % symptomColors.length], unit: '/5', icon: '📝', isSymptom: true, symptomId: s.id,
   }));
@@ -36570,7 +36626,7 @@ function getAllOverlayableMetrics() {
   // genuinely the right unit for something that either happened on a
   // given day or didn't, not a continuous quantity.
   const treatmentColors = ['#a855f7', '#06b6d4', '#f43f5e', '#84cc16', '#eab308'];
-  const treatmentDefs = (typeof loadTreatmentDefs === 'function' ? loadTreatmentDefs() : []).filter(t => t.active !== false);
+  const treatmentDefs = (typeof loadTreatmentDefs === 'function' ? loadTreatmentDefs() : []).filter(t => t.active !== false && mhCondMatch(t));
   const treatments = treatmentDefs.map((t, i) => ({
     key: 'treatment_' + t.id, title: t.name, color: treatmentColors[i % treatmentColors.length], unit: '', icon: '💠', isTreatment: true, treatmentId: t.id,
   }));
@@ -36742,7 +36798,7 @@ function renderMMMetricPicker() {
     if (firstActive) _mmExpandedGroups.add(firstActive.label);
   }
 
-  el.innerHTML = MM_METRIC_GROUPS.map(g => {
+  el.innerHTML = mhCondChipsHtml() + MM_METRIC_GROUPS.map(g => {
     const members = all.filter(g.match);
     if (!members.length) return ''; // e.g. no treatments defined yet - no empty group header to tap for nothing
     const selectedCount = members.filter(m => _mmSelectedMetrics.includes(m.key)).length;
@@ -41710,7 +41766,7 @@ function mhTagDays() {
   return out;
 }
 function mhAnchorDefs() {
-  const defs = loadTreatmentDefs().filter(t => t.active !== false);
+  const defs = loadTreatmentDefs().filter(t => t.active !== false && mhCondMatch(t));
   const days = mhTagDays(); const cats = {};
   const tags = Object.keys(days).sort().map(k => {
     const m = /^([^:]{1,30}):\s*\S/.exec(days[k].name); if (m) { const c = m[1].trim().toLowerCase(); (cats[c] = cats[c] || { name: m[1].trim(), n: 0 }).n++; }
@@ -41768,7 +41824,7 @@ function renderTreatmentSessionsPicker() {
   // Drop any selected id whose treatment no longer exists (deleted since)
   _treatmentSessionsSelected = _treatmentSessionsSelected.filter(id => defs.some(t => t.id === id));
 
-  el.innerHTML = `
+  el.innerHTML = mhCondChipsHtml() + `
     <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">TREATMENTS (tap to include/exclude)</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
       ${defs.map(t => {
