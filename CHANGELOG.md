@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1005 — The Log Now Says What Happened To Steps
+
+- First real look at the new log viewer (Pete's phone): the logs live in `app/logs/` and are fresh (the July file was a stale old copy in a different folder), but a search for "steps" found nothing, because the pipeline only logged a generic "merge ok" line. Now, whenever a run changes the steps of any of the last 10 days, it logs one line: the date, old value, new value, which source was chosen and what every source offered (for example `steps 2026-10-12: 6000 -> 9185 (chosen: health_connect; offered: manual=6000 health_connect=9185)`). The "Steps only" filter in the viewer now answers "who replaced my typed total, and when".
+
 ## v3.10.1004 — Pipeline & Health Connect Log
 
 - New card in Settings → Advanced: **🧾 Pipeline & Health Connect Log**. Reads every log the server keeps (`pipeline.log`, `cron_pipeline.log`, the watchdog and auto-update logs, plus the other places a pipeline log could have ended up), shows where each lives and when it was last written, flags one that has been silent for 2+ days as STALE, and can show only the Health Connect lines or only the steps lines. Has Select all and Copy. Server: `GET /logs?n=150&q=text`. Added after Pete's `pipeline.log` turned out to end in July while data was still arriving: a silent log is now visible instead of misleading. Test: `p121`.

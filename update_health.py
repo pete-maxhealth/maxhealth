@@ -897,6 +897,18 @@ def main():
     merged, field_sources = merge_with_precedence(existing, new_rows_by_source, precedence, field_sources,
                                                   provisional=load_provisional_manual(), today_iso=datetime.now().strftime('%Y-%m-%d'))
 
+    # v3.10.1005: say what happened to recent steps, so "my typed total was replaced" can be answered from the log
+    try:
+        _cut = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
+        for _d in sorted(merged):
+            if _d < _cut: continue
+            _old = (existing.get(_d) or {}).get('steps'); _new = (merged.get(_d) or {}).get('steps')
+            if str(_old or '') != str(_new or '') and _new:
+                _offer = ' '.join(f"{src}={(rows.get(_d) or {}).get('steps') or '-'}" for src, rows in new_rows_by_source.items() if (rows.get(_d) or {}).get('steps'))
+                log('pipeline', 'steps', 'ok', f"steps {_d}: {_old or 'none'} -> {_new} (chosen: {(field_sources.get(_d) or {}).get('steps', 'unknown')}; offered: {_offer or 'nothing new'})")
+    except Exception as _e:
+        log('pipeline', 'steps', 'warn', f"could not summarise steps changes: {_e}")
+
     new_dates = len(merged) - len(existing)
     log('pipeline', 'merge', 'ok',
         f"{len(merged)} total rows ({new_dates:+d} new dates, "

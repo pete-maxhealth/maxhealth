@@ -23,6 +23,9 @@ with fresh_server() as root, sync_playwright() as pw:
         if (c.get(iso) or {}).get('steps') in ('6000', '6000.0'): ok = True; break
         time.sleep(1)
     if not ok: f.add('BUG', f"typed total did not reach combined.csv: {(read_combined(root).get(iso) or {}).get('steps')}")
+    import glob
+    logtxt = ''.join(open(x, errors='replace').read() for x in glob.glob(os.path.join(root, '**', 'pipeline.log'), recursive=True))
+    if 'steps %s:' % iso not in logtxt: f.add('BUG', 'pipeline.log does not say what happened to today\'s steps')
     fs = json.load(open(os.path.join(root, 'data', 'field_sources.json')))
     if fs.get(iso, {}).get('steps') != 'manual': f.add('BUG', f"steps not attributed to manual: {fs.get(iso)}")
     if errs: f.add('BUG', f'page errors: {errs[:2]}')
