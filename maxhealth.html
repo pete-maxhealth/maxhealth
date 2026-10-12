@@ -691,6 +691,7 @@
   @media (prefers-reduced-motion: reduce) { .mh-wait-box { animation: none; } }
   /* v3.10.885: Trends topic filter + one-line "what question does this answer" captions */
   .mh-grp-hide { display: none !important; }
+  .mh-lib-off { display: none !important; }
   /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
   body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
   body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) .hist-filter, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
@@ -6224,7 +6225,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.978'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.979'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40909,7 +40910,7 @@ function mhDcSummary(k) {
 // Put a screen (or the whole app) back to its standard layout: which cards are open, hidden, in what order, and the topic
 // filter. Only layout is touched; nothing you logged. State lives in the browser, so the page reloads and returns to the
 // same screen.
-const MH_LAYOUT_ALL_RE = /^(mh_collapse_|mh_reorder_|mh_topic_|mh_pills_open$|mh_dashboard_(order|hidden)$|mh_library_section_order$|mh_mm_(legend|section)_(hidden|order)$|mh_trend_cards_(hidden|order)$|mh_trends_group$)/;
+const MH_LAYOUT_ALL_RE = /^(mh_collapse_|mh_reorder_|mh_topic_|mh_pills_open$|mh_dashboard_(order|hidden)$|mh_library_section_order$|mh_library_hidden$|mh_mm_(legend|section)_(hidden|order)$|mh_trend_cards_(hidden|order)$|mh_trends_group$)/;
 function mhLayoutKeys(root) {
   const all = []; try { for (let i = 0; i < localStorage.length; i++) all.push(localStorage.key(i)); } catch (_) {}
   if (!root) return all.filter(k => MH_LAYOUT_ALL_RE.test(k));
@@ -40919,7 +40920,7 @@ function mhLayoutKeys(root) {
   const sc = mhScopeOf(root);
   if (sc.generic) { keys.add('mh_reorder_' + sc.generic); keys.add('mh_reorder_hidden_' + sc.generic); keys.add('mh_topic_' + sc.generic); }
   if (sc.name === 'trends') { ['mh_trend_cards_order', 'mh_trend_cards_hidden', 'mh_trends_group'].forEach(k => keys.add(k)); }
-  if (sc.name === 'library') { ['mh_topic_library', 'mh_library_section_order'].forEach(k => keys.add(k)); }
+  if (sc.name === 'library') { ['mh_topic_library', 'mh_library_section_order', 'mh_library_hidden'].forEach(k => keys.add(k)); }
   if (sc.name === 'mm') { ['mh_mm_section_order', 'mh_mm_section_hidden', 'mh_mm_legend_order', 'mh_mm_legend_hidden'].forEach(k => keys.add(k)); }
   return [...keys];
 }
@@ -40973,7 +40974,7 @@ function mhDcAll(open) {   // returns how many visible cards changed
 function mhSectionsAll(btn, open) {
   const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), sc = mhScopeOf(root), keys = mhScopeKeys(sc), inScope = k => !keys || keys.includes(k);
   const seen = new Set(); let n = 0, restored = 0;
-  const hiddenKeys = sc.generic ? getGenericHidden(sc.generic) : [];   // hidden cards stay hidden: Open all must not reveal their content
+  const hiddenKeys = sc.generic ? getGenericHidden(sc.generic) : sc.name === 'library' ? mhLibHidden().map(k => MH_LIB_GROUPS[k][1]) : [];   // hidden cards stay hidden: Open all must not reveal their content
   // 1. Open all / Close all only expand or collapse. What is hidden or filtered out is set once in the Filter panel and is never touched here.
 
   // 2. Expand or collapse every collapsible card in scope (each announces itself with toggleSection('key','wrapId','iconId'))
@@ -40994,14 +40995,35 @@ function mhSectionsAll(btn, open) {
 const MH_LIB_GROUPS = { recipes: ['Recipes', 'lib-recipes', 'dashSection-libRecipes'], az: ['A\u2013Z', 'lib-az', 'dashSection-libAZ'], food: ['Food Library', 'lib-food', 'dashSection-libFood'], tools: ['Tools', 'lib-tools', 'dashSection-libTools'], ingredients: ['Ingredients', 'lib-ingredients', 'dashSection-libIngredients'] };
 function mhLibTopicGet() { let k = 'all'; try { k = localStorage.getItem('mh_topic_library') || 'all'; } catch (_) {} return MH_LIB_GROUPS[k] ? k : 'all'; }
 function mhLibTopicSet(k) { try { localStorage.setItem('mh_topic_library', k); } catch (_) {} mhLibTopicApply(); mhClosePills(); mhScrollTopOf(document.getElementById('mhTopicBar-library')); }
+function mhLibHidden() { try { const a = JSON.parse(localStorage.getItem('mh_library_hidden') || '[]'); return Array.isArray(a) ? a.filter(k => MH_LIB_GROUPS[k]) : []; } catch (_) { return []; } }
+function toggleLibraryHidden(k) {
+  if (!MH_LIB_GROUPS[k]) return; const h = mhLibHidden(), i = h.indexOf(k); if (i > -1) h.splice(i, 1); else h.push(k);
+  try { localStorage.setItem('mh_library_hidden', JSON.stringify(h)); } catch (_) {}
+  mhLibTopicApply();
+}
+function mhLibShowAll() { try { localStorage.setItem('mh_library_hidden', '[]'); } catch (_) {} mhLibTopicApply(); showToast('All sections shown again'); }
 function mhLibTopicApply() {
   const scroll = document.getElementById('libraryScroll'); if (!scroll) return;
-  const cur = mhLibTopicGet();
+  const cur = mhLibTopicGet(), hid = mhLibHidden();
   let bar = document.getElementById('mhTopicBar-library');
   if (!bar) { bar = document.createElement('div'); bar.id = 'mhTopicBar-library'; bar.className = 'mh-topic-bar'; scroll.insertBefore(bar, scroll.firstChild); }
   const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).map(k => [k, MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
   if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }
-  Object.keys(MH_LIB_GROUPS).forEach(k => { const el = document.getElementById(MH_LIB_GROUPS[k][2]); if (el) el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k); });
+  // A 👁 on every section (same as Today, Reports and Settings): hide it for good; the hidden ones wait under Filter. Choosing a section's chip still shows it.
+  Object.keys(MH_LIB_GROUPS).forEach(k => {
+    const up = scroll.querySelector(`[onclick="moveLibrarySection('${k}','up')"]`);
+    if (up && !up.parentNode.querySelector('[data-libeye]')) { const eye = document.createElement('span'); eye.dataset.libeye = k; eye.textContent = '\uD83D\uDC41'; eye.title = 'Hide this section'; eye.setAttribute('onclick', `toggleLibraryHidden('${k}')`); eye.style.cssText = 'cursor:pointer;color:var(--text3);font-size:12px;padding:2px 6px;'; up.parentNode.insertBefore(eye, up); }
+  });
+  let strip = document.getElementById('genericRestoreStrip-library');
+  if (!strip) { strip = document.createElement('div'); strip.id = 'genericRestoreStrip-library'; scroll.insertBefore(strip, scroll.firstChild); }
+  const sig = hid.join(',');
+  if (strip.dataset.sig !== sig) {
+    strip.dataset.sig = sig;
+    strip.innerHTML = hid.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;"><span style="font-size:10px;color:var(--text3);">Hidden:</span>${hid.map(k => `<button onclick="toggleLibraryHidden('${k}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${MH_LIB_GROUPS[k][0]} +</button>`).join('')}${hid.length > 1 ? `<button data-showall="1" onclick="mhLibShowAll()" style="background:none;border:1px dashed var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--accent);cursor:pointer;touch-action:manipulation;">Show all</button>` : ''}</div>` : '';
+  }
+  Object.keys(MH_LIB_GROUPS).forEach(k => { const el = document.getElementById(MH_LIB_GROUPS[k][2]); if (!el) return;
+    el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k);
+    el.classList.toggle('mh-lib-off', cur === 'all' && hid.includes(k)); });
 }
 (function () { let t = 0; const run = () => { t = 0; try { mhEnsurePillsToolbars(); } catch (_) {} };
   const kick = () => { if (!t) t = requestAnimationFrame(run); };

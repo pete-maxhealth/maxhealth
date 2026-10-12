@@ -50,7 +50,8 @@ Pack rules, enforced by p99: a pack may only carry symptoms, treatments and layo
 Do this once at large text and once at small text.
 
 1. **Toolbar on every page.** Today, Log > History, Log > Library, Insights > Trends and Reports, Settings > Manage, Customise and Import. The first row is always Filter (where the page has anything to filter), Open all, Close all, Default, in that order. Supplements and Log (chat) have no toolbar by design.
-2. **Library chips.** Open Filter on Library, tap Tools: only Library Tools shows. Close the app and reopen: the filter is still there. Tap Default and confirm: everything is back.
+2. **Library chips and 👁.** Tap the 👁 on a section: it disappears and is listed under Filter as Hidden, with the count on the button; tap its name to bring it back.
+2b. **Library chips.** Open Filter on Library, tap Tools: only Library Tools shows. Close the app and reopen: the filter is still there. Tap Default and confirm: everything is back.
 3. **History.** This Week, Month and All sit inside the Filter panel and still change the list.
 4. **Packs.** Settings → Data → Starter packs shows eight packs: general wellbeing, brain tumour, epilepsy, type 2 diabetes, type 1 diabetes, migraine, cluster headache and strict keto. Preview one: it should list symptoms and a screen layout and change nothing until you apply it.
 5. **No regressions.** Log a meal by typing, run the 3-AI check (the grams must not be echoed unless you typed them), tap a Trends chart, use the Next meal idea buttons (each tapped pill stays highlighted).

@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.979 — 👁 Hide On Every Library Section
+
+- **Every Library section has the 👁** (as on Today, Reports and Settings). Hidden sections wait under Filter in a "Hidden:" list (counted on the Filter button, tap to bring back, Show all). Choosing a section's chip still shows it; Open all skips hidden sections; Default clears them. State in `mh_library_hidden` (layout key). Test: `p101_library_hide_eye`.
+
 ## v3.10.978 — Clear The System Health App-Error Note
 
 - **"Mark app errors as fixed"** under System health (Settings > About): clears the reported-errors list so the amber note goes away (it used to clear only on its own after 7 days without a repeat). Confirms first; a repeat of the same error is recorded again as New. Server: `POST /clear-client-errors`. Test: `p100_clear_app_errors`.
