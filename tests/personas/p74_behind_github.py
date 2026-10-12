@@ -18,21 +18,21 @@ def run(pw, root, readme, status=200, name=''):
     return b, ctx, page, errs
 with fresh_server() as root, sync_playwright() as pw:
     # 1. behind: banner appears
-    b, ctx, page, errs = run(pw, root, '# X\n**Version:** v3.10.999\n')
+    b, ctx, page, errs = run(pw, root, '# X\n**Version:** v3.10.5000\n')
     page.evaluate("localStorage.setItem('mh_onboarded','1'); localStorage.removeItem('mh_behind_checked'); mhBehindCheck(true)"); page.wait_for_timeout(600)
     if not page.query_selector('#mhBehindBanner'): f.add('BUG', 'no banner when GitHub is ahead')
     else:
         t = page.inner_text('#mhBehindBanner')
-        if 'v3.10.999' not in t or 'mh_autoupdate' not in t: f.add('BUG', f'banner text unhelpful: {t[:120]}')
+        if 'v3.10.5000' not in t or 'mh_autoupdate' not in t: f.add('BUG', f'banner text unhelpful: {t[:120]}')
         page.click('#mhBehindClose'); page.wait_for_timeout(200)
         if page.query_selector('#mhBehindBanner'): f.add('BUG', 'Dismiss did not remove banner')
         page.evaluate("mhBehindRender()")
         if page.query_selector('#mhBehindBanner'): f.add('BUG', 'dismissed version came back')
     # About note still tells the truth after dismissal
     page.evaluate("switchTab('settings'); switchSubTab('settings','about')"); page.wait_for_timeout(400)
-    if 'v3.10.999' not in page.evaluate("document.getElementById('mhBehindNote').textContent"): f.add('BUG', 'About note missing while behind')
+    if 'v3.10.5000' not in page.evaluate("document.getElementById('mhBehindNote').textContent"): f.add('BUG', 'About note missing while behind')
     # 2. newer release un-dismisses
-    page.evaluate("localStorage.setItem('mh_latest_ver','v3.10.1000'); mhBehindRender()"); page.wait_for_timeout(200)
+    page.evaluate("localStorage.setItem('mh_latest_ver','v3.10.5001'); mhBehindRender()"); page.wait_for_timeout(200)
     if not page.query_selector('#mhBehindBanner'): f.add('BUG', 'a newer version should show the banner again after a dismissal')
     if errs: f.add('BUG', f'page errors: {errs[:2]}')
     b.close()

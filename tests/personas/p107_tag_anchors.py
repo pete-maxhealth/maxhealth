@@ -11,17 +11,17 @@ with fresh_server() as root, sync_playwright() as pw:
     ev = page.evaluate
     if ev("mhAnchorDefs().some(d=>d.isTag)"): f.add('BUG', 'tag anchors with no tags')
     ev("""(()=>{ const dmy=n=>{const d=new Date(Date.now()-n*864e5);return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getFullYear()).slice(2);};
-      const h=[]; for(let i=1;i<=14;i++){ const tagged=[2,5,8,11].includes(i); h.push({date:dmy(i),log:[],totals:{kcal:1000,protein:50,carbs:20,fat:50},mode:'standard',notes:tagged?'Treatment: Acupuncture, 30min walk':(i===3?'Exercise: 10k steps':'standard'),weight:90+i*0.1}); }
+      const h=[]; for(let i=1;i<=14;i++){ const tagged=[2,5,8,11].includes(i); h.push({date:dmy(i),log:[],totals:{kcal:1000,protein:50,carbs:20,fat:50},mode:'standard',notes:tagged?'Treatment: Acupuncture, 30min walk':(i===3?'Exercise: Swim':'standard'),weight:90+i*0.1}); }
       state.history=h; })()""")
     names = ev("mhAnchorDefs().map(d=>d.id)")
-    for need in ['tag:treatment: acupuncture', 'tag:exercise: 10k steps', 'tagcat:treatment', 'tagcat:exercise']:
+    for need in ['tag:treatment: acupuncture', 'tag:exercise: swim', 'tagcat:treatment', 'tagcat:exercise']:
         if need not in names: f.add('BUG', f'missing anchor {need}: {names}')
     if ev("mhAnchorSessions('tag:treatment: acupuncture').length") != 4: f.add('BUG', 'tag days not 4')
     if ev("mhAnchorSessions('tagcat:treatment').length") != 4: f.add('BUG', 'category days not 4')
     if any('min' in n for n in names): f.add('BUG', 'activity summary became a tag')
     st = ev("computeTreatmentSessionStats('tag:treatment: acupuncture','weight',1,'0')")
     if st['insufficientData'] or not st['during'] or not st['before'] or not st['after']: f.add('BUG', f'stats {st}')
-    st2 = ev("computeTreatmentSessionStats('tag:exercise: 10k steps','weight',1,'0')")
+    st2 = ev("computeTreatmentSessionStats('tag:exercise: swim','weight',1,'0')")
     if not st2['insufficientData']: f.add('BUG', 'single day should be insufficient')
     ev("renderTreatmentSessionsPicker()")
     sec = ev("document.getElementById('treatment-sessions-content').innerText")
@@ -31,7 +31,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Acupuncture' not in ev("document.getElementById('treatmentSessionsResult').innerText"): f.add('BUG', 'result missing tag block')
     pills = ev("getAllOverlayableMetrics().filter(m=>m.isTag).map(m=>m.key)")
     if 'tag_treatment: acupuncture' not in pills: f.add('BUG', f'no tag pill {pills}')
-    if 'tag_exercise: 10k steps' in pills: f.add('BUG', 'single-day tag became a pill')
+    if 'tag_exercise: swim' in pills: f.add('BUG', 'single-day tag became a pill')
     ev("_mmSelectedMetrics=['weight','tag_treatment: acupuncture']; openMultiMetricOverlay()"); page.wait_for_timeout(600)
     if 'Acupuncture' not in ev("document.getElementById('multiMetricOverlay').innerText"): f.add('BUG', 'pill not in overlay')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
