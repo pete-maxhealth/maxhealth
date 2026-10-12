@@ -6236,7 +6236,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.990'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.991'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -9165,7 +9165,7 @@ function _startAddFoodVoiceListening() {
   if (!_addFoodVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _addFoodVoiceRecognition = new SpeechRecognition();
-  _addFoodVoiceRecognition.lang = 'en-GB';
+  _addFoodVoiceRecognition.lang = mhSpeechLang();
   _addFoodVoiceRecognition.continuous = false; // one food per form — say it once, review, tap again to redo
   _addFoodVoiceRecognition.interimResults = false;
 
@@ -13015,7 +13015,7 @@ function toggleWaterVoiceInput() {
   }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SpeechRecognition();
-  rec.lang = 'en-GB';
+  rec.lang = mhSpeechLang();
   rec.continuous = false;
   rec.interimResults = false;
   const btn = document.getElementById('waterVoiceBtn');
@@ -16028,7 +16028,7 @@ function _startVoiceListening() {
   if (!_voiceListening) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _voiceRecognition = new SpeechRecognition();
-  _voiceRecognition.lang = 'en-GB';
+  _voiceRecognition.lang = mhSpeechLang();
   _voiceRecognition.continuous = true; // was false with per-phrase restart - each restart plays an audible tone, sounding like "lots of beeping" across a multi-item log
   _voiceRecognition.interimResults = false;
 
@@ -18542,7 +18542,7 @@ function toggleSavedPromptVoiceInput() {
   }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SpeechRecognition();
-  rec.lang = 'en-GB';
+  rec.lang = mhSpeechLang();
   rec.continuous = false;
   rec.interimResults = false;
   const btn = document.getElementById('savedPromptVoiceBtn');
@@ -19001,7 +19001,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     // waiting. Captured directly and given both fixes at once (28/09/2026).
     const analysingBubble = addBubble('Analysing your health data...', 'system', 'thinking');
     try {
-      const result = await callHealthAI(text, { maxTokens: 900 });
+      const result = await callHealthAI(text + mhLangAINote(), { maxTokens: 900 });
       const reply = result.ok ? result.text : `Couldn't analyse your data: ${result.error}`;
       analysingBubble.remove();
       addBubble(reply, 'system');
@@ -21699,6 +21699,127 @@ function cancelMealPreview() {
   addBubble('Cancelled — nothing logged.', 'system');
 }
 
+// ── Languages (English default; Spanish, German, French, Turkish) ───────────
+// Exact-match translation of what is on screen: each language is a small file lang/<code>.json
+// {english text: translated text}, fetched from GitHub (cached for offline) and applied to text, placeholders and
+// tooltips as screens render. Anything without a translation stays English, so a missing line is never blank or
+// wrong. English is always the base: the 🌐 button (shown whenever another language is on) and ?lang=en bring it back.
+// Health wording is machine-assisted and has NOT been checked by native-speaking clinicians.
+const MH_LANG_BASE = 'https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/lang/';
+const MH_LANGS = [
+  { code: 'en', name: 'English', native: 'English', speech: 'en-GB' },
+  { code: 'es', name: 'Spanish', native: 'Español', speech: 'es-ES' },
+  { code: 'de', name: 'German', native: 'Deutsch', speech: 'de-DE' },
+  { code: 'fr', name: 'French', native: 'Français', speech: 'fr-FR' },
+  { code: 'tr', name: 'Turkish', native: 'Türkçe', speech: 'tr-TR' },
+];
+const MH_L = { dict: null, code: 'en', obs: null };
+function mhLangCode() { try { const c = localStorage.getItem('mh_lang') || 'en'; return MH_LANGS.some(l => l.code === c) ? c : 'en'; } catch (_) { return 'en'; } }
+function mhLangInfo(code) { return MH_LANGS.find(l => l.code === (code || mhLangCode())) || MH_LANGS[0]; }
+function mhSpeechLang() { return mhLangInfo().speech; }
+function mhLangAINote() { const l = mhLangInfo(); return l.code === 'en' ? '' : `\n\nWrite your reply in ${l.name}.`; }
+function mhLangSet(code) {
+  try { if (code === 'en') localStorage.removeItem('mh_lang'); else localStorage.setItem('mh_lang', code); } catch (_) {}
+  location.reload();
+}
+function mhLangNorm(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+function mhLangFix(node) {
+  const d = MH_L.dict; if (!d || node.nodeType !== 3) return;
+  const raw = node.nodeValue; if (!raw || raw.length < 2) return;
+  const p = node.parentNode; if (p && /^(SCRIPT|STYLE|TEXTAREA|CODE)$/.test(p.nodeName)) return;
+  const k = mhLangNorm(raw); let tr = k && Object.prototype.hasOwnProperty.call(d, k) ? d[k] : null;
+  // Labels the app upper-cases itself (tab names, headings): match the lower-case entry and upper-case the translation.
+  if (tr == null && k && k === k.toUpperCase() && k !== k.toLowerCase()) {
+    if (!MH_L.lower || MH_L.lowerFor !== d) { MH_L.lower = {}; MH_L.lowerFor = d; Object.keys(d).forEach(e => { const lk = e.toLowerCase(); if (lk !== e && !(lk in MH_L.lower)) MH_L.lower[lk] = d[e]; }); }
+    const lo = MH_L.lower[k.toLowerCase()]; if (lo) { try { tr = lo.toLocaleUpperCase(MH_L.code); } catch (_) { tr = lo.toUpperCase(); } }
+  }
+  if (tr && tr !== k) { if (p && p.closest && p.closest('[data-nolang]')) return; node.nodeValue = raw.match(/^\s*/)[0] + tr + raw.match(/\s*$/)[0]; }
+}
+function mhLangFixAttrs(el) {
+  const d = MH_L.dict; if (!d || !el.getAttribute) return;
+  ['placeholder', 'title', 'aria-label'].forEach(a => { const v = el.getAttribute(a); if (v) { const k = mhLangNorm(v); if (Object.prototype.hasOwnProperty.call(d, k) && d[k] !== k) el.setAttribute(a, d[k]); } });
+}
+function mhLangWalk(root) {
+  if (!MH_L.dict || !root) return;
+  if (root.nodeType === 3) { mhLangFix(root); return; }
+  if (root.nodeType !== 1) return;
+  mhLangFixAttrs(root);
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  let n; while ((n = w.nextNode())) { if (n.nodeType === 3) mhLangFix(n); else mhLangFixAttrs(n); }
+}
+function mhLangStartObserver() {
+  if (MH_L.obs || !window.MutationObserver) return;
+  MH_L.obs = new MutationObserver(recs => {
+    recs.forEach(r => {
+      if (r.type === 'childList') r.addedNodes.forEach(n => mhLangWalk(n));
+      else if (r.type === 'characterData') mhLangFix(r.target);
+      else if (r.type === 'attributes') mhLangFixAttrs(r.target);
+    });
+    MH_L.obs.takeRecords();
+  });
+  MH_L.obs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
+}
+async function mhLangLoad(code) {
+  let cached = null; try { cached = JSON.parse(localStorage.getItem('mh_lang_cache_' + code) || 'null'); } catch (_) {}
+  if (cached && cached.d) { MH_L.dict = cached.d; }
+  try {
+    const r = await fetch(MH_LANG_BASE + code + '.json', { cache: 'no-store' });
+    if (r.ok) { const d = await r.json(); if (d && typeof d === 'object') { try { localStorage.setItem('mh_lang_cache_' + code, JSON.stringify({ v: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', d })); } catch (_) {} MH_L.dict = d; } }
+  } catch (_) {}
+  return MH_L.dict;
+}
+async function mhLangInit() {
+  try { const q = new URLSearchParams(location.search).get('lang'); if (q && MH_LANGS.some(l => l.code === q)) { if (q === 'en') localStorage.removeItem('mh_lang'); else localStorage.setItem('mh_lang', q); } } catch (_) {}
+  MH_L.code = mhLangCode();
+  mhLangPickerOnboarding();
+  mhLangSettingsCard();
+  if (MH_L.code === 'en') return;
+  document.documentElement.lang = MH_L.code;
+  mhLangButton();
+  let cached = null; try { cached = JSON.parse(localStorage.getItem('mh_lang_cache_' + MH_L.code) || 'null'); } catch (_) {}
+  if (cached && cached.d) { MH_L.dict = cached.d; mhLangWalk(document.body); mhLangStartObserver(); }
+  await mhLangLoad(MH_L.code);
+  if (MH_L.dict) { mhLangWalk(document.body); mhLangStartObserver(); }
+  else { try { showToast('Language file not available offline yet. Staying in English.'); } catch (_) {} }
+}
+function mhLangOptionsHtml() { const c = mhLangCode(); return MH_LANGS.map(l => `<option value="${l.code}"${l.code === c ? ' selected' : ''}>${l.native}${l.code === 'en' ? '' : ' (' + l.name + ')'}</option>`).join(''); }
+function mhLangPickerOnboarding() {
+  const ov = document.getElementById('onboardingOverlay'); if (!ov || document.getElementById('mhLangOb')) return;
+  const d = document.createElement('div'); d.id = 'mhLangOb'; d.setAttribute('data-nolang', '1');
+  d.style.cssText = 'display:flex;justify-content:flex-end;padding:10px 12px 0;';
+  d.innerHTML = `<label style="font-size:12px;color:var(--text3);">🌐 <select id="mhLangObSel" onchange="mhLangSet(this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px;font-size:13px;">${mhLangOptionsHtml()}</select></label>`;
+  ov.insertBefore(d, ov.firstChild);
+}
+function mhLangSettingsCard() {
+  const w = document.getElementById('set-profile-wrap'); if (!w || document.getElementById('mhLangCard')) return;
+  const d = document.createElement('div'); d.id = 'mhLangCard'; d.className = 'settings-card'; d.setAttribute('data-nolang', '1');
+  d.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">🌐 Language</div>
+    <select id="mhLangSel" onchange="mhLangSet(this.value)" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;">${mhLangOptionsHtml()}</select>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">English is the default and always one tap away. Translations cover most screens; anything not translated yet stays in English. Health wording is machine-assisted and has not been checked by clinicians who speak the language, so check anything important in English.</div>`;
+  w.insertBefore(d, w.firstChild);
+}
+function mhLangButton() {
+  if (document.getElementById('mhLangFab')) return;
+  const b = document.createElement('button'); b.id = 'mhLangFab'; b.setAttribute('data-nolang', '1'); b.title = 'Language / Back to English';
+  b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:450;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:16px;padding:5px 10px;font-size:12px;opacity:.85;';
+  b.textContent = '🌐 ' + MH_L.code.toUpperCase();
+  b.onclick = () => {
+    document.getElementById('mhLangModal')?.remove();
+    const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
+    m.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
+      <button id="mhLangEn" class="run-btn" style="width:100%;padding:12px;font-size:15px;margin-bottom:10px;">Back to English</button>
+      ${MH_LANGS.filter(l => l.code !== 'en').map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;${l.code === MH_L.code ? 'border-color:var(--accent);' : ''}">${l.native}</button>`).join('')}
+      <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:4px;">✕</button></div>`;
+    document.body.appendChild(m);
+    m.querySelector('#mhLangEn').onclick = () => mhLangSet('en');
+    m.querySelector('#mhLangX').onclick = () => m.remove();
+    m.querySelectorAll('.mh-lang-opt').forEach(x => x.onclick = () => mhLangSet(x.dataset.c));
+  };
+  document.body.appendChild(b);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { mhLangInit(); }); else { mhLangInit(); }
+
 // ── Meal planner ("I'm planning on eating this at …") ──────────────────────
 // A separate planned list (mh_planned_v1). Planned food NEVER counts as eaten:
 // the Today totals show eaten + planned side by side, and a plan only moves
@@ -23175,7 +23296,7 @@ function toggleSpeakText(btn, text) {
       if (_currentSpeakBtn === btn) _currentSpeakBtn = null;
       return;
     }
-    const utterance = new SpeechSynthesisUtterance(chunks[i++]);
+    const utterance = new SpeechSynthesisUtterance(chunks[i++]); try { utterance.lang = mhSpeechLang(); } catch (_) {}
     // A failed chunk skips ahead rather than silently ending the whole
     // read-aloud - one bad chunk shouldn't cut off everything after it.
     utterance.onend = utterance.onerror = playNext;
@@ -27401,7 +27522,7 @@ function _startSupplementVoiceListening() {
   if (!_supplementVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _supplementVoiceRecognition = new SpeechRecognition();
-  _supplementVoiceRecognition.lang = 'en-GB';
+  _supplementVoiceRecognition.lang = mhSpeechLang();
   _supplementVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across several supplements
   _supplementVoiceRecognition.interimResults = false;
 
@@ -29334,7 +29455,7 @@ function _startRecipeVoiceListening() {
   if (!_recipeVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _recipeVoiceRecognition = new SpeechRecognition();
-  _recipeVoiceRecognition.lang = 'en-GB';
+  _recipeVoiceRecognition.lang = mhSpeechLang();
   _recipeVoiceRecognition.continuous = true; // was false with per-phrase restart - each restart plays an audible tone, sounding like beeping across a multi-ingredient recipe
   _recipeVoiceRecognition.interimResults = false;
 
@@ -29516,7 +29637,7 @@ function _startLibraryVoiceListening() {
   if (!_libraryVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _libraryVoiceRecognition = new SpeechRecognition();
-  _libraryVoiceRecognition.lang = 'en-GB';
+  _libraryVoiceRecognition.lang = mhSpeechLang();
   _libraryVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across a batch of foods
   _libraryVoiceRecognition.interimResults = false;
 
@@ -30232,7 +30353,7 @@ function _startRecipeStepVoiceListening() {
   if (!_recipeStepVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _recipeStepVoiceRecognition = new SpeechRecognition();
-  _recipeStepVoiceRecognition.lang = 'en-GB';
+  _recipeStepVoiceRecognition.lang = mhSpeechLang();
   // continuous:true keeps one recognition session open across the whole
   // multi-step dictation instead of fully stopping and restarting after every
   // single phrase. The previous continuous:false + auto-restart-on-end
@@ -30784,7 +30905,7 @@ function _startCookVoiceListening() {
   _cookListening = true;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _cookRecognition = new SpeechRecognition();
-  _cookRecognition.lang = 'en-GB';
+  _cookRecognition.lang = mhSpeechLang();
   // continuous:true, and (see the speak() override further down) the mic is
   // no longer switched off while a step is being read - "pause" said mid-
   // sentence genuinely needs to be heard, not just in the gaps between
@@ -31510,7 +31631,7 @@ function _startMissedDayVoiceListening(textareaId = 'missedDayConvMeals', btnId 
   if (!_missedDayVoiceActive) return;
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   _missedDayVoiceRecognition = new SpeechRecognition();
-  _missedDayVoiceRecognition.lang = 'en-GB';
+  _missedDayVoiceRecognition.lang = mhSpeechLang();
   _missedDayVoiceRecognition.continuous = true; // was false with per-phrase restart - audible tone each time, sounding like beeping across several meals
   _missedDayVoiceRecognition.interimResults = false;
 
@@ -32484,7 +32605,7 @@ function toggleWeightVoiceInput() {
   }
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const rec = new SpeechRecognition();
-  rec.lang = 'en-GB';
+  rec.lang = mhSpeechLang();
   rec.continuous = false;
   rec.interimResults = false;
   const btn = document.getElementById('weightVoiceBtn');
@@ -43622,7 +43743,7 @@ Answer the question directly using the actual data. Reference specific dates or 
 
   try {
     const maxTok = isFullSummary ? 3000 : 800;
-    const result = await callHealthAI(prompt, { maxTokens: maxTok, system: 'You are a health data analyst. Answer questions about the provided data accurately and concisely.' });
+    const result = await callHealthAI(prompt + mhLangAINote(), { maxTokens: maxTok, system: 'You are a health data analyst. Answer questions about the provided data accurately and concisely.' });
     if (!result.ok) {
       txt.textContent = `Couldn't generate a response: ${result.error}`;
       out.style.display = 'block';

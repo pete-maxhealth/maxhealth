@@ -57,6 +57,7 @@ Do this once at large text and once at small text.
 4d. **Change my focus.** Settings > Manage > Setup > Change my focus: choose Muscle growth, read the preview, Switch. Today now hides Ketosis and Fasting; your own symptoms are still there; Show me everything brings it all back.
 4c. **Food Library category.** In Log > Library > Food Library pick a category from the third dropdown: only those foods show, with a warning banner; Show everything resets it.
 4e. **Meal planner.** In chat type "I'm planning on eating 2 eggs at 1pm": the preview says Ready to plan for 13:00; Add to plan. Under the Today bars the plan shows with eaten + planned totals. At the time it asks Did you eat this? Yes moves it into the log.
+4f. **Languages.** Settings > Profile > Language: choose Español; screens switch; tap the 🌐 button, Back to English: everything returns. Same picker on first-run onboarding.
 4b. **Close all really closes.** On Trends (7 Days) tap Close all: the Weight, Heart rate and other metric cards fold to one-line bars (tap a bar to open just that one); Open all opens them. Same on Today and the Library.
 5. **No regressions.** Log a meal by typing, run the 3-AI check (the grams must not be echoed unless you typed them), tap a Trends chart, use the Next meal idea buttons (each tapped pill stays highlighted).
 6. **Jill's phone.** Fresh install of the web version: the first-run "what do you want to track?" choice appears once, then the chosen layout.
