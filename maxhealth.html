@@ -693,8 +693,11 @@
   .mh-grp-hide { display: none !important; }
   .mh-lib-off { display: none !important; }
   /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
-  body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
-  body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) .hist-filter, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
+  /* v3.10.981: the view chips (All / Body / Heart & sleep ...) are always visible under the toolbar; only the "Hidden:" lists sit behind Filter. */
+  body:not(.mh-pills-open) #dashboardRestoreStrip,
+  body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
+  .mh-topic-bar:empty { display: none; }
+  .mh-topic-bar .mh-grp-chip, #mhTrendsGroupBar .mh-grp-chip { font-size: var(--mh-pill-fs) !important; padding: 3px 9px !important; font-family: inherit !important; line-height: 1.35 !important; }
   /* A collapsed card shrinks to one tidy list row: title left, position / hide / move controls right, action buttons tucked away (v3.10.944) */
   .section-title.mh-collapsed { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; font-size: 15px !important; line-height: 1.25; padding: 9px 0 !important; margin: 0 !important; border-top: 1px solid var(--border); }
   .card-unit:has(> .section-title.mh-collapsed) { margin-top: 0 !important; margin-bottom: 0 !important; }
@@ -3186,6 +3189,10 @@
           <option value="recent">Recent</option>
         </select>
       </div>
+      <select id="libraryCategory" onchange="renderLibrary()" title="Show only one food category"
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;cursor:pointer;width:100%;">
+        <option value="">All categories</option>
+      </select>
       <div id="libraryFilterBanner" style="display:none;font-size:11px;color:var(--yellow);background:rgba(245,197,66,0.08);border:1px solid rgba(245,197,66,0.25);border-radius:6px;padding:6px 10px;margin-top:8px;"></div>
     </div>
 
@@ -6225,7 +6232,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.980'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.981'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -8424,7 +8431,10 @@ function renderLibrary() {
   const stripApos = s => s.replace(/['’]/g, '');
   const searchQuery = stripApos((document.getElementById('librarySearch')?.value || '').toLowerCase().trim());
   localStorage.setItem('mh_library_search', document.getElementById('librarySearch')?.value || '');
-  const searchedLib = searchQuery ? libWithIdx.filter(f => stripApos(f.name.toLowerCase()).includes(searchQuery)) : libWithIdx;
+  const catSel = document.getElementById('libraryCategory'); mhLibFillCategories(catSel);
+  const catPick = catSel ? catSel.value : '';
+  const searchedLib0 = searchQuery ? libWithIdx.filter(f => stripApos(f.name.toLowerCase()).includes(searchQuery)) : libWithIdx;
+  const searchedLib = catPick ? searchedLib0.filter(f => getItemCategories(f).includes(catPick)) : searchedLib0;   // category: not remembered across reloads (a narrowed list that survives a restart looks like lost data)
 
   // Meals section retired - any not-yet-converted meal entries stay visible
   // here rather than being filtered out into a section that no longer
@@ -8455,7 +8465,10 @@ function renderLibrary() {
   // hidden by the very filter it's warning about.
   const filterBannerEl = document.getElementById('libraryFilterBanner');
   if (filterBannerEl) {
-    if (categoryFilter === 'all') {
+    if (categoryFilter === 'all' && catPick) {
+      filterBannerEl.style.display = '';
+      filterBannerEl.innerHTML = `⚠ Showing ${catPick} only — nothing else is missing. <span onclick="document.getElementById('libraryCategory').value='';renderLibrary();" style="text-decoration:underline;cursor:pointer;">Show everything</span>`;
+    } else if (categoryFilter === 'all') {
       filterBannerEl.style.display = 'none';
     } else {
       filterBannerEl.style.display = '';
@@ -8466,7 +8479,7 @@ function renderLibrary() {
   // Update the live match count next to the search box
   const countEl = document.getElementById('librarySearchCount');
   if (countEl) {
-    countEl.textContent = searchQuery ? `${filteredLib.length} match${filteredLib.length===1?'':'es'}` : '';
+    countEl.textContent = (searchQuery || catPick) ? `${filteredLib.length} match${filteredLib.length===1?'':'es'}` : '';
   }
   const ic = document.getElementById('lib-ingredients-count'); if (ic) ic.textContent = `(${ingredients.length})`;
 
@@ -16909,6 +16922,15 @@ const CATEGORY_EMOJI = {
 // "alcohol" as an option even if nothing alcoholic is saved. Automatically
 // grows or shrinks with the real library, and with anything a person adds
 // via Manage Categories, with nothing to maintain here at all.
+// Fills the Food Library "category" dropdown from the categories really in use, keeping the current pick (v3.10.981).
+function mhLibFillCategories(sel) {
+  if (!sel) return;
+  const cats = getLibraryCategoriesInUse(), cur = sel.value;
+  const sig = cats.join('|'); if (sel.dataset.sig === sig) return; sel.dataset.sig = sig;
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option value="${esc(c)}">${CATEGORY_EMOJI[c] ? CATEGORY_EMOJI[c] + ' ' : ''}${esc(c.charAt(0).toUpperCase() + c.slice(1))}</option>`).join('');
+  sel.value = cats.includes(cur) ? cur : '';
+}
 function getLibraryCategoriesInUse() {
   const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
   const found = new Set();
@@ -40829,7 +40851,8 @@ function computeChemoCycleAnalysis() {
 // global state, closed by default); "Open all" / "Close all" expand or collapse every collapsible card on that screen.
 // The pills themselves are unchanged and still do exactly what they did.
 function mhPillsOpen() { try { return localStorage.getItem('mh_pills_open') === '1'; } catch (_) { return false; } }
-const MH_PILL_SEL = '.mh-topic-bar, .hist-filter, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
+const MH_CHIP_SEL = '.mh-topic-bar, #mhTrendsGroupBar';   // view chips: always visible
+const MH_PILL_SEL = '.mh-topic-bar, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
 function mhPillsRoot(el) {
   let p = el.parentNode; if (p && p.classList && p.classList.contains('mh-filter-panel')) p = p.parentNode;   // chips live inside the panel; the screen is the panel's parent
   return el.closest('.subview, .view') || p;
@@ -40848,7 +40871,7 @@ function mhEnsurePillsToolbars() {
       if (sc.generic) { const k = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[k]; if (k !== 'all' && g) cur = g.label; }
       else if (sc.name === 'trends') { const k = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[k]; if (k !== 'all' && g) cur = g.label; }
       else if (sc.name === 'library') { const k = mhLibTopicGet(); if (k !== 'all') cur = MH_LIB_GROUPS[k][0]; } } catch (_) {}
-    const hasChips = [...root.querySelectorAll(MH_PILL_SEL)].some(e => !e.dataset.nofilter);   // a screen with nothing to filter keeps the toolbar but not a dead Filter button
+    const hasChips = !!root.querySelector('[id$="RestoreStrip"], [id^="genericRestoreStrip-"]');   // the Filter button opens the Hidden list, so a screen without one keeps the toolbar but not a dead Filter button
     const html = (hasChips ? `<button class="main" onclick="mhTogglePills()">☰ Filter${cur ? ': ' + cur : ''}${nHidden ? ` · ${nHidden} hidden` : ''} ${open ? '▾' : '▸'}</button>` : '')
       + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button><button onclick="mhResetScreen(this)" title="Put this screen back to its standard layout">\u21BA Default</button>`;
     if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
@@ -40859,8 +40882,10 @@ function mhEnsurePillsToolbars() {
     // One panel under the toolbar holds the chips and the Hidden list, so they visibly sit inside the Filter.
     let panel = root.querySelector('.mh-filter-panel');
     if (!panel) { panel = document.createElement('div'); panel.className = 'mh-filter-panel'; }
-    if (panel.previousElementSibling !== tb) tb.parentNode.insertBefore(panel, tb.nextSibling);
-    root.querySelectorAll(MH_PILL_SEL).forEach(el => { if (el.parentNode !== panel) panel.appendChild(el); });
+    // View chips sit right under the toolbar and stay visible; only the Hidden lists go inside the Filter panel.
+    let ref = tb; root.querySelectorAll(MH_CHIP_SEL).forEach(el => { if (el.parentNode === ref.parentNode && ref.nextElementSibling === el) { ref = el; return; } ref.parentNode.insertBefore(el, ref.nextSibling); ref = el; });
+    if (panel.previousElementSibling !== ref) ref.parentNode.insertBefore(panel, ref.nextSibling);
+    root.querySelectorAll(MH_PILL_SEL).forEach(el => { if (el.matches(MH_CHIP_SEL)) return; if (el.parentNode !== panel) panel.appendChild(el); });
   });
   try { mhNudgeRender(); } catch (_) {}
 }
@@ -41027,7 +41052,7 @@ function mhSectionsAll(btn, open) {
   showToast(open ? `Opened ${n} section${n === 1 ? '' : 's'}${restored ? ` and restored ${restored} hidden` : ''} ${where}` : (n ? `Closed ${n} section${n === 1 ? '' : 's'} ${where}` : `Nothing to close ${where}`));
 }
 // ── Library section chips (v3.10.977): All / Recipes / A-Z / Food / Tools / Ingredients, same Filter panel as every other page ──
-const MH_LIB_GROUPS = { recipes: ['Recipes', 'lib-recipes', 'dashSection-libRecipes'], az: ['A\u2013Z', 'lib-az', 'dashSection-libAZ'], food: ['Food Library', 'lib-food', 'dashSection-libFood'], tools: ['Tools', 'lib-tools', 'dashSection-libTools'], ingredients: ['Ingredients', 'lib-ingredients', 'dashSection-libIngredients'] };
+const MH_LIB_GROUPS = { recipes: ['Recipes', 'lib-recipes', 'dashSection-libRecipes', '\uD83C\uDF73'], az: ['A\u2013Z', 'lib-az', 'dashSection-libAZ', '\uD83D\uDD24'], food: ['Food Library', 'lib-food', 'dashSection-libFood', '\uD83E\uDD66'], tools: ['Tools', 'lib-tools', 'dashSection-libTools', '\uD83D\uDEE0\uFE0F'], ingredients: ['Ingredients', 'lib-ingredients', 'dashSection-libIngredients', '\uD83D\uDCCB'] };
 function mhLibTopicGet() { let k = 'all'; try { k = localStorage.getItem('mh_topic_library') || 'all'; } catch (_) {} return MH_LIB_GROUPS[k] ? k : 'all'; }
 function mhLibTopicSet(k) { try { localStorage.setItem('mh_topic_library', k); } catch (_) {} mhLibTopicApply(); mhClosePills(); mhScrollTopOf(document.getElementById('mhTopicBar-library')); }
 function mhLibHidden() { try { const a = JSON.parse(localStorage.getItem('mh_library_hidden') || '[]'); return Array.isArray(a) ? a.filter(k => MH_LIB_GROUPS[k]) : []; } catch (_) { return []; } }
@@ -41042,7 +41067,7 @@ function mhLibTopicApply() {
   const cur = mhLibTopicGet(), hid = mhLibHidden();
   let bar = document.getElementById('mhTopicBar-library');
   if (!bar) { bar = document.createElement('div'); bar.id = 'mhTopicBar-library'; bar.className = 'mh-topic-bar'; scroll.insertBefore(bar, scroll.firstChild); }
-  const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).map(k => [k, MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
+  const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).map(k => [k, MH_LIB_GROUPS[k][3] + ' ' + MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
   if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }
   // A 👁 on every section (same as Today, Reports and Settings): hide it for good; the hidden ones wait under Filter. Choosing a section's chip still shows it.
   Object.keys(MH_LIB_GROUPS).forEach(k => {

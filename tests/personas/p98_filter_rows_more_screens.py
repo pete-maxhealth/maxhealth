@@ -1,4 +1,4 @@
-"""Persona 98: History, Library and Customise get the same Filter toolbar as every other page (first item, one per screen);
+"""Persona 98: Library and Customise get the same toolbar (History keeps its own This Week / Month / All row, no toolbar) as every other page (first item, one per screen);
 Customise has nothing to filter so it shows Open/Close/Default with no dead Filter button; Library section chips filter and persist;
 Default puts the Library back; Supplements and Log (nothing to fold or filter) get no toolbar."""
 import sys; sys.path.insert(0, __file__.rsplit('/',1)[0])
@@ -14,7 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     page.evaluate("localStorage.setItem('mh_onboarded','1'); localStorage.setItem('mh_pills_open','1')"); page.reload(); page.wait_for_timeout(2000)
     page.evaluate("document.querySelectorAll('[id*=nboard]').forEach(e=>{ if(e.style) e.style.display='none'; })")
-    for t, sub, want in [('log','hist','Filter,Open,Close,Default'), ('log','library','Filter,Open,Close,Default'), ('settings','customise','Open,Close,Default'), ('log','supplements',None), ('log','chat',None)]:
+    for t, sub, want in [('log','hist',None), ('log','library','Filter,Open,Close,Default'), ('settings','customise','Open,Close,Default'), ('log','supplements',None), ('log','chat',None)]:
         page.evaluate(f"switchTab('{t}'); switchSubTab('{t}','{sub}')"); page.wait_for_timeout(900)
         r = labels(page)
         if want is None:
@@ -23,9 +23,6 @@ with fresh_server() as root, sync_playwright() as pw:
         if r['n'] != 1: f.add('BUG', f'{sub}: {r["n"]} visible toolbars'); continue
         if not all(r['first']): f.add('BUG', f'{sub}: toolbar not first')
         if r['l'][0] != want: f.add('BUG', f'{sub}: order {r["l"][0]} != {want}')
-    # history: week/month/all chips sit inside the panel
-    page.evaluate("switchTab('log'); switchSubTab('log','hist')"); page.wait_for_timeout(500)
-    if not page.evaluate("!!document.querySelector('.mh-filter-panel .hist-filter')"): f.add('BUG', 'history filter not in panel')
     # library chips
     page.evaluate("switchTab('log'); switchSubTab('log','library')"); page.wait_for_timeout(700)
     r = page.evaluate("""()=>{ const vis=id=>{const e=document.getElementById(id); return !!e && !e.classList.contains('mh-grp-hide');};

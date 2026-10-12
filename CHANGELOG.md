@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.981 — Topic Chips Always Visible, Library Chip Icons, Food Category Filter
+
+- **The topic chips (All / Body / Heart & sleep / Food / Patterns, Manage, Reports, Import, Library) are visible again, always, under the toolbar** (Pete Spence: "I can't see any sub categories anywhere"). Since v3.10.973 they sat inside the closed Filter panel and tapping one closed it again, so they kept vanishing. Only the "Hidden:" lists stay behind Filter now. The Filter button appears only on screens that have a Hidden list. History goes back to its own This Week / Month / All row with no toolbar. Tests p71 and p98 updated to match.
+
+- **Library chips carry icons** (🍳 Recipes, 🔤 A–Z, 🥦 Food Library, 🛠️ Tools, 📋 Ingredients).
+- **Food Library category dropdown**: under All items / sort, "All categories" plus the categories really in use (with their emoji). Picking one narrows the list, shows the "Showing meat only — nothing else is missing" banner with Show everything, and updates the match count. Deliberately not remembered across a reload (a narrowed list that survives a restart looks like lost data). Test: `p103_library_category_icons`.
+
 ## v3.10.980 — Close All Now Folds The Trends Metric Cards
 
 - **Close all on Trends said "closed 7" but Weight, Heart rate, Steps etc. stayed open** (Pete Spence's screenshot): those metric cards had no collapse of their own, only the section headings did. Each metric card now folds to a one-line bar (icon, name, latest value); tap the bar to open just that card. Close all / Open all handle them and respect the chosen group (Body, Heart & sleep ...); hidden or empty cards are left alone and not counted. Remembered per card (`mh_collapse_tc_<id>`), cleared by Default. Test: `p102_trends_cards_fold`.
