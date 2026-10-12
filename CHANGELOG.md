@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.997 — Header Fit and Translated Language Settings
+
+- The top bar no longer squashes the LOCAL badge or the date when a language is on: the badge and date stay on one line and the controls wrap instead of clipping at large text sizes. The date follows the language (for example "12 EKİ PZT").
+- The Settings > Language card's explanation and the LOCAL badge are now translated (only the language buttons stay in their own language).
+
 ## v3.10.996 — "How are you today?" Feeds Analysis Properly
 
 - **Fixed: days with no food were losing their scores and tags.** A "How are you today?" score, a tag (e.g. "Treatment: Massage") or a per-tag note recorded on a day when no food was logged vanished at midnight, because the daily history entry was only written when there was a food log. Those days are now kept (merged into an existing wearable-only entry if there is one, otherwise a small food-less entry). Food averages and counts ignore them (0 kcal), and a day with nothing recorded is not invented. Test: `p115`.

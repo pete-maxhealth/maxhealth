@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.997 | 23 | Header right group wraps, `.date-badge` nowrap, localised `headerDate` via `Intl`; language card no longer `data-nolang` (only `#mhLangSel`). |
 | v3.10.996 | 23 | Rollover keeps food-less days that carry symptoms/tags/tagNotes (merge or minimal entry); `mhAnalystExtras(h)` added to `askReportsAI` prompt. |
 | v3.10.995 | 23 | `mhLangTranslateScreen`, `mhLangCollectEnglish`, `mhLangMerge`, `mhLangUserGet` (`mh_lang_user_<code>`, fills gaps only), via `callHealthAI`. |
 | v3.10.994 | 23 | `MH_FLAG_SVG`/`mhFlagImg` (flags as SVG data URIs), `mhLangOpen`, `mhLangButtonsHtml`, header slot `#mhLangHdr`; `mhLangPat` pattern entries (`{1}` slots; patterns with under 16 literal characters accept numbers only). |
