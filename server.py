@@ -547,10 +547,39 @@ def run_pipeline(device=None, dry_run=False, auto_sync=False):
 # A fresh launcher install only gets the watchdog cron line, so a new user never got
 # app updates or the 30-minute merge. On startup (Termux only) add whichever of those
 # two lines is missing. Existing lines are never changed or removed.
+MHSTART_SCRIPT = """#!/data/data/com.termux/files/usr/bin/bash
+if curl -sf http://localhost:5757/ping > /dev/null 2>&1; then
+  echo "MaxedHealth already running ✓"
+  exit 0
+fi
+echo "Starting MaxedHealth..."
+cd %s || { echo "✗ App folder not found — is MaxedHealth installed?"; exit 1; }
+python server.py &
+sleep 2
+curl -sf http://localhost:5757/ping > /dev/null 2>&1 && echo "MaxedHealth running ✓" || echo "Starting — check in a moment"
+"""
+def ensure_mhstart(prefix=None):
+    """v3.10.1007: put the `mhstart` command back if a Termux package upgrade (or anything else) removed it.
+    Never overwrites an existing one. Returns True when it wrote the file."""
+    try:
+        prefix = prefix or os.environ.get('PREFIX') or ''
+        if not prefix: return False
+        dst = os.path.join(prefix, 'bin', 'mhstart')
+        if os.path.exists(dst): return False
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        with open(dst, 'w') as fh: fh.write(MHSTART_SCRIPT % APP_DIR)
+        os.chmod(dst, 0o755)
+        print('  [setup] restored the mhstart command')
+        return True
+    except Exception as e:
+        print('  [setup] could not restore mhstart:', e)
+        return False
+
 def ensure_scheduled_jobs(force=False):
     home = os.path.expanduser('~')
     if not (force or os.environ.get('MH_FORCE_CRON_SETUP') or '/com.termux/' in home):
         return []
+    if ensure_mhstart(): pass
     ct = shutil.which('crontab')
     if not ct:
         return []

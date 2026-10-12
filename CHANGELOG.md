@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1007 — mhstart Comes Back By Itself
+
+- Pete's phone had lost the `mhstart` command (probably a Termux package upgrade), so the "Local server not running" box told him to type something that did not exist. On startup (Termux only) the server now writes `mhstart` again if it is missing; it never overwrites an existing one. Until the server is up once, start it with `bash ~/mh_watchdog.sh`. Tests: `p123`; also `p74` and `p107` were updated (a hard-coded old version, and a step-count tag that no longer counts as a tag).
+
 ## v3.10.1006 — No More Fake "000 steps" Tags
 
 - The Treatment Sessions picker (and Manage tags, Compare, reports) offered dozens of junk tags such as "000 steps", "001 steps", "000 steps|active day". Cause: older device imports wrote a day's note as "12,345 steps, 7.1h sleep, HRV 40", the note is comma-separated, so "12,345" split into the fake tags "12" and "345 steps". Fixed three ways: new imports write plain digits ("12345 steps"); a one-time repair rewrites the stored notes; and device read-outs (steps, sleep hours, HRV, SpO2, bare numbers, and a typed "Exercise: 6.3k steps") are never offered as tags at all. Real tags such as "Treatment: Massage" are untouched. Test: `p122`.
