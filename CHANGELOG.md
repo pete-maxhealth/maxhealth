@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.967 — Close All On Today Now Closes The Big Cards
+
+Close all on Today said "8 closed" but most of the page stayed put: only a handful of small inner sections had a collapse control (and half of those were already hidden), while the big cards could only be hidden or reordered. Weight, Day mode, Ketosis, Calories & macros, Macro ratio today, Goal check, Symptoms, Treatment, Local weather, Fasting and Water now shrink to a one-line bar with their name; Close all does it for every card that is showing, tapping a bar opens just that card, Open all restores them, and each card remembers its state (kept through refreshes and day changes). Empty cards get no bar. The "Closed N" message now counts only what really changed on screen. Tests: p88 (new), p71, p78, p80.
+
 ## v3.10.966 — Typed Steps Are A Same-Day Catch-Up, Not An Override
 
 The Today **Daily Steps** box says "your real total" but only fed the calorie estimate; nothing typed there reached the pipeline, so Trends kept showing the watch's stale figure (Zepp 4277 all afternoon while Health Connect, RingConn and Zepp had not synced). Typing or changing the total now also saves it as today's manual steps, marked **provisional**, with these rules (`merge_with_precedence`):

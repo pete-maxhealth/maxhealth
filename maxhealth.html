@@ -346,6 +346,12 @@
   .phase-label { font-family: 'Syne', sans-serif; font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 4px; opacity: 0.8; }
   .phase-value { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
 
+  /* v3.10.967: Today cards that had no collapse of their own can now shrink to one slim bar (Close all / tap the bar) */
+  .mh-dc-bar { display: none; align-items: center; justify-content: space-between; gap: 8px; flex: 1 1 100%; width: 100%; cursor: pointer; font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text2); padding: 2px 0; min-height: 24px; }
+  .mh-dc-bar .mh-dc-hint { font-size: 10px; color: var(--text3); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .mh-dc-closed > .mh-dc-bar { display: flex; }
+  .mh-dc-closed { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: var(--radius) !important; padding: 12px 16px !important; margin-bottom: 8px !important; min-height: 0 !important; height: auto !important; box-shadow: none !important; }
+  .mh-dc-closed > *:not(.mh-dc-bar) { display: none !important; }
   .weight-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -6145,7 +6151,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.966'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.967'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -23886,6 +23892,7 @@ function checkActivityLevelAutoSwitch() {
 }
 
 function updateDashboard(skipActivityRender) {
+  try { mhDcApply(); } catch (_) {}
   if (typeof updateGBMSectionVisibility === 'function') updateGBMSectionVisibility();
   checkWeightPhaseAutoSwitch(); // no-ops after the first call each day, see its own guard
   checkActivityLevelAutoSwitch(); // same pattern, own guard
@@ -40691,6 +40698,41 @@ function mhScopeKeys(sc) {   // null = everything on the screen
   if (sc.name === 'trends') { const cur = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[cur]; return cur !== 'all' && g ? g.ids.slice() : null; }
   return null;
 }
+// ── Today cards that had no collapse of their own (v3.10.967) ───────────────────────────────────────────
+// Only a handful of inner sections ever had a collapse control, so Close all on Today reported "8 closed" while the big
+// cards (Weight, Calories & macros, Fasting, Water ...) never moved. Each of them now shrinks to a one-line bar with its
+// name; tap the bar to open it again. State is remembered per card.
+const MH_DASH_CARDS = [
+  ['weight', 'dashSection-weight', '\u2696\uFE0F Weight'], ['daymode', 'dashSection-daymode', 'Day mode'], ['ketosis', 'dashSection-ketosis', 'Ketosis'],
+  ['macros', 'dashSection-macros', 'Calories & macros'], ['macroratio', 'macroRatioCard', 'Macro ratio today'], ['goalcheck', 'dashSection-goalcheck', 'Goal check'],
+  ['symptoms', 'dashSection-symptoms', 'Symptoms'], ['treatment', 'dashSection-treatment', 'Treatment'], ['wx', 'mhWxCard', '\uD83C\uDF24 Local weather'],
+  ['fasting', 'dashSection-fasting', '\u23F1 Fasting'], ['water', 'dashSection-water', '\uD83D\uDCA7 Water']];
+function mhDcGet(k) { try { return localStorage.getItem('mh_collapse_dc_' + k) === 'closed'; } catch (_) { return false; } }
+function mhDcSet(k, closed) { try { localStorage.setItem('mh_collapse_dc_' + k, closed ? 'closed' : 'open'); } catch (_) {} }
+function mhDcApply() {
+  MH_DASH_CARDS.forEach(([k, id, title]) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (!mhDcGet(k) && !el.querySelector(':scope > .mh-dc-bar') && (!el.offsetParent || el.getBoundingClientRect().height < 8)) return;   // nothing to collapse yet
+    let bar = el.querySelector(':scope > .mh-dc-bar');
+    if (!bar) {
+      bar = document.createElement('div'); bar.className = 'mh-dc-bar';
+      bar.innerHTML = '<span>' + title + '</span><span class="mh-dc-hint">\u25B8 show</span>';
+      bar.onclick = () => { mhDcSet(k, false); el.classList.remove('mh-dc-closed'); };
+      el.insertBefore(bar, el.firstChild);
+    }
+    el.classList.toggle('mh-dc-closed', mhDcGet(k));
+  });
+}
+function mhDcAll(open) {   // returns how many visible cards changed
+  let n = 0;
+  MH_DASH_CARDS.forEach(([k, id]) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (!el.classList.contains('mh-dc-closed') && (!el.offsetParent || el.getBoundingClientRect().height < 8)) return;   // hidden / empty cards are left alone
+    const was = el.classList.contains('mh-dc-closed'); if (was === !open) return;
+    mhDcSet(k, !open); n++;
+  });
+  mhDcApply(); return n;
+}
 function mhSectionsAll(btn, open) {
   const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn), sc = mhScopeOf(root), keys = mhScopeKeys(sc), inScope = k => !keys || keys.includes(k);
   const seen = new Set(); let n = 0, restored = 0;
@@ -40701,10 +40743,12 @@ function mhSectionsAll(btn, open) {
   root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => {
     const m = /toggleSection\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (!m || seen.has(m[2]) || !inScope(m[1]) || hiddenKeys.includes(m[1])) return; seen.add(m[2]);
     const wrap = document.getElementById(m[2]); if (!wrap || !root.contains(wrap)) return;
-    wrap.style.display = open ? 'block' : 'none'; n++;
+    const _was = wrap.style.display !== 'none' && wrap.offsetParent !== null;   // count only what actually changed on screen
+    wrap.style.display = open ? 'block' : 'none'; if (open ? !_was : _was) n++;
     const icon = document.getElementById(m[3]); if (icon) { icon.textContent = open ? '▾ hide' : '▸ show'; mhMarkCollapsed(icon, !open); }
     try { localStorage.setItem('mh_collapse_' + m[1], open ? 'open' : 'closed'); } catch (_) {}
   });
+  if (root.id === 'view-dash') n += mhDcAll(open);
   if (!open) mhScrollTopOf(root.querySelector('.mh-pills-toolbar') || root);
   const where = keys ? 'in this group' : 'on this screen';
   showToast(open ? `Opened ${n} section${n === 1 ? '' : 's'}${restored ? ` and restored ${restored} hidden` : ''} ${where}` : (n ? `Closed ${n} section${n === 1 ? '' : 's'} ${where}` : `Nothing to close ${where}`));
