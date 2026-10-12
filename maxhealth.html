@@ -5183,6 +5183,8 @@
     <div class="settings-card">
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="previewOnboarding()">🔍 Preview setup wizard (safe — nothing is saved)</button>
       <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;" onclick="resetOnboarding()">↺ Redo setup wizard</button>
+      <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-top:8px;" onclick="mhResetAllLayout()">↺ Reset layout on every screen</button>
+      <div class="settings-hint" style="margin-top:6px;">Lost your way? This puts the cards back to their standard open/closed state, order and visibility on every screen. Nothing you have logged is touched. Each screen also has its own ↺ Default button beside Open all / Close all.</div>
     </div>
     </div>
 
@@ -6151,7 +6153,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.967'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.968'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40675,7 +40677,7 @@ function mhEnsurePillsToolbars() {
       if (sc.generic) { const k = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[k]; if (k !== 'all' && g) cur = g.label; }
       else if (sc.name === 'trends') { const k = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[k]; if (k !== 'all' && g) cur = g.label; } } catch (_) {}
     const html = `<button class="main" onclick="mhTogglePills()">☰ Filter${cur ? ': ' + cur : ''}${nHidden ? ` · ${nHidden} hidden` : ''} ${open ? '▾' : '▸'}</button>`
-      + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button>`;
+      + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button><button onclick="mhResetScreen(this)" title="Put this screen back to its standard layout">\u21BA Default</button>`;
     if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
     if (tb.dataset.sig !== html) { tb.innerHTML = html; tb.dataset.sig = html; }
   });
@@ -40707,6 +40709,55 @@ const MH_DASH_CARDS = [
   ['macros', 'dashSection-macros', 'Calories & macros'], ['macroratio', 'macroRatioCard', 'Macro ratio today'], ['goalcheck', 'dashSection-goalcheck', 'Goal check'],
   ['symptoms', 'dashSection-symptoms', 'Symptoms'], ['treatment', 'dashSection-treatment', 'Treatment'], ['wx', 'mhWxCard', '\uD83C\uDF24 Local weather'],
   ['fasting', 'dashSection-fasting', '\u23F1 Fasting'], ['water', 'dashSection-water', '\uD83D\uDCA7 Water']];
+// What each collapsed bar says on its right, read live from the card itself, so a folded screen still works as a dashboard.
+function mhDcSummary(k) {
+  const t = id => { const e = document.getElementById(id); return e ? (e.textContent || '').replace(/\s+/g, ' ').trim() : ''; };
+  const cut = (x, n) => x.length > n ? x.slice(0, n - 1) + '\u2026' : x;
+  try {
+    if (k === 'weight') { const w = t('displayWeight'); return w && w[0] !== '\u2014' ? w : ''; }
+    if (k === 'daymode') return cut(t('occasionDisplay'), 22);
+    if (k === 'ketosis') return cut(t('ketosisBadge').replace(/^\S+\s/, ''), 22);
+    if (k === 'macros') return `${t('calCurrent')} \u00B7 P ${t('protCurrent')} \u00B7 C ${t('carbCurrent')}`;
+    if (k === 'macroratio') return `P ${t('ratioPct')} \u00B7 F ${t('ratioFatPct')} \u00B7 C ${t('ratioCarbPct')}`;
+    if (k === 'fasting') { const v = t('fastNowVal'); return v && v[0] !== '\u2014' ? v : ''; }
+    if (k === 'water') return `${t('waterAmount')} ${t('waterTarget')}`;
+  } catch (_) {}
+  return '';
+}
+// Put a screen (or the whole app) back to its standard layout: which cards are open, hidden, in what order, and the topic
+// filter. Only layout is touched; nothing you logged. State lives in the browser, so the page reloads and returns to the
+// same screen.
+const MH_LAYOUT_ALL_RE = /^(mh_collapse_|mh_reorder_|mh_topic_|mh_pills_open$|mh_dashboard_(order|hidden)$|mh_library_section_order$|mh_mm_(legend|section)_(hidden|order)$|mh_trend_cards_(hidden|order)$|mh_trends_group$)/;
+function mhLayoutKeys(root) {
+  const all = []; try { for (let i = 0; i < localStorage.length; i++) all.push(localStorage.key(i)); } catch (_) {}
+  if (!root) return all.filter(k => MH_LAYOUT_ALL_RE.test(k));
+  const keys = new Set();
+  root.querySelectorAll('[onclick*="toggleSection("]').forEach(h => { const m = /toggleSection\(\s*'([^']+)'/.exec(h.getAttribute('onclick') || ''); if (m) keys.add('mh_collapse_' + m[1]); });
+  if (root.id === 'view-dash') { keys.add('mh_dashboard_order'); keys.add('mh_dashboard_hidden'); all.filter(k => k.startsWith('mh_collapse_dc_')).forEach(k => keys.add(k)); }
+  const sc = mhScopeOf(root);
+  if (sc.generic) { keys.add('mh_reorder_' + sc.generic); keys.add('mh_reorder_hidden_' + sc.generic); keys.add('mh_topic_' + sc.generic); }
+  if (sc.name === 'trends') { ['mh_trend_cards_order', 'mh_trend_cards_hidden', 'mh_trends_group'].forEach(k => keys.add(k)); }
+  if (sc.name === 'mm') { ['mh_mm_section_order', 'mh_mm_section_hidden', 'mh_mm_legend_order', 'mh_mm_legend_hidden'].forEach(k => keys.add(k)); }
+  return [...keys];
+}
+function mhDoResetLayout(keys) {
+  try { keys.forEach(k => localStorage.removeItem(k)); } catch (_) {}
+  try {
+    const tabEl = document.querySelector('#mainTabRow .tab.active'); const tab = tabEl ? (tabEl.id || '').replace(/^maintab-/, '') : '';
+    if (tab) sessionStorage.setItem('mh_resume_tab', JSON.stringify({ tab, sub: (typeof _activeSubTab !== 'undefined' && _activeSubTab[tab]) || '' }));
+  } catch (_) {}
+  location.reload();
+}
+function mhResetScreen(btn) {
+  const root = mhPillsRoot(btn.closest('.mh-pills-toolbar') || btn);
+  appConfirm('Put this screen back to its standard layout? Open/closed cards, hidden cards, their order and the filter go back to default. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(root)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
+}
+function mhResetAllLayout() {
+  appConfirm('Put every screen back to its standard layout? Open/closed cards, hidden cards, their order and filters all go back to default. Nothing you have logged is touched.', () => mhDoResetLayout(mhLayoutKeys(null)), null, false, { confirm: 'Reset layout', cancel: 'Keep it' });
+}
+window.addEventListener('load', () => setTimeout(() => {
+  try { const r = JSON.parse(sessionStorage.getItem('mh_resume_tab') || 'null'); if (r && r.tab) { sessionStorage.removeItem('mh_resume_tab'); switchTab(r.tab); if (r.sub) switchSubTab(r.tab, r.sub); } } catch (_) {}
+}, 1800));
 function mhDcGet(k) { try { return localStorage.getItem('mh_collapse_dc_' + k) === 'closed'; } catch (_) { return false; } }
 function mhDcSet(k, closed) { try { localStorage.setItem('mh_collapse_dc_' + k, closed ? 'closed' : 'open'); } catch (_) {} }
 function mhDcApply() {
@@ -40716,11 +40767,12 @@ function mhDcApply() {
     let bar = el.querySelector(':scope > .mh-dc-bar');
     if (!bar) {
       bar = document.createElement('div'); bar.className = 'mh-dc-bar';
-      bar.innerHTML = '<span>' + title + '</span><span class="mh-dc-hint">\u25B8 show</span>';
+      bar.innerHTML = '<span>' + title + '</span><span class="mh-dc-hint">show \u25B8</span>';
       bar.onclick = () => { mhDcSet(k, false); el.classList.remove('mh-dc-closed'); };
       el.insertBefore(bar, el.firstChild);
     }
     el.classList.toggle('mh-dc-closed', mhDcGet(k));
+    const hint = bar.querySelector('.mh-dc-hint'); if (hint) hint.textContent = (mhDcSummary(k) || 'show') + ' \u25B8';
   });
 }
 function mhDcAll(open) {   // returns how many visible cards changed

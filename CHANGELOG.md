@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.968 — Reset Layout, And Live Values On Folded Cards
+
+- **↺ Default** button on every screen's toolbar (beside Open all / Close all): puts that screen back to its standard layout (open/closed cards, hidden cards, their order, the topic filter) after a confirmation. **Settings → Setup → Reset layout on every screen** does the same everywhere. Only layout is touched, never anything logged; the page reloads and comes back to the same screen.
+- **Folded Today cards show a live value** on the right of their bar: Weight (92.6kg), Day mode (the occasion), Ketosis (status), Calories & macros (kcal, protein, carbs so far), Macro ratio (P/F/C %), Fasting (time fasted so far) and Water (250 / 2000ml). So a fully folded Today still works as a dashboard.
+Tests: p89 (new), p88, p71, p72, p73, p78, p80, p81. Full suite green at v3.10.967 (88 personas).
+
 ## v3.10.967 — Close All On Today Now Closes The Big Cards
 
 Close all on Today said "8 closed" but most of the page stayed put: only a handful of small inner sections had a collapse control (and half of those were already hidden), while the big cards could only be hidden or reordered. Weight, Day mode, Ketosis, Calories & macros, Macro ratio today, Goal check, Symptoms, Treatment, Local weather, Fasting and Water now shrink to a one-line bar with their name; Close all does it for every card that is showing, tapping a bar opens just that card, Open all restores them, and each card remembers its state (kept through refreshes and day changes). Empty cards get no bar. The "Closed N" message now counts only what really changed on screen. Tests: p88 (new), p71, p78, p80.

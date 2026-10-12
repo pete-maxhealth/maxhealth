@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.968 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhResetScreen`/`mhResetAllLayout`/`mhLayoutKeys` (+ `mh_resume_tab` sessionStorage), `mhDcSummary` live bar values, toolbar `↺ Default`. |
 | v3.10.967 | 23 | Full detail in CHANGELOG.md (Phase 23). `MH_DASH_CARDS` + `mhDcApply`/`mhDcAll`: Today cards collapse to `.mh-dc-bar`; `mhSectionsAll` calls `mhDcAll` on `#view-dash`; toggle count only counts on-screen changes. |
 | v3.10.966 | 23 | Full detail in CHANGELOG.md (Phase 23). `saveDailySteps` also POSTs `/save-manual-entry` {date, steps, provisional:true}; manual_entry.json entry gets `provisional:['steps']`; `merge_with_precedence(..., provisional, today_iso)` treats it as a same-day floor (devices at/above take over, HC never beats it, past days device wins). |
 | v3.10.965 | 23 | Full detail in CHANGELOG.md (Phase 23). `#mhTwChip` moved into `#mhQueryRow` beside `#quickBtnsQuery`; short pill text. |
@@ -1096,6 +1097,7 @@ Fresh server + empty data folder + headless Chromium, one script per kind of use
 - `p78_reorder_keeps_hidden.py` — hiding then reordering never brings hidden cards back (settings, reports, trends, import, dashboard)
 - `p84_today_sleep.py` — today's own sleep wins over yesterday's row
 - `p85_field_sources.py` — day cards show per-field data source
+- `p89_reset_layout.py` — per-screen and global layout reset keep data and return to the same screen; bars show live values
 - `p88_dashboard_close_all.py` — Close all / Open all on Today really collapse and restore the big cards
 - `p87_daily_steps_manual.py` — typed Daily Steps total is a provisional same-day floor (merge rules)
 - `p86_ringconn_nap_only.py` — RingConn sessions joined into nights, filed by wake date; nap-only day has no night
