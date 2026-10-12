@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.987 — Tags As Before/During/After Anchors And Compare Metrics Pills
+
+- **Treatment Sessions analysis** (before / day of / after) can now be anchored on a **day tag**, not just a logged treatment: pick a tag such as "Treatment: Acupuncture" or "Exercise: 10k steps", or "Any Treatment" / "Any Exercise" for every tag in that category. Same window, same 3-day minimum, CSV, share and saved queries. Tags are listed after your treatments and are never selected by default.
+- **Compare Metrics** gets a Tags group: any tag used on 3+ days becomes a 0/1 "did this tag apply today" pill that can sit on a chart with HRV, carbs, headache scores and so on.
+- Still to come: condition labels on symptoms/treatments/tags with a condition filter on the pickers, "Add another focus" in Change my focus, and the tag manager. Test: `p107`.
+
 ## v3.10.986 — Treatment Tags From Your Own List, No Duplicate Tag Strip
 
 - **Occasion picker** now shows a chip per treatment on your own treatment list (any condition: Massage, Chemo, Insulin, Physio…), tapping one adds the tag **Treatment: <name>**; you can still type your own, e.g. "Treatment: Acupuncture". Works for every pack because it reads your list, not a fixed one.

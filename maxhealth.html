@@ -6235,7 +6235,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.986'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.987'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -26763,7 +26763,7 @@ function computeReportMetricStats(treatmentId, metricObj, windowDays) {
   // chart uses for symptom pills, reused here rather than duplicated
   // differently and risking the two disagreeing with each other later.
   if (metricObj.isSymptom) {
-    const sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
+    const sessions = mhAnchorSessions(treatmentId);
     const sessionDates = [...new Set(sessions.map(s => s.date))];
     if (sessionDates.length < 3) return { sessionDates, before: [], during: [], after: [], insufficientData: true };
     const byDate = {};
@@ -36574,7 +36574,15 @@ function getAllOverlayableMetrics() {
   const treatments = treatmentDefs.map((t, i) => ({
     key: 'treatment_' + t.id, title: t.name, color: treatmentColors[i % treatmentColors.length], unit: '', icon: '💠', isTreatment: true, treatmentId: t.id,
   }));
-  return base.concat(symptoms).concat(treatments);
+  // Day tags used on 3+ days become 0/1 "did this tag apply today" pills, like treatments.
+  let tagPills = [];
+  try {
+    const td = mhTagDays(); const tagColors = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a3e635'];
+    tagPills = Object.keys(td).filter(k => td[k].dates.size >= 3).sort().slice(0, 20).map((k, i) => ({
+      key: 'tag_' + k, title: td[k].name, color: tagColors[i % tagColors.length], unit: '', icon: '🏷', isTag: true, anchorId: 'tag:' + k,
+    }));
+  } catch (_) {}
+  return base.concat(symptoms).concat(treatments).concat(tagPills);
 }
 
 function loadMMSelectedMetrics() {
@@ -36707,6 +36715,7 @@ const MM_METRIC_GROUPS = [
   { label: 'Lab Results', match: m => m.isLabMarker },
   { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water', 'fast_h', 'eat_window'].includes(m.key) },
   { label: 'Symptoms', match: m => m.isSymptom },
+  { label: 'Tags', match: m => m.isTag },
   { label: 'Treatment', match: m => m.isTreatment },
   { label: 'Vitals & Sleep', match: m => ['hr', 'hrv', 'spo2', 'sleep', 'gki'].includes(m.key) },
 ];
@@ -36841,6 +36850,11 @@ function renderMMChart() {
       const days = state.history.filter(d => d.symptoms && d.symptoms[m.symptomId] != null);
       const filtered = days.filter(d => _mmDateInRange(d.date));
       return { metric: m, points: filtered.map(d => ({ date: d.date, val: d.symptoms[m.symptomId] })) };
+    }
+    if (m.isTag) {
+      const tagDates = new Set(mhAnchorSessions(m.anchorId).map(x => x.date));
+      const dayDates = state.history.map(d => d.date).filter(_mmDateInRange);
+      return { metric: m, points: dayDates.map(date => ({ date, val: tagDates.has(date) ? 1 : 0 })) };
     }
     if (m.isTreatment) {
       // One point per CALENDAR DAY within the period that has any history
@@ -41678,6 +41692,43 @@ function renderWeightProtocol() {
 // <select>, one treatment at a time. Selection persists across re-renders
 // via this module-level array, same pattern _mmSelectedMetrics already
 // uses for Compare Metrics.
+// ── Anchors for before / during / after: treatments AND tags ───────────────
+// A day tag such as "Treatment: Acupuncture" or "Exercise: 10k steps" can be the
+// anchor, exactly like a logged treatment session. Ids: 'tag:<tag>' (that exact
+// tag) and 'tagcat:<category>' (any "<category>: …" tag). Everything downstream
+// (window, day-of, CSV, share, saved queries) is unchanged.
+function mhTagDays() {
+  const out = {}; // lower tag -> { name, dates:Set }
+  const add = (notes, date) => {
+    String(notes || '').replace(/\(today, in progress\)/i, '').split(',').map(t => t.trim()).forEach(t => {
+      if (!t || /^\d+min /i.test(t) || ['standard', 'occasion', 'holiday', 'missed day entry', 'missed day'].includes(t.toLowerCase())) return;
+      const k = t.toLowerCase(); (out[k] = out[k] || { name: t, dates: new Set() }).dates.add(date);
+    });
+  };
+  (state.history || []).forEach(d => add(d.notes, d.date));
+  add(state.notes, todayStr());
+  return out;
+}
+function mhAnchorDefs() {
+  const defs = loadTreatmentDefs().filter(t => t.active !== false);
+  const days = mhTagDays(); const cats = {};
+  const tags = Object.keys(days).sort().map(k => {
+    const m = /^([^:]{1,30}):\s*\S/.exec(days[k].name); if (m) { const c = m[1].trim().toLowerCase(); (cats[c] = cats[c] || { name: m[1].trim(), n: 0 }).n++; }
+    return { id: 'tag:' + k, name: '🏷 ' + days[k].name, active: true, isTag: true };
+  });
+  const catDefs = Object.keys(cats).sort().map(c => ({ id: 'tagcat:' + c, name: '🏷 Any ' + cats[c].name, active: true, isTag: true }));
+  return defs.concat(catDefs, tags);
+}
+function mhAnchorSessions(id) {
+  id = String(id || '');
+  if (id.indexOf('tag:') === 0) { const d = mhTagDays()[id.slice(4)]; return d ? [...d.dates].map(date => ({ date, treatmentId: id })) : []; }
+  if (id.indexOf('tagcat:') === 0) {
+    const c = id.slice(7); const set = new Set(); const days = mhTagDays();
+    Object.keys(days).forEach(k => { if (k.indexOf(c + ':') === 0) days[k].dates.forEach(x => set.add(x)); });
+    return [...set].map(date => ({ date, treatmentId: id }));
+  }
+  return loadTreatmentLog().filter(s => s.treatmentId === id);
+}
 let _treatmentSessionsSelected = [];
 // Same multi-select principle applied to metrics too - Pete Spence's own
 // screenshot showed this was still a single-select native picker despite
@@ -41705,7 +41756,7 @@ function renderTreatmentSessionsPicker() {
   const el = document.getElementById('treatment-sessions-content');
   const section = document.getElementById('treatment-sessions-section');
   if (!el || !section) return;
-  const defs = loadTreatmentDefs().filter(t => t.active !== false);
+  const defs = mhAnchorDefs();
   if (!defs.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
 
@@ -41713,7 +41764,7 @@ function renderTreatmentSessionsPicker() {
   // array means "never touched yet") - an empty pill row with nothing
   // selected and no results would look broken on first open, not like an
   // intentional starting state.
-  if (_treatmentSessionsSelected.length === 0) _treatmentSessionsSelected = defs.map(t => t.id);
+  if (_treatmentSessionsSelected.length === 0) _treatmentSessionsSelected = defs.filter(t => !t.isTag).map(t => t.id);
   // Drop any selected id whose treatment no longer exists (deleted since)
   _treatmentSessionsSelected = _treatmentSessionsSelected.filter(id => defs.some(t => t.id === id));
 
@@ -41760,7 +41811,7 @@ function renderTreatmentSessionsPicker() {
 // copy-pasting it - one source of truth for both the on-screen result and
 // the CSV export below, so they can never quietly disagree.
 function computeTreatmentSessionStats(treatmentId, metricKey, windowDays, periodChoice) {
-  let sessions = loadTreatmentLog().filter(s => s.treatmentId === treatmentId);
+  let sessions = mhAnchorSessions(treatmentId);
   if (periodChoice === 'custom') {
     const from = document.getElementById('treatmentDateFrom')?.value;
     const to = document.getElementById('treatmentDateTo')?.value;
@@ -41799,7 +41850,7 @@ function renderTreatmentSessionsResult() {
     resultEl.innerHTML = `<div style="font-size:12px;color:var(--text3);">Select at least one treatment and one metric to compare against above.</div>`;
     return;
   }
-  const defs = loadTreatmentDefs();
+  const defs = mhAnchorDefs();
   const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : null;
   const col = (label, arr, cfg) => `
     <div style="text-align:center;flex:1;">
@@ -41876,7 +41927,7 @@ function buildTreatmentSessionsSummaryText() {
   const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
   const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
   if (!metricKeys.length || !_treatmentSessionsSelected.length) return '';
-  const defs = loadTreatmentDefs();
+  const defs = mhAnchorDefs();
   const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : null;
   const lines = [];
   _treatmentSessionsSelected.forEach(id => {
@@ -41906,7 +41957,7 @@ function exportTreatmentSessionsCSV() {
   const windowDays = parseInt(document.getElementById('treatmentWindowPick')?.value || '1', 10);
   const periodChoice = document.getElementById('treatmentPeriodPick')?.value || '0';
   if (!metricKeys.length || !_treatmentSessionsSelected.length) { showToast('Select at least one treatment and one metric first'); return; }
-  const defs = loadTreatmentDefs();
+  const defs = mhAnchorDefs();
   const avg = arr => arr.length ? Math.round((arr.reduce((s,v)=>s+v,0) / arr.length) * 10) / 10 : '';
   // One row per treatment × metric combination now, not just per treatment
   const rows = [['Treatment', 'Metric', 'Window (± days)', 'Before', 'Before readings', 'Day of', 'Day-of readings', 'After', 'After readings', 'Session days']];
@@ -41949,7 +42000,7 @@ function saveTreatmentSessionsQuery() {
   const customFrom = document.getElementById('treatmentDateFrom')?.value || '';
   const customTo = document.getElementById('treatmentDateTo')?.value || '';
   if (!treatmentIds.length || !metricKeys.length) { showToast('Nothing to save yet'); return; }
-  const defs = loadTreatmentDefs();
+  const defs = mhAnchorDefs();
   const treatmentNames = treatmentIds.map(id => defs.find(t => t.id === id)?.name || 'treatment').join(', ');
   const metricNames = metricKeys.map(k => getDrillConfig(k)?.title || k).join(', ');
   const defaultName = `${treatmentNames} vs ${metricNames}`;
@@ -41975,7 +42026,7 @@ function emailTreatmentSessionsReport() {
   const metricKeys = _treatmentMetricsSelected;
   const resultEl = document.getElementById('treatmentSessionsResult');
   if (!treatmentIds.length || !metricKeys.length || !resultEl) { showToast('Nothing to email yet'); return; }
-  const defs = loadTreatmentDefs();
+  const defs = mhAnchorDefs();
   const treatmentNames = treatmentIds.map(id => defs.find(t => t.id === id)?.name || 'Treatment').join(', ');
   const metricNames = metricKeys.map(k => getDrillConfig(k)?.title || k).join(', ');
   // Pulls the plain text straight from what's already on screen rather

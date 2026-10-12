@@ -17,6 +17,7 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.972 First-run "What would you like to start with?" step.
 - [x] v3.10.973-974 One Filter panel holding chips and Hidden pills; toolbar always first; one pill size.
 - [x] v3.10.975 Optional nudges; epilepsy, type 2 diabetes and migraine starter packs.
+- [x] v3.10.987 Tags as before/after anchors + Compare Metrics tag pills. Next: condition labels + filter, Add another focus, tag manager, report profiles on tags; then more demo personas; then language packs.
 - [x] v3.10.986 Treatment tags from own list + duplicate strip fix. Idea: per-pack occasion chip sets; demo personas for the newer packs.
 - [x] v3.10.985 Meal planner. Ideas: fasting-window warning, fill-the-gap suggestions for the plan. Next: language packs (EN default, ES, DE, FR, TR).
 - [x] v3.10.984 Seventeen more packs + disclaimer on every pack screen. Idea: embed all packs for offline focus switching; clinician review of symptom lists.
