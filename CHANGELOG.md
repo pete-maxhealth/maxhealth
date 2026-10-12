@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1009 — A Demo For Every Pack
+
+Eleven new demo personas so every one of the 27 starter packs has someone to try: type 3c diabetes, heart health, Crohn's and colitis, arthritis, fibromyalgia, long COVID, PCOS, thyroid, cancer treatment, anxiety and low mood, and sleep problems. 28 personas in all. Test p124 checks pack coverage.
+
 ## v3.10.1008 — Fair Tap Size
 
 - Every button is now at least 34px tall (the small chips, Open all / Close all, Edit, On, delete and similar were about 29px at large text). The sweep at 1.5x text size on two demo personas now finds no small buttons, no clipped text and no unlabelled buttons. The chat-bar buttons keep their theme styling by design.
