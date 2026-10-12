@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.992 — Flags, Report Profiles on Tags, Planner Fasting Heads-up
+
+- **Flags** 🇬🇧 🇪🇸 🇩🇪 🇫🇷 🇹🇷 on the language pickers, the 🌐 recovery box and the corner button. Medical terms with no safe translation stay in English (nothing is guessed); Settings says so.
+- **Report profiles can be about a tag** (for example "Swim", or "Any Exercise") as well as a treatment, and the wizard shows the condition chips so a clinician can narrow the list to one condition. The saved profile, the report text, PDF and CSV use the tag name. Test: `p112`.
+- **Planner fasting heads-up:** if you track fasting (a goal set, or 3+ fasts in the last 30 days) and a plan would end a fast early, the confirmation says how long after your last meal it is and when your goal would be reached. Information only, nothing changes. Silent otherwise. Test: `p113`.
+- Decided not to build: demo personas applying a pack's screen layout (it would need its own restore on exit, for a cosmetic gain).
+
 ## v3.10.991 — Language Packs
 
 - **Languages:** English (default), Spanish, German, French and Turkish. Pick one in onboarding (first screen) or Settings > Profile. Screens, buttons, hints and most toasts and cards switch over; anything not yet translated simply stays English.

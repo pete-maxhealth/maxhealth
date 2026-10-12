@@ -6236,7 +6236,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.991'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.992'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -20020,7 +20020,10 @@ function mhCondToggle(id) {
   try { localStorage.setItem('mh_cond_filter', JSON.stringify(f)); } catch (_) {}
   try { if (document.getElementById('mmMetricPicker')) renderMMMetricPicker(); } catch (_) {}
   try { renderTreatmentSessionsPicker(); } catch (_) {}
+  try { if (document.getElementById('reportWizardModal') && window._reportWizardStep === 2) renderReportWizardStep(); } catch (_) {}
 }
+function mhAnchorById(id) { return mhAnchorDefs().find(t => t.id === id) || loadTreatmentDefs().find(t => t.id === id) || null; }
+function mhAnchorLabel(t) { return t ? String(t.name).replace(/^🏷\s*/, '') : ''; }
 function mhCondChipsHtml() {
   const list = mhCondList(); if (list.length < 2) return '';
   const f = mhCondFilter();
@@ -21707,11 +21710,11 @@ function cancelMealPreview() {
 // Health wording is machine-assisted and has NOT been checked by native-speaking clinicians.
 const MH_LANG_BASE = 'https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/lang/';
 const MH_LANGS = [
-  { code: 'en', name: 'English', native: 'English', speech: 'en-GB' },
-  { code: 'es', name: 'Spanish', native: 'Español', speech: 'es-ES' },
-  { code: 'de', name: 'German', native: 'Deutsch', speech: 'de-DE' },
-  { code: 'fr', name: 'French', native: 'Français', speech: 'fr-FR' },
-  { code: 'tr', name: 'Turkish', native: 'Türkçe', speech: 'tr-TR' },
+  { code: 'en', flag: '🇬🇧', name: 'English', native: 'English', speech: 'en-GB' },
+  { code: 'es', flag: '🇪🇸', name: 'Spanish', native: 'Español', speech: 'es-ES' },
+  { code: 'de', flag: '🇩🇪', name: 'German', native: 'Deutsch', speech: 'de-DE' },
+  { code: 'fr', flag: '🇫🇷', name: 'French', native: 'Français', speech: 'fr-FR' },
+  { code: 'tr', flag: '🇹🇷', name: 'Turkish', native: 'Türkçe', speech: 'tr-TR' },
 ];
 const MH_L = { dict: null, code: 'en', obs: null };
 function mhLangCode() { try { const c = localStorage.getItem('mh_lang') || 'en'; return MH_LANGS.some(l => l.code === c) ? c : 'en'; } catch (_) { return 'en'; } }
@@ -21782,7 +21785,7 @@ async function mhLangInit() {
   if (MH_L.dict) { mhLangWalk(document.body); mhLangStartObserver(); }
   else { try { showToast('Language file not available offline yet. Staying in English.'); } catch (_) {} }
 }
-function mhLangOptionsHtml() { const c = mhLangCode(); return MH_LANGS.map(l => `<option value="${l.code}"${l.code === c ? ' selected' : ''}>${l.native}${l.code === 'en' ? '' : ' (' + l.name + ')'}</option>`).join(''); }
+function mhLangOptionsHtml() { const c = mhLangCode(); return MH_LANGS.map(l => `<option value="${l.code}"${l.code === c ? ' selected' : ''}>${l.flag} ${l.native}${l.code === 'en' ? '' : ' (' + l.name + ')'}</option>`).join(''); }
 function mhLangPickerOnboarding() {
   const ov = document.getElementById('onboardingOverlay'); if (!ov || document.getElementById('mhLangOb')) return;
   const d = document.createElement('div'); d.id = 'mhLangOb'; d.setAttribute('data-nolang', '1');
@@ -21795,21 +21798,21 @@ function mhLangSettingsCard() {
   const d = document.createElement('div'); d.id = 'mhLangCard'; d.className = 'settings-card'; d.setAttribute('data-nolang', '1');
   d.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">🌐 Language</div>
     <select id="mhLangSel" onchange="mhLangSet(this.value)" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;">${mhLangOptionsHtml()}</select>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">English is the default and always one tap away. Translations cover most screens; anything not translated yet stays in English. Health wording is machine-assisted and has not been checked by clinicians who speak the language, so check anything important in English.</div>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">English is the default and always one tap away. Translations cover most screens; anything not translated yet stays in English. Health wording is machine-assisted and has not been checked by clinicians who speak the language, so check anything important in English. Medical terms with no safe translation are left in English rather than guessed.</div>`;
   w.insertBefore(d, w.firstChild);
 }
 function mhLangButton() {
   if (document.getElementById('mhLangFab')) return;
   const b = document.createElement('button'); b.id = 'mhLangFab'; b.setAttribute('data-nolang', '1'); b.title = 'Language / Back to English';
   b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:450;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:16px;padding:5px 10px;font-size:12px;opacity:.85;';
-  b.textContent = '🌐 ' + MH_L.code.toUpperCase();
+  b.textContent = mhLangInfo(MH_L.code).flag + ' ' + MH_L.code.toUpperCase();
   b.onclick = () => {
     document.getElementById('mhLangModal')?.remove();
     const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
     m.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
     m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
-      <button id="mhLangEn" class="run-btn" style="width:100%;padding:12px;font-size:15px;margin-bottom:10px;">Back to English</button>
-      ${MH_LANGS.filter(l => l.code !== 'en').map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;${l.code === MH_L.code ? 'border-color:var(--accent);' : ''}">${l.native}</button>`).join('')}
+      <button id="mhLangEn" class="run-btn" style="width:100%;padding:12px;font-size:15px;margin-bottom:10px;">🇬🇧 Back to English</button>
+      ${MH_LANGS.filter(l => l.code !== 'en').map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;${l.code === MH_L.code ? 'border-color:var(--accent);' : ''}">${l.flag} ${l.native}</button>`).join('')}
       <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:4px;">✕</button></div>`;
     document.body.appendChild(m);
     m.querySelector('#mhLangEn').onclick = () => mhLangSet('en');
@@ -21884,13 +21887,30 @@ function mhPlanParse(text, now) {
   return { time: mhPlanHHMM(hh, min), date: localISODate(date), food };
 }
 
+// Fasting heads-up for a plan (only when you track fasting: a goal set, or 3+ recorded fasts in the last 30 days).
+// Compares the planned time with your last real meal that counts; says nothing if the plan is under the fast threshold.
+function mhPlanFastNote(pp, kcal) {
+  try {
+    if (kcal < mhFastThresholdKcal()) return '';
+    const tracking = localStorage.getItem(MH_FAST_GOAL_KEY) != null || (mhFastingStats(30).nFasts || 0) >= 3;
+    if (!tracking) return '';
+    const now = mhFastingNow(); if (!now || now.stale) return '';
+    const at = new Date((pp.date || localISODate()) + 'T' + (pp.time || nowTime()) + ':00').getTime();
+    if (isNaN(at) || at <= now.lastMs) return '';
+    const h = (at - now.lastMs) / 3600000, goal = mhFastGoalH();
+    if (h >= goal || h > 36) return '';
+    const ok = new Date(now.lastMs + goal * 3600000);
+    const day = ok.toDateString() === new Date().toDateString() ? '' : ' tomorrow';
+    return `\n⏱ Heads up: that is ${mhFastFmt(h)} after your last meal (${mhFastClock(now.lastMs)}), short of your ${mhFastFmt(goal)} fasting goal. ${mhFastFmt(goal)} would be ${mhFastClock(ok.getTime())}${day}. Your call, nothing changed.`;
+  } catch (_) { return ''; }
+}
 function mhPlanAdd(foods, text, pp) {
   const clean = (foods || []).map(f => { const c = JSON.parse(JSON.stringify(f)); Object.keys(c).forEach(k => { if (k[0] === '_') delete c[k]; }); return c; });
   const a = mhPlanLoad();
   a.push({ id: 'p' + Date.now() + Math.floor(Math.random() * 1000), date: pp.date || localISODate(), time: pp.time || nowTime(), text: String(text || clean.map(f => f.name).join(', ')), foods: clean, createdAt: Date.now() });
   mhPlanSave(a);
   const k = Math.round(clean.reduce((s, f) => s + (f.kcal || 0), 0));
-  addBubble(`🗓 Planned for ${pp.time} ${mhPlanDateLabel(pp.date)}: ${text} (${k} kcal). It shows under your Today totals as planned, and only counts as eaten when you confirm it.`, 'system');
+  addBubble(`🗓 Planned for ${pp.time} ${mhPlanDateLabel(pp.date)}: ${text} (${k} kcal). It shows under your Today totals as planned, and only counts as eaten when you confirm it.` + mhPlanFastNote(pp, k), 'system');
   mhPlanRender();
 }
 function mhPlanRemove(id) { mhPlanSave(mhPlanLoad().filter(p => p.id !== id)); mhPlanRender(); }
@@ -26704,9 +26724,8 @@ function renderReportProfileList() {
     el.innerHTML = '<div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No report profiles yet.</div>';
     return;
   }
-  const treatments = loadTreatmentDefs();
   el.innerHTML = profiles.map(p => {
-    const treatment = treatments.find(t => t.id === p.treatmentId);
+    const treatment = mhAnchorById(p.treatmentId);
     const scheduleText = p.schedule?.frequency === 'weekly'
       ? `Reminds weekly on ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][p.schedule.dayOfWeek ?? 0]}`
       : p.schedule?.frequency === 'fortnightly' ? 'Reminds every 2 weeks'
@@ -26864,11 +26883,12 @@ function renderReportWizardStep() {
         ${REPORT_WIZARD_COLORS.map(c => `<div onclick="window._reportWizardDraft.orgColor='${c}';renderReportWizardStep();" style="width:34px;height:34px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${d.orgColor === c ? 'var(--text)' : 'transparent'};"></div>`).join('')}
       </div>`;
   } else if (step === 2) {
-    const treatments = loadTreatmentDefs().filter(t => t.active !== false);
-    body = treatments.length ? `
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Which treatment is this report about?</div>
+    const treatments = mhAnchorDefs().filter(t => t.active !== false);
+    if (d.treatmentId && !treatments.some(t => t.id === d.treatmentId)) { const cur = mhAnchorById(d.treatmentId); if (cur) treatments.unshift(cur); }
+    body = treatments.length ? mhCondChipsHtml() + `
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Which treatment or tag is this report about? (a tag like "Any Exercise" compares the days around those days)</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${treatments.map(t => `<div onclick="window._reportWizardDraft.treatmentId='${t.id}';renderReportWizardStep();" style="padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;border:1px solid ${d.treatmentId === t.id ? 'var(--accent)' : 'var(--border)'};background:${d.treatmentId === t.id ? 'var(--accent-dim)' : 'var(--surface2)'};color:${d.treatmentId === t.id ? 'var(--accent)' : 'var(--text2)'};">${t.name}</div>`).join('')}
+        ${treatments.map(t => `<div data-aid="${_pkEsc(t.id)}" onclick="window._reportWizardDraft.treatmentId=this.dataset.aid;renderReportWizardStep();" style="padding:8px 14px;border-radius:20px;cursor:pointer;font-size:13px;border:1px solid ${d.treatmentId === t.id ? 'var(--accent)' : 'var(--border)'};background:${d.treatmentId === t.id ? 'var(--accent-dim)' : 'var(--surface2)'};color:${d.treatmentId === t.id ? 'var(--accent)' : 'var(--text2)'};">${_pkEsc(t.name)}</div>`).join('')}
       </div>` : `
       <div style="font-size:13px;color:var(--text3);text-align:center;padding:20px 0;">No treatments set up yet. Add one under Treatment Tracking in Settings first, or skip this step for now and come back to it.</div>`;
   } else if (step === 3 || step === 4) {
@@ -26974,8 +26994,9 @@ async function generateProfileReport(id) {
   const profile = loadReportProfiles().find(p => p.id === id);
   if (!profile) { showToast('Report profile not found'); return; }
   if (!profile.treatmentId) { showToast('This profile has no treatment selected — edit it first'); return; }
-  const treatment = loadTreatmentDefs().find(t => t.id === profile.treatmentId);
-  if (!treatment) { showToast('The treatment this profile refers to no longer exists'); return; }
+  const treatment0 = mhAnchorById(profile.treatmentId);
+  if (!treatment0) { showToast('The treatment or tag this profile refers to no longer exists'); return; }
+  const treatment = Object.assign({}, treatment0, { name: mhAnchorLabel(treatment0) });
 
   const allMetrics = getAllOverlayableMetrics();
   const symptomDefs = loadSymptomDefs();

@@ -17,6 +17,7 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.972 First-run "What would you like to start with?" step.
 - [x] v3.10.973-974 One Filter panel holding chips and Hidden pills; toolbar always first; one pill size.
 - [x] v3.10.975 Optional nudges; epilepsy, type 2 diabetes and migraine starter packs.
+- [x] v3.10.992 Flags, report profiles on tags/conditions, planner fasting heads-up. Dropped: demo applying pack layout (cosmetic, restore risk).
 - [x] v3.10.991 Language packs (en/es/de/fr/tr), machine-assisted. Next: native-speaker + clinician review, translate remaining dynamic strings, report profiles on tags/conditions.
 - [x] v3.10.990 Six new demo personas with day tags. Idea: demo applies pack layout + labels. Next: report profiles on tags/conditions, language packs.
 - [x] v3.10.989 Tag manager. Next: report profiles on tags/conditions, demo personas for newer packs, language packs.

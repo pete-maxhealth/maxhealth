@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.992 | 23 | `flag` on `MH_LANGS`; `mhAnchorById/mhAnchorLabel` so report profiles (`treatmentId`) accept `tag:`/`tagcat:` anchors, `mhCondToggle` re-renders wizard step 2; `mhPlanFastNote(pp,kcal)` fasting heads-up. |
 | v3.10.991 | 23 | Language packs: `MH_LANGS`, `MH_L`, `lang/<code>.json` (raw GitHub + `mh_lang_cache_<code>` fallback), exact-match text/placeholder/title/aria translation via TreeWalker + MutationObserver, `data-nolang` opt-out, `mhLangSet`, 🌐 `mhLangFab` recovery, `mhSpeechLang()`, `mhLangAINote()`. |
 | v3.10.990 | 23 | Six demo personas (`frank, linda, ben, arthur, helen, nadia`) and `persona.dayTags` handled in `applyPersonaClinicalSetup`. |
 | v3.10.989 | 23 | `mhTagsMap/mhTagRename/mhTagDelete/mhTagsManage` (rewrites `state.history[].notes`, `state.notes`, `tagNotes`). |
