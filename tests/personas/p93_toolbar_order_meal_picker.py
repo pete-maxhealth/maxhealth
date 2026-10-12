@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if r['vis'] != 1: f.add('BUG', f'{t}/{sub}: {r["vis"]} visible toolbars')
         elif not all(r['first']): f.add('BUG', f'{t}/{sub}: toolbar is not the first item')
         elif not r['labels'][0].startswith('Filter,Open,Close,Default'): f.add('BUG', f"{t}/{sub}: toolbar order {r['labels'][0]}")
-        if r['total'] > 8: f.add('BUG', f'{t}/{sub}: toolbars piling up ({r["total"]})')
+        if r['total'] > 14: f.add('BUG', f'{t}/{sub}: toolbars piling up ({r["total"]})')
     # meal picker
     page.evaluate("""()=>{ saveLibrary([{id:'a',name:'Chicken',kcal:200,protein:30,carbs:0,fat:8,portion:'100g',categories:['meat']},{id:'b',name:'Broccoli',kcal:30,protein:3,carbs:4,fat:0,portion:'100g',categories:['vegetable']},{id:'c',name:'Cheese',kcal:400,protein:25,carbs:1,fat:33,portion:'100g',categories:['dairy']}]); switchTab('log'); startNextMealFlow(); startNextMealFlow(); }""")
     page.wait_for_timeout(500)

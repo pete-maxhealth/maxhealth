@@ -693,7 +693,7 @@
   .mh-grp-hide { display: none !important; }
   /* One button per screen puts every chip row and every "Hidden:" strip behind it (v3.10.942). Closed by default. */
   body:not(.mh-pills-open) .mh-topic-bar, body:not(.mh-pills-open) #mhTrendsGroupBar, body:not(.mh-pills-open) #dashboardRestoreStrip,
-  body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
+  body:not(.mh-pills-open) #trendCardsRestoreStrip, body:not(.mh-pills-open) #mmSectionRestoreStrip, body:not(.mh-pills-open) .hist-filter, body:not(.mh-pills-open) [id^="genericRestoreStrip-"] { display: none !important; }
   /* A collapsed card shrinks to one tidy list row: title left, position / hide / move controls right, action buttons tucked away (v3.10.944) */
   .section-title.mh-collapsed { display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; font-size: 15px !important; line-height: 1.25; padding: 9px 0 !important; margin: 0 !important; border-top: 1px solid var(--border); }
   .card-unit:has(> .section-title.mh-collapsed) { margin-top: 0 !important; margin-bottom: 0 !important; }
@@ -5355,6 +5355,7 @@
 </div><!-- end view-manage -->
 <div class="subview" id="view-customise">
   <div class="dash-scroll" id="customiseScroll" onscroll="trackScrollNav(this)">
+    <div class="mh-topic-bar" id="mhTopicBar-customise" data-nofilter="1"></div>
     <div class="section-title" style="margin-top:8px;cursor:pointer;" onclick="toggleSection('set-appearance','set-appearance-wrap','set-appearance-icon')">Appearance <span id="set-appearance-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-appearance-wrap">
     <div class="settings-card">
@@ -6223,7 +6224,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.976'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.977'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40819,13 +40820,14 @@ function computeChemoCycleAnalysis() {
 // global state, closed by default); "Open all" / "Close all" expand or collapse every collapsible card on that screen.
 // The pills themselves are unchanged and still do exactly what they did.
 function mhPillsOpen() { try { return localStorage.getItem('mh_pills_open') === '1'; } catch (_) { return false; } }
-const MH_PILL_SEL = '.mh-topic-bar, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
+const MH_PILL_SEL = '.mh-topic-bar, .hist-filter, #mhTrendsGroupBar, #dashboardRestoreStrip, #trendCardsRestoreStrip, #mmSectionRestoreStrip, [id^="genericRestoreStrip-"]';
 function mhPillsRoot(el) {
   let p = el.parentNode; if (p && p.classList && p.classList.contains('mh-filter-panel')) p = p.parentNode;   // chips live inside the panel; the screen is the panel's parent
   return el.closest('.subview, .view') || p;
 }
 function mhEnsurePillsToolbars() {
   document.body.classList.toggle('mh-pills-open', mhPillsOpen());
+  try { mhLibTopicApply(); } catch (_) {}
   const roots = new Map();
   document.querySelectorAll(MH_PILL_SEL).forEach(el => { const r = mhPillsRoot(el); if (r && !roots.has(r)) roots.set(r, el); });
   roots.forEach((first, root) => {
@@ -40834,8 +40836,10 @@ function mhEnsurePillsToolbars() {
     const open = mhPillsOpen();
     let cur = ''; try { const sc = mhScopeOf(root);
       if (sc.generic) { const k = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[k]; if (k !== 'all' && g) cur = g.label; }
-      else if (sc.name === 'trends') { const k = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[k]; if (k !== 'all' && g) cur = g.label; } } catch (_) {}
-    const html = `<button class="main" onclick="mhTogglePills()">☰ Filter${cur ? ': ' + cur : ''}${nHidden ? ` · ${nHidden} hidden` : ''} ${open ? '▾' : '▸'}</button>`
+      else if (sc.name === 'trends') { const k = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[k]; if (k !== 'all' && g) cur = g.label; }
+      else if (sc.name === 'library') { const k = mhLibTopicGet(); if (k !== 'all') cur = MH_LIB_GROUPS[k][0]; } } catch (_) {}
+    const hasChips = [...root.querySelectorAll(MH_PILL_SEL)].some(e => !e.dataset.nofilter);   // a screen with nothing to filter keeps the toolbar but not a dead Filter button
+    const html = (hasChips ? `<button class="main" onclick="mhTogglePills()">☰ Filter${cur ? ': ' + cur : ''}${nHidden ? ` · ${nHidden} hidden` : ''} ${open ? '▾' : '▸'}</button>` : '')
       + `<button onclick="mhSectionsAll(this, true)">Open all</button><button onclick="mhSectionsAll(this, false)">Close all</button><button onclick="mhResetScreen(this)" title="Put this screen back to its standard layout">\u21BA Default</button>`;
     if (!tb) { tb = document.createElement('div'); tb.className = 'mh-pills-toolbar'; first.parentNode.insertBefore(tb, first); }
     if (tb.dataset.sig !== html) { tb.innerHTML = html; tb.dataset.sig = html; }
@@ -40858,6 +40862,7 @@ function mhScopeOf(root) {
   if (id === 'view-manage') return { name: 'manage', generic: 'manage' };
   if (id === 'view-reports') return { name: 'reports', generic: 'reports' };
   if (id === 'view-import') return { name: 'import', generic: 'import' };
+  if (id === 'view-library') return { name: 'library' };
   if (id === 'view-trends') return { name: 'trends' };
   if (id === 'view-today') return { name: 'today' };
   if (root.querySelector && root.querySelector('#mmSectionRestoreStrip')) return { name: 'mm' };
@@ -40866,6 +40871,7 @@ function mhScopeOf(root) {
 function mhScopeKeys(sc) {   // null = everything on the screen
   if (sc.generic) { const cur = mhTopicGet(sc.generic), g = MH_TOPIC_SCOPES[sc.generic].groups[cur]; return cur !== 'all' && g ? g.keys.slice() : null; }
   if (sc.name === 'trends') { const cur = mhTrendsGroupGet(), g = mhTrendsGroupDefs()[cur]; return cur !== 'all' && g ? g.ids.slice() : null; }
+  if (sc.name === 'library') { const cur = mhLibTopicGet(); return cur !== 'all' ? [MH_LIB_GROUPS[cur][1]] : null; }
   return null;
 }
 // ── Today cards that had no collapse of their own (v3.10.967) ───────────────────────────────────────────
@@ -40905,6 +40911,7 @@ function mhLayoutKeys(root) {
   const sc = mhScopeOf(root);
   if (sc.generic) { keys.add('mh_reorder_' + sc.generic); keys.add('mh_reorder_hidden_' + sc.generic); keys.add('mh_topic_' + sc.generic); }
   if (sc.name === 'trends') { ['mh_trend_cards_order', 'mh_trend_cards_hidden', 'mh_trends_group'].forEach(k => keys.add(k)); }
+  if (sc.name === 'library') { ['mh_topic_library', 'mh_library_section_order'].forEach(k => keys.add(k)); }
   if (sc.name === 'mm') { ['mh_mm_section_order', 'mh_mm_section_hidden', 'mh_mm_legend_order', 'mh_mm_legend_hidden'].forEach(k => keys.add(k)); }
   return [...keys];
 }
@@ -40974,6 +40981,19 @@ function mhSectionsAll(btn, open) {
   if (!open) mhScrollTopOf(root.querySelector('.mh-pills-toolbar') || root);
   const where = keys ? 'in this group' : 'on this screen';
   showToast(open ? `Opened ${n} section${n === 1 ? '' : 's'}${restored ? ` and restored ${restored} hidden` : ''} ${where}` : (n ? `Closed ${n} section${n === 1 ? '' : 's'} ${where}` : `Nothing to close ${where}`));
+}
+// ── Library section chips (v3.10.977): All / Recipes / A-Z / Food / Tools / Ingredients, same Filter panel as every other page ──
+const MH_LIB_GROUPS = { recipes: ['Recipes', 'lib-recipes', 'dashSection-libRecipes'], az: ['A\u2013Z', 'lib-az', 'dashSection-libAZ'], food: ['Food Library', 'lib-food', 'dashSection-libFood'], tools: ['Tools', 'lib-tools', 'dashSection-libTools'], ingredients: ['Ingredients', 'lib-ingredients', 'dashSection-libIngredients'] };
+function mhLibTopicGet() { let k = 'all'; try { k = localStorage.getItem('mh_topic_library') || 'all'; } catch (_) {} return MH_LIB_GROUPS[k] ? k : 'all'; }
+function mhLibTopicSet(k) { try { localStorage.setItem('mh_topic_library', k); } catch (_) {} mhLibTopicApply(); mhClosePills(); mhScrollTopOf(document.getElementById('mhTopicBar-library')); }
+function mhLibTopicApply() {
+  const scroll = document.getElementById('libraryScroll'); if (!scroll) return;
+  const cur = mhLibTopicGet();
+  let bar = document.getElementById('mhTopicBar-library');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'mhTopicBar-library'; bar.className = 'mh-topic-bar'; scroll.insertBefore(bar, scroll.firstChild); }
+  const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).map(k => [k, MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
+  if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }
+  Object.keys(MH_LIB_GROUPS).forEach(k => { const el = document.getElementById(MH_LIB_GROUPS[k][2]); if (el) el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k); });
 }
 (function () { let t = 0; const run = () => { t = 0; try { mhEnsurePillsToolbars(); } catch (_) {} };
   const kick = () => { if (!t) t = requestAnimationFrame(run); };

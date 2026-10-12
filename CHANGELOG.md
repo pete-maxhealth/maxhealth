@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.977 — Filter Toolbar On More Screens, Three New Packs, Test Plan
+
+- **Same toolbar on History, Library and Customise** (first item, same order as every other page). History's This Week / Month / All now sit inside the Filter panel. Library gets section chips (All, Recipes, A-Z, Food Library, Tools, Ingredients) that persist and are cleared by Default (`mh_topic_library`). Customise has nothing to filter, so it shows Open all / Close all / Default with no Filter button (a screen with no chips never gets a dead Filter button). Supplements and Log (chat) have nothing to fold or filter and deliberately get no toolbar.
+- **Three more starter packs**: strict keto, type 1 diabetes, cluster headache (index now lists eight). Symptoms and layout only, no advice.
+- **Test plan**: `tests/TEST_PLAN.md` (automatic suite, per-feature checks, Pete's 10-minute phone checklist, release gate). Two older tests were stale rather than the app (p08 now chooses 'Show me everything' like p01; p47 follows the renamed `descForAI`). New tests: `p98_filter_rows_more_screens`, `p99_all_shipped_packs` (every shipped pack validated and applied in the app).
+
 ## v3.10.976 — AI Check No Longer Sends Guessed Grams, Layout By Voice, Half-Written Page Guard
 
 - **The 3-AI comparison on a logged meal sent the first AI's guessed grams to all three checkers** (Pete Spence's screenshot: clotted cream 90g, raspberries 35g... then every AI "independently" guessed ~160g, the exact total). An amount is now sent only if it appears in the person's own words; guessed amounts are left out, so each AI judges the portion itself. Because their macros are then for their own portion, they are scaled to the logged amount before comparing and averaging (raw figures stay on the card, and the card says no amounts were sent). Library, History and Recipe edit forms still send the amount you entered. Test: `p95`.

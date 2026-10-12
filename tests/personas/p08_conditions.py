@@ -22,7 +22,7 @@ with fresh_server() as root, sync_playwright() as pw:
         page.fill('#onboardWeight','70'); page.fill('#onboardTarget','65')
         page.evaluate("onboardNext(4)"); page.evaluate("obSetActivity('light')"); page.evaluate("obSetGoal('lose')")
         page.evaluate("onboardNext(5)"); page.evaluate(f"obSetCondition('{cond}')")
-        page.evaluate("onboardNext(6)"); page.evaluate("onboardFinish()"); page.wait_for_timeout(1500)
+        page.evaluate("onboardNext(6)"); page.evaluate("obSetStart('everything')"); page.evaluate("onboardFinish()"); page.wait_for_timeout(1500)
         text = {}
         for tab, sub in SCREENS:
             # Real taps on the real buttons, exactly like a person (not direct function calls).
