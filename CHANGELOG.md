@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.995 — Translate This Screen (AI)
+
+- When a language other than English is on, a **✨ Translate this screen with AI** button sits next to the flag in the top bar and inside the language box. It collects the English text still showing on the screen that the language pack does not cover, tells you how many phrases and where they go (your own AI provider), and only sends after you tap Translate. Notes: it can include your own notes or food names if they are on screen.
+- The answers are kept on your phone (`mh_lang_user_<code>`), so each phrase is only translated once and works offline afterwards. The shipped pack always wins over an AI translation. **Forget my AI translations** in the language box clears them. Failure or a bad answer changes nothing.
+- The AI is told to keep numbers, units, names and quotes, never soften medical meaning, and leave a medical term in English if unsure. Machine translation: check anything important in English. Test `p114`.
+
 ## v3.10.994 — Flags You Can See, More of the App Translated
 
 - **Flags are now drawn pictures**, not emoji (some phones do not draw flag emoji). One sits in the top bar next to search: tap it to change language. Settings > Profile and the first onboarding screen show a row of flag buttons; the corner button when a language is on shows the flag too. English is always in the list.

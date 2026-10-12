@@ -6237,7 +6237,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.994'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.995'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -21796,24 +21796,24 @@ function mhLangStartObserver() {
 }
 async function mhLangLoad(code) {
   let cached = null; try { cached = JSON.parse(localStorage.getItem('mh_lang_cache_' + code) || 'null'); } catch (_) {}
-  if (cached && cached.d) { MH_L.dict = cached.d; }
+  if (cached && cached.d) { MH_L.dict = mhLangMerge(cached.d); }
   try {
     const r = await fetch(MH_LANG_BASE + code + '.json', { cache: 'no-store' });
-    if (r.ok) { const d = await r.json(); if (d && typeof d === 'object') { try { localStorage.setItem('mh_lang_cache_' + code, JSON.stringify({ v: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', d })); } catch (_) {} MH_L.dict = d; } }
+    if (r.ok) { const d = await r.json(); if (d && typeof d === 'object') { try { localStorage.setItem('mh_lang_cache_' + code, JSON.stringify({ v: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', d })); } catch (_) {} MH_L.dict = mhLangMerge(d); } }
   } catch (_) {}
   return MH_L.dict;
 }
 async function mhLangInit() {
   try { const q = new URLSearchParams(location.search).get('lang'); if (q && MH_LANGS.some(l => l.code === q)) { if (q === 'en') localStorage.removeItem('mh_lang'); else localStorage.setItem('mh_lang', q); } } catch (_) {}
   MH_L.code = mhLangCode();
-  try { const h = document.getElementById('mhLangHdr'); if (h) h.innerHTML = mhFlagImg(MH_L.code, 15); } catch (_) {}
+  try { const h = document.getElementById('mhLangHdr'); if (h) h.innerHTML = mhFlagImg(MH_L.code, 15) + (MH_L.code !== 'en' ? '<span onclick="event.stopPropagation();mhLangOpen();setTimeout(()=>mhLangTranslateScreen(false),50)" title="Translate this screen with AI" style="margin-left:6px;font-size:15px;">✨</span>' : ''); } catch (_) {}
   mhLangPickerOnboarding();
   mhLangSettingsCard();
   if (MH_L.code === 'en') return;
   document.documentElement.lang = MH_L.code;
   mhLangButton();
   let cached = null; try { cached = JSON.parse(localStorage.getItem('mh_lang_cache_' + MH_L.code) || 'null'); } catch (_) {}
-  if (cached && cached.d) { MH_L.dict = cached.d; mhLangWalk(document.body); mhLangStartObserver(); }
+  if (cached && cached.d) { MH_L.dict = mhLangMerge(cached.d); mhLangWalk(document.body); mhLangStartObserver(); }
   await mhLangLoad(MH_L.code);
   if (MH_L.dict) { mhLangWalk(document.body); mhLangStartObserver(); }
   else { try { showToast('Language file not available offline yet. Staying in English.'); } catch (_) {} }
@@ -21839,6 +21839,62 @@ function mhLangSettingsCard() {
     <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">English is the default and always one tap away. Translations cover most screens; anything not translated yet stays in English. Health wording is machine-assisted and has not been checked by clinicians who speak the language, so check anything important in English. Medical terms with no safe translation are left in English rather than guessed.</div>`;
   w.insertBefore(d, w.firstChild);
 }
+// ── "Translate this screen" (AI) for text the packs do not cover ────────────────────────────────
+// Sends the English text that is visible and still untranslated to the person's own AI provider, asks for a
+// plain JSON array back, and keeps the answers on this phone (mh_lang_user_<code>) so each phrase is only
+// ever translated once. These fill gaps only: the shipped pack always wins. Machine output, labelled as such.
+function mhLangUserGet(code) { try { const o = JSON.parse(localStorage.getItem('mh_lang_user_' + (code || MH_L.code)) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (_) { return {}; } }
+function mhLangMerge(fileDict) { return Object.assign({}, mhLangUserGet(), fileDict || {}); }
+function mhLangCollectEnglish() {
+  const EN = /\b(the|and|your|you|to|is|for|with|of|on|in|this|that|are|not|no|at|by|from|or|it|be|can|will|today|day|days|log|logged|week|average|avg|nothing|yet|add|set|tap|use)\b/i;
+  const d = MH_L.dict || {}, vals = new Set(Object.values(d)), seen = new Set(), out = [];
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) {
+    const p = n.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA|CODE|OPTION|NOSCRIPT)$/.test(p.nodeName)) continue;
+    if (p.closest && p.closest('[data-nolang],#mhLangModal')) continue;
+    const r = p.getBoundingClientRect(); if (!r.width || !r.height) continue;
+    const cs = getComputedStyle(p); if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const t = mhLangNorm(n.nodeValue); if (!t || t.length < 3 || t.length > 600 || !/[A-Za-z]{3}/.test(t) || seen.has(t)) continue;
+    if (Object.prototype.hasOwnProperty.call(d, t) || vals.has(t) || !EN.test(t)) continue;
+    if (mhLangPat(t, d)) continue;
+    seen.add(t); out.push(t);
+  }
+  return out.slice(0, 160);
+}
+function mhLangParseArr(txt, n) {
+  try { const m = /\[[\s\S]*\]/.exec(String(txt || '')); const a = JSON.parse(m ? m[0] : txt); return Array.isArray(a) && a.length === n && a.every(x => typeof x === 'string') ? a : null; } catch (_) { return null; }
+}
+async function mhLangTranslateScreen(ok) {
+  const l = mhLangInfo(); if (l.code === 'en') return;
+  const items = mhLangCollectEnglish();
+  const m = document.getElementById('mhLangModal');
+  if (!items.length) { if (m) m.remove(); showToast('Nothing left to translate on this screen'); return; }
+  if (!ok) {
+    if (!m) return;
+    m.querySelector('div').innerHTML = `<div style="font-weight:700;margin-bottom:8px;">✨ Translate this screen</div>
+      <div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:10px;">${items.length} English phrases on this screen will be sent to your AI provider to be translated into ${l.native}. That can include your own notes or food names if they are on screen. The answers are kept on this phone so each phrase is only translated once. It is machine translation: check anything important in English.</div>
+      <button class="run-btn" id="mhLangGo" style="width:100%;padding:10px;margin-bottom:6px;">Translate ${items.length} phrases</button>
+      <button class="copy-btn" id="mhLangNo" style="width:100%;padding:8px;">Cancel</button>`;
+    m.querySelector('#mhLangGo').onclick = () => mhLangTranslateScreen(true);
+    m.querySelector('#mhLangNo').onclick = () => m.remove();
+    return;
+  }
+  const go = m && m.querySelector('#mhLangGo'); if (go) { go.disabled = true; go.textContent = 'Translating…'; }
+  const user = mhLangUserGet(); let done = 0, failed = 0, lastErr = '';
+  for (let i = 0; i < items.length; i += 40) {
+    const chunk = items.slice(i, i + 40);
+    const prompt = `Translate each item of this JSON array of app interface text from English into ${l.name}. Keep numbers, units, dates, times, emoji, symbols, names, brand names and anything in quotes exactly as written. This is a health-tracking app: do not add, remove or soften any medical meaning, and leave a medical term in English if you are unsure of the right ${l.name} term. Return ONLY a JSON array of strings, the same length and the same order, with no commentary.\n\n${JSON.stringify(chunk)}`;
+    let r; try { r = await callHealthAI(prompt, { maxTokens: 3500, system: 'You are a careful translator for a health app. Output only valid JSON.' }); } catch (e) { r = { ok: false, error: String(e) }; }
+    const arr = r && r.ok ? mhLangParseArr(r.text, chunk.length) : null;
+    if (!arr) { failed += chunk.length; lastErr = (r && r.error) || 'The answer could not be read'; continue; }
+    chunk.forEach((en, j) => { const tr = arr[j].trim(); if (tr && tr !== en) { user[en] = tr; done++; } });
+  }
+  try { localStorage.setItem('mh_lang_user_' + l.code, JSON.stringify(user)); } catch (_) {}
+  if (MH_L.dict) { MH_L.dict = Object.assign({}, user, MH_L.dict); mhLangWalk(document.body); }
+  document.getElementById('mhLangModal')?.remove();
+  showToast(done ? `✨ Translated ${done} phrases${failed ? ` (${failed} could not be)` : ''}. Machine translation: check anything important in English.` : `Could not translate: ${lastErr}`, null, null, 4500);
+}
+function mhLangForgetAI() { try { localStorage.removeItem('mh_lang_user_' + MH_L.code); } catch (_) {} mhLangSet(MH_L.code); }
 function mhLangOpen() {
   document.getElementById('mhLangModal')?.remove();
   const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
@@ -21846,8 +21902,11 @@ function mhLangOpen() {
   m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
     <div style="font-weight:700;margin-bottom:10px;">🌐 Language</div>
     ${MH_LANGS.map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${l.code === mhLangCode() ? 'border-color:var(--accent);' : ''}">${mhFlagImg(l.code, 16)} ${l.native}${l.code === 'en' ? ' (Back to English)' : ''}</button>`).join('')}
-    <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:4px;">✕</button></div>`;
+    ${MH_L.code !== 'en' ? `<button id="mhLangAI" class="copy-btn" style="width:100%;padding:10px;margin-top:4px;border-color:var(--accent);color:var(--accent);">✨ Translate this screen with AI</button>${Object.keys(mhLangUserGet()).length ? `<div style="text-align:center;margin-top:6px;"><span id="mhLangForget" style="font-size:11px;color:var(--text3);text-decoration:underline;cursor:pointer;">Forget my AI translations (${Object.keys(mhLangUserGet()).length})</span></div>` : ''}` : ''}
+    <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:6px;">✕</button></div>`;
   document.body.appendChild(m);
+  const ai = m.querySelector('#mhLangAI'); if (ai) ai.onclick = () => mhLangTranslateScreen(false);
+  const fg = m.querySelector('#mhLangForget'); if (fg) fg.onclick = mhLangForgetAI;
   m.querySelector('#mhLangX').onclick = () => m.remove();
   m.querySelectorAll('.mh-lang-opt').forEach(x => x.onclick = () => mhLangSet(x.dataset.c));
 }
