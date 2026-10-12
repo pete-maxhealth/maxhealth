@@ -6,6 +6,13 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1002 — Consistency Sweep
+
+- **Meal plan card:** the "+ Plan a meal" button, the plan rows and the Yes / Changed it / Skipped buttons wrapped badly or clipped at large text ("YES, ATE IT" lost its end). They now wrap, each plan row is a padded rounded box (yellow outline when it is due), and the three buttons drop to a new line when the screen is narrow.
+- **Rounder, clearer buttons:** every rectangular button (copy, run, modal, neutral, settings, zoom, and the small inline ones, in every colour theme) shares a 12px corner and a heavier outline. Pills, tabs and the theme-styled chat bar are left as they were.
+- **Select all + Copy** under every output area (AI answers, reports, import results, logs, diagnostics, commands). One shared bar, added next to the output so the copy is exactly the output text; hidden on empty placeholders. Falls back to selecting the text if the phone blocks clipboard access.
+- **Sweep fixes:** card titles with ▲▼👁 wrapped instead of clipping at large text (22 clipped on Trends, Reports, Settings); the ▲▼ arrows are a proper tap size (they were 16 by 17px); toasts wrap instead of running off the screen (the new Share messages are long); photo, gallery and send buttons gained labels for screen readers; buttons have a minimum height. Test: `p120`.
+
 ## v3.10.1001 — Reorder Works Inside a Topic
 
 - ▲ ▼ on Settings, Reports and Import cards could appear dead when a topic chip (for example About & setup) was selected: the card swapped places with a neighbour that belongs to another topic and so was out of sight. It now jumps over cards you cannot currently see, to the next visible one. Test: `p119` (fails on the old code, passes now).
