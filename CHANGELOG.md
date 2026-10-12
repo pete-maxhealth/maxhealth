@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.969 — Filter Count Fix, Themed Toolbar, Quieter Pills
+
+- **"1 hidden" with nothing to restore fixed.** Hidden-card lists could keep keys for cards that no longer exist; they were counted in the Filter badge but never listed. `mhPruneHidden` now drops them on read (generic, dashboard, trend cards).
+- **Toolbar buttons (Filter, Open all, Close all, Default) use the chosen theme accent.**
+- **All chips quieter** (smaller, transparent) so the toolbar leads.
+- **Chips and Hidden strips now sit nested under the open Filter** on an accent rule.
+- Test: `p90_stale_hidden.py`.
+
 ## v3.10.968 — Reset Layout, And Live Values On Folded Cards
 
 - **↺ Default** button on every screen's toolbar (beside Open all / Close all): puts that screen back to its standard layout (open/closed cards, hidden cards, their order, the topic filter) after a confirmation. **Settings → Setup → Reset layout on every screen** does the same everywhere. Only layout is touched, never anything logged; the page reloads and comes back to the same screen.
