@@ -53,7 +53,7 @@ Do this once at large text and once at small text.
 2. **Library chips and 👁.** Tap the 👁 on a section: it disappears and is listed under Filter as Hidden, with the count on the button; tap its name to bring it back.
 2b. **Library chips.** Open Filter on Library, tap Tools: only Library Tools shows. Close the app and reopen: the filter is still there. Tap Default and confirm: everything is back.
 3. **History.** This Week, Month and All sit inside the Filter panel and still change the list.
-4. **Packs.** Settings → Data → Starter packs shows eight packs: general wellbeing, brain tumour, epilepsy, type 2 diabetes, type 1 diabetes, migraine, cluster headache and strict keto. Preview one: it should list symptoms and a screen layout and change nothing until you apply it.
+4. **Packs.** Settings → Data → Starter packs lists all 27 packs A–Z, with a "not medical advice" line at the top. Preview one: it should list symptoms and a screen layout and change nothing until you apply it.
 4d. **Change my focus.** Settings > Manage > Setup > Change my focus: choose Muscle growth, read the preview, Switch. Today now hides Ketosis and Fasting; your own symptoms are still there; Show me everything brings it all back.
 4c. **Food Library category.** In Log > Library > Food Library pick a category from the third dropdown: only those foods show, with a warning banner; Show everything resets it.
 4b. **Close all really closes.** On Trends (7 Days) tap Close all: the Weight, Heart rate and other metric cards fold to one-line bars (tap a bar to open just that one); Open all opens them. Same on Today and the Library.

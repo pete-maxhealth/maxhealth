@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.984 — Seventeen More Condition Packs, Disclaimer On Every Pack Screen
+
+- **17 new starter packs** (27 in all, listed A-Z): High blood pressure, Heart health, Asthma & COPD, IBS & gut health, Crohn's & colitis, Arthritis & joint pain, Fibromyalgia & chronic pain, Long COVID & ME/CFS, Multiple sclerosis, Parkinson's, PCOS, Menopause, Thyroid, Cancer treatment, Anxiety & low mood, Weight loss (keeps the fasting card), Sleep problems. Each is symptoms (and common treatment names) plus a screen layout; they are generic starting lists, not clinical guidance.
+- **Disclaimer on every pack screen**: the Starter packs list, the pack preview, and Change my focus (list and preview) all say these are starting lists of things people commonly track, not medical advice, and do not replace your own clinician. Every pack description also ends "nothing here is advice". Tests: `p99` (all packs), `p104` (disclaimer shown).
+
 ## v3.10.983 — Type 3c (Pancreatic) Diabetes Pack
 
 - **New pack: Type 3c (pancreatic) diabetes tracking**: symptoms (thirst, urination, fatigue, unplanned weight loss, loose or greasy stools, abdominal pain, bloating, low-sugar signs), treatments (Insulin dose, Pancreatic enzymes with a meal), weight kept in front, ketosis and fasting tucked away. Ten packs in total. Covered by `p99`.

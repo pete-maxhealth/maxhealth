@@ -22,7 +22,11 @@ with fresh_server() as root, sync_playwright() as pw:
     for want in ('Show me everything', 'Muscle growth tracking', 'Strict keto tracking', 'Brain tumour tracking'):
         if want not in body: f.add('BUG', f'focus list missing {want}')
     ev("[...document.querySelectorAll('#mhFocusBody .copy-btn')].find(b=>b.closest('div').textContent.includes('Muscle growth')).click()"); page.wait_for_timeout(800)
+    if 'not medical advice' not in ev("document.getElementById('mhFocusModal').innerText"): f.add('BUG', 'disclaimer missing from the focus list')
+    for want in ('Asthma & COPD tracking', 'Parkinson', 'Long COVID'):
+        if want not in body: f.add('BUG', f'focus list missing {want}')
     prev = ev("document.getElementById('mhFocusModal').innerText")
+    if 'not medical advice' not in prev: f.add('BUG', 'disclaimer missing from the focus preview')
     if 'Ketosis' not in prev or 'Fasting' not in prev or 'Nothing you have logged is touched' not in prev: f.add('BUG', f'preview wrong: {prev[:300]}')
     with page.expect_navigation(): ev("document.getElementById('mhFocusGo').click()")
     page.wait_for_timeout(1800)
