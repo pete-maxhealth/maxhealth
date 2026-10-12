@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.1006 | 24 | `mhTagIsDeviceNoise` (filters device read-outs from tag lists), `mhFixStepCommas` one-time notes repair (`mh_mig_step_commas`); steps log snapshots `_old_steps` before the in-place merge. |
 | v3.10.1005 | 24 | `update_health.py` logs a `steps` line (old, new, chosen source, offered values) whenever a run changes recent steps. |
 | v3.10.1004 | 24 | `GET /logs` (server.py) and `mhRenderPipelineLog` (Advanced tools card). |
 | v3.10.1003 | 24 | `merge_with_precedence`: provisional (typed) steps: HC may beat them today, never on earlier dates; typed replaces a stored HC value after the day ends; ring/watch always win after the day. |

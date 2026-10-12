@@ -6280,7 +6280,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1005'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1006'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -39524,7 +39524,7 @@ function processCombinedText(text, silent, outEl) {
 
         // Build a description from available device data
         const parts2 = [];
-        if (steps)    parts2.push(`${steps.toLocaleString()} steps`);
+        if (steps)    parts2.push(`${steps} steps`);   // plain digits: notes are comma-separated, so '12,345 steps' used to split into the fake tags '12' and '345 steps'
         if (sleepMin) parts2.push(`${Math.round(sleepMin/60*10)/10}h sleep`);
         if (hrv)      parts2.push(`HRV ${hrv}`);
         if (spo2)     parts2.push(`SpO2 ${spo2}%`);
@@ -42215,11 +42215,29 @@ function renderWeightProtocol() {
 // anchor, exactly like a logged treatment session. Ids: 'tag:<tag>' (that exact
 // tag) and 'tagcat:<category>' (any "<category>: …" tag). Everything downstream
 // (window, day-of, CSV, share, saved queries) is unchanged.
+// Device read-outs that older imports wrote into the day's notes ("12,345 steps, 7.1h sleep, HRV 40"). They are data, not tags,
+// and the comma in "12,345" used to split into fake tags like "000 steps". Never offered as tags.
+function mhTagIsDeviceNoise(t) {
+  t = String(t || '').trim();
+  return /^\d+([.,]\d+)?\s*k?\s*steps?\b/i.test(t) || /^\d+$/.test(t) || /^\d+(\.\d+)?h\s*sleep/i.test(t) || /^HRV\s*\d/i.test(t) || /^Sp[Oo]2\s*\d/i.test(t) || /^\d+\s*·/.test(t) || /^exercise:\s*\d+([.,]\d+)?\s*k?\s*steps?$/i.test(t);   // a typed step total is a number (use Steps), not a tag to compare
+}
+// One-time repair of stored notes: "12,345 steps" -> "12345 steps" so it stops splitting.
+function mhFixStepCommas() {
+  try {
+    if (localStorage.getItem('mh_mig_step_commas') === '1' || !state || !Array.isArray(state.history)) return;
+    let n = 0; const fix = v => String(v || '').replace(/(\d{1,3}),(\d{3})(?=\s*steps?\b)/gi, (m, a, b) => { n++; return a + b; });
+    state.history.forEach(h => { if (h && h.notes) h.notes = fix(h.notes); });
+    if (state.notes) state.notes = fix(state.notes);
+    if (n) saveState();
+    localStorage.setItem('mh_mig_step_commas', '1');
+  } catch (_) {}
+}
+setTimeout(mhFixStepCommas, 2000);
 function mhTagDays() {
   const out = {}; // lower tag -> { name, dates:Set }
   const add = (notes, date) => {
     String(notes || '').replace(/\(today, in progress\)/i, '').split(',').map(t => t.trim()).forEach(t => {
-      if (!t || /^\d+min /i.test(t) || ['standard', 'occasion', 'holiday', 'missed day entry', 'missed day'].includes(t.toLowerCase())) return;
+      if (!t || /^\d+min /i.test(t) || mhTagIsDeviceNoise(t) || ['standard', 'occasion', 'holiday', 'missed day entry', 'missed day'].includes(t.toLowerCase())) return;
       const k = t.toLowerCase(); (out[k] = out[k] || { name: t, dates: new Set() }).dates.add(date);
     });
   };

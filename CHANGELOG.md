@@ -6,6 +6,11 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1006 — No More Fake "000 steps" Tags
+
+- The Treatment Sessions picker (and Manage tags, Compare, reports) offered dozens of junk tags such as "000 steps", "001 steps", "000 steps|active day". Cause: older device imports wrote a day's note as "12,345 steps, 7.1h sleep, HRV 40", the note is comma-separated, so "12,345" split into the fake tags "12" and "345 steps". Fixed three ways: new imports write plain digits ("12345 steps"); a one-time repair rewrites the stored notes; and device read-outs (steps, sleep hours, HRV, SpO2, bare numbers, and a typed "Exercise: 6.3k steps") are never offered as tags at all. Real tags such as "Treatment: Massage" are untouched. Test: `p122`.
+- Also fixed: the new steps log line (v3.10.1005) never appeared because the merge changes rows in place; it now snapshots the old value first. Caught by `p87`.
+
 ## v3.10.1005 — The Log Now Says What Happened To Steps
 
 - First real look at the new log viewer (Pete's phone): the logs live in `app/logs/` and are fresh (the July file was a stale old copy in a different folder), but a search for "steps" found nothing, because the pipeline only logged a generic "merge ok" line. Now, whenever a run changes the steps of any of the last 10 days, it logs one line: the date, old value, new value, which source was chosen and what every source offered (for example `steps 2026-10-12: 6000 -> 9185 (chosen: health_connect; offered: manual=6000 health_connect=9185)`). The "Steps only" filter in the viewer now answers "who replaced my typed total, and when".

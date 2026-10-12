@@ -893,6 +893,7 @@ def main():
         flush_log()
         return
 
+    _old_steps = {d: (r or {}).get('steps') for d, r in existing.items()}   # rows are mutated in place by the merge, so snapshot first
     # Merge with precedence
     merged, field_sources = merge_with_precedence(existing, new_rows_by_source, precedence, field_sources,
                                                   provisional=load_provisional_manual(), today_iso=datetime.now().strftime('%Y-%m-%d'))
@@ -902,7 +903,7 @@ def main():
         _cut = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
         for _d in sorted(merged):
             if _d < _cut: continue
-            _old = (existing.get(_d) or {}).get('steps'); _new = (merged.get(_d) or {}).get('steps')
+            _old = _old_steps.get(_d); _new = (merged.get(_d) or {}).get('steps')
             if str(_old or '') != str(_new or '') and _new:
                 _offer = ' '.join(f"{src}={(rows.get(_d) or {}).get('steps') or '-'}" for src, rows in new_rows_by_source.items() if (rows.get(_d) or {}).get('steps'))
                 log('pipeline', 'steps', 'ok', f"steps {_d}: {_old or 'none'} -> {_new} (chosen: {(field_sources.get(_d) or {}).get('steps', 'unknown')}; offered: {_offer or 'nothing new'})")
