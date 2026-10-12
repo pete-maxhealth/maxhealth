@@ -824,6 +824,18 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': str(ex)}, 400)
             return
 
+        # ── POST /clear-client-errors — "Mark as fixed" on the System health note (v3.10.978) ──
+        # Empties the reported-errors list. If the same error happens again it is recorded again as New.
+        if path == '/clear-client-errors':
+            try:
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(ERROR_LOG_JSON, 'w', encoding='utf-8') as f:
+                    json.dump([], f)
+                self.send_json({'status': 'ok'})
+            except Exception as ex:
+                self.send_json({'error': str(ex)}, 400)
+            return
+
         # ── POST /save-devices — custom devices, retired list, file patterns ──
         if path == '/save-devices':
             try:
