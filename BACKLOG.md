@@ -17,6 +17,7 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.972 First-run "What would you like to start with?" step.
 - [x] v3.10.973-974 One Filter panel holding chips and Hidden pills; toolbar always first; one pill size.
 - [x] v3.10.975 Optional nudges; epilepsy, type 2 diabetes and migraine starter packs.
+- [x] v3.10.980 Close all on Trends folds the metric cards.
 - [x] v3.10.979 Library 👁 hide per section (uniform with the other pages).
 - [x] v3.10.978 Mark app errors as fixed on System health.
 - [x] v3.10.977 Filter toolbar on History/Library/Customise; strict keto, type 1 diabetes, cluster headache packs; test plan + p98/p99.

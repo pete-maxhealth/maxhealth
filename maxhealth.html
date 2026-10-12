@@ -6225,7 +6225,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.979'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.980'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -40837,6 +40837,7 @@ function mhPillsRoot(el) {
 function mhEnsurePillsToolbars() {
   document.body.classList.toggle('mh-pills-open', mhPillsOpen());
   try { mhLibTopicApply(); } catch (_) {}
+  try { mhTcApply(); } catch (_) {}
   const roots = new Map();
   document.querySelectorAll(MH_PILL_SEL).forEach(el => { const r = mhPillsRoot(el); if (r && !roots.has(r)) roots.set(r, el); });
   roots.forEach((first, root) => {
@@ -40919,7 +40920,7 @@ function mhLayoutKeys(root) {
   if (root.id === 'view-dash') { keys.add('mh_dashboard_order'); keys.add('mh_dashboard_hidden'); all.filter(k => k.startsWith('mh_collapse_dc_')).forEach(k => keys.add(k)); }
   const sc = mhScopeOf(root);
   if (sc.generic) { keys.add('mh_reorder_' + sc.generic); keys.add('mh_reorder_hidden_' + sc.generic); keys.add('mh_topic_' + sc.generic); }
-  if (sc.name === 'trends') { ['mh_trend_cards_order', 'mh_trend_cards_hidden', 'mh_trends_group'].forEach(k => keys.add(k)); }
+  if (sc.name === 'trends') { ['mh_trend_cards_order', 'mh_trend_cards_hidden', 'mh_trends_group'].forEach(k => keys.add(k)); all.filter(k => k.startsWith('mh_collapse_tc_')).forEach(k => keys.add(k)); }
   if (sc.name === 'library') { ['mh_topic_library', 'mh_library_section_order', 'mh_library_hidden'].forEach(k => keys.add(k)); }
   if (sc.name === 'mm') { ['mh_mm_section_order', 'mh_mm_section_hidden', 'mh_mm_legend_order', 'mh_mm_legend_hidden'].forEach(k => keys.add(k)); }
   return [...keys];
@@ -40944,6 +40945,39 @@ window.addEventListener('load', () => setTimeout(() => {
   try { if (localStorage.getItem('mh_offer_local_switch')) { localStorage.removeItem('mh_offer_local_switch'); offerLocalSwitchIfAvailable(); } } catch (_) {}
   try { const r = JSON.parse(sessionStorage.getItem('mh_resume_tab') || 'null'); if (r && r.tab) { sessionStorage.removeItem('mh_resume_tab'); switchTab(r.tab); if (r.sub) switchSubTab(r.tab, r.sub); } } catch (_) {}
 }, 1800));
+// ── Trends metric cards fold too (v3.10.980) ───────────────────────────────────────────────────────────
+// Close all on Trends used to report "closed 7" yet every metric card (Weight, Heart rate, Steps ...) stayed open, because those cards
+// never had a collapse. Each now shrinks to a one-line bar (name + latest value); tap the bar to open it. Remembered per card.
+function mhTcGet(id) { try { return localStorage.getItem('mh_collapse_tc_' + id) === 'closed'; } catch (_) { return false; } }
+function mhTcSet(id, closed) { try { localStorage.setItem('mh_collapse_tc_' + id, closed ? 'closed' : 'open'); } catch (_) {} }
+function mhTcShown(el) { return !!el && el.style.display !== 'none' && (!!el.offsetParent || el.classList.contains('mh-dc-closed')); }
+function mhTcApply() {
+  DEFAULT_TREND_CARDS_ORDER.forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    if (!mhTcGet(id) && !el.querySelector(':scope > .mh-dc-bar') && !mhTcShown(el)) return;   // not on screen yet
+    let bar = el.querySelector(':scope > .mh-dc-bar');
+    if (!bar) {
+      const nm = el.querySelector('.metric-name'), ic = el.querySelector('.metric-icon');
+      bar = document.createElement('div'); bar.className = 'mh-dc-bar';
+      bar.innerHTML = '<span>' + ((ic ? ic.textContent.trim() + ' ' : '') + (nm ? nm.textContent.trim() : id)).replace(/[<>&]/g, '') + '</span><span class="mh-dc-hint">show \u25B8</span>';
+      bar.onclick = ev => { ev.stopPropagation(); mhTcSet(id, false); el.classList.remove('mh-dc-closed'); };
+      el.insertBefore(bar, el.firstChild);
+    }
+    el.classList.toggle('mh-dc-closed', mhTcGet(id));
+    const hint = bar.querySelector('.mh-dc-hint'); const v = el.querySelector('.metric-value'), u = el.querySelector('.metric-unit');
+    if (hint) { const t = v ? (v.textContent.trim() + (u ? ' ' + u.textContent.trim() : '')) : ''; hint.textContent = (t && t[0] !== '\u2014' ? t : 'show') + ' \u25B8'; }
+  });
+}
+function mhTcAll(open, ids) {   // returns how many visible cards changed; ids = the cards in scope (null = all)
+  let n = 0;
+  DEFAULT_TREND_CARDS_ORDER.forEach(id => {
+    if (ids && !ids.includes(id)) return;
+    const el = document.getElementById(id); if (!el || !mhTcShown(el)) return;
+    if (el.classList.contains('mh-dc-closed') === !open) return;
+    mhTcSet(id, !open); n++;
+  });
+  mhTcApply(); return n;
+}
 function mhDcGet(k) { try { return localStorage.getItem('mh_collapse_dc_' + k) === 'closed'; } catch (_) { return false; } }
 function mhDcSet(k, closed) { try { localStorage.setItem('mh_collapse_dc_' + k, closed ? 'closed' : 'open'); } catch (_) {} }
 function mhDcApply() {
@@ -40987,6 +41021,7 @@ function mhSectionsAll(btn, open) {
     try { localStorage.setItem('mh_collapse_' + m[1], open ? 'open' : 'closed'); } catch (_) {}
   });
   if (root.id === 'view-dash') n += mhDcAll(open);
+  if (root.id === 'view-trends') n += mhTcAll(open, keys);
   if (!open) mhScrollTopOf(root.querySelector('.mh-pills-toolbar') || root);
   const where = keys ? 'in this group' : 'on this screen';
   showToast(open ? `Opened ${n} section${n === 1 ? '' : 's'}${restored ? ` and restored ${restored} hidden` : ''} ${where}` : (n ? `Closed ${n} section${n === 1 ? '' : 's'} ${where}` : `Nothing to close ${where}`));

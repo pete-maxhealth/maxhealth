@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.980 — Close All Now Folds The Trends Metric Cards
+
+- **Close all on Trends said "closed 7" but Weight, Heart rate, Steps etc. stayed open** (Pete Spence's screenshot): those metric cards had no collapse of their own, only the section headings did. Each metric card now folds to a one-line bar (icon, name, latest value); tap the bar to open just that card. Close all / Open all handle them and respect the chosen group (Body, Heart & sleep ...); hidden or empty cards are left alone and not counted. Remembered per card (`mh_collapse_tc_<id>`), cleared by Default. Test: `p102_trends_cards_fold`.
+
 ## v3.10.979 — 👁 Hide On Every Library Section
 
 - **Every Library section has the 👁** (as on Today, Reports and Settings). Hidden sections wait under Filter in a "Hidden:" list (counted on the Filter button, tap to bring back, Show all). Choosing a section's chip still shows it; Open all skips hidden sections; Default clears them. State in `mh_library_hidden` (layout key). Test: `p101_library_hide_eye`.

@@ -54,6 +54,7 @@ Do this once at large text and once at small text.
 2b. **Library chips.** Open Filter on Library, tap Tools: only Library Tools shows. Close the app and reopen: the filter is still there. Tap Default and confirm: everything is back.
 3. **History.** This Week, Month and All sit inside the Filter panel and still change the list.
 4. **Packs.** Settings → Data → Starter packs shows eight packs: general wellbeing, brain tumour, epilepsy, type 2 diabetes, type 1 diabetes, migraine, cluster headache and strict keto. Preview one: it should list symptoms and a screen layout and change nothing until you apply it.
+4b. **Close all really closes.** On Trends (7 Days) tap Close all: the Weight, Heart rate and other metric cards fold to one-line bars (tap a bar to open just that one); Open all opens them. Same on Today and the Library.
 5. **No regressions.** Log a meal by typing, run the 3-AI check (the grams must not be echoed unless you typed them), tap a Trends chart, use the Next meal idea buttons (each tapped pill stays highlighted).
 6. **Jill's phone.** Fresh install of the web version: the first-run "what do you want to track?" choice appears once, then the chosen layout.
 
