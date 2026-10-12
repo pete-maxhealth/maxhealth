@@ -2607,6 +2607,7 @@
          information from that card that wasn't shown anywhere else) now
          sits directly under the numbers it's actually explaining. -->
     <div id="calorieContextNote" style="font-size:11px;color:var(--text3);line-height:1.5;padding:4px 0 8px;"></div>
+    <div id="mhPlanBlock"></div>
     </div>
 
     <!-- Proactive recipe nudge - surfaces unprompted late in the day if
@@ -6233,7 +6234,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.984'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.985'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19015,6 +19016,16 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
 
   // ── Keyword queries — always handled locally ─────────────
   if (handleLayoutQuery(lower)) return;
+  // Planning a meal for later ("I'm planning on eating … at 1pm"): the food goes through the
+  // normal preview, then lands in the planned list instead of the log (see logFoods).
+  if (!window._planPending) {
+    const _pl = mhPlanParse(text);
+    if (_pl) {
+      if (!_pl.food) { addBubble(`What are you planning to eat at ${_pl.time}? Try: “I'm planning on eating 2 eggs and toast at ${_pl.time}”.`, 'system'); return; }
+      window._planPending = { time: _pl.time, date: _pl.date, t: Date.now() };
+      return processMessage(_pl.food, imageBase64, imageMime, skipLibraryChecks);
+    }
+  }
   if (handleRemainingQuery(lower, totals, targets)) return;
   if (handleWhatCanIAskQuery(lower)) return;
   if (handleKetoStatusQuery(lower, totals, targets, !!imageBase64)) return;
@@ -21067,7 +21078,7 @@ function renderMealPreview() {
   refreshKnownCategoriesDatalist(loadLibrary());
   bubble.className = 'bubble system';
   bubble.innerHTML = `
-    <div style="font-size:10px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Ready to log</div>
+    <div style="font-size:10px;color:var(--accent);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">${window._planPending ? 'Ready to plan for ' + window._planPending.time : 'Ready to log'}</div>
     ${itemRows}
     ${foods.length > 1 ? `<div style="font-size:12px;color:var(--text3);padding:8px 0 4px;" id="previewTotalLine">Total: <strong style="color:var(--text);">${Math.round(totals.kcal)}kcal · ${Math.round(totals.protein*100)/100}g P · ${Math.round(totals.fat*100)/100}g F · ${Math.round(totals.carbs*100)/100}g C</strong></div>` : ''}
     ${impactHtml}
@@ -21082,11 +21093,12 @@ function renderMealPreview() {
     ${existingLibCategoriesLine}
     <input id="mealPreviewCategories" list="allKnownCategories" type="text" placeholder="Categories for Save only (optional, comma-separated)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-top:8px;">
     <div style="display:flex;gap:8px;margin-top:4px;">
-      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="confirmMealLog()">Log it ✓</button>
+      <button class="run-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="confirmMealLog()">${window._planPending ? 'Add to plan ✓' : 'Log it ✓'}</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="saveLibraryOnlyFromPreview()">📚 Save only</button>
       <button class="copy-btn" style="flex:1;padding:10px;font-size:13px;font-weight:700;" onclick="cancelMealPreview()">Cancel</button>
     </div>
     <div style="margin-top:8px;">
+      ${window._planPending ? '' : '<button class="copy-btn" style="width:100%;padding:9px;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;" onclick="mhPlanFromPreview()">🗓 Plan for later</button>'}
       <button class="copy-btn" style="width:100%;padding:9px;font-size:12px;font-weight:700;color:var(--text2);" onclick="runMultiAICheck()">🔍 Verify across 3 AIs — worth it for anything uncertain</button>
     </div>
   `;
@@ -21624,9 +21636,201 @@ function cancelMealPreview() {
   const bubble = document.getElementById('mealPreviewBubble');
   if (bubble) bubble.remove();
   window._pendingMealFoods = null;
+  window._planPending = null;
   window._mhQueuedOverride = null;
   addBubble('Cancelled — nothing logged.', 'system');
 }
+
+// ── Meal planner ("I'm planning on eating this at …") ──────────────────────
+// A separate planned list (mh_planned_v1). Planned food NEVER counts as eaten:
+// the Today totals show eaten + planned side by side, and a plan only moves
+// into the real log when you confirm it (or switch on "trust my plan").
+// Values only ever come from the normal preview (library / your own numbers),
+// so nothing here estimates anything.
+function mhPlanLoad() { try { const a = JSON.parse(localStorage.getItem('mh_planned_v1') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
+function mhPlanSave(a) { try { localStorage.setItem('mh_planned_v1', JSON.stringify(a)); } catch (_) {} }
+function mhPlanEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function mhPlanHHMM(h, m) { return String(h).padStart(2, '0') + ':' + String(m || 0).padStart(2, '0'); }
+function mhPlanISOtoDMY(iso) { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(2)}` : todayStr(); }
+function mhPlanDateLabel(iso) {
+  const today = localISODate(); const tom = localISODate(new Date(Date.now() + 864e5));
+  if (iso === today) return 'today'; if (iso === tom) return 'tomorrow';
+  const p = iso.split('-'); return `${p[2]}/${p[1]}`;
+}
+
+// Pure parser. Returns null unless the text clearly says you are PLANNING to
+// eat (plan words) AND gives a time. "I had 2 eggs at 8am" is never a plan.
+function mhPlanParse(text, now) {
+  now = now || new Date();
+  const t = String(text || '');
+  const planWord = /\b(plan(?:ning|ned)?(?:\s+on)?|pre-?plan|going to|gonna|i['’]?ll|i will|intend(?:ing)? to|will be (?:eating|having))\b/i;
+  if (!planWord.test(t)) return null;
+  const re = /\b(?:at|around|@|by|for)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?(?![\d:])|\b(?:(?:at|around|by|for)\s*)?(noon|midday)\b/i;
+  let m = re.exec(t);
+  if (!m) return null;
+  let h, min = 0, ap = null;
+  if (m[4]) { h = 12; ap = 'pm'; }
+  else {
+    h = parseInt(m[1], 10); min = m[2] ? parseInt(m[2], 10) : 0;
+    ap = m[3] ? m[3].toLowerCase().replace(/\./g, '') : null;
+    // "for 7" is too vague to call a time: needs a colon or am/pm
+    if (/^for/i.test(m[0]) && !m[2] && !ap) return null;
+    if (h > 24 || min > 59) return null;
+  }
+  const lower = t.toLowerCase();
+  const tomorrow = /\btomorrow\b/.test(lower);
+  let hh;
+  if (ap === 'am') hh = h % 12;
+  else if (ap === 'pm') hh = (h % 12) + 12;
+  else if (h >= 13 || h === 0 || (m[2] && h >= 13)) hh = h % 24;
+  else if (h === 12) hh = 12;
+  else {
+    const lo = h, hi = h + 12;
+    if (/\bbreakfast\b/.test(lower)) hh = lo;
+    else if (/\b(dinner|supper|tonight|evening)\b/.test(lower)) hh = hi;
+    else if (/\blunch\b/.test(lower)) hh = (h <= 4 ? hi : lo);
+    else if (tomorrow) hh = lo;
+    else { const cur = now.getHours() * 60 + now.getMinutes(); hh = (lo * 60 + min > cur) ? lo : hi; }
+  }
+  let date = new Date(now.getTime());
+  if (tomorrow) date = new Date(now.getTime() + 864e5);
+  else if (!ap && h < 12 && h !== 0 && hh === h && (hh * 60 + min) <= (now.getHours() * 60 + now.getMinutes())) { /* both passed today: tomorrow's early slot */ date = new Date(now.getTime() + 864e5); }
+  let food = t.replace(m[0], ' ');
+  food = food
+    .replace(/\b(i['’]?\s?m|i am|we['’]?re)?\s*(planning|going|gonna|intend(?:ing)?)\s*(on|to)?\s*(eating|eat|having|have)?\b/ig, ' ')
+    .replace(/\b(i['’]?ll|i will|will be)\s*(be\s+)?(eating|eat|having|have)?\b/ig, ' ')
+    .replace(/\bpre-?plan\b/ig, ' ')
+    .replace(/\b(tomorrow|tonight|today|this)\b/ig, ' ')
+    .replace(/\s+/g, ' ').replace(/^[\s,.:;-]+|[\s,.:;-]+$/g, '');
+  return { time: mhPlanHHMM(hh, min), date: localISODate(date), food };
+}
+
+function mhPlanAdd(foods, text, pp) {
+  const clean = (foods || []).map(f => { const c = JSON.parse(JSON.stringify(f)); Object.keys(c).forEach(k => { if (k[0] === '_') delete c[k]; }); return c; });
+  const a = mhPlanLoad();
+  a.push({ id: 'p' + Date.now() + Math.floor(Math.random() * 1000), date: pp.date || localISODate(), time: pp.time || nowTime(), text: String(text || clean.map(f => f.name).join(', ')), foods: clean, createdAt: Date.now() });
+  mhPlanSave(a);
+  const k = Math.round(clean.reduce((s, f) => s + (f.kcal || 0), 0));
+  addBubble(`🗓 Planned for ${pp.time} ${mhPlanDateLabel(pp.date)}: ${text} (${k} kcal). It shows under your Today totals as planned, and only counts as eaten when you confirm it.`, 'system');
+  mhPlanRender();
+}
+function mhPlanRemove(id) { mhPlanSave(mhPlanLoad().filter(p => p.id !== id)); mhPlanRender(); }
+function mhPlanEat(id) {
+  const a = mhPlanLoad(); const p = a.find(x => x.id === id); if (!p) return;
+  mhPlanSave(a.filter(x => x.id !== id));
+  const foods = JSON.parse(JSON.stringify(p.foods || []));
+  window._planPending = null;
+  window._pendingMealTimeOverride = p.time || null;
+  if (p.date && p.date !== localISODate()) window._logTargetDate = mhPlanISOtoDMY(p.date);
+  try { logFoods(foods, p.text); } finally { window._pendingMealTimeOverride = null; window._logTargetDate = null; }
+  try { updateDashboard(); } catch (_) {}
+  mhPlanRender();
+}
+function mhPlanChanged(id) {
+  const p = mhPlanLoad().find(x => x.id === id); if (!p) return;
+  mhPlanRemove(id);
+  const i = document.getElementById('chatInput');
+  if (i) { i.value = 'I had ' + p.text; try { i.focus(); } catch (_) {} }
+  showToast('Plan removed. Edit what you actually ate and send it.', null, null, 3500);
+}
+function mhPlanTimeModal(init, onOk, title) {
+  const old = document.getElementById('mhPlanModal'); if (old) old.remove();
+  const o = document.createElement('div'); o.id = 'mhPlanModal';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const today = localISODate(), tom = localISODate(new Date(Date.now() + 864e5));
+  o.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
+    <div style="font-weight:700;margin-bottom:10px;">${mhPlanEsc(title || 'When will you eat this?')}</div>
+    <input id="mhPlanTime" type="time" value="${mhPlanEsc(init.time || nowTime())}" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:16px;margin-bottom:8px;">
+    <select id="mhPlanDay" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:14px;margin-bottom:12px;">
+      <option value="${today}" ${init.date === tom ? '' : 'selected'}>Today</option><option value="${tom}" ${init.date === tom ? 'selected' : ''}>Tomorrow</option></select>
+    <div style="display:flex;gap:8px;"><button class="run-btn" style="flex:1;padding:10px;" id="mhPlanOk">OK</button><button class="copy-btn" style="flex:1;padding:10px;" id="mhPlanNo">Cancel</button></div></div>`;
+  document.body.appendChild(o);
+  document.getElementById('mhPlanNo').onclick = () => o.remove();
+  document.getElementById('mhPlanOk').onclick = () => {
+    const tm = document.getElementById('mhPlanTime').value; const dy = document.getElementById('mhPlanDay').value; o.remove();
+    if (/^\d{2}:\d{2}$/.test(tm)) onOk({ time: tm, date: dy });
+  };
+}
+function mhPlanFromPreview() {
+  if (!window._pendingMealFoods) return;
+  mhPlanTimeModal({}, v => { window._planPending = { time: v.time, date: v.date, t: Date.now() }; renderMealPreview(); confirmMealLog(); }, 'When will you eat this?');
+}
+function mhPlanEdit(id) {
+  const a = mhPlanLoad(); const p = a.find(x => x.id === id); if (!p) return;
+  mhPlanTimeModal({ time: p.time, date: p.date }, v => { p.time = v.time; p.date = v.date; mhPlanSave(a); mhPlanRender(); }, 'Change the time');
+}
+function mhPlanStart() {
+  const i = document.getElementById('chatInput');
+  try { switchTab('log', document.getElementById('maintab-log')); } catch (_) {}
+  if (i) { i.value = "I'm planning on eating  at "; try { i.focus(); } catch (_) {} }
+}
+function mhPlanSetAuto(on) { try { localStorage.setItem('mh_plan_auto', on ? '1' : '0'); } catch (_) {} mhPlanRender(); }
+
+function mhPlanRender() {
+  const host = document.getElementById('mhPlanBlock'); if (!host) return;
+  let plans = mhPlanLoad();
+  // Quietly drop anything more than 3 days overdue so the list never piles up.
+  const cutoff = localISODate(new Date(Date.now() - 3 * 864e5));
+  const kept = plans.filter(p => p.date >= cutoff);
+  if (kept.length !== plans.length) { plans = kept; mhPlanSave(plans); }
+  plans.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const today = localISODate(), now = nowTime();
+  const auto = localStorage.getItem('mh_plan_auto') === '1';
+  const due = p => p.date < today || (p.date === today && p.time <= now);
+  if (auto) { const d = plans.find(due); if (d) { showToast('Logged from your plan: ' + d.text, null, null, 3500); mhPlanEat(d.id); return; } }
+  const dueList = plans.filter(due);
+  if (dueList.length && !window._planToasted) { window._planToasted = {}; }
+  dueList.forEach(p => { if (window._planToasted && !window._planToasted[p.id]) { window._planToasted[p.id] = 1; showToast('Time for: ' + p.text + '. Did you eat it? See Today.', null, null, 4500); } });
+  const k = p => Math.round((p.foods || []).reduce((s, f) => s + (f.kcal || 0), 0));
+  const rows = plans.map(p => {
+    const isDue = due(p);
+    return `<div class="mh-plan-row" data-plan="${mhPlanEsc(p.id)}" style="padding:8px 0;border-top:1px solid var(--border);${isDue ? 'background:rgba(250,204,21,.08);' : ''}">
+      <div style="font-size:12px;"><strong>${mhPlanEsc(p.time)}</strong> <span style="color:var(--text3);">${mhPlanEsc(mhPlanDateLabel(p.date))}</span> · ${mhPlanEsc(p.text)} <span style="color:var(--text3);">${k(p)} kcal</span></div>
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+        ${isDue ? `<span style="font-size:11px;color:var(--yellow);width:100%;">Did you eat this?</span>
+          <button class="run-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanEat('${p.id}')">Yes, ate it ✓</button>
+          <button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanChanged('${p.id}')">Changed it</button>
+          <button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanRemove('${p.id}')">Skipped</button>`
+        : `<button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanEat('${p.id}')">✓ Ate it now</button>
+          <button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanEdit('${p.id}')">✎ Time</button>
+          <button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanRemove('${p.id}')">✕</button>`}
+      </div></div>`;
+  }).join('');
+  // Totals: eaten + planned for TODAY only. Overdue plans still count as planned
+  // (not eaten) until you answer.
+  let totalsHtml = '';
+  const todays = plans.filter(p => p.date <= today);
+  if (todays.length) {
+    const planned = [].concat(...todays.map(p => p.foods || []));
+    const eatenT = calcTotals(state.todayLog), planT = calcTotals(planned), allT = calcTotals(state.todayLog.concat(planned));
+    const tg = TARGETS[state.dayMode] || {};
+    const eC = getEffectiveCarbs(eatenT), pC = getEffectiveCarbs(planT), aC = getEffectiveCarbs(allT);
+    const line = (lab, e, pl, al, tgt, unit) => `<div style="font-size:12px;">${lab}: ${Math.round(e * 10) / 10} + ${Math.round(pl * 10) / 10} = <strong>${Math.round(al * 10) / 10}${unit}</strong>${tgt ? ` / ${tgt}${unit}` : ''}</div>`;
+    const over = [];
+    if (tg.carbs && aC > tg.carbs) over.push(`carbs would be ${Math.round((aC - tg.carbs) * 10) / 10}g over your ceiling`);
+    if (tg.kcal && allT.kcal > tg.kcal) over.push(`calories would be ${allT.kcal - tg.kcal} over your target`);
+    const left = [];
+    if (tg.kcal && allT.kcal <= tg.kcal) left.push(`${tg.kcal - allT.kcal} kcal`);
+    if (tg.protein && allT.protein < tg.protein) left.push(`${Math.round((tg.protein - allT.protein) * 10) / 10}g protein`);
+    totalsHtml = `<div style="padding:8px 0;border-top:1px solid var(--border);" id="mhPlanTotals">
+      <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;margin-bottom:4px;">eaten + planned = combined / target</div>
+      ${line('Calories', eatenT.kcal, planT.kcal, allT.kcal, tg.kcal, ' kcal')}
+      ${line('Protein', eatenT.protein, planT.protein, allT.protein, tg.protein, 'g')}
+      ${line('Carbs', eC, pC, aC, tg.carbs, 'g')}
+      ${line('Fat', eatenT.fat, planT.fat, allT.fat, 0, 'g')}
+      ${over.length ? `<div style="font-size:12px;color:var(--yellow);margin-top:4px;">⚠ After your plan: ${over.join('; ')}.</div>` : (left.length ? `<div style="font-size:12px;color:var(--text3);margin-top:4px;">After your plan, still to go: ${left.join(', ')}.</div>` : '')}
+    </div>`;
+  }
+  host.innerHTML = `<div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:6px 0 10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <div style="font-size:11px;color:var(--text2);font-weight:700;">🗓 Meal plan</div>
+      <button class="copy-btn" style="padding:6px 10px;font-size:12px;" onclick="mhPlanStart()">+ Plan a meal</button></div>
+    ${plans.length ? rows : '<div style="font-size:11px;color:var(--text3);margin-top:6px;">Nothing planned. Type e.g. “I’m planning on eating 2 eggs and toast at 1pm”, or tap “Plan for later” on any meal preview. Planned food only counts as eaten when you confirm it.</div>'}
+    ${totalsHtml}
+    <label style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--text3);margin-top:6px;"><input type="checkbox" id="mhPlanAuto" ${auto ? 'checked' : ''} onchange="mhPlanSetAuto(this.checked)"> Trust my plan: log it automatically at the time</label>
+  </div>`;
+}
+setInterval(() => { try { if (document.getElementById('mhPlanBlock')) mhPlanRender(); } catch (_) {} }, 30000);
 
 // ── Multi-AI consensus check ────────────────────────────────────────────────
 // Runs the same food description past Claude, Gemini, and OpenAI independently
@@ -22258,6 +22462,11 @@ function confirmFuzzyLibSaveAsNew(idx) {
 }
 
 function logFoods(foods, originalText, aiMessage = null) {
+  // A meal being planned (not eaten): divert into the planned list. Expires after 10 minutes.
+  if (window._planPending) {
+    const _pp = window._planPending; window._planPending = null;
+    if (Date.now() - _pp.t < 600000) { mhPlanAdd(foods, originalText, _pp); return; }
+  }
   _tracePolyolsPipeline('3_logFoods_param_received', foods);
   // Applied here, not at each individual entry point, because this is the one
   // choke point every logging path funnels through — library quick-add, database
@@ -24142,6 +24351,7 @@ function checkActivityLevelAutoSwitch() {
 
 function updateDashboard(skipActivityRender) {
   try { mhDcApply(); } catch (_) {}
+  try { mhPlanRender(); } catch (_) {}
   if (typeof updateGBMSectionVisibility === 'function') updateGBMSectionVisibility();
   checkWeightPhaseAutoSwitch(); // no-ops after the first call each day, see its own guard
   checkActivityLevelAutoSwitch(); // same pattern, own guard

@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.985 — Meal Planner ("I'm planning on eating this at …")
+
+- **Plan a meal for later.** Type "I'm planning on eating 2 eggs and toast at 1pm" (needs a plan word and a time; "I had…" is never a plan), or tap **🗓 Plan for later** on any meal preview. The food goes through the normal preview (library or your own numbers, nothing estimated) and lands in a separate planned list (`mh_planned_v1`), not the log.
+- **Today shows the plan** under the macro bars: each planned meal with ✓ Ate it now / ✎ Time / ✕, and totals as **eaten + planned = combined / target** for calories, protein, carbs (net-aware) and fat, with a warning if the plan would go over your carb ceiling or calorie target, or what is still to go.
+- **At the planned time** the row asks "Did you eat this?": Yes (moves into the real log at the planned time), Changed it (removes the plan and pre-fills chat), Skipped. Unanswered plans never count as eaten; plans over 3 days old drop quietly. Optional "Trust my plan" switch logs automatically.
+- Ambiguous hours pick the next upcoming time, with breakfast/lunch/dinner words as hints; the preview shows the time so it can be changed. Test: `p105`. Fasting-window warnings are not included (the app has no eating-window setting).
+
 ## v3.10.984 — Seventeen More Condition Packs, Disclaimer On Every Pack Screen
 
 - **17 new starter packs** (27 in all, listed A-Z): High blood pressure, Heart health, Asthma & COPD, IBS & gut health, Crohn's & colitis, Arthritis & joint pain, Fibromyalgia & chronic pain, Long COVID & ME/CFS, Multiple sclerosis, Parkinson's, PCOS, Menopause, Thyroid, Cancer treatment, Anxiety & low mood, Weight loss (keeps the fasting card), Sleep problems. Each is symptoms (and common treatment names) plus a screen layout; they are generic starting lists, not clinical guidance.
