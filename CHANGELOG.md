@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.994 — Flags You Can See, More of the App Translated
+
+- **Flags are now drawn pictures**, not emoji (some phones do not draw flag emoji). One sits in the top bar next to search: tap it to change language. Settings > Profile and the first onboarding screen show a row of flag buttons; the corner button when a language is on shows the flag too. English is always in the list.
+- **Numbered sentences are translated.** The engine now handles dictionary entries with `{1}`, `{2}` slots, so the weather card, the "walk would close the gap" line, fasting and trends sentences, report headings, and "x/y taken" style text switch language (parts such as an effort label are translated too).
+- About 240 more strings per language (Today, Trends, Reports, Settings, weather). Still English on purpose: the long Formulas and Technical Reference text and device import hints, some partial sentence fragments, and anything you typed yourself (food names, notes). Machine-assisted, not clinician-reviewed.
+- Test `p111` also checks a numbered sentence and that very short patterns never hijack ordinary text.
+
 ## v3.10.993 — Meal Plan Card Tidy
 
 - The plan card's buttons are now three equal, labelled buttons in a row (✓ Ate it, ✎ Time, ✕ Remove; when due: ✓ Yes, ate it, ✎ Changed it, ✕ Skipped), so the lone ✕ no longer looks lost. Long food names wrap instead of pushing the card wider than the screen.

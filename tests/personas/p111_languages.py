@@ -29,8 +29,17 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("mhLangCode()") != 'en': f.add('BUG', 'default not English')
     if 'today' not in ev("document.getElementById('maintab-today').textContent").lower(): f.add('BUG', 'English tab changed')
     if ev("!!document.getElementById('mhLangFab')"): f.add('BUG', 'language button in English mode')
+    if not ev("!!document.querySelector('#mhLangHdr img')"): f.add('BUG', 'header flag missing')
+    if ev("document.querySelectorAll('#mhLangSel img').length") != 5: f.add('BUG', 'settings flag buttons missing')
     if not ev("!!document.getElementById('mhLangSel')"): f.add('BUG', 'settings language select missing')
     if ev("mhSpeechLang()") != 'en-GB' or ev("mhLangAINote()") != '': f.add('BUG', 'English speech/AI note')
+    # numbered sentences (patterns)
+    page.evaluate("mhLangSet('fr')"); page.wait_for_timeout(2500)
+    r = ev("""(()=>{ const d=document.createElement('div'); d.textContent="🚶 ~104min walk would close today's 567kcal gap"; document.body.appendChild(d); mhLangWalk(d); const a=d.textContent;
+      const e=document.createElement('div'); e.textContent='Every tag zzz logged'; document.body.appendChild(e); mhLangWalk(e); const b=e.textContent; d.remove(); e.remove(); return [a,b]; })()""")
+    if '104 min' not in r[0] or '567 kcal' not in r[0]: f.add('BUG', f'pattern not translated {r[0]!r}')
+    if r[1] != 'Every tag zzz logged': f.add('BUG', f'short pattern hijacked text {r[1]!r}')
+    page.evaluate("mhLangSet('en')"); page.wait_for_timeout(2000)
     # switch to Spanish
     page.evaluate("mhLangSet('es')"); page.wait_for_timeout(2500)
     if ev("mhLangCode()") != 'es': f.add('BUG', 'Spanish not stored')
@@ -54,7 +63,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # the way back
     page.click('#mhLangFab'); page.wait_for_timeout(300)
     if 'back to english' not in ev("document.getElementById('mhLangModal').innerText").lower(): f.add('BUG', 'modal not in English')
-    page.click('#mhLangEn'); page.wait_for_timeout(2000)
+    page.click('.mh-lang-opt[data-c="en"]'); page.wait_for_timeout(2000)
     if ev("mhLangCode()") != 'en' or 'today' not in ev("document.getElementById('maintab-today').textContent").lower(): f.add('BUG', 'did not return to English')
     # ?lang=de then ?lang=en
     page.goto('http://localhost:5757/?lang=de'); page.wait_for_timeout(2500)

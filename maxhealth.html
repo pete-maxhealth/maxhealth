@@ -2441,6 +2441,7 @@
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <span onclick="openSiteSearch()" style="font-size:18px;cursor:pointer;padding:4px;" title="Search everything">🔍</span>
+    <span id="mhLangHdr" data-nolang="1" onclick="mhLangOpen()" style="cursor:pointer;display:inline-flex;align-items:center;padding:4px;"></span>
     <div id="serverModeBadge" style="font-size:10px;font-family:Space Mono,monospace;padding:3px 8px;border-radius:20px;background:var(--surface);border:1px solid var(--border);color:var(--text3);cursor:pointer;" onclick="showServerStatus()" title="Tap for connection status">☁ CLOUD</div>
     <div class="date-badge" id="headerDate"></div>
   </div>
@@ -6236,7 +6237,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.993'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.994'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -21717,6 +21718,12 @@ const MH_LANGS = [
   { code: 'tr', flag: '🇹🇷', name: 'Turkish', native: 'Türkçe', speech: 'tr-TR' },
 ];
 const MH_L = { dict: null, code: 'en', obs: null };
+const MH_FLAG_SVG = {"en": "<rect width='30' height='20' fill='#012169'/><path d='M0 0L30 20M30 0L0 20' stroke='#fff' stroke-width='4'/><path d='M0 0L30 20M30 0L0 20' stroke='#C8102E' stroke-width='1.6'/><path d='M15 0V20M0 10H30' stroke='#fff' stroke-width='6'/><path d='M15 0V20M0 10H30' stroke='#C8102E' stroke-width='3.4'/>", "es": "<rect width='30' height='20' fill='#AA151B'/><rect y='5' width='30' height='10' fill='#F1BF00'/>", "de": "<rect width='30' height='7' fill='#000'/><rect y='7' width='30' height='6.7' fill='#D00'/><rect y='13.4' width='30' height='6.6' fill='#FFCE00'/>", "fr": "<rect width='10' height='20' fill='#0055A4'/><rect x='10' width='10' height='20' fill='#fff'/><rect x='20' width='10' height='20' fill='#EF4135'/>", "tr": "<rect width='30' height='20' fill='#E30A17'/><circle cx='11' cy='10' r='5' fill='#fff'/><circle cx='12.4' cy='10' r='4' fill='#E30A17'/><polygon points='17.5,7.6 18.4,9.4 20.3,9.4 18.8,10.6 19.4,12.5 17.5,11.3 15.6,12.5 16.2,10.6 14.7,9.4 16.6,9.4' fill='#fff'/>"};
+function mhFlagImg(code, h) {
+  const b = MH_FLAG_SVG[code]; if (!b) return '';
+  const u = 'data:image/svg+xml,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'>" + b + '</svg>');
+  return `<img src="${u}" alt="" style="height:${h || 14}px;width:${Math.round((h || 14) * 1.5)}px;border-radius:2px;box-shadow:0 0 0 1px rgba(128,128,128,.45);vertical-align:-2px;">`;
+}
 function mhLangCode() { try { const c = localStorage.getItem('mh_lang') || 'en'; return MH_LANGS.some(l => l.code === c) ? c : 'en'; } catch (_) { return 'en'; } }
 function mhLangInfo(code) { return MH_LANGS.find(l => l.code === (code || mhLangCode())) || MH_LANGS[0]; }
 function mhSpeechLang() { return mhLangInfo().speech; }
@@ -21726,6 +21733,30 @@ function mhLangSet(code) {
   location.reload();
 }
 function mhLangNorm(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+// Sentences with numbers or names in them: a dictionary key written with {1} {2} ... stands for those parts
+// ("~{1}min walk would close today's {2}kcal gap"). The parts are copied across, and translated too when
+// they are themselves a known phrase (for example an effort label).
+function mhLangPat(k, d) {
+  if (!/\d|·|:/.test(k)) return null;
+  if (MH_L.patFor !== d) {
+    MH_L.patFor = d; MH_L.pats = [];
+    Object.keys(d).forEach(key => {
+      if (!/\{\d\}/.test(key)) return;
+      const parts = key.split(/\{\d\}/); const order = (key.match(/\{(\d)\}/g) || []).map(x => +x[1]);
+      const re = new RegExp('^' + parts.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.+?)') + '$');
+      MH_L.pats.push({ re, order, to: d[key], lit: parts.reduce((a, b) => b.length > a.length ? b : a, ''), short: parts.join('').length < 16 });
+    });
+    MH_L.pats.sort((a, b) => b.lit.length - a.lit.length);
+  }
+  for (const pt of MH_L.pats) {
+    if (pt.lit && k.indexOf(pt.lit) < 0) continue;
+    const m = pt.re.exec(k); if (!m) continue;
+    if (pt.short && m.slice(1).some(v => !/^[\d.,\/%\s-]+$/.test(v))) continue;   // very short patterns only take numbers
+    const g = {}; pt.order.forEach((n, i) => { const v = m[i + 1]; g[n] = Object.prototype.hasOwnProperty.call(d, v) ? d[v] : v; });
+    return pt.to.replace(/\{(\d)\}/g, (_, n) => g[n] != null ? g[n] : '');
+  }
+  return null;
+}
 function mhLangFix(node) {
   const d = MH_L.dict; if (!d || node.nodeType !== 3) return;
   const raw = node.nodeValue; if (!raw || raw.length < 2) return;
@@ -21736,6 +21767,7 @@ function mhLangFix(node) {
     if (!MH_L.lower || MH_L.lowerFor !== d) { MH_L.lower = {}; MH_L.lowerFor = d; Object.keys(d).forEach(e => { const lk = e.toLowerCase(); if (lk !== e && !(lk in MH_L.lower)) MH_L.lower[lk] = d[e]; }); }
     const lo = MH_L.lower[k.toLowerCase()]; if (lo) { try { tr = lo.toLocaleUpperCase(MH_L.code); } catch (_) { tr = lo.toUpperCase(); } }
   }
+  if (tr == null && k) tr = mhLangPat(k, d);
   if (tr && tr !== k) { if (p && p.closest && p.closest('[data-nolang]')) return; node.nodeValue = raw.match(/^\s*/)[0] + tr + raw.match(/\s*$/)[0]; }
 }
 function mhLangFixAttrs(el) {
@@ -21774,6 +21806,7 @@ async function mhLangLoad(code) {
 async function mhLangInit() {
   try { const q = new URLSearchParams(location.search).get('lang'); if (q && MH_LANGS.some(l => l.code === q)) { if (q === 'en') localStorage.removeItem('mh_lang'); else localStorage.setItem('mh_lang', q); } } catch (_) {}
   MH_L.code = mhLangCode();
+  try { const h = document.getElementById('mhLangHdr'); if (h) h.innerHTML = mhFlagImg(MH_L.code, 15); } catch (_) {}
   mhLangPickerOnboarding();
   mhLangSettingsCard();
   if (MH_L.code === 'en') return;
@@ -21785,40 +21818,45 @@ async function mhLangInit() {
   if (MH_L.dict) { mhLangWalk(document.body); mhLangStartObserver(); }
   else { try { showToast('Language file not available offline yet. Staying in English.'); } catch (_) {} }
 }
+function mhLangButtonsHtml(compact) {
+  const c = mhLangCode();
+  return MH_LANGS.map(l => `<button type="button" class="copy-btn" onclick="mhLangSet('${l.code}')" style="display:inline-flex;align-items:center;gap:6px;padding:${compact ? 5 : 8}px 10px;margin:0 6px 6px 0;font-size:${compact ? 12 : 13}px;white-space:nowrap;${l.code === c ? 'border-color:var(--accent);color:var(--accent);' : ''}">${mhFlagImg(l.code, compact ? 12 : 16)} ${l.native}</button>`).join('');
+}
 function mhLangOptionsHtml() { const c = mhLangCode(); return MH_LANGS.map(l => `<option value="${l.code}"${l.code === c ? ' selected' : ''}>${l.flag} ${l.native}${l.code === 'en' ? '' : ' (' + l.name + ')'}</option>`).join(''); }
 function mhLangPickerOnboarding() {
   const ov = document.getElementById('onboardingOverlay'); if (!ov || document.getElementById('mhLangOb')) return;
   const d = document.createElement('div'); d.id = 'mhLangOb'; d.setAttribute('data-nolang', '1');
   d.style.cssText = 'display:flex;justify-content:flex-end;padding:10px 12px 0;';
-  d.innerHTML = `<label style="font-size:12px;color:var(--text3);">🌐 <select id="mhLangObSel" onchange="mhLangSet(this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px;font-size:13px;">${mhLangOptionsHtml()}</select></label>`;
+  d.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;padding:10px 12px 0;'; d.id = 'mhLangOb';
+  d.innerHTML = `<div id="mhLangObSel" style="text-align:center;">${mhLangButtonsHtml(true)}</div>`;
   ov.insertBefore(d, ov.firstChild);
 }
 function mhLangSettingsCard() {
   const w = document.getElementById('set-profile-wrap'); if (!w || document.getElementById('mhLangCard')) return;
   const d = document.createElement('div'); d.id = 'mhLangCard'; d.className = 'settings-card'; d.setAttribute('data-nolang', '1');
   d.innerHTML = `<div style="font-weight:700;margin-bottom:6px;">🌐 Language</div>
-    <select id="mhLangSel" onchange="mhLangSet(this.value)" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:14px;">${mhLangOptionsHtml()}</select>
+    <div id="mhLangSel">${mhLangButtonsHtml(false)}</div>
     <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;">English is the default and always one tap away. Translations cover most screens; anything not translated yet stays in English. Health wording is machine-assisted and has not been checked by clinicians who speak the language, so check anything important in English. Medical terms with no safe translation are left in English rather than guessed.</div>`;
   w.insertBefore(d, w.firstChild);
+}
+function mhLangOpen() {
+  document.getElementById('mhLangModal')?.remove();
+  const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
+  m.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
+    <div style="font-weight:700;margin-bottom:10px;">🌐 Language</div>
+    ${MH_LANGS.map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${l.code === mhLangCode() ? 'border-color:var(--accent);' : ''}">${mhFlagImg(l.code, 16)} ${l.native}${l.code === 'en' ? ' (Back to English)' : ''}</button>`).join('')}
+    <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:4px;">✕</button></div>`;
+  document.body.appendChild(m);
+  m.querySelector('#mhLangX').onclick = () => m.remove();
+  m.querySelectorAll('.mh-lang-opt').forEach(x => x.onclick = () => mhLangSet(x.dataset.c));
 }
 function mhLangButton() {
   if (document.getElementById('mhLangFab')) return;
   const b = document.createElement('button'); b.id = 'mhLangFab'; b.setAttribute('data-nolang', '1'); b.title = 'Language / Back to English';
   b.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:450;background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:16px;padding:5px 10px;font-size:12px;opacity:.85;';
-  b.textContent = mhLangInfo(MH_L.code).flag + ' ' + MH_L.code.toUpperCase();
-  b.onclick = () => {
-    document.getElementById('mhLangModal')?.remove();
-    const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
-    m.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
-    m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
-      <button id="mhLangEn" class="run-btn" style="width:100%;padding:12px;font-size:15px;margin-bottom:10px;">🇬🇧 Back to English</button>
-      ${MH_LANGS.filter(l => l.code !== 'en').map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;${l.code === MH_L.code ? 'border-color:var(--accent);' : ''}">${l.flag} ${l.native}</button>`).join('')}
-      <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:4px;">✕</button></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#mhLangEn').onclick = () => mhLangSet('en');
-    m.querySelector('#mhLangX').onclick = () => m.remove();
-    m.querySelectorAll('.mh-lang-opt').forEach(x => x.onclick = () => mhLangSet(x.dataset.c));
-  };
+  b.innerHTML = mhFlagImg(MH_L.code, 12) + ' ' + MH_L.code.toUpperCase();
+  b.onclick = mhLangOpen;
   document.body.appendChild(b);
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { mhLangInit(); }); else { mhLangInit(); }
