@@ -541,9 +541,9 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
 
     provisional: {date: {field, ...}} - manual values typed as a same-day catch-up (the Today "Daily Steps" box), not as a
         deliberate correction. v3.10.966: for these, on today_iso the manual value is only a FLOOR - it shows while it is
-        greater than what the devices report, and a device figure equal to or above it takes over; Health Connect (which
-        double-counts phone + watch) can never beat it. On any earlier date the devices win outright and the manual
-        value only fills a field no device reported. Manual Entry screen values are not provisional and stay absolute.
+        greater than what the devices report, and a device figure equal to or above it takes over, Health Connect included
+        (v3.10.1003: Health Connect is the daytime snapshot, the typed total the fallback when it is not reporting). On any earlier date a real device (ring / watch) wins outright; Health Connect (which
+        double-counts phone + watch) never replaces a typed total, so the manual value fills a field only Health Connect (or nothing) reported. Manual Entry screen values are not provisional and stay absolute.
 
     Returns (merged rows dict, field_sources dict).
     """
@@ -583,8 +583,8 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
                 for source in prio_sources:
                     if _prov and source == 'manual':
                         continue                                  # handled as a floor below, never as the top source
-                    if _prov and _prov_manual and source == 'health_connect' and date == today_iso:
-                        continue                                  # HC double-counts: it must not beat a same-day catch-up
+                    if _prov and _prov_manual and source == 'health_connect' and date != today_iso:
+                        continue                                  # v3.10.1003: after the day ends, a typed total is only replaced by a real device (ring / watch), never by Health Connect
                     source_rows = new_rows_by_source.get(source, {})
                     if date not in source_rows:
                         continue
@@ -630,6 +630,7 @@ def merge_with_precedence(existing_rows, new_rows_by_source, precedence, field_s
                     except (TypeError, ValueError):
                         cur, man = 0.0, 0.0
                     if man > 0 and ((date == today_iso and man > cur) or not row.get(field)
+                                    or (date != today_iso and date_field_sources.get(field) == 'health_connect')
                                     or (field not in date_field_sources and cur == man)):
                         row[field] = _prov_manual
                         sources_used.add('manual')

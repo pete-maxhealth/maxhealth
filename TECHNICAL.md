@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.1003 | 24 | `merge_with_precedence`: provisional (typed) steps: HC may beat them today, never on earlier dates; typed replaces a stored HC value after the day ends; ring/watch always win after the day. |
 | v3.10.1002 | 24 | Global `--btn-radius`/`--btn-border` button rules (attribute selectors catch inline radii); `mhOutRefresh` adds the Select all / Copy bar to anything matching `MH_OUT_SEL`; `.toast` wraps; titles with reorder controls wrap. To give a new output area the bar, add its selector to `MH_OUT_SEL` or give it class `mh-output`. |
 | v3.10.1001 | 24 | `moveGenericSection` skips neighbours hidden by a topic chip, by you, or by condition. |
 | v3.10.1000 | 24 | `mhShareTryChain` (zip, then separate files, then text). |

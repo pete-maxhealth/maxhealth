@@ -6,6 +6,11 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1003 — Typed Steps Survive the Night
+
+- Pete's rule for steps: during the day Health Connect gives the snapshot, the typed total is the fallback when Health Connect is not reporting, and at the end of the day RingConn / Zepp supply the true figure. The old code did not match: today the typed total beat Health Connect, and from midnight the (double-counted) Health Connect figure replaced the typed one, so typed entries seemed to vanish. Now: **today** a typed total is a floor (it shows while it is above what the devices report; Health Connect and ring/watch figures at or above it take over). **After the day ends** Health Connect can no longer replace a typed total, only a real device (RingConn, Zepp, Garmin, Withings) can, and a typed total also replaces a Health Connect figure already stored for that day. Entries from the Manual Entry screen are unchanged (always absolute). Test: `p87` (merge rules).
+- Reminder: Health Connect still double-counts steps until the launcher fix in BACKLOG, so on today it can read high.
+
 ## v3.10.1002 — Consistency Sweep
 
 - **Meal plan card:** the "+ Plan a meal" button, the plan rows and the Yes / Changed it / Skipped buttons wrapped badly or clipped at large text ("YES, ATE IT" lost its end). They now wrap, each plan row is a padded rounded box (yellow outline when it is due), and the three buttons drop to a new line when the screen is narrow.
