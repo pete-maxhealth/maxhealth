@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1001 — Reorder Works Inside a Topic
+
+- ▲ ▼ on Settings, Reports and Import cards could appear dead when a topic chip (for example About & setup) was selected: the card swapped places with a neighbour that belongs to another topic and so was out of sight. It now jumps over cards you cannot currently see, to the next visible one. Test: `p119` (fails on the old code, passes now).
+
 ## v3.10.1000 — Share Tries Harder
 
 - On Pete's phone the share menu still answered "not allowed" even with a fresh tap, so the zip itself is probably not on that browser's list of shareable file types (inference). The Share… button now tries three ways in turn: the zip, then the files separately (CSV and JSON are usually allowed), then plain text for small data, and says which one worked. Only if all three are refused does it save to Downloads, with the reason. Test: `p118`.
