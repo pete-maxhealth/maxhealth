@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## Docs refresh (12 Oct, no app change)
+
+README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
+
 ## v3.10.998 — Score a Past Day
 
 - **＋ Score a past day** under the "How are you today?" card: pick any of the last 14 days, tap 1-5 for each symptom (tap a score again to clear it), Save. It goes into that day's history entry (a small food-less one is created, in date order, if the day has none; food data is never touched). Good for a day you forgot to score, or one you want filled in after a clinic visit. Appears in Compare Metrics, before/after, reports and the analyst like any other score. Test: `p117`.
