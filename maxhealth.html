@@ -6237,7 +6237,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.995'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.996'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -21874,12 +21874,12 @@ async function mhLangTranslateScreen(ok) {
     m.querySelector('div').innerHTML = `<div style="font-weight:700;margin-bottom:8px;">✨ Translate this screen</div>
       <div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:10px;">${items.length} English phrases on this screen will be sent to your AI provider to be translated into ${l.native}. That can include your own notes or food names if they are on screen. The answers are kept on this phone so each phrase is only translated once. It is machine translation: check anything important in English.</div>
       <button class="run-btn" id="mhLangGo" style="width:100%;padding:10px;margin-bottom:6px;">Translate ${items.length} phrases</button>
-      <button class="copy-btn" id="mhLangNo" style="width:100%;padding:8px;">Cancel</button>`;
+      <button class="copy-btn" id="mhLangNo" style="width:100%;padding:10px;">${mhLangT('Cancel')}</button>`;
     m.querySelector('#mhLangGo').onclick = () => mhLangTranslateScreen(true);
     m.querySelector('#mhLangNo').onclick = () => m.remove();
     return;
   }
-  const go = m && m.querySelector('#mhLangGo'); if (go) { go.disabled = true; go.textContent = 'Translating…'; }
+  const go = m && m.querySelector('#mhLangGo'); if (go) { go.disabled = true; go.textContent = mhLangT('Translating…'); }
   const user = mhLangUserGet(); let done = 0, failed = 0, lastErr = '';
   for (let i = 0; i < items.length; i += 40) {
     const chunk = items.slice(i, i + 40);
@@ -21895,15 +21895,16 @@ async function mhLangTranslateScreen(ok) {
   showToast(done ? `✨ Translated ${done} phrases${failed ? ` (${failed} could not be)` : ''}. Machine translation: check anything important in English.` : `Could not translate: ${lastErr}`, null, null, 4500);
 }
 function mhLangForgetAI() { try { localStorage.removeItem('mh_lang_user_' + MH_L.code); } catch (_) {} mhLangSet(MH_L.code); }
+function mhLangT(x) { const d = MH_L.dict; return (d && Object.prototype.hasOwnProperty.call(d, x)) ? d[x] : x; }
 function mhLangOpen() {
   document.getElementById('mhLangModal')?.remove();
   const m = document.createElement('div'); m.id = 'mhLangModal'; m.setAttribute('data-nolang', '1');
   m.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
   m.innerHTML = `<div style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:14px;padding:16px;max-width:320px;width:100%;">
-    <div style="font-weight:700;margin-bottom:10px;">🌐 Language</div>
+    <div style="font-weight:700;margin-bottom:10px;">${mhLangT('🌐 Language')}</div>
     ${MH_LANGS.map(l => `<button class="copy-btn mh-lang-opt" data-c="${l.code}" style="width:100%;padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;${l.code === mhLangCode() ? 'border-color:var(--accent);' : ''}">${mhFlagImg(l.code, 16)} ${l.native}${l.code === 'en' ? ' (Back to English)' : ''}</button>`).join('')}
-    ${MH_L.code !== 'en' ? `<button id="mhLangAI" class="copy-btn" style="width:100%;padding:10px;margin-top:4px;border-color:var(--accent);color:var(--accent);">✨ Translate this screen with AI</button>${Object.keys(mhLangUserGet()).length ? `<div style="text-align:center;margin-top:6px;"><span id="mhLangForget" style="font-size:11px;color:var(--text3);text-decoration:underline;cursor:pointer;">Forget my AI translations (${Object.keys(mhLangUserGet()).length})</span></div>` : ''}` : ''}
-    <button id="mhLangX" class="copy-btn" style="width:100%;padding:8px;margin-top:6px;">✕</button></div>`;
+    ${MH_L.code !== 'en' ? `<button id="mhLangAI" class="copy-btn" style="width:100%;padding:10px;margin-top:4px;border-color:var(--accent);color:var(--accent);">${mhLangT('✨ Translate this screen with AI')}</button>${Object.keys(mhLangUserGet()).length ? `<div style="text-align:center;margin-top:6px;"><span id="mhLangForget" style="font-size:11px;color:var(--text3);text-decoration:underline;cursor:pointer;">${mhLangT('Forget my AI translations')} (${Object.keys(mhLangUserGet()).length})</span></div>` : ''}` : ''}
+    <button id="mhLangX" class="copy-btn" style="width:100%;padding:10px;margin-top:6px;">${mhLangT('Cancel')}</button></div>`;
   document.body.appendChild(m);
   const ai = m.querySelector('#mhLangAI'); if (ai) ai.onclick = () => mhLangTranslateScreen(false);
   const fg = m.querySelector('#mhLangForget'); if (fg) fg.onclick = mhLangForgetAI;
@@ -24774,6 +24775,30 @@ function updateDashboard(skipActivityRender) {
     try { resetSupplementLog(); } catch(e) { localStorage.setItem('mh_supplement_log', JSON.stringify({ date: todayStr() })); }
     saveState(); // persists today's date immediately
 
+    // A day with NO food logged but something else worth keeping (a symptom score, a tag such as
+    // "Treatment: Massage", a per-tag note) used to be dropped here, so a bad-headache day with no meals vanished
+    // from Patterns, before/after and reports. Keep those days: either merge into the entry that is already there
+    // (e.g. one made from wearable data) or write a small food-less entry. Food averages ignore it (0 kcal).
+    if (!_hasLog) {
+      try {
+        const _legacyW = ['standard','occasion','holiday','missed day entry','missed day'];
+        const _realTags = String(_capturedNotes || '').split(',').map(t => t.trim()).filter(t => t && !_legacyW.includes(t.toLowerCase()) && !/^\d+min /i.test(t));
+        const _hasMeta = !!_capturedSymptoms || _realTags.length > 0 || Object.keys(_capturedTagNotes).length > 0;
+        if (_hasMeta) {
+          const _ex = (state.history || []).find(h => h.date === _rolloverDate);
+          if (_ex) {
+            if (_capturedSymptoms && !_ex.symptoms) _ex.symptoms = _capturedSymptoms;
+            if (_realTags.length && !(_ex.notes && String(_ex.notes).trim() && !_legacyW.includes(String(_ex.notes).trim().toLowerCase()))) _ex.notes = _capturedNotes;
+            if (Object.keys(_capturedTagNotes).length && !_ex.tagNotes) _ex.tagNotes = _capturedTagNotes;
+          } else {
+            state.history = state.history || [];
+            state.history.unshift({ date: _rolloverDate, log: [], totals: { kcal: 0, protein: 0, carbs: 0, fat: 0 }, mode: _capturedMode, notes: _capturedNotes, tagNotes: _capturedTagNotes,
+              weight: _capturedWeight, water_ml: _capturedWater, steps: _capturedSteps, exercises: _capturedExercises, ...(_capturedSymptoms ? { symptoms: _capturedSymptoms } : {}) });
+          }
+          saveState();
+        }
+      } catch (e) { console.warn('[ROLLOVER] food-less day not kept', e); }
+    }
     // Write history entry using captured data
     if (_hasLog && !_alreadyInHistory) {
       state.history = (state.history || []).filter(h => h.date !== _rolloverDate);
@@ -43808,6 +43833,30 @@ async function callHealthAI(prompt, { maxTokens = 800, system = null, image = nu
   }
 }
 
+// What the "Ask the analyst" prompt also gets beyond the daily numbers: how-are-you scores (1 worst, 5 best), the tags
+// used each day (exercise, treatments, occasions) and treatment session days, last 120 days, so a question such as
+// "did exercise or HRV affect my headache days?" can actually be answered. Empty when there are none.
+function mhAnalystExtras(h) {
+  try {
+    const legacy = ['standard','occasion','holiday','missed day entry','missed day'];
+    const sym = {}; loadSymptomDefs().forEach(d => { sym[d.id] = d.name; });
+    const cutoff = (h || []).slice(0, 120);
+    const sLines = [], tLines = [];
+    cutoff.forEach(e => {
+      if (e.symptoms) { const p = Object.keys(e.symptoms).filter(k => e.symptoms[k] != null && sym[k]).map(k => `${sym[k]}=${e.symptoms[k]}`); if (p.length) sLines.push(`${e.date}: ${p.join(', ')}`); }
+      const tags = String(e.notes || '').split(',').map(t => t.trim()).filter(t => t && !legacy.includes(t.toLowerCase()) && !/^\d+min /i.test(t));
+      if (tags.length) tLines.push(`${e.date}: ${tags.join('; ')}`);
+    });
+    const defs = {}; loadTreatmentDefs().forEach(d => { defs[d.id] = d.name; });
+    const byDate = {}; loadTreatmentLog().forEach(x => { if (defs[x.treatmentId]) (byDate[x.date] = byDate[x.date] || new Set()).add(defs[x.treatmentId]); });
+    const trLines = cutoff.filter(e => byDate[e.date]).map(e => `${e.date}: ${[...byDate[e.date]].join('; ')}`);
+    let out = '';
+    if (sLines.length) out += `\nHow-are-you scores per day (1 = worst, 5 = best; days not listed were not scored):\n${sLines.join('\n')}\n`;
+    if (tLines.length) out += `\nTags per day (exercise, treatments, occasions the person recorded):\n${tLines.join('\n')}\n`;
+    if (trLines.length) out += `\nTreatment session days:\n${trLines.join('\n')}\n`;
+    return out;
+  } catch (_) { return ''; }
+}
 async function askReportsAI(overrideQuestion, isFullSummary) {
   const question = overrideQuestion || document.getElementById('rptAskInput')?.value.trim();
   if (!question) { showToast('Enter a question first'); return; }
@@ -43852,6 +43901,7 @@ async function askReportsAI(overrideQuestion, isFullSummary) {
 Data (CSV, most recent first, empty = no reading):
 ${schema}
 ${dataRows}
+${mhAnalystExtras(h)}
 
 Note: fat_g is dietary fat (grams eaten). fat_pct is body fat percentage from a smart scale — completely different measurements.
 

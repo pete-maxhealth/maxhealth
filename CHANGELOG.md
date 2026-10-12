@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.996 — "How are you today?" Feeds Analysis Properly
+
+- **Fixed: days with no food were losing their scores and tags.** A "How are you today?" score, a tag (e.g. "Treatment: Massage") or a per-tag note recorded on a day when no food was logged vanished at midnight, because the daily history entry was only written when there was a food log. Those days are now kept (merged into an existing wearable-only entry if there is one, otherwise a small food-less entry). Food averages and counts ignore them (0 kcal), and a day with nothing recorded is not invented. Test: `p115`.
+- **Ask the analyst now sees your scores, tags and treatment days** (last 120 days) alongside the daily numbers, so a question like "did exercise, HRV or nutrition affect my headache days?" can be answered from your data. Only added when you have any. Test: `p116`.
+- The language box's close button now says **Cancel** (in your language) instead of a bare ✕, and its other labels are translated too.
+- Already working, checked: scores appear as Compare Metrics pills, in the before/after around a treatment or tag, in report profiles (symptoms) and in Patterns on food days.
+
 ## v3.10.995 — Translate This Screen (AI)
 
 - When a language other than English is on, a **✨ Translate this screen with AI** button sits next to the flag in the top bar and inside the language box. It collects the English text still showing on the screen that the language pack does not cover, tells you how many phrases and where they go (your own AI provider), and only sends after you tap Translate. Notes: it can include your own notes or food names if they are on screen.

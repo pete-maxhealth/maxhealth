@@ -17,6 +17,7 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.972 First-run "What would you like to start with?" step.
 - [x] v3.10.973-974 One Filter panel holding chips and Hidden pills; toolbar always first; one pill size.
 - [x] v3.10.975 Optional nudges; epilepsy, type 2 diabetes and migraine starter packs.
+- [x] v3.10.996 Food-less days keep scores/tags; analyst prompt gets scores/tags/treatments. Idea: back-fill a past day's How-are-you scores from History.
 - [x] v3.10.995 AI 'Translate this screen' (✨) with consent, cached per phrase.
 - [x] v3.10.994 SVG flags + header language button; number-aware translation; ~240 more strings. Still English by design: Formulas reference, device hints. Next: native-speaker review; crawl more states (modals, toasts) for leftovers.
 - [x] v3.10.993 Plan card buttons standardised, fat goal in plan totals. Full suite green at 992.
