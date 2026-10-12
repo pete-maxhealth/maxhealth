@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.986 | 23 | `#occasionTreatChips` in `renderOccasionTags` (chips from `loadTreatmentDefs`, tag `Treatment: <name>`); banner skips pills when `#occasionDisplay` is visible. |
 | v3.10.985 | 23 | Meal planner: `mhPlanParse/Add/Eat/Render`, `mh_planned_v1`, `window._planPending` diverts `logFoods` into the planned list, `#mhPlanBlock` in the macros section, `mh_plan_auto`. |
 | v3.10.984 | 23 | 17 more `starter_packs/*.json` (27 total); pack lists sorted A-Z client-side and capped at 60; `not medical advice` line in `mhStarterPacks`, `mhPackPreview`, `mhFocusOpen/Preview`. |
 | v3.10.983 | 23 | starter pack `type3c_diabetes_tracking`. |

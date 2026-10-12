@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.986 — Treatment Tags From Your Own List, No Duplicate Tag Strip
+
+- **Occasion picker** now shows a chip per treatment on your own treatment list (any condition: Massage, Chemo, Insulin, Physio…), tapping one adds the tag **Treatment: <name>**; you can still type your own, e.g. "Treatment: Acupuncture". Works for every pack because it reads your list, not a fixed one.
+- **No duplicate**: while the picker's Active tags list is on screen, the pinned 📌 strip no longer repeats the same tags (the activity nudge still shows). Test `p106`.
+
 ## v3.10.985 — Meal Planner ("I'm planning on eating this at …")
 
 - **Plan a meal for later.** Type "I'm planning on eating 2 eggs and toast at 1pm" (needs a plan word and a time; "I had…" is never a plan), or tap **🗓 Plan for later** on any meal preview. The food goes through the normal preview (library or your own numbers, nothing estimated) and lands in a separate planned list (`mh_planned_v1`), not the log.
