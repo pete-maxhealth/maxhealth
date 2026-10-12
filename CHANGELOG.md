@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1000 — Share Tries Harder
+
+- On Pete's phone the share menu still answered "not allowed" even with a fresh tap, so the zip itself is probably not on that browser's list of shareable file types (inference). The Share… button now tries three ways in turn: the zip, then the files separately (CSV and JSON are usually allowed), then plain text for small data, and says which one worked. Only if all three are refused does it save to Downloads, with the reason. Test: `p118`.
+
 ## v3.10.999 — Share Really Shares
 
 - Pete noticed Share seemed identical to Export. Cause (inferred from the code, confirmed by the new behaviour): Share always builds a zip, and the phone's share menu only opens if the tap is still "fresh". After the zip is built that can have expired, and the old code then silently saved a download, so it looked like Export. Now a refused share opens a small "Ready to share" box with a fresh **Share…** button (plus Cancel and "Save to Downloads instead"). If the browser has no share menu at all, the toast says so plainly instead of pretending.

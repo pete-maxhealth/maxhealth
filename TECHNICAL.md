@@ -317,6 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
+| v3.10.1000 | 24 | `mhShareTryChain` (zip, then separate files, then text). |
 | v3.10.999 | 24 | `mhShareRetryModal` (fresh-tap Share after a refused `navigator.share`; honest toast when unsupported); buttons relabelled. |
 | v3.10.998 | 23 | `mhSymBackfillOpen/mhSymBackfillSave` (past-day scores into `state.history[].symptoms`, sorted insert via `ddmmyySortKey`). |
 | v3.10.997 | 23 | Header right group wraps, `.date-badge` nowrap, localised `headerDate` via `Intl`; language card no longer `data-nolang` (only `#mhLangSel`). |

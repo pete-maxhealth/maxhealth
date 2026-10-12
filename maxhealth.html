@@ -6238,7 +6238,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.999'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1000'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -20171,7 +20171,22 @@ function buildBulkDataActionsCard() {
         <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;">Overwrites the server's master.csv to match this app. Use it if the server's copy has fallen behind.</div>
       </details>`;
 }
-function mhShareRetryModal(file, blob, name, why) {
+async function mhShareTryChain(file, rawFiles, dl) {
+  // 1) the zip  2) the files one by one-type (csv/json are on most browsers' safe list, zip is not always)  3) plain text for small data
+  const tries = [];
+  tries.push(['zip', { files: [file], title: 'MaxedHealth export' }]);
+  const fl = (rawFiles || []).map(f => new File([f.text], f.name, { type: f.type || 'text/plain' }));
+  if (fl.length) tries.push(['files', { files: fl, title: 'MaxedHealth export' }]);
+  const txt = (rawFiles || []).map(f => f.name + '\n' + f.text).join('\n\n');
+  if (txt && txt.length < 60000) tries.push(['text', { title: 'MaxedHealth export', text: txt }]);
+  let last = null;
+  for (const [kind, data] of tries) {
+    try { if (data.files && navigator.canShare && !navigator.canShare({ files: data.files })) { last = { name: 'TypeNotAllowed' }; continue; } await navigator.share(data); return { ok: true, kind }; }
+    catch (e) { if (e && e.name === 'AbortError') return { abort: true }; last = e; }
+  }
+  return { ok: false, err: last && last.name || 'error' };
+}
+function mhShareRetryModal(file, blob, name, why, rawFiles) {
   document.getElementById('mhShareRetry')?.remove();
   const m = document.createElement('div'); m.id = 'mhShareRetry';
   m.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -20184,8 +20199,12 @@ function mhShareRetryModal(file, blob, name, why) {
   document.getElementById('mhShRNo').onclick = () => m.remove();
   document.getElementById('mhShRSave').onclick = () => { m.remove(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); showToast('Saved to Downloads ✓'); };
   document.getElementById('mhShRGo').onclick = async () => {
-    try { await navigator.share({ files: [file], title: 'MaxedHealth export' }); m.remove(); try { localStorage.setItem('mh_last_export_nudge', localISODate(new Date())); } catch (e) {} showToast('Shared ✓'); }
-    catch (e) { if (e && e.name === 'AbortError') return; m.remove(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); showToast("The share menu wouldn't open (" + (e && e.name || 'error') + '), so the zip was saved to Downloads.'); }
+    const r = await mhShareTryChain(file, rawFiles);
+    if (r.abort) return;
+    m.remove();
+    if (r.ok) { try { localStorage.setItem('mh_last_export_nudge', localISODate(new Date())); } catch (e) {} showToast(r.kind === 'zip' ? 'Shared ✓' : r.kind === 'files' ? 'Shared as separate files ✓ (this phone would not share a zip)' : 'Shared as text ✓ (this phone would not share files)'); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+    showToast('This phone refused every way of sharing (' + r.err + '), so the zip was saved to Downloads. Open it from Files and send it from there.');
   };
 }
 function mhBulkSelect(on) { document.querySelectorAll('#bulkDsList .bulkDs').forEach(c => { c.checked = !!on; }); }
@@ -20232,7 +20251,7 @@ async function mhExportSelected(share) {
           catch (e) {
             if (e && e.name === 'AbortError') return;
             // Most often the browser refuses because too long passed since the tap. A fresh tap on a button works.
-            mhShareRetryModal(file, blob, name, e && e.name); return;
+            mhShareRetryModal(file, blob, name, e && e.name, files); return;
           }
         }
         showToast("This browser can't open the share menu, so the zip was saved to Downloads instead. Open it from your Files app to send it.");
