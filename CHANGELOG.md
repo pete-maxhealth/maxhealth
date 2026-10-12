@@ -2,6 +2,17 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.973 — One Filter Panel, One Pill Size
+
+- **Hidden lists now sit inside the Filter.** Opening Filter shows one panel under the toolbar holding the topic chips and the "Hidden:" pills together (divided by a dotted line), instead of loose rows below. Works on Today, Trends, Reports and every Settings screen.
+- **One pill size across the main pages**: toolbar buttons, topic chips, Hidden pills, Trends period pills (Today / 7 Days / 30 Days / All / Custom) and day-mode tags all use a single size variable (`--mh-pill-fs`), a notch smaller than before and in the same font.
+
+## v3.10.972 — First Run: "What Would You Like To Start With?"
+
+- New wizard step after Health Context with three choices: **Brain tumour tracking**, **Keep it simple**, **Show me everything**. The first two add their starter-pack lists and apply their screen layout (Default buttons then return to it); the third applies nothing. The choice is pre-selected from the condition picked (GBM suggests Brain tumour, anything else Keep it simple) and can be changed.
+- The packs are embedded in the app so the first run works offline; a test fails if they drift from `starter_packs/*.json`. Preview mode applies nothing.
+- Tests: `p92_first_run_choice.py`; `p01_new_user.py` now chooses "everything" before finishing.
+
 ## v3.10.971 — Starter Packs Carry A Screen Layout
 
 - **Setup packs can now include a "Screen layout"**: which cards start open, folded or hidden. Shown in the pack preview as its own tick-box; importing never touches logged data.

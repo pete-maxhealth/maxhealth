@@ -32,7 +32,7 @@ def run(v, pw):
     if v['age'] and not kcal: f.add('BUG?', 'no kcal target computed from complete profile')
     call('onboardNext(5)')
     if v['cond']: call(f"obSetCondition('{v['cond']}')")
-    call('onboardNext(6)'); call('onboardFinish()'); page.wait_for_timeout(1500)
+    call("obSetStart('everything')"); call('onboardNext(6)'); call('onboardFinish()'); page.wait_for_timeout(1500)
     ob = page.evaluate("getComputedStyle(document.getElementById('onboardingOverlay')).display")
     if ob != 'none': f.add('BUG', f'wizard still showing after Finish (display={ob})')
     txt = page.inner_text('body')
