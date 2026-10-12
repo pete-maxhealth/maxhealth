@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.982 — Change My Focus, Muscle Growth Pack
+
+- **Settings > Manage > Setup > "🎯 Change my focus (what are you tracking now?)"**: pick Everything or any starter pack (Everything / eight condition packs / Muscle growth). The preview names the Today cards that will tuck away or fold and the Trends cards that hide, and how many symptoms/treatments will be added. Switch replaces your screen arrangement with the pack's (hidden cards stay reachable under Filter) and adds the pack's lists without removing any of yours; nothing logged is touched. "Show me everything" returns to the standard layout. Works offline for Brain tumour and Keep it simple (embedded copies); the rest need the GitHub list.
+- **New pack: Muscle growth tracking** (soreness, joint ache, fatigue, sleep, appetite, motivation, cramps; ketosis and fasting tucked away, weight/calories/protein/body composition kept in front). Nine packs in total. Test: `p104_change_focus`.
+
 ## v3.10.981 — Topic Chips Always Visible, Library Chip Icons, Food Category Filter
 
 - **The topic chips (All / Body / Heart & sleep / Food / Patterns, Manage, Reports, Import, Library) are visible again, always, under the toolbar** (Pete Spence: "I can't see any sub categories anywhere"). Since v3.10.973 they sat inside the closed Filter panel and tapping one closed it again, so they kept vanishing. Only the "Hidden:" lists stay behind Filter now. The Filter button appears only on screens that have a Hidden list. History goes back to its own This Week / Month / All row with no toolbar. Tests p71 and p98 updated to match.

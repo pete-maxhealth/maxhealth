@@ -5239,6 +5239,7 @@
     <div id="set-setup-wrap">
     <div class="settings-card">
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="previewOnboarding()">🔍 Preview setup wizard (safe — nothing is saved)</button>
+      <button class="run-btn" style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);width:100%;margin-bottom:8px;" onclick="mhFocusOpen()">🎯 Change my focus (what are you tracking now?)</button>
       <button class="run-btn" style="background:transparent;border:1px solid var(--accent);color:var(--accent);width:100%;margin-top:8px;" onclick="mhResetAllLayout()">↺ Reset layout on every screen</button>
       <details style="margin-top:10px;"><summary style="font-size:11px;color:var(--text3);cursor:pointer;">Advanced</summary>
         <button class="run-btn" style="background:transparent;border:1px solid var(--red);color:var(--red);width:100%;margin-top:8px;" onclick="resetOnboarding()">↺ Redo setup wizard (replaces your settings)</button>
@@ -6232,7 +6233,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.981'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.982'; // single source of truth — bump here each release
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -19930,6 +19931,65 @@ async function mhStarterPacks() {
       } catch (e) { showToast("Couldn't open that pack"); }
     });
   } catch (e) { body.textContent = "Couldn't reach the starter packs (needs a connection). Try again later."; }
+}
+// ── Change my focus (v3.10.982) ───────────────────────────────────────────────────────────────────────────
+// One place to change WHY you are using the app. Pick a starting point (Everything, or a pack); the preview says which Today cards will be
+// tucked away and which will stay in front; applying swaps the screen layout to that pack's and adds its symptom/treatment lists to
+// yours (never removes any). Nothing you logged is touched and every hidden card stays reachable under Filter.
+const MH_PACK_BASE = 'https://raw.githubusercontent.com/pete-maxhealth/maxhealth/main/starter_packs/';
+function mhFocusSummary(pack) {
+  const lay = (pack.sets && pack.sets.layout && pack.sets.layout.data) || {}, hidden = [], folded = [], trend = [];
+  try { JSON.parse(lay.mh_dashboard_hidden || '[]').forEach(k => hidden.push(DASHBOARD_SECTION_LABELS[k] || k)); } catch (_) {}
+  Object.keys(lay).forEach(k => { if (k.startsWith('mh_collapse_dc_') && lay[k] === 'closed') { const key = k.slice('mh_collapse_dc_'.length), c = MH_DASH_CARDS.find(x => x[0] === key); folded.push(c ? c[2].replace(/^[^A-Za-z]+/, '') : key); } });
+  try { JSON.parse(lay.mh_trend_cards_hidden || '[]').forEach(id => { const el = document.getElementById(id), nm = el && el.querySelector('.metric-name'); trend.push(nm ? nm.textContent.trim() : id); }); } catch (_) {}
+  return { hidden, folded, trend, syms: ((pack.sets.symptoms || {}).data || []).length, tr: ((pack.sets.treatments || {}).data || []).length };
+}
+function mhFocusModal(inner) {
+  document.getElementById('mhFocusModal')?.remove();
+  const m = document.createElement('div'); m.id = 'mhFocusModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  m.innerHTML = '<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;">' + inner + '</div>';
+  document.body.appendChild(m); return m;
+}
+async function mhFocusOpen() {
+  const m = mhFocusModal('<div style="font-weight:700;font-size:15px;margin-bottom:4px;">What are you tracking now?</div><div style="font-size:12px;color:var(--text3);margin-bottom:8px;">Pick a focus. The cards that matter for it stay in front and the rest tuck away (always one tap away under Filter). Nothing you have logged changes.</div><div id="mhFocusBody" style="font-size:13px;color:var(--text3);">Looking…</div><button class="copy-btn" id="mhFocusClose" style="width:100%;margin-top:12px;">Close</button>');
+  document.getElementById('mhFocusClose').onclick = () => m.remove();
+  const body = document.getElementById('mhFocusBody');
+  let packs = [];
+  try { const r = await fetch(MH_PACK_BASE + 'index.json', { cache: 'no-store' }); if (!r.ok) throw 0; const idx = await r.json(); if (!Array.isArray(idx.packs)) throw 0; packs = idx.packs.slice(0, 30); }
+  catch (_) { packs = [{ embedded: 'brain', title: 'Brain tumour tracking', description: 'Symptoms and treatments people commonly track, with the metabolic cards folded away.' }, { embedded: 'simple', title: 'Keep it simple', description: 'Everyday symptoms, with the advanced cards tucked away.' }]; }
+  const row = (t, d, i) => `<div style="padding:10px 0;border-bottom:1px solid var(--border);"><div style="color:var(--text);font-weight:600;">${_pkEsc(t)}</div><div style="font-size:12px;margin:2px 0 6px;">${_pkEsc(d)}</div><button class="copy-btn" data-f="${i}" style="font-size:12px;">Choose</button></div>`;
+  body.innerHTML = row('Show me everything', 'Every card visible in its standard place. Good if you are not sure yet.', 'all') + packs.map((p, i) => row(p.title, p.description, i)).join('');
+  body.querySelectorAll('button[data-f]').forEach(btn => btn.onclick = async () => {
+    const f = btn.dataset.f;
+    if (f === 'all') { mhFocusPreview({ everything: true, title: 'Show me everything' }); return; }
+    const p = packs[+f];
+    try {
+      let pack;
+      if (p.embedded) pack = JSON.parse(JSON.stringify(MH_FIRST_RUN_PACKS[p.embedded]));
+      else { const rr = await fetch(MH_PACK_BASE + String(p.file).replace(/[^A-Za-z0-9_.-]/g, ''), { cache: 'no-store' }); pack = await rr.json(); }
+      if (!pack || !pack.sets) throw 0; pack.title = p.title; mhFocusPreview(pack);
+    } catch (_) { showToast("Couldn't open that one"); }
+  });
+}
+function mhFocusPreview(pack) {
+  const list = (a) => a.length ? a.map(_pkEsc).join(', ') : 'none';
+  let txt;
+  if (pack.everything) txt = '<div style="margin-bottom:6px;">Every card comes back to its standard place and order on every screen. Your own lists stay as they are.</div>';
+  else { const s = mhFocusSummary(pack);
+    txt = `<div style="margin-bottom:6px;"><b>Tucked away on Today:</b> ${list(s.hidden)}</div><div style="margin-bottom:6px;"><b>Folded to a one-line bar:</b> ${list(s.folded)}</div><div style="margin-bottom:6px;"><b>Hidden on Trends:</b> ${list(s.trend)}</div><div style="margin-bottom:6px;"><b>Added to your lists</b> (only what you do not have already): ${s.syms} symptom${s.syms === 1 ? '' : 's'}${s.tr ? ', ' + s.tr + ' treatment' + (s.tr === 1 ? '' : 's') : ''}. Nothing is removed from your lists.</div>`; }
+  const m = mhFocusModal(`<div style="font-weight:700;font-size:15px;margin-bottom:6px;">${_pkEsc(pack.title || 'Focus')}</div><div style="font-size:12px;color:var(--text3);line-height:1.5;">${txt}<div style="margin-top:8px;">Your own card arrangement on every screen is replaced by this one. Nothing you have logged is touched, and hidden cards stay one tap away under Filter.</div></div><div style="display:flex;gap:8px;margin-top:12px;"><button class="copy-btn" id="mhFocusBack" style="flex:1;">Back</button><button class="copy-btn" id="mhFocusGo" style="flex:1;background:var(--green-dim);color:var(--green);">Switch</button></div>`);
+  document.getElementById('mhFocusBack').onclick = () => { m.remove(); mhFocusOpen(); };
+  document.getElementById('mhFocusGo').onclick = () => { m.remove(); mhFocusApply(pack); };
+}
+function mhFocusApply(pack) {
+  try {
+    if (pack.everything) { localStorage.removeItem('mh_layout_base'); localStorage.removeItem('mh_layout_base_at'); mhDoResetLayout(mhLayoutKeys(null)); return; }
+    if (pack.sets.layout) mhPackApply(pack, ['layout'], 'replace');
+    const lists = ['symptoms', 'treatments'].filter(k => pack.sets[k]); if (lists.length) mhPackApply(pack, lists, 'merge');
+    try { const tabEl = document.querySelector('#mainTabRow .tab.active'); const tab = tabEl ? (tabEl.id || '').replace(/^maintab-/, '') : ''; if (tab) sessionStorage.setItem('mh_resume_tab', JSON.stringify({ tab, sub: '' })); } catch (_) {}
+    location.reload();
+  } catch (e) { showToast("Couldn't switch just now"); }
 }
 async function mhPackShare(forceDownload) {
   const sel = getBulkSelectedDatasets().filter(k => PACK_SETS[k]);
