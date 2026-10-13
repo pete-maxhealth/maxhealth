@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1026 — Routine And Patterns Together
+
+Patterns now always sits directly under Your routine, wherever you move the routine card: the usual first, then what goes with what. Test p140.
+
 ## v3.10.1025 — Your Routine Folds, Reads Better
 
 Found on the real phone. Your routine now has the same "▾ hide / ▸ show" fold as Patterns. The sleep line no longer says "Last 3 nights: last 3 nights shorter". A meal window wider than four hours (a lunch of 09:27-20:50 is not a routine) now reads "varies a lot, often about 14:00". Test p140.
