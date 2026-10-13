@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1027 — Your Routine Matches Patterns
+
+Your routine is now a proper Trends section, the same kind as Patterns and Your Journey: same title style, "▾ hide" fold, and the "3/8 👁 ▼ ▲" controls. It leaves the metric-card order (a saved order that still lists it is tidied automatically) and defaults to straight before Patterns; it's now moved with the other sections. Tests p136, p140.
+
 ## v3.10.1026 — Routine And Patterns Together
 
 Patterns now always sits directly under Your routine, wherever you move the routine card: the usual first, then what goes with what. Test p140.
