@@ -317,7 +317,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.924 | 23 | Full detail in CHANGELOG.md (Phase 23). `#pushToServerBtn` hidden in `checkServer()` offline branch, shown on success. |
 | v3.10.925 | 23 | Full detail in CHANGELOG.md (Phase 23). `mhRequestPersistentStorage` (startup +4s), `mhUnsavedDays`, `mhIsCloudHost`, `mhIsIOSBrowserTab`, `#mhStorageStatus` in Data & Backup; `checkBackupReminder` cloud thresholds 7 days / 5 unsaved days. |
 | v3.10.926 | 23 | Full detail in CHANGELOG.md (Phase 23). MEAL PATH prompt gains `COOKING FAT NOTE` (no invented fat; one-line note when fat-cooked food has none stated). New persona `p60_prompt_rules.py` guards the prompt rule text. |
-| v3.10.1011 | 24 | Worker allowance (`STARTER_TOTAL`/`STARTER_TOPUP`/`LICENCE_DAILY`, HMAC licence token), model/token/tool hardening; client headers gated on a probe; p126-p128. |
+| v3.10.1011 | 24 | Worker allowance (`STARTER_TOTAL`/`STARTER_TOPUP`/`LICENCE_DAILY`, HMAC licence token), model/token/tool hardening; client headers gated on a probe; `premium-site/licence.php`; licence card; `tools/split_premium.py`; p126-p131. |
 | v3.10.1010 | 24 | `window.fetch` wrapper answers AI hosts with labelled samples while `mh_demo_active` is set; `mhPremiumPreview()`; p125. |
 | v3.10.1009 | 24 | Eleven new demo personas (28 total, one per starter pack); p124. |
 | v3.10.1008 | 24 | Global `button { min-height: 34px }` (opt out with class `mh-nominh`). |

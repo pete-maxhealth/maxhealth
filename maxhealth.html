@@ -4441,6 +4441,15 @@
 <div class="section-title" id="title-set-aiprovider" style="margin-top:8px;cursor:pointer;" onclick="toggleSection('set-aiprovider','set-aiprovider-wrap','set-aiprovider-icon')">AI Provider <span id="set-aiprovider-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-aiprovider-wrap">
       <div id="aiAllowanceLine" style="display:none;font-size:12.5px;color:var(--accent);margin:6px 0 10px;font-family:Space Mono,monospace;"></div>
+      <div class="settings-card" id="licenceCard" style="margin-bottom:10px;">
+        <div class="settings-row"><div class="settings-label">Premium licence</div><div id="licenceState" style="font-size:12.5px;color:var(--text3);text-align:right;">None</div></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <input id="licenceKeyInput" type="text" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX" style="flex:1;min-width:150px;" />
+          <button class="btn" onclick="mhLicenceActivate()">Activate</button>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn" onclick="mhLicenceTrial()">Start 14-day trial</button><button class="btn" id="licenceRemoveBtn" style="display:none;" onclick="mhLicenceRemove()">Remove</button></div>
+        <div id="licenceMsg" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
+      </div>
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Provider</div>
@@ -45322,6 +45331,58 @@ function mhAllowanceRefresh() {
 }
 
 window.addEventListener('load', function () { setTimeout(function () { try { mhAllowanceRefresh(); } catch (e) {} }, 800); });
+
+// Premium licence (v3.10.1011): activate a key or start the 14-day trial, then keep the signed token fresh.
+const MH_LICENCE_URL = 'https://pspence.co.uk/maxedhealth/licence.php';
+function mhLicPayload(tok) { try { return JSON.parse(atob(String(tok).split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { return null; } }
+function mhLicMsg(m, bad) { const e = document.getElementById('licenceMsg'); if (e) { e.textContent = m || ''; e.style.color = bad ? 'var(--red)' : 'var(--text3)'; } }
+function mhLicenceRender() {
+  const el = document.getElementById('licenceState'); if (!el) return;
+  const tok = localStorage.getItem('mh_licence'); const p = tok ? mhLicPayload(tok) : null;
+  const rm = document.getElementById('licenceRemoveBtn');
+  if (!p) { el.textContent = 'None'; if (rm) rm.style.display = 'none'; return; }
+  const days = Math.max(0, Math.ceil((p.exp * 1000 - Date.now()) / 86400000));
+  el.textContent = p.tier === 'trial' ? `Trial: ${days} day${days === 1 ? '' : 's'} left` : (p.tier === 'founder' ? 'Founder licence' : 'Premium licence') + (days > 0 ? '' : ' (renew needed)');
+  if (rm) rm.style.display = 'inline-block';
+}
+async function mhLicCall(body) {
+  const r = await fetch(MH_LICENCE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ device: mhDeviceId() }, body)) });
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  return { status: r.status, j };
+}
+async function mhLicenceActivate() {
+  const key = (document.getElementById('licenceKeyInput').value || '').trim().toUpperCase();
+  if (!key) { mhLicMsg('Enter your licence key first.', true); return; }
+  mhLicMsg('Checking…');
+  try {
+    const { j } = await mhLicCall({ action: 'activate', key });
+    if (!j.ok) { mhLicMsg(j.error || 'That did not work. Please try again.', true); return; }
+    localStorage.setItem('mh_licence', j.token); localStorage.setItem('mh_licence_key', key);
+    mhLicMsg('Licence activated. Thank you!'); mhLicenceRender();
+  } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
+}
+async function mhLicenceTrial() {
+  mhLicMsg('Starting your trial…');
+  try {
+    const { j } = await mhLicCall({ action: 'trial' });
+    if (!j.ok) { mhLicMsg(j.error || 'The trial could not be started.', true); return; }
+    localStorage.setItem('mh_licence', j.token); localStorage.removeItem('mh_licence_key');
+    mhLicMsg('Your 14-day trial has started.'); mhLicenceRender();
+  } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
+}
+function mhLicenceRemove() { localStorage.removeItem('mh_licence'); localStorage.removeItem('mh_licence_key'); mhLicMsg('Licence removed from this device.'); mhLicenceRender(); }
+// Quietly renew a stored key's token when it has under 7 days left (needs a connection; fails silently).
+async function mhLicenceAutoRefresh() {
+  try {
+    if (localStorage.getItem('mh_demo_active')) return;
+    const tok = localStorage.getItem('mh_licence'), key = localStorage.getItem('mh_licence_key');
+    const p = tok && mhLicPayload(tok); if (!p || !key) return;
+    if (p.exp * 1000 - Date.now() > 7 * 86400000) return;
+    const { j } = await mhLicCall({ action: 'activate', key });
+    if (j.ok) { localStorage.setItem('mh_licence', j.token); mhLicenceRender(); }
+  } catch (e) {}
+}
+window.addEventListener('load', function () { setTimeout(function () { try { mhLicenceRender(); mhLicenceAutoRefresh(); } catch (e) {} }, 1200); });
 
 // Premium preview (v3.10.1010): what the paid version adds, shown inside a demo. Locked, sample data only.
 function mhPremiumPreview() {
