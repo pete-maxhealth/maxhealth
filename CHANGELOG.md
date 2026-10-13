@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1029 — Nine Protocols, 27 Packs
+
+Settings > Condition / Protocol lists nine because it only sets the carb target and report framing. It looked as if it should list all 27 starter packs, so a short line under it now says what it does and links to Change my focus, where the packs live. Test p142.
+
 ## v3.10.1028 — Hide Stays Lowercase
 
 The fold hint on Wellness Balance and the Import-tab labels showed as capitals ("HIDE"). It now reads "▾ hide" like every other section.
