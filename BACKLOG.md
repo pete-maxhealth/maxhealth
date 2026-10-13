@@ -55,3 +55,12 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 
 ## Deferred until home
 - GoDaddy upload of premium-site/, ICO fee check, move APK off public GitHub, launcher items.
+
+## Pattern signals (`pattern_detector.py`, `/pattern-signals`): tested 13 Oct, NOT promoted
+Works mechanically, but the app never calls it and several outputs are not trustworthy enough to sell:
+- Meal windows use only today's log, despite "learns from 2-4 days".
+- "Regular exercise detected" fires if one day is 30% above the average (one 9,000-step day in a week of ~6,000).
+- HRV "Excellent / Good / Fair / Low" uses fixed millisecond cut-offs; HRV is personal and age-dependent, so a label like that can mislead.
+- Sleep "quality" is graded from the wearable's deep-sleep percentage alone; regularity uses duration spread, not bedtime.
+- No tests. The app's own SPC early-warning checks already cover the useful ground.
+Decision: leave off the Premium page. If revived, compare against the person's own baseline, not fixed thresholds, and add tests first.
