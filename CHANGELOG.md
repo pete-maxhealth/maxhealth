@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1012 — Show The Sync
+
+The demo now has a Premium card at the top of Today and a "See a day of synced data" example: a clearly labelled, static day showing Health Connect snapshots, ring and watch end-of-day figures, the device-ranking decision with the sleep difference flagged, and the daily self-check. Removed on exit. Test p132.
+
 ## v3.10.1011 — Free Starter Allowance
 
 The shared AI proxy now gives each device a free starter allowance (60 answers), then a small daily top-up (5), with a visible "Free AI answers left" line in Settings, AI Provider and a gentle toast at 10 and 3 left. A valid signed licence token gets a higher daily limit. The Worker also now only accepts approved models, caps response size, and allows only the web-search tool, so a stranger cannot point it at an expensive model. The app only sends the new headers once the Worker has proved it understands them, so an older deployed Worker keeps working. **Deploy `worker.js` in the Cloudflare dashboard to switch the allowance on; add a `LICENCE_SECRET` secret when the licence service goes live.** Docs rewritten to the Free web app vs Premium model (guide, story, index, legal); the full DIY guide moved to `premium/`. Also new: a licence service (`premium-site/licence.php`: device-bound keys, 14-day trial, revoke, licensed download) with a licence card in Settings, and `tools/split_premium.py` to build the public free tree and the private Premium payload (see `premium/MIGRATION.md`). Tests p126 to p131.
