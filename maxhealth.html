@@ -6307,7 +6307,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1032'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1033'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6447,6 +6447,9 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
 // else on every single page load — before loadState(), before state exists —
 // and restores automatically if a previous demo session was left open,
 // rather than relying on a graceful exit that real usage often skips.
+// Personal-account keys that show on screen in Settings/Trends/Today. Demo mode blanks them while
+// active and restores them on exit (and after an abandoned session). Added after the demo audit (v1033).
+const DEMO_PRIVATE_KEYS = ['mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
 (function healFromAbandonedDemoSession() {
   if (!localStorage.getItem('mh_demo_active')) return; // normal case — nothing to do
   try {
@@ -6484,6 +6487,7 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
     restore('mh_tdee_confirmed_date', backup.tdeeConfirmed);
     restore('mh_tdee_check_dismissed', backup.tdeeDismissed);
     restore('mh_ceil_standard', backup.ceilStd);
+    Object.keys(backup.priv || {}).forEach(k => restore(k, backup.priv[k]));
     Object.keys(backup.extraTargets || {}).forEach(k => restore(k, backup.extraTargets[k]));
   } catch(e) {
     console.warn('[healFromAbandonedDemoSession] restore failed, clearing markers anyway:', e);
@@ -45263,6 +45267,7 @@ function generateDemoSupplements() {
   return [{"id": "demo_sup0", "name": "Vitamin D3", "dose": "4000 IU", "periods": ["morning"], "active": true}, {"id": "demo_sup1", "name": "Vitamin C", "dose": "1000mg", "periods": ["morning"], "active": true}, {"id": "demo_sup2", "name": "MCT C8 Oil", "dose": "1 tablespoon", "periods": ["morning"], "active": true}, {"id": "demo_sup3", "name": "Turmeric Curcumin", "dose": "500mg", "periods": ["midday"], "active": true}, {"id": "demo_sup4", "name": "Omega-3 Fish Oil", "dose": "1000mg", "periods": ["midday", "morning", "evening"], "active": true}, {"id": "demo_sup5", "name": "Quercetin", "dose": "500mg", "periods": ["midday", "evening"], "active": true}, {"id": "demo_sup6", "name": "Zinc", "dose": "15mg", "periods": ["morning"], "active": true}, {"id": "demo_sup7", "name": "Iron", "dose": "18mg", "periods": ["morning"], "active": true}, {"id": "demo_sup8", "name": "Ashwagandha", "dose": "600mg", "periods": ["midday"], "active": true}, {"id": "demo_sup9", "name": "Green Tea Extract", "dose": "500mg", "periods": ["midday"], "active": true}, {"id": "demo_sup10", "name": "Mushroom Complex", "dose": "1200mg", "periods": ["midday"], "active": true}, {"id": "demo_sup11", "name": "Reishi Mushroom", "dose": "1000mg", "periods": ["evening"], "active": true}, {"id": "demo_sup12", "name": "Vitamin K2", "dose": "100mcg", "periods": ["evening"], "active": true}, {"id": "demo_sup13", "name": "CoQ10", "dose": "100mg", "periods": ["evening"], "active": true}, {"id": "demo_sup14", "name": "Melatonin", "dose": "3mg", "periods": ["bedtime"], "active": true}, {"id": "demo_sup15", "name": "Magnesium Glycinate", "dose": "400mg", "periods": ["bedtime"], "active": true}, {"id": "demo_sup16", "name": "Probiotic", "dose": "10 Billion CFU", "periods": ["morning"], "active": true}, {"id": "demo_sup17", "name": "L-Theanine", "dose": "200mg", "periods": ["evening", "morning"], "active": true}, {"id": "demo_sup18", "name": "NAC (N-Acetyl Cysteine)", "dose": "600mg", "periods": ["morning", "evening"], "active": true}, {"id": "demo_sup19", "name": "Collagen Peptides", "dose": "10g", "periods": ["morning", "evening"], "active": true}];
 }
 
+let _demoFullSnap = null;
 function startDemoMode(personaId) {
   const persona = DEMO_PERSONAS.find(p => p.id === personaId) || DEMO_PERSONAS[0];
   // CONFIRMED BUG (24/09/26, Pete Spence's real account): picking a second persona
@@ -45327,6 +45332,7 @@ function startDemoMode(personaId) {
       tdeeConfirmed: localStorage.getItem('mh_tdee_confirmed_date'),
       tdeeDismissed: localStorage.getItem('mh_tdee_check_dismissed'),
       ceilStd:       localStorage.getItem('mh_ceil_standard'),
+      priv:          Object.fromEntries(DEMO_PRIVATE_KEYS.map(k => [k, localStorage.getItem(k)])),
       extraTargets:  Object.fromEntries(['mh_target_fat','mh_target_kcal_maintain','mh_target_kcal_gain','mh_target_water'].map(k => [k, localStorage.getItem(k)])),
     };
     // Durable copy of everything above EXCEPT the in-memory `.state` (nutrition
@@ -45339,6 +45345,9 @@ function startDemoMode(personaId) {
     const { state: _omit, ...durableBackup } = _realState;
     localStorage.setItem('mh_demo_backup', JSON.stringify(durableBackup));
     localStorage.setItem('mh_demo_active', '1');
+    // In-memory snapshot of every mh_ key so exit can put back anything demo mode touched.
+    _demoFullSnap = {};
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('mh_') === 0) _demoFullSnap[k] = localStorage.getItem(k); }
   }
   // Load demo state into memory only
   state.history  = generateDemoHistoryForPersona(persona);
@@ -45367,6 +45376,7 @@ function startDemoMode(personaId) {
     localStorage.setItem('mh_tdee_confirmed_date', todayStr());
     localStorage.removeItem('mh_tdee_check_dismissed');
     localStorage.setItem('mh_ceil_standard', persona.targets.carbs);
+    DEMO_PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
     // Fat/phase/water targets: never the real account's. Fat fills the persona's remaining calories.
     ['mh_target_fat','mh_target_kcal_maintain','mh_target_kcal_gain','mh_target_water'].forEach(k => localStorage.removeItem(k));
     localStorage.setItem('mh_target_fat', String(Math.max(30, Math.round((persona.targets.kcal - 4*persona.targets.protein - 4*persona.targets.carbs)/9))));
@@ -45653,6 +45663,7 @@ function exitDemoMode() {
     if (_realState.tdeeDismissed) localStorage.setItem('mh_tdee_check_dismissed', _realState.tdeeDismissed);
     else                           localStorage.removeItem('mh_tdee_check_dismissed');
     Object.keys(_realState.extraTargets || {}).forEach(k => { const v = _realState.extraTargets[k]; if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); });
+    Object.keys(_realState.priv || {}).forEach(k => { const v = _realState.priv[k]; if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); });
     if (_realState.ceilStd)       localStorage.setItem('mh_ceil_standard', _realState.ceilStd);
     else                           localStorage.removeItem('mh_ceil_standard');
     if (_realState.theme)        localStorage.setItem('mh_theme', _realState.theme);
@@ -45683,6 +45694,14 @@ function exitDemoMode() {
     // exact matching backup behind it.
     localStorage.removeItem('mh_demo_backup');
     localStorage.removeItem('mh_demo_active');
+    // Generic safety net: put back any other mh_ key whose value changed during demo.
+    if (_demoFullSnap) {
+      Object.keys(_demoFullSnap).forEach(k => {
+        if (/^(mh_lang|mh_latest_ver|mh_demo_)/.test(k) || /(_log|_trace)$/.test(k)) return;
+        if (localStorage.getItem(k) !== _demoFullSnap[k]) localStorage.setItem(k, _demoFullSnap[k]);
+      });
+      _demoFullSnap = null;
+    }
     _realState=null;
   }
   document.getElementById('demoBanner').style.display='none';

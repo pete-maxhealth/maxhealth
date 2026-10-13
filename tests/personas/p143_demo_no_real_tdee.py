@@ -8,9 +8,9 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     ev = page.evaluate
-    ev("state.onboarded=true; saveState(); localStorage.setItem('mh_tdee','3400'); localStorage.setItem('mh_tdee_confirmed_date','2026-10-01'); localStorage.setItem('mh_ceil_standard','30'); localStorage.setItem('mh_target_fat','281'); localStorage.setItem('mh_name','Pete'); localStorage.setItem('mh_age','56'); localStorage.setItem('mh_height_cm','180')")
+    ev("state.onboarded=true; saveState(); localStorage.setItem('mh_tdee','3400'); localStorage.setItem('mh_tdee_confirmed_date','2026-10-01'); localStorage.setItem('mh_ceil_standard','30'); localStorage.setItem('mh_target_fat','281'); localStorage.setItem('mh_name','Pete'); localStorage.setItem('mh_carer_email','a@b.c'); localStorage.setItem('mh_tableware','RESORTSET'); localStorage.setItem('mh_today_notes','secret note'); localStorage.setItem('mh_provider','claude'); localStorage.setItem('mh_age','56'); localStorage.setItem('mh_height_cm','180')")
     page.reload(); page.wait_for_timeout(1500)
-    ev("startDemoMode('zara')"); page.wait_for_timeout(800)
+    ev("startDemoMode('zara')"); ev("localStorage.setItem('mh_provider','openai')"); page.wait_for_timeout(800)
     t = int(ev("localStorage.getItem('mh_tdee')"))
     if t == 3400 or not (1700 <= t <= 2600): f.add('BUG', f'zara demo TDEE unrealistic/leaked: {t}')
     if ev("localStorage.getItem('mh_ceil_standard')") != '110': f.add('BUG', 'demo carb ceiling is not the persona target')
@@ -20,7 +20,11 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = ev("document.getElementById('suggestedTargetsContent').textContent")
     if '3400' in txt: f.add('BUG', 'real TDEE visible in Suggested Targets during demo')
     if ev("document.getElementById('settingsName').value") != 'Zara': f.add('BUG', 'settings name field not switched to persona in demo')
+    for k in ('mh_carer_email','mh_tableware','mh_today_notes'):
+        if ev(f"localStorage.getItem('{k}')") is not None: f.add('BUG', f'{k} visible during demo')
     ev("exitDemoMode()"); page.wait_for_timeout(500)
+    for k, v in (('mh_carer_email','a@b.c'),('mh_tableware','RESORTSET'),('mh_today_notes','secret note'),('mh_provider','claude')):
+        if ev(f"localStorage.getItem('{k}')") != v: f.add('BUG', f'{k} not restored after demo')
     if ev("document.getElementById('settingsName').value") != 'Pete': f.add('BUG', 'settings name field still shows demo persona after exit')
     ev("saveProfile()")
     if ev("localStorage.getItem('mh_name')") != 'Pete': f.add('BUG', 'demo persona name leaked into real account via saveProfile after exit')

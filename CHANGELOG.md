@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1033
+- Demo-mode leak audit: 26 more personal-account settings (conditions, condition history, activity level, carer email, today notes, tableware, saved prompts/queries, research digests, journey overlays, steps baselines, notification prefs and more) are blanked while a demo persona is active and restored on exit or after an abandoned session. Exit also puts back any other mh_ key demo changed. p143 extended.
+
 ## v3.10.1032
 - Fixed: after exiting demo mode the Settings form still held the demo persona's name, age and height, and the next profile save wrote them into the real account. Settings fields now refresh on entering and leaving demo. p143 extended.
 
