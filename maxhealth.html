@@ -6312,7 +6312,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1022'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1023'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -12398,6 +12398,24 @@ function mhClearAppErrors() {
     updateSelfCheckDisplay();
   }, null, false, { confirm: 'Clear', cancel: 'Keep' });
 }
+// Hides the pipeline warnings shown so far. Nothing logged is touched; if the same problem is logged again on a later sync it comes back (v3.10.1023).
+function mhClearPipelineWarnings() {
+  appConfirm('Hide the pipeline warnings shown so far? Nothing you logged is touched. If the same problem is found again on a later sync it will show up again.', async () => {
+    try { const r = await fetch(`${MH_SERVER}/clear-pipeline-warnings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); if (!r.ok) throw 0; showToast('Pipeline warnings dismissed'); } catch (_) { showToast('Could not dismiss them just now. Is the local server running and up to date?'); }
+    updateSelfCheckDisplay();
+  }, null, false, { confirm: 'Dismiss', cancel: 'Keep' });
+}
+// "Resolve sleep conflict" from System health: says so when there is nothing open, instead of doing nothing.
+async function mhResolveSleepFromHealth() {
+  try {
+    const r = await fetch(`${MH_SERVER}/sleep-conflicts`, { signal: AbortSignal.timeout(4000) });
+    const d = r.ok ? await r.json() : null;
+    const c = d && Array.isArray(d.conflicts) ? d.conflicts : [];
+    if (!r.ok) { showToast('Could not reach the local server to check. It may need updating.'); return; }
+    if (!c.length) { showToast('No open sleep conflict. The warning is old log text: use Dismiss pipeline warnings.'); return; }
+    showSleepConflictComparison(c[0]);
+  } catch (_) { showToast('Could not reach the local server to check.'); }
+}
 // 01/10/26 - plain-language system health from selfcheck.py (pipeline log, data integrity, app errors, backups).
 async function updateSelfCheckDisplay() {
   const el = document.getElementById('selfCheckDisplay');
@@ -12416,7 +12434,8 @@ async function updateSelfCheckDisplay() {
     const link = (fn, label) => `<span onclick="${fn}" style="font-size:12px;color:var(--accent);text-decoration:underline;cursor:pointer;padding:6px 12px 6px 0;display:inline-block;">${label}</span>`;
     let actions = '';
     if (items.some(i => /app error x\d/.test(i.text))) actions += link('mhClearAppErrors()', 'Mark app errors as fixed');
-    if (items.some(i => /Overlapping sleep sessions/.test(i.text))) actions += link('checkSleepConflicts()', 'Resolve sleep conflict');
+    if (items.some(i => /Overlapping sleep sessions/.test(i.text))) actions += link('mhResolveSleepFromHealth()', 'Resolve sleep conflict');
+    if (items.some(i => /^(New )?Pipeline (warning|error)/.test(i.text))) actions += link('mhClearPipelineWarnings()', 'Dismiss pipeline warnings');
     el.innerHTML = `<div>${icon} ${esc(j.headline)}</div>` + (actions ? `<div>${actions}</div>` : '')
       + items.map(i => `<div style="font-size:11px;color:var(--text3);margin-top:4px;word-break:break-word;">${esc(cut(i.text))}</div>`).join('')
       + (items.some(i => String(i.text).length > 90) ? `<div><span onclick="var d=document.getElementById('selfCheckFull');d.style.display=d.style.display==='none'?'block':'none';" style="font-size:11px;color:var(--accent);cursor:pointer;display:inline-block;padding:6px 0;">Details ▾</span><div id="selfCheckFull" style="display:none;font-size:11px;color:var(--text3);word-break:break-word;">${items.map(i => '<div style="margin-top:4px;">' + esc(i.text) + '</div>').join('')}</div></div>` : '');

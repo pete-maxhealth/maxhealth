@@ -865,6 +865,16 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({'error': str(ex)}, 400)
             return
 
+        if path == '/clear-pipeline-warnings':
+            try:
+                os.makedirs(DATA_DIR, exist_ok=True)
+                with open(os.path.join(DATA_DIR, 'pipeline_dismissed.json'), 'w', encoding='utf-8') as f:
+                    json.dump({'before': datetime.now().strftime('%Y-%m-%d %H:%M:%S')}, f)
+                self.send_json({'status': 'ok'})
+            except Exception as ex:
+                self.send_json({'error': str(ex)}, 400)
+            return
+
         # ── POST /save-devices — custom devices, retired list, file patterns ──
         if path == '/save-devices':
             try:

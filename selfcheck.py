@@ -25,6 +25,7 @@ DATA = os.path.join(BASE, 'data')
 COMBINED = os.path.join(DATA, 'tables', 'combined.csv')
 PIPE_LOG = os.path.join(BASE, 'logs', 'pipeline.log')
 ERROR_LOG = os.path.join(DATA, 'error_log.json')
+PIPE_DISMISSED = os.path.join(DATA, 'pipeline_dismissed.json')   # {'before': 'YYYY-MM-DD HH:MM:SS'} set by 'Dismiss pipeline warnings'
 BACKUP_DIR = os.path.join(DATA, 'backup')
 OUT = os.path.join(DATA, 'selfcheck.json')
 LABELS = {'green': 'Nothing to worry about', 'amber': 'One to know', 'red': 'One to watch'}
@@ -79,6 +80,11 @@ def check_pipeline_log(items, days=7):
     except Exception:
         return info
     cutoff = datetime.now() - timedelta(days=days)
+    try:   # entries the person has dismissed stay hidden; the same problem on a later sync is logged again and shows again
+        dis = datetime.strptime(json.load(open(PIPE_DISMISSED, encoding='utf-8')).get('before', ''), '%Y-%m-%d %H:%M:%S')
+        cutoff = max(cutoff, dis)
+    except Exception:
+        pass
     errs, warns = {}, {}
     last24 = 0
     for ln in lines:
