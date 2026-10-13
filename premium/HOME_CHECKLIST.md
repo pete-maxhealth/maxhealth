@@ -48,4 +48,5 @@ Organisation licence tier: seats plus automatic branding on activation, a monthl
 5. Public docs: read the new Free vs Premium wording in the guide and story pages.
 
 ## H. Smaller items still open
+0. Decide on a low-key "keep it free" donation link (Ko-fi / Buy Me a Coffee / GitHub Sponsors): one link in Settings and on the why-free page, never in the logging flow or the demo. Check the tax treatment of the income first. Needs your account URL before I can add it.
 Garmin extractor verification; old HTML changelog gaps; GitHub Releases cleanup; multi-category meal picker.

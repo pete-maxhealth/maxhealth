@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1016 — Why Not iPhone
+
+The Premium page has a "What about iPhone?" section: why Premium is Android only, what an iPhone user still gets from the free app, how the manual route works, and why regular backups matter. The in-app Premium preview carries a short version of the same note. Test p132 checks it.
+
 ## v3.10.1015 — Premium On Trends Too
 
 Demo mode now also puts a locked, clearly labelled "ring vs watch, 7 days" sample chart at the top of Trends. Tapping it opens the same synced-day example. It disappears on exit. Test p132 covers it.

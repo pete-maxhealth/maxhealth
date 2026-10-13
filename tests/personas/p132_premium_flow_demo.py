@@ -19,6 +19,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if need not in t: f.add('BUG', f'flow missing "{need}"')
     ev("document.getElementById('mhPremiumFlow').remove(); mhPremiumPreview()"); page.wait_for_timeout(200)
     if 'See a day of synced data' not in ev("document.getElementById('mhPremiumPrev').textContent"): f.add('BUG', 'preview lacks the flow button')
+    if 'iPhone' not in ev("document.getElementById('mhPremiumPrev').textContent"): f.add('BUG', 'preview lacks the iPhone / backup note')
     ev("document.querySelector('#mhPremiumPrev button').click()"); page.wait_for_timeout(300)
     if not ev("!!document.getElementById('mhPremiumFlow')") or ev("!!document.getElementById('mhPremiumPrev')"): f.add('BUG', 'preview button did not swap to the flow')
     ev("document.getElementById('mhPremiumFlow').remove(); exitDemoMode()"); page.wait_for_timeout(1800)
