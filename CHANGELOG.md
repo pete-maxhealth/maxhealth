@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1017 — Ko-fi Card, Switched Off
+
+A "Help keep it free" card is wired into Settings → AI Provider, hidden until `MH_DONATE_URL` is set to the Ko-fi page. It is never shown in the demo or in the logging flow. Nothing visible changes until the URL is added.
+
 ## v3.10.1016 — Why Not iPhone
 
 The Premium page has a "What about iPhone?" section: why Premium is Android only, what an iPhone user still gets from the free app, how the manual route works, and why regular backups matter. The in-app Premium preview carries a short version of the same note. Test p132 checks it.
