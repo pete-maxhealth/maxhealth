@@ -7,20 +7,93 @@
 const PER_IP_DAILY_CAP = 80;
 const MONTHLY_CALL_CAP = 5000;
 
-export default {
+
+// ── Starter allowance and licence tokens (added v3.10.1011) ────────────────────
+// Every number here can be changed in one place. All of it is backwards compatible:
+// a request with no X-MH-Device header (an older copy of the app) is handled exactly as before.
+const STARTER_TOTAL   = 60;   // free AI calls for a brand-new device
+const STARTER_TOPUP   = 5;    // calls per day once the starter is used up
+const LICENCE_DAILY   = 200;  // calls per day for a valid licence token
+const ALLOWED_MODELS  = ['claude-sonnet-4-6', 'claude-haiku-4-5'];
+const MAX_TOKENS_CAP  = 2500;
+const CORS_HEADERS = {
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'POST, OPTIONS',
+	'Access-Control-Allow-Headers': 'Content-Type, X-MH-Device, X-MH-Licence',
+	'Access-Control-Expose-Headers': 'X-MH-Remaining, X-MH-Tier',
+};
+
+function b64uToBytes(s) {
+	s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
+	const bin = atob(s); const out = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+	return out;
+}
+
+// Licence token = base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, LICENCE_SECRET)).
+// Payload: { id: "<licence id>", tier: "premium"|"trial"|"founder", exp: <unix seconds> }.
+async function verifyLicence(token, env) {
+	try {
+		if (!token || !env.LICENCE_SECRET) return null;
+		const [p, sig] = token.split('.');
+		if (!p || !sig) return null;
+		const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.LICENCE_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+		const ok = await crypto.subtle.verify('HMAC', key, b64uToBytes(sig), new TextEncoder().encode(p));
+		if (!ok) return null;
+		const payload = JSON.parse(new TextDecoder().decode(b64uToBytes(p)));
+		if (!payload.id || (payload.exp && payload.exp < Date.now() / 1000)) return null;
+		return payload;
+	} catch (e) { return null; }
+}
+
+function limited(message, remaining) {
+	return new Response(JSON.stringify({ error: { message } }), {
+		status: 429,
+		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS, 'X-MH-Remaining': String(remaining) }
+	});
+}
+
+// Returns { block?: Response, remaining?: number, tier?: string }.
+async function allowance(request, env, weight) {
+	if (!env.RATE_LIMIT_KV) return {};
+	const today = new Date().toISOString().slice(0, 10);
+	const lic = await verifyLicence(request.headers.get('X-MH-Licence'), env);
+	if (lic) {
+		const k = `lic:${lic.id}:${today}`;
+		const used = parseInt((await env.RATE_LIMIT_KV.get(k)) || '0', 10);
+		if (used + weight > LICENCE_DAILY) return { block: limited(`Daily AI limit for your licence reached (${LICENCE_DAILY}). It resets tomorrow.`, 0) };
+		await env.RATE_LIMIT_KV.put(k, String(used + weight), { expirationTtl: 60 * 60 * 36 });
+		return { remaining: LICENCE_DAILY - used - weight, tier: lic.tier || 'premium' };
+	}
+	const dev = request.headers.get('X-MH-Device') || '';
+	if (!/^[A-Za-z0-9_-]{16,64}$/.test(dev)) return {};   // older app: existing per-IP caps still apply
+	const k = `starter:${dev}`;
+	let s; try { s = JSON.parse((await env.RATE_LIMIT_KV.get(k)) || 'null'); } catch (e) { s = null; }
+	if (!s) s = { used: 0, day: today, dayUsed: 0 };
+	if (s.day !== today) { s.day = today; s.dayUsed = 0; }
+	if (s.used + weight <= STARTER_TOTAL) {
+		s.used += weight;
+		await env.RATE_LIMIT_KV.put(k, JSON.stringify(s), { expirationTtl: 60 * 60 * 24 * 400 });
+		return { remaining: STARTER_TOTAL - s.used, tier: 'starter' };
+	}
+	if (s.dayUsed + weight <= STARTER_TOPUP) {
+		s.dayUsed += weight;
+		await env.RATE_LIMIT_KV.put(k, JSON.stringify(s), { expirationTtl: 60 * 60 * 24 * 400 });
+		return { remaining: STARTER_TOPUP - s.dayUsed, tier: 'topup' };
+	}
+	return { block: limited(`Your free starter AI allowance is used up and today's top-up is spent. It tops up a little each day, or you can add your own API key in Settings, or look at Premium.`, 0) };
+}
+
+const handler = {
 	async fetch(request, env) {
 		if (request.method === 'OPTIONS') {
 			return new Response(null, {
-				headers: {
-					'Access-Control-Allow-Origin': '*',
-					'Access-Control-Allow-Methods': 'POST, OPTIONS',
-					'Access-Control-Allow-Headers': 'Content-Type',
-				}
+				headers: CORS_HEADERS
 			});
 		}
 
 		if (request.method !== 'POST') {
-			return new Response('Method not allowed', { status: 405 });
+			return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
 		}
 
 		try {
@@ -204,8 +277,8 @@ export default {
 			// smaller model with a harder token cap than the app was actually
 			// designed around, no matter what any individual feature needed.
 			// Falls back to sensible defaults only if the client omits them.
-			const model = body.model || 'claude-sonnet-4-6';
-			const maxTokens = body.max_tokens || 800;
+			const model = ALLOWED_MODELS.includes(body.model) ? body.model : 'claude-sonnet-4-6';
+			const maxTokens = Math.min(parseInt(body.max_tokens, 10) || 800, MAX_TOKENS_CAP);
 
 			const anthropicBody = {
 				model,
@@ -215,7 +288,11 @@ export default {
 			};
 			// Forward tool use (e.g. web search) if the client requested it -
 			// previously dropped silently, same as model/max_tokens.
-			if (body.tools) anthropicBody.tools = body.tools;
+			if (Array.isArray(body.tools)) {
+				// Only the web-search tool is allowed, and capped at 3 searches a call.
+				const ws = body.tools.filter(x => x && x.type === 'web_search_20250305').slice(0, 1).map(x => ({ type: x.type, name: 'web_search', max_uses: 3 }));
+				if (ws.length) anthropicBody.tools = ws;
+			}
 
 			const response = await fetch('https://api.anthropic.com/v1/messages', {
 				method: 'POST',
@@ -245,5 +322,22 @@ export default {
 				}
 			});
 		}
+	}
+};
+
+export default {
+	async fetch(request, env) {
+		if (request.method !== 'POST') return handler.fetch(request, env);
+		let weight = 1;
+		try { const b = await request.clone().json(); if (b && b.multiCheck) weight = 3; } catch (e) {}
+		const a = await allowance(request, env, weight);
+		if (a.block) return a.block;
+		const res = await handler.fetch(request, env);
+		if (a.remaining === undefined) return res;
+		const out = new Response(res.body, res);
+		out.headers.set('X-MH-Remaining', String(a.remaining));
+		out.headers.set('X-MH-Tier', a.tier || '');
+		out.headers.set('Access-Control-Expose-Headers', 'X-MH-Remaining, X-MH-Tier');
+		return out;
 	}
 };

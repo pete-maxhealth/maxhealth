@@ -4440,6 +4440,7 @@
   <div class="dash-scroll" id="manageScroll" onscroll="trackScrollNav(this)">
 <div class="section-title" id="title-set-aiprovider" style="margin-top:8px;cursor:pointer;" onclick="toggleSection('set-aiprovider','set-aiprovider-wrap','set-aiprovider-icon')">AI Provider <span id="set-aiprovider-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
     <div id="set-aiprovider-wrap">
+      <div id="aiAllowanceLine" style="display:none;font-size:12.5px;color:var(--accent);margin:6px 0 10px;font-family:Space Mono,monospace;"></div>
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-label">Provider</div>
@@ -6284,7 +6285,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1010'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1011'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6313,6 +6314,47 @@ const APP_VERSION = 'v3.10.1010'; // single source of truth — bump here each r
     }
     return { content: [{ type: 'text', text: NOTE + ' In your own copy, this is where a personal answer based on your logged data would appear.' }] };
   }
+  // Starter allowance (v3.10.1011): requests to the shared proxy carry an anonymous device id (and a
+  // licence token, if one is set) so the Worker can count a free starter allowance per device. The
+  // headers are only added once the Worker has said it accepts them (a cached preflight probe), so an
+  // older deployed Worker is never broken by the extra headers.
+  const PROXY_RE = /maxhealth-ai\.[\w-]+\.workers\.dev/;
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function deviceId() {
+    let d = lsGet('mh_device_id');
+    if (!d || !/^[A-Za-z0-9_-]{16,64}$/.test(d)) {
+      const a = new Uint8Array(18); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.floor(Math.random() * 256));
+      d = 'd' + Array.from(a, b => b.toString(36).padStart(2, '0')).join('').slice(0, 30);
+      lsSet('mh_device_id', d);
+    }
+    return d;
+  }
+  function workerAcceptsHeaders(url) {
+    let c = null; try { c = JSON.parse(lsGet('mh_worker_hdrs') || 'null'); } catch (e) {}
+    const fresh = c && (Date.now() - c.t) < 6 * 3600 * 1000;
+    if (!fresh && !window._mhProbing) {
+      window._mhProbing = true;
+      // A GET carrying the custom header only resolves if the Worker's preflight allows it, so a
+      // resolved fetch (any status) means the Worker understands the allowance headers.
+      realFetch(url, { method: 'GET', headers: { 'X-MH-Device': deviceId() } }).then(() => {
+        lsSet('mh_worker_hdrs', JSON.stringify({ t: Date.now(), ok: true }));
+      }).catch(() => {
+        lsSet('mh_worker_hdrs', JSON.stringify({ t: Date.now(), ok: false }));
+      }).finally(() => { window._mhProbing = false; });
+    }
+    return !!(c && c.ok);
+  }
+  function noteAllowance(res) {
+    try {
+      const rem = res.headers.get('X-MH-Remaining'); if (rem === null) return;
+      const tier = res.headers.get('X-MH-Tier') || '';
+      lsSet('mh_ai_allowance', JSON.stringify({ remaining: parseInt(rem, 10), tier, t: Date.now() }));
+      if (typeof mhAllowanceRefresh === 'function') mhAllowanceRefresh();
+      const n = parseInt(rem, 10);
+      if (tier === 'starter' && (n === 10 || n === 3) && typeof showToast === 'function') showToast(n + ' free AI answers left. Add your own AI key in Settings, or see Premium, to keep going.');
+    } catch (e) {}
+  }
   window.fetch = function (input, init) {
     try {
       const url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -6320,9 +6362,16 @@ const APP_VERSION = 'v3.10.1010'; // single source of truth — bump here each r
         const body = init && init.body;
         return Promise.resolve(new Response(JSON.stringify(sampleFor(body)), { status: 200, headers: { 'Content-Type': 'application/json' } }));
       }
+      if (PROXY_RE.test(url) && init && String(init.method || '').toUpperCase() === 'POST' && workerAcceptsHeaders(url)) {
+        const h = new Headers(init.headers || {});
+        h.set('X-MH-Device', deviceId());
+        const lic = lsGet('mh_licence'); if (lic) h.set('X-MH-Licence', lic);
+        return realFetch(input, Object.assign({}, init, { headers: h })).then(res => { noteAllowance(res); return res; });
+      }
     } catch (e) {}
     return realFetch(input, init);
   };
+  window.mhDeviceId = deviceId;
   window.mhDemoSampleFor = sampleFor;
 })();
 
@@ -45261,6 +45310,18 @@ function startDemoMode(personaId) {
   updateDashboard();
   showToast(`Demo mode — exploring as ${persona.name}. Nothing here is saved.`);
 }
+
+// Shows how much of the free starter allowance is left (v3.10.1011).
+function mhAllowanceRefresh() {
+  const el = document.getElementById('aiAllowanceLine'); if (!el) return;
+  let a = null; try { a = JSON.parse(localStorage.getItem('mh_ai_allowance') || 'null'); } catch (e) {}
+  if (!a) { el.style.display = 'none'; return; }
+  const own = localStorage.getItem('mh_apikey');
+  el.style.display = own ? 'none' : 'block';
+  el.textContent = a.tier === 'starter' ? `Free AI answers left: ${a.remaining}` : a.tier === 'topup' ? `Starter allowance used. Today's top-up left: ${a.remaining}` : a.tier ? `AI answers left today: ${a.remaining}` : '';
+}
+
+window.addEventListener('load', function () { setTimeout(function () { try { mhAllowanceRefresh(); } catch (e) {} }, 800); });
 
 // Premium preview (v3.10.1010): what the paid version adds, shown inside a demo. Locked, sample data only.
 function mhPremiumPreview() {

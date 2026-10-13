@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1011 — Free Starter Allowance
+
+The shared AI proxy now gives each device a free starter allowance (60 answers), then a small daily top-up (5), with a visible "Free AI answers left" line in Settings, AI Provider and a gentle toast at 10 and 3 left. A valid signed licence token gets a higher daily limit. The Worker also now only accepts approved models, caps response size, and allows only the web-search tool, so a stranger cannot point it at an expensive model. The app only sends the new headers once the Worker has proved it understands them, so an older deployed Worker keeps working. **Deploy `worker.js` in the Cloudflare dashboard to switch the allowance on; add a `LICENCE_SECRET` secret when the licence service goes live.** Docs rewritten to the Free web app vs Premium model (guide, story, index, legal); the full DIY guide moved to `premium/`. Tests p126, p127, p128.
+
 ## v3.10.1010 — Demo Without Live AI
 
 Demo mode can no longer reach any AI provider or the shared proxy. Every AI request made during a demo is answered on the device with a clearly labelled "Sample answer" in the right shape (meal estimate, recipe, multi-check, chat, insight), so a demo cannot spend real tokens. A "See Premium" link in the demo banner opens a locked preview of what Premium adds, with the register-interest link. Tests p125.
