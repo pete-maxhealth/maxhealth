@@ -64,4 +64,4 @@ Works mechanically, but the app never calls it and several outputs are not trust
 - HRV "Excellent / Good / Fair / Low" uses fixed millisecond cut-offs; HRV is personal and age-dependent, so a label like that can mislead.
 - Sleep "quality" is graded from the wearable's deep-sleep percentage alone; regularity uses duration spread, not bedtime.
 - No tests. The app's own SPC early-warning checks already cover the useful ground.
-v2 status: server side done and tested. Still to do before promoting: a "Your routine" card in the app (Premium) and a labelled demo sample.
+v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p135, p136). Still wanted: a real-phone check with a few days of real data.

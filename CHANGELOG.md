@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1020 — Your Routine
+
+`pattern_detector.py` was rewritten: everything is compared with your own baseline (no Excellent/Good/Low scales, no "regular exercise" label), meal times come from the whole logged history, restored-from-backup placeholders are ignored, midnight bedtimes average correctly, and each signal says how many days it still needs. Trends gets a "Your routine" card (Premium reads it from the phone's server; the demo shows a labelled sample; nothing shows on the free web app). Tests p135 and p136.
+
 ## v3.10.1019 — Premium Page, Sharper
 
 The Premium page and in-app preview now lead with what Premium does every day: sync that feeds the early-warning checks, missing-day and source tagging, dated backups with restore, and AI included with no key to set up. The comparison table gained an AI row. Android-only and the iPhone route were added earlier (v3.10.1016).

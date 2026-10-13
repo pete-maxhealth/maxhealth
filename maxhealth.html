@@ -6295,7 +6295,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1019'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1020'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -45330,6 +45330,7 @@ function startDemoMode(personaId) {
   document.getElementById('onboardingOverlay').style.display='none';
   document.getElementById('demoBanner').style.display='block';
   setTimeout(function () { try { mhDemoPremiumCard(); } catch (e) {} }, 700);
+  setTimeout(function () { try { mhRoutineCard(); } catch (e) {} }, 900);
   closeDemoPersonaPicker();
   updateDashboard();
   showToast(`Demo mode — exploring as ${persona.name}. Nothing here is saved.`);
@@ -45412,6 +45413,7 @@ function mhPremiumPreview() {
     ${row('⌚','Automatic wearable sync','Steps, sleep, heart rate and HRV flow in from Health Connect and your ring or watch, with no manual entry, so the early-warning checks have the data they need.')}
     ${row('🏅','Device ranking','When two devices disagree, the app picks the more trustworthy one for each measure, and tells you which.')}
     ${row('🩺','Self-checks','The app checks its own data pipeline every day and tells you in plain words if something stopped working.')}
+    ${row('🧭','Your routine','Your usual meal times, sleep, steps and HRV, and when this week differs, compared only with your own history.')}
     ${row('✨','AI included','A much larger daily AI allowance comes with your licence, with no key to set up.')}
     ${row('🔄','Auto-update and setup help','Updates arrive by themselves, and setup help is included.')}
     ${row('📱','Your data stays on your phone','Nothing leaves your device unless you choose to share it.')}
@@ -45444,6 +45446,56 @@ function mhDemoPremiumCard() {
     th.insertBefore(t, th.firstChild);
   }
 }
+
+// "Your routine" card on Trends (v3.10.1020). Premium: reads /pattern-signals from the phone's local server.
+// Demo: a static, clearly labelled sample. Free web with no server: nothing is shown.
+function mhRoutineLines(s) {
+  const L = [], mw = s.meal_windows || {}, sl = s.sleep_circadian || {}, ac = s.activity_pattern || {}, hv = s.hrv_baseline || {};
+  const mt = Object.keys(mw).map(k => k + ' ' + mw[k]);
+  if (mt.length) L.push(['🍽', 'Your usual meal times', mt.join(' · ')]);
+  if (sl.duration && sl.status == null) L.push(['😴', 'Your usual sleep', sl.duration + (sl.typical_bedtime ? ', bed about ' + sl.typical_bedtime + (sl.bedtime_spread ? ' (' + sl.bedtime_spread + ')' : '') : '') + (sl.regularity ? ', ' + sl.regularity : '') + (sl.recent_vs_usual ? '. Last 3 nights: ' + sl.recent_vs_usual : '')]);
+  else if (sl.status) L.push(['😴', 'Sleep', 'Still learning, ' + sl.status]);
+  if (ac.usual_steps && ac.status == null) L.push(['🚶', 'Your usual steps', ac.usual_steps + ' a day' + (ac.this_week_vs_usual ? '. This week: ' + ac.this_week_vs_usual : '')]);
+  else if (ac.status) L.push(['🚶', 'Steps', 'Still learning, ' + ac.status]);
+  if (hv.baseline_hrv) L.push(['💓', 'HRV against your own baseline', 'Latest ' + hv.latest_hrv + ' is ' + hv.status + ' (usual ' + hv.usual_range + ')']);
+  else if (hv.status) L.push(['💓', 'HRV', 'Latest ' + (hv.latest_hrv || '') + '. ' + hv.status]);
+  return L;
+}
+function mhRoutineCard(sample) {
+  const th = document.getElementById('view-trends'); if (!th) return;
+  const demo = !!localStorage.getItem('mh_demo_active');
+  const ex = document.getElementById('mhRoutineCard');
+  if (ex && !sample) ex.remove();
+  const draw = (lines, status, isSample) => {
+    if (!lines.length && !status) return;
+    const c = document.createElement('div'); c.id = 'mhRoutineCard'; c.className = 'card-unit mh-nominh';
+    c.style.cssText = 'margin:10px 0;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);';
+    const esc = x => String(x).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    c.innerHTML = '<div style="font-weight:700;font-size:13.5px;color:var(--text);">🧭 Your routine <span style="font-size:10px;font-weight:700;color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:1px 6px;">' + (isSample ? '🔒 Premium' : 'from your own history') + '</span></div>'
+      + (isSample ? '<div style="font-size:12px;color:var(--yellow);font-weight:700;margin:4px 0;">EXAMPLE ONLY: sample numbers.</div>' : '')
+      + lines.map(l => '<div style="padding:6px 0;border-top:1px solid var(--border);font-size:12.5px;line-height:1.45;"><span style="color:var(--text3);">' + l[0] + ' ' + esc(l[1]) + '</span><br><span style="color:var(--text);">' + esc(l[2]) + '</span></div>').join('')
+      + (status ? '<div style="font-size:12px;color:var(--text3);margin-top:6px;">' + esc(status) + '</div>' : '');
+    const old = document.getElementById('mhRoutineCard'); if (old) old.remove();
+    const after = document.getElementById('demoPremiumTrends');
+    if (after && after.nextSibling) th.insertBefore(c, after.nextSibling); else th.insertBefore(c, th.firstChild);
+  };
+  if (demo) {
+    if (document.getElementById('mhRoutineCard')) return;
+    draw(mhRoutineLines({ meal_windows: { Breakfast: '07:40-08:30', Lunch: '12:45-13:30', Dinner: '18:30-19:30' }, sleep_circadian: { duration: '7h05m', typical_bedtime: '23:10', bedtime_spread: '±18 min', regularity: 'fairly regular', recent_vs_usual: 'in line with your usual' }, activity_pattern: { usual_steps: '7,400', this_week_vs_usual: 'in line with your usual' }, hrv_baseline: { baseline_hrv: '48ms', latest_hrv: '51ms', status: 'within your usual range', usual_range: '42-54ms' } }), 'Compared with your own history. A real one is built from your meals and devices.', true);
+    return;
+  }
+  if (typeof MH_SERVER === 'undefined' || !MH_SERVER) return;
+  fetch(MH_SERVER + '/pattern-signals', { signal: AbortSignal.timeout(4000) }).then(r => r.ok ? r.json() : null).then(s => {
+    if (!s || s.error) return;
+    draw(mhRoutineLines(s), s.status, false);
+  }).catch(() => {});
+}
+(function () {
+  try {
+    const orig = window.switchTab;
+    if (typeof orig === 'function') window.switchTab = function (name) { const r = orig.apply(this, arguments); if (name === 'insights') setTimeout(() => { try { mhRoutineCard(); } catch (e) {} }, 500); return r; };
+  } catch (e) {}
+})();
 
 // A static, clearly labelled example of the Premium data flow (v3.10.1012).
 function mhPremiumFlow() {
@@ -45553,7 +45605,7 @@ function exitDemoMode() {
     _realState=null;
   }
   document.getElementById('demoBanner').style.display='none';
-  try { const c = document.getElementById('demoPremiumCard'); if (c) c.remove(); } catch (e) {} try { const c2 = document.getElementById('demoPremiumTrends'); if (c2) c2.remove(); } catch (e) {}
+  try { const c = document.getElementById('demoPremiumCard'); if (c) c.remove(); } catch (e) {} try { const c2 = document.getElementById('demoPremiumTrends'); if (c2) c2.remove(); } catch (e) {} try { const c3 = document.getElementById('mhRoutineCard'); if (c3) c3.remove(); } catch (e) {}
   updateDashboard();
   // Re-show onboarding if user hasn't completed it
   if (!state.onboarded) {
