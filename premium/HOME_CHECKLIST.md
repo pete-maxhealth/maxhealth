@@ -48,5 +48,5 @@ Organisation licence tier: seats plus automatic branding on activation, a monthl
 5. Public docs: read the new Free vs Premium wording in the guide and story pages.
 
 ## H. Smaller items still open
-0. Ko-fi is live (ko-fi.com/maxedhealth, wired in v3.10.1018). Decide whether the older JustGiving "keep the project running" button on `docs/why-free.html` stays, since it now overlaps. Check the tax treatment of tips.
+0. Ko-fi is live (ko-fi.com/maxedhealth). The old JustGiving button is removed from `docs/why-free.html`; its header photo is still hosted on images.justgiving.com, so copy it into the repo before that page is ever taken down. Check the tax treatment of tips.
 Garmin extractor verification; old HTML changelog gaps; GitHub Releases cleanup; multi-category meal picker.

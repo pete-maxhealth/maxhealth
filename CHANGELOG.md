@@ -6,9 +6,9 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
-## v3.10.1018 — Ko-fi Is Live
+## v3.10.1018 — Ko-fi Is Live (JustGiving button removed)
 
-`MH_DONATE_URL` now points at ko-fi.com/maxedhealth, so the "Help keep it free" card shows in Settings → AI Provider (never in the demo). The why-free page has a matching Ko-fi button.
+`MH_DONATE_URL` now points at ko-fi.com/maxedhealth, so the "Help keep it free" card shows in Settings → AI Provider (never in the demo). The why-free page has a matching Ko-fi button, and the old JustGiving button is gone (Headcase Cancer Trust stays).
 
 ## v3.10.1017 — Ko-fi Card, Switched Off
 
