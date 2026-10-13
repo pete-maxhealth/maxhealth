@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1018 — Ko-fi Is Live
+
+`MH_DONATE_URL` now points at ko-fi.com/maxedhealth, so the "Help keep it free" card shows in Settings → AI Provider (never in the demo). The why-free page has a matching Ko-fi button.
+
 ## v3.10.1017 — Ko-fi Card, Switched Off
 
 A "Help keep it free" card is wired into Settings → AI Provider, hidden until `MH_DONATE_URL` is set to the Ko-fi page. It is never shown in the demo or in the logging flow. Nothing visible changes until the URL is added.

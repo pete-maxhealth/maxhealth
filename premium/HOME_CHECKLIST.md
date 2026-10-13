@@ -48,5 +48,5 @@ Organisation licence tier: seats plus automatic branding on activation, a monthl
 5. Public docs: read the new Free vs Premium wording in the guide and story pages.
 
 ## H. Smaller items still open
-0. Ko-fi chosen. Create the page, then set `MH_DONATE_URL` in `maxhealth.html` (one line; the Settings card is already built and hidden) and add a link on `docs/why-free.html`. Keep it separate from the existing Headcase Cancer Trust link there. Check the tax treatment of tips first.
+0. Ko-fi is live (ko-fi.com/maxedhealth, wired in v3.10.1018). Decide whether the older JustGiving "keep the project running" button on `docs/why-free.html` stays, since it now overlaps. Check the tax treatment of tips.
 Garmin extractor verification; old HTML changelog gaps; GitHub Releases cleanup; multi-category meal picker.

@@ -7,9 +7,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ctx = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 800}, service_workers='block'); page = ctx.new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
-    if page.evaluate("document.getElementById('mhDonateCard').style.display") != 'none': f.add('BUG', 'donate card visible with no URL')
+    if 'ko-fi.com/maxedhealth' not in page.evaluate("document.getElementById('mhDonateCard').innerHTML"): f.add('BUG', 'Ko-fi card not wired to the real page')
     def patch(route):
-        r = route.fetch(); b = r.text().replace("const MH_DONATE_URL = '';", "const MH_DONATE_URL = 'https://ko-fi.com/example';")
+        r = route.fetch(); b = r.text().replace("const MH_DONATE_URL = 'https://ko-fi.com/maxedhealth';", "const MH_DONATE_URL = 'https://ko-fi.com/example';")
         route.fulfill(response=r, body=b)
     page.route('**/maxhealth.html*', patch); page.route('http://localhost:5757/', patch)
     page.goto('http://localhost:5757/'); page.wait_for_timeout(2500)
