@@ -204,7 +204,10 @@ class PatternDetector:
             if label in windows:
                 m = sorted(windows[label])
                 lo, hi = m[len(m) // 10], m[-1 - len(m) // 10]      # trim the extremes
-                out[label] = f"{_fmt(lo)}-{_fmt(hi)}"
+                if hi - lo > 240:     # a window wider than 4h is not a routine, so say so
+                    out[label] = f"varies a lot, often about {_fmt(statistics.median(m))}"
+                else:
+                    out[label] = f"{_fmt(lo)}-{_fmt(hi)}"
         return out
 
     def meal_timing_summary(self) -> Dict[str, str]:
