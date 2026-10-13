@@ -1,3 +1,5 @@
+**Home checklist (Premium, licensing, GitHub, Android Studio, prices): see `premium/HOME_CHECKLIST.md`.**
+
 # MaxedHealth backlog (bookmarked 11 Oct 2026)
 
 Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md).
