@@ -17,7 +17,7 @@ Last updated 13 Oct 2026, app v3.10.1011. Order matters where marked.
 6. ICO registration fee question (you are collecting email addresses).
 
 ## C. Making Premium really Premium (needs the laptop and both phones)
-1. Phone side: make `mh_autoupdate.sh` and the launcher fetch `premium_payload.zip` with the stored licence token (`action: download`) instead of pulling from GitHub. The server needs a small endpoint to receive the token from the app. Test on Pete's phone first, then Jill's.
+1. Phone side (then un-hide the trial button `#licenceTrialBtn`): make `mh_autoupdate.sh` and the launcher fetch `premium_payload.zip` with the stored licence token (`action: download`) instead of pulling from GitHub. The server needs a small endpoint to receive the token from the app. Test on Pete's phone first, then Jill's.
 2. Build the payload: `python3 tools/split_premium.py --out /tmp/split`; put `premium_payload.zip` in `maxedhealth_licence/`.
 3. Only then: create the private repo (full history), recreate the public repo from `split/free/` (new history, same name). Old commits stay visible in a public repo's history unless it is recreated.
 4. Remove the launcher APK from public GitHub Releases. Keep `debug.keystore` and a backup of the 2 Oct APK safe offline first.

@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1014 — Trial Button Held Back
+
+The "Start 14-day trial" button is hidden for now, because a trial only raises AI limits until the phone-side Premium download exists. The function and the licence service are unchanged; un-hide `#licenceTrialBtn` when that download ships (home checklist, section C).
+
 ## v3.10.1013 — Four More Languages
 
 Portuguese (Brazil), Italian, Polish and Dutch join English, Spanish, German, French and Turkish, each with its flag, in the onboarding and Settings pickers. They cover about 1,370 to 1,390 of the app's strings, keep every {n} placeholder, and use the right speech language for voice entry. They are machine translations and need review by native speakers, which is on the home checklist. Test p133 checks files, placeholders, the nine-language picker and switching.
