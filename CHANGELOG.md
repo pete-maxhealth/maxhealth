@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1013 — Four More Languages
+
+Portuguese (Brazil), Italian, Polish and Dutch join English, Spanish, German, French and Turkish, each with its flag, in the onboarding and Settings pickers. They cover about 1,370 to 1,390 of the app's strings, keep every {n} placeholder, and use the right speech language for voice entry. They are machine translations and need review by native speakers, which is on the home checklist. Test p133 checks files, placeholders, the nine-language picker and switching.
+
 ## v3.10.1012 — Show The Sync
 
 The demo now has a Premium card at the top of Today and a "See a day of synced data" example: a clearly labelled, static day showing Health Connect snapshots, ring and watch end-of-day figures, the device-ranking decision with the sleep difference flagged, and the daily self-check. Removed on exit. Test p132.

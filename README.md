@@ -4,7 +4,7 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.1012
+**Version:** v3.10.1013
 
 ---
 
@@ -17,7 +17,7 @@
 - **Tags as before / during / after anchors** — any day tag (or tag category such as "Any Exercise") can be analysed like a treatment, and tags used on three or more days become pills on the Compare Metrics graph. Tag manager to rename, merge or remove. Report profiles can be about a treatment or a tag.
 - **"How are you today?" scoring** — 1 to 5 per symptom, kept on no-food days, back-fillable for the last 14 days, and fed into Compare Metrics, before/after, reports and the AI analyst.
 - **Meal planner** — "I'm planning on eating 2 eggs at 1pm": a separate plan with eaten + planned totals against your targets (including fat), a "Did you eat this?" prompt at the time, optional auto-log, and a fasting heads-up if you track fasting.
-- **Five languages** — English, Spanish, German, French and Turkish, with flags, a picker in onboarding and Settings, and a one-tap way back to English. **✨ Translate this screen with AI** fills in anything not yet covered, with your consent, and remembers the answers on your phone. Machine-assisted translations, not clinician-reviewed.
+- **Nine languages** — English, Spanish, German, French, Turkish, Portuguese (Brazil), Italian, Polish and Dutch, with flags, a picker in onboarding and Settings, and a one-tap way back to English. **✨ Translate this screen with AI** fills in anything not yet covered, with your consent, and remembers the answers on your phone. Machine-assisted translations, not clinician-reviewed.
 - **One Filter toolbar everywhere** — Filter, Open all, Close all, Default in the same place on every screen; every card can be hidden, folded and reordered; first-run "what would you like to start with?".
 - **Seventeen demo personas**, six of them new cohorts with tag data, so every feature can be explored without entering anything.
 

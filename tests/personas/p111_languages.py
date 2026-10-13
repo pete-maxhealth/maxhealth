@@ -5,7 +5,7 @@ from harness import *
 from playwright.sync_api import sync_playwright
 f = Findings()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-for c in ['es', 'de', 'fr', 'tr']:
+for c in ['es', 'de', 'fr', 'tr', 'pt', 'it', 'pl', 'nl']:
     p = os.path.join(ROOT, 'lang', c + '.json')
     if not os.path.exists(p): f.add('BUG', f'missing lang/{c}.json'); continue
     d = json.load(open(p, encoding='utf-8'))
@@ -30,7 +30,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'today' not in ev("document.getElementById('maintab-today').textContent").lower(): f.add('BUG', 'English tab changed')
     if ev("!!document.getElementById('mhLangFab')"): f.add('BUG', 'language button in English mode')
     if not ev("!!document.querySelector('#mhLangHdr img')"): f.add('BUG', 'header flag missing')
-    if ev("document.querySelectorAll('#mhLangSel img').length") != 5: f.add('BUG', 'settings flag buttons missing')
+    if ev("document.querySelectorAll('#mhLangSel img').length") != 9: f.add('BUG', 'settings flag buttons missing')
     if not ev("!!document.getElementById('mhLangSel')"): f.add('BUG', 'settings language select missing')
     if ev("mhSpeechLang()") != 'en-GB' or ev("mhLangAINote()") != '': f.add('BUG', 'English speech/AI note')
     # numbered sentences (patterns)

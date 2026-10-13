@@ -42,7 +42,7 @@ Organisation licence tier: seats plus automatic branding on activation, a monthl
 
 ## G. Review needed from real people
 1. Clinician review of the 27 starter packs and the 11 newest demo personas (their lab values and stories).
-2. Native-speaker review of each language pack.
+2. Native-speaker review of each language pack (Spanish, German, French, Turkish, and the newer Portuguese-BR, Italian, Polish, Dutch). All are machine translations; corrections go in `lang/<code>.json` as English → translation.
 3. Decide whether any condition should get real formulas (heart: sodium and saturated fat; PCOS: lower-carb defaults). Only with solid evidence, clearly labelled.
 4. Read the 28-card demo picker on a real phone; decide if it needs search or groups.
 5. Public docs: read the new Free vs Premium wording in the guide and story pages.
