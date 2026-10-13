@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1024 — Language Gets Its Own Section
+
+Language was tucked inside Profile. It is now its own Settings section, folds like the others, appears in the Manage filter chips and in settings search. Nothing about the nine languages changed. Test p139.
+
 ## v3.10.1023 — Dismiss, And Say So
 
 System health gets a "Dismiss pipeline warnings" link. The warnings come from the last seven days of the pipeline log, so they used to stay for a week even after the cause was fixed. Dismissing hides what was logged so far; the same problem found again on a later sync shows again, so nothing real is hidden. "Resolve sleep conflict" now tells you when there is no open conflict (the warning is then just old log text) and when the local server cannot be reached or needs updating, instead of doing nothing. Needs the new server.py on the phone, which the normal update brings. Test p138.
