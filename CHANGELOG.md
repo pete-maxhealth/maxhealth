@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1010 — Demo Without Live AI
+
+Demo mode can no longer reach any AI provider or the shared proxy. Every AI request made during a demo is answered on the device with a clearly labelled "Sample answer" in the right shape (meal estimate, recipe, multi-check, chat, insight), so a demo cannot spend real tokens. A "See Premium" link in the demo banner opens a locked preview of what Premium adds, with the register-interest link. Tests p125.
+
 ## v3.10.1009 — A Demo For Every Pack
 
 Eleven new demo personas so every one of the 27 starter packs has someone to try: type 3c diabetes, heart health, Crohn's and colitis, arthritis, fibromyalgia, long COVID, PCOS, thyroid, cancer treatment, anxiety and low mood, and sleep problems. 28 personas in all. Test p124 checks pack coverage.

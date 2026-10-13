@@ -2482,6 +2482,7 @@
 </div>
 <div id="demoBanner" style="display:none;background:rgba(245,197,66,0.12);border-bottom:1px solid rgba(245,197,66,0.35);padding:9px 16px;text-align:center;font-size:12.5px;font-weight:600;color:var(--yellow);font-family:Space Mono,monospace;letter-spacing:0.03em;">
   👁 DEMO MODE — sample data only, nothing is saved &nbsp;·&nbsp; <span style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="exitDemoMode()">Exit demo →</span>
+  &nbsp;·&nbsp; <span id="demoPremiumLink" style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="mhPremiumPreview()">See Premium →</span>
 </div>
 <div class="tab-row" id="mainTabRow">
   <div class="tab active" id="maintab-today"   onclick="switchTab('today',this)">Today</div>
@@ -6283,7 +6284,47 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1009'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1010'; // single source of truth — bump here each release
+
+// ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
+// While a demo is running, any request to the shared proxy or a provider API is answered
+// here with a clearly labelled sample, so a demo can never spend real tokens or leak a key.
+(function () {
+  const realFetch = window.fetch.bind(window);
+  const AI_HOSTS = /maxhealth-ai\.[\w-]+\.workers\.dev|api\.anthropic\.com|api\.openai\.com|generativelanguage\.googleapis\.com/;
+  const NOTE = 'Sample answer: live AI is switched off in demo mode.';
+  function demoOn() { try { return !!localStorage.getItem('mh_demo_active'); } catch (e) { return false; } }
+  function sampleFor(body) {
+    const t = typeof body === 'string' ? body : '';
+    if (/multiCheck/.test(t)) {
+      const txt = 'KCAL: 420\nPROTEIN: 30\nFAT: 22\nCARBS: 25\nNOTE: ' + NOTE;
+      return { claude: { ok: true, text: txt }, gemini: { ok: true, text: txt }, openai: { ok: true, text: txt } };
+    }
+    if (/precise nutrition assistant/i.test(t)) {
+      return { content: [{ type: 'text', text: JSON.stringify({ type: 'food', items: [
+        { name: 'Sample grilled chicken', amount: '150g', kcal: 248, protein: 46, fat: 5.4, carbs: 0 },
+        { name: 'Sample mixed salad', amount: '120g', kcal: 30, protein: 1.5, fat: 0.4, carbs: 5 }
+      ], message: NOTE + ' Real estimates come from your own AI key, or Premium.' }) }] };
+    }
+    if (/recipe assistant/i.test(t)) {
+      return { content: [{ type: 'text', text: JSON.stringify({ title: 'Sample: lemon chicken traybake', intro: NOTE,
+        servings: 2, ingredients: [ { name: 'chicken thighs', amount: 400, unit: 'g' }, { name: 'lemon', amount: 1, unit: 'whole' }, { name: 'garlic', amount: 2, unit: 'clove' }, { name: 'olive oil', amount: 1, unit: 'tbsp' } ],
+        method: ['Heat the oven to 200C.', 'Toss everything in a tray.', 'Roast for 35 minutes.'] }) }] };
+    }
+    return { content: [{ type: 'text', text: NOTE + ' In your own copy, this is where a personal answer based on your logged data would appear.' }] };
+  }
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (demoOn() && AI_HOSTS.test(url)) {
+        const body = init && init.body;
+        return Promise.resolve(new Response(JSON.stringify(sampleFor(body)), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      }
+    } catch (e) {}
+    return realFetch(input, init);
+  };
+  window.mhDemoSampleFor = sampleFor;
+})();
 
 // ── Error capture (01/10/26) ─────────────────────────────────────────────────
 // Records uncaught JS errors and unhandled promise rejections: kept locally (mh_error_log) and
@@ -45219,6 +45260,25 @@ function startDemoMode(personaId) {
   closeDemoPersonaPicker();
   updateDashboard();
   showToast(`Demo mode — exploring as ${persona.name}. Nothing here is saved.`);
+}
+
+// Premium preview (v3.10.1010): what the paid version adds, shown inside a demo. Locked, sample data only.
+function mhPremiumPreview() {
+  const old = document.getElementById('mhPremiumPrev'); if (old) old.remove();
+  const row = (ic, t, d) => `<div style="display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--border);"><div style="font-size:22px;width:30px;text-align:center;">${ic}</div><div><div style="font-weight:700;font-size:13.5px;color:var(--text);">${t} <span style="font-size:10px;font-weight:700;color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:1px 6px;">🔒 Premium</span></div><div style="font-size:12.5px;color:var(--text3);line-height:1.45;margin-top:2px;">${d}</div></div></div>`;
+  const o = document.createElement('div'); o.id = 'mhPremiumPrev';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  o.innerHTML = `<div style="background:var(--surface);border-radius:var(--radius,12px);padding:20px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto;">
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--text);margin-bottom:4px;">⭐ What Premium adds</div>
+    <div style="font-size:12.5px;color:var(--text3);margin-bottom:10px;line-height:1.5;">The free web app does everything you've just seen. Premium runs on your Android phone and takes the typing out of it. These are previews only.</div>
+    ${row('⌚','Automatic wearable sync','Steps, sleep, heart rate and HRV flow in from Health Connect and your ring or watch, with no manual entry.')}
+    ${row('🏅','Device ranking','When two devices disagree, the app picks the more trustworthy one for each measure, and tells you which.')}
+    ${row('🩺','Self-checks','The app checks its own data pipeline every day and tells you in plain words if something stopped working.')}
+    ${row('🔄','Auto-update and setup help','Updates arrive by themselves, and setup help is included.')}
+    ${row('📱','Your data stays on your phone','Nothing leaves your device unless you choose to share it.')}
+    <div style="display:flex;gap:8px;margin-top:14px;"><a href="${MH_PREMIUM_URL}" target="_blank" rel="noopener" style="flex:1;text-align:center;text-decoration:none;padding:10px;border-radius:12px;background:var(--accent);color:#000;font-weight:700;font-size:13px;">Register interest</a><button class="btn" style="flex:1;" onclick="document.getElementById('mhPremiumPrev').remove()">Close</button></div>
+  </div>`;
+  document.body.appendChild(o);
 }
 
 function exitDemoMode() {
