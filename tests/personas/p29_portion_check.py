@@ -11,7 +11,7 @@ with fresh_server() as root, sync_playwright() as pw:
     def route(r):
         u = r.request.url
         if 'workers.dev' in u:
-            bodies.append(r.request.post_data or '')
+            if r.request.method == 'POST': bodies.append(r.request.post_data or '')
             t = lambda g: f"KCAL: 600\nPROTEIN: 30g\nFAT: 30g\nCARBS: 50g\nPORTION_G: {g}\nPORTION_KCAL: {g*2}"
             r.fulfill(status=200, content_type='application/json', headers={'access-control-allow-origin': '*'},
                       body=json.dumps({'claude': {'ok': True, 'text': t(300)}, 'gemini': {'ok': True, 'text': t(450)}, 'openai': {'ok': True, 'text': t(620)}}))
