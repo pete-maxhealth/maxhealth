@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1036
+- Fixed: folded Settings sections re-opened themselves after every reload (body shown, label still saying 'show'). The section-ordering code un-hid every section it was not hiding, which also re-opened folded bodies. It now only un-hides what it hid itself, and keeps a folded section folded when you hide then restore it. Test p146; p136 adjusted because the mover correctly skips cards with no data.
+
 ## v3.10.1035
 - New demo persona Barry: the same PEMF back-pain story as Bill (weekly sessions, improving pain scores, Treatment Sessions before/after) with the app's normal header and no company branding, so it is safe for public screenshots and video. Bill is unchanged for the PEMFiT pitch. Test p145.
 

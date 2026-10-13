@@ -29,9 +29,13 @@ with fresh_server() as root, sync_playwright() as pw:
     if o.index('trends-routine') != o.index('trends-patterns') - 1: f.add('BUG', f'routine not straight before Patterns by default {o}')
     if 'mcRoutine' in ev("getTrendCardsOrder()"): f.add('BUG', 'routine still in the metric-card order')
     if page.locator('#title-trends-routine .reorder-pos-badge').count() != 1: f.add('BUG', 'routine title lacks the same reorder controls as Patterns')
+    # cards with no data hide themselves and the mover skips unseen cards; show the neighbour so the move is visible
+    ev("genericUnitFor('trends','trends-bodycomp').forEach(e=>e.style.display='')")
     ev("moveGenericSection('trends','trends-routine','up')"); page.wait_for_timeout(200)
+    # a card with no data hides itself, and the mover steps over cards you cannot see, so 'up' may skip one
     if gi().index('trends-routine') != o.index('trends-routine') - 1: f.add('BUG', 'move up did not reorder')
     ev("moveGenericSection('trends','trends-routine','down')"); page.wait_for_timeout(200)
+    if gi().index('trends-routine') != o.index('trends-routine'): f.add('BUG', 'move down did not return to the start')
     ev("mhTrendsGroupSet('body')"); page.wait_for_timeout(300)
     if ev("document.getElementById('mcRoutine').offsetParent !== null"): f.add('BUG', 'Body filter still shows the routine card')
     ev("mhTrendsGroupSet('patterns')"); page.wait_for_timeout(300)
