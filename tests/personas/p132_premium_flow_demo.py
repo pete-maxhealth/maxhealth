@@ -12,6 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'Premium card present outside demo')
     ev("startDemoMode(DEMO_PERSONAS[0].id)"); page.wait_for_timeout(2500)
     if not ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'no Premium card in the demo')
+    if not ev("!!document.getElementById('demoPremiumTrends')"): f.add('BUG', 'no Premium sample chart on Trends in the demo')
     ev("document.getElementById('demoPremiumCard').click()"); page.wait_for_timeout(300)
     t = ev("(document.getElementById('mhPremiumFlow')||{}).textContent||''")
     for need in ('EXAMPLE ONLY', 'Health Connect', 'RingConn', 'Zepp', 'Device ranking', 'self-check'):
@@ -21,6 +22,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("document.querySelector('#mhPremiumPrev button').click()"); page.wait_for_timeout(300)
     if not ev("!!document.getElementById('mhPremiumFlow')") or ev("!!document.getElementById('mhPremiumPrev')"): f.add('BUG', 'preview button did not swap to the flow')
     ev("document.getElementById('mhPremiumFlow').remove(); exitDemoMode()"); page.wait_for_timeout(1800)
+    if ev("!!document.getElementById('demoPremiumTrends')"): f.add('BUG', 'Trends sample left behind after exiting the demo')
     if ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'Premium card left behind after exiting the demo')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
