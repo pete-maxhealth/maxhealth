@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1019 — Premium Page, Sharper
+
+The Premium page and in-app preview now lead with what Premium does every day: sync that feeds the early-warning checks, missing-day and source tagging, dated backups with restore, and AI included with no key to set up. The comparison table gained an AI row. Android-only and the iPhone route were added earlier (v3.10.1016).
+
 ## v3.10.1018 — Ko-fi Is Live (JustGiving button removed)
 
 `MH_DONATE_URL` now points at ko-fi.com/maxedhealth, so the "Help keep it free" card shows in Settings → AI Provider (never in the demo). The why-free page has a matching Ko-fi button, and the old JustGiving button is gone (Headcase Cancer Trust stays).
