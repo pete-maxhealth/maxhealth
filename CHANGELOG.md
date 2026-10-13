@@ -6,6 +6,10 @@
 
 README has a "Newest" block for v3.10.981-998, the How It Works guide gained "More than one condition? Tags? Before and after.", and the premium comparison table lists starter packs and the five languages. BACKLOG holds the written launcher plan (backup incl. `debug.keystore`, step-doubling fix, moving the APK off public GitHub).
 
+## v3.10.1022 — System Health You Can Tap
+
+Settings → Manage → Data → System health squeezed long pipeline messages into a narrow right-hand column, which pushed "Mark app errors as fixed" out of reach. The row now stacks with full-width text, the action links sit directly under the headline, each long message is cut to one line with a "Details ▾" toggle for the whole text, and a sleep-conflict warning gets a "Resolve sleep conflict" link. Test p137.
+
 ## v3.10.1021 — Routine Card Joins The Layout
 
 "Your routine" is now a proper Trends card: it has the ▲ ▼ reorder and 👁 hide buttons, folds with Close all, belongs to the Patterns filter, restores from the Hidden strip, and is cleared by Default. It sits at the top of the saved order (existing saved orders are migrated), and shows in the 7 Days, 30 Days, All and Custom views. Test p136 covers each control.
