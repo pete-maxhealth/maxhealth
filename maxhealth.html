@@ -6322,7 +6322,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1041'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1042'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6348,6 +6348,30 @@ const APP_VERSION = 'v3.10.1041'; // single source of truth — bump here each r
       return { content: [{ type: 'text', text: JSON.stringify({ title: 'Sample: lemon chicken traybake', intro: NOTE,
         servings: 2, ingredients: [ { name: 'chicken thighs', amount: 400, unit: 'g' }, { name: 'lemon', amount: 1, unit: 'whole' }, { name: 'garlic', amount: 2, unit: 'clove' }, { name: 'olive oil', amount: 1, unit: 'tbsp' } ],
         method: ['Heat the oven to 200C.', 'Toss everything in a tray.', 'Roast for 35 minutes.'] }) }] };
+    }
+    const t2 = t.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    if (/"combos"/.test(t2) && /LIBRARY \(individual ingredients\):/.test(t2)) {
+      // Next meal idea / Balance my macros: build a few combos from the person's own library lines so the demo shows a real result (v3.10.1041).
+      try {
+        const libBlock = t2.split('LIBRARY (individual ingredients):')[1].split('\n\nRECIPES:')[0].split('\n').map(x => x.trim()).filter(Boolean);
+        const items = libBlock.map(l => { const parts = l.split(' | '); const cm = l.match(/categories: ([^|]+)$/); return { name: parts[0], cats: cm ? cm[1].split(',').map(c => c.trim().toLowerCase()) : [] }; }).filter(i => i.name);
+        const em = t2.match(/EXACT COMPOSITION REQUESTED \("([^"]+)"/);
+        const want = em ? em[1].split('+').map(x => { const m = x.trim().match(/^(\d+)\s+(.+)$/); return m ? { n: parseInt(m[1], 10) || 1, c: m[2].trim().toLowerCase() } : null; }).filter(Boolean) : [];
+        const combos = [];
+        for (let k = 0; k < 4; k++) {
+          const pick = [];
+          (want.length ? want : [{ n: 2, c: '' }]).forEach(w => {
+            let pool = items.filter(i => !w.c || i.cats.includes(w.c));
+            const junk = /crisp|chocolate|biscuit|wafer|cake|sweet|jam|hoop|bar\b|butter|spread|oil|cream/i;
+            const likes = { protein: /chicken|beef|egg|salmon|tuna|whey|steak|pork|turkey|ham|prawn|mince|sausage|bacon|lamb|fish|cheese/i, meat: /chicken|beef|steak|pork|turkey|ham|mince|sausage|bacon|lamb/i, vegetable: /broccoli|spinach|kale|cabbage|cauliflower|pepper|courgette|asparagus|mushroom|kimchi|sprout|lettuce|tomato|cucumber|onion|avocado|aubergine|green/i };
+            const clean = pool.filter(i => !junk.test(i.name)); if (clean.length) pool = clean;
+            const liked = likes[w.c] ? pool.filter(i => likes[w.c].test(i.name)) : []; if (liked.length) pool = liked;
+            for (let j = 0; j < w.n && pool.length; j++) { const it = pool[(k + j * 2) % pool.length]; if (it && !pick.includes(it.name)) pick.push(it.name); }
+          });
+          if (pick.length && !combos.some(c => c.items.join('|') === pick.join('|'))) combos.push({ items: pick, note: 'Sample pick for the demo: fits what is left of today.' });
+        }
+        return { content: [{ type: 'text', text: JSON.stringify({ combos }) }] };
+      } catch (e) {}
     }
     return { content: [{ type: 'text', text: NOTE + ' In your own copy, this is where a personal answer based on your logged data would appear.' }] };
   }
@@ -24030,6 +24054,7 @@ document.addEventListener('DOMContentLoaded', mhShowPremiumCard);
 function checkBackupReminder() {
   const el = document.getElementById('backupReminderBanner');
   if (!el) return;
+  if (mhDemoBlocksServerSync()) { el.style.display = 'none'; return; } // a demo has nothing of the person's to back up (v3.10.1041)
   const cloud = mhIsCloudHost();
 
   const lastExport = localStorage.getItem('mh_last_export_nudge');
@@ -33438,7 +33463,7 @@ function dismissNewUserBanner() {
 
 function showNewUserBanner() {
   if (localStorage.getItem('mh_new_user_dismissed')) return;
-  if (_demoMode) return;
+  if (_demoMode || mhDemoBlocksServerSync()) return;
   const el = document.getElementById('newUserBanner');
   if (el) el.style.display = 'block';
   // 01/10/26 - the GBM patient-guide link is only relevant to someone who chose GBM
@@ -45495,6 +45520,7 @@ function startDemoMode(personaId) {
   }
   document.getElementById('onboardingOverlay').style.display='none';
   document.getElementById('demoBanner').style.display='block';
+  try { ['newUserBanner', 'backupReminderBanner'].forEach(function (id) { var b = document.getElementById(id); if (b) b.style.display = 'none'; }); } catch (e) {}
   setTimeout(function () { try { mhDemoPremiumCard(); } catch (e) {} }, 700);
   setTimeout(function () { try { mhRoutineCard(); } catch (e) {} }, 900);
   closeDemoPersonaPicker();
