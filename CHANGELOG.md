@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1040
+- Meal plan on Today is now its own card with the same move up / move down / hide controls and fold bar as every other Today card (it used to be a plain box inside Calories & macros with no controls). Saved layouts gain it just after Calories & macros. Test p149; p36 updated for the new key.
+
 ## v3.10.1039
 - Changing language while in demo mode no longer drops you out of the demo (the reload used to end it and show your real account). The same persona restarts straight after the reload, in this tab only; your real data is still restored when you exit. Test p148.
 
