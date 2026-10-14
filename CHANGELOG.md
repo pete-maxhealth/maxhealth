@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1048
+- Fixed: a boiled egg (or anything with "boiled" in its name) was treated as an oil by the meal-preview fat check, because "oil" sits inside "boiled". Typing "2 boiled eggs and butter" showed a red "fat looks far too low for 100g (expect roughly 90g)" warning on the egg. The oil, butter, cream, lard, ghee and dripping checks now match whole words, and "boiled onion" no longer counts as "oil added". Test p153 (fails without the fix).
+
 ## v3.10.1047
 - Changed: the demo food library and recipes are now generic. The old demo library was a copy of the app owner's own food diary (supermarket brands, beers, a wine, takeaway meals) and was low-carb for every persona. It is replaced by 48 everyday foods (chicken, salmon, eggs, oats, rice, pasta, sweet potato, fruit, vegetables, nuts, dairy, whey) and 8 recipes (chicken and rice bowl, protein porridge, salmon with sweet potato, turkey and lentil chilli, tuna and chickpea salad, lean bolognese, yoghurt power bowl, tofu stir-fry), all with full macros and no brand names.
 - Changed: Alex (the muscle-gain demo persona) is no longer on a low-carb style: carb target 320 g instead of 120 g, moderate meal pool.
