@@ -1,4 +1,4 @@
-"""Persona 132: a demo shows a Premium card on Today; tapping it (or the preview button) opens a clearly labelled example of the synced-data flow (Health Connect snapshots, ring and watch, ranking decision, self-check); the card is gone after exiting the demo."""
+"""Persona 132: the demo no longer advertises Premium (not delivered yet: no card, no Trends sample, banner link hidden), but the example flow and preview still open when called, and a clearly labelled example of the synced-data flow (Health Connect snapshots, ring and watch, ranking decision, self-check); the card is gone after exiting the demo."""
 import sys; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -11,9 +11,10 @@ with fresh_server() as root, sync_playwright() as pw:
     ev = page.evaluate
     if ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'Premium card present outside demo')
     ev("startDemoMode(DEMO_PERSONAS[0].id)"); page.wait_for_timeout(2500)
-    if not ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'no Premium card in the demo')
-    if not ev("!!document.getElementById('demoPremiumTrends')"): f.add('BUG', 'no Premium sample chart on Trends in the demo')
-    ev("document.getElementById('demoPremiumCard').click()"); page.wait_for_timeout(300)
+    if ev("!!document.getElementById('demoPremiumCard')"): f.add('BUG', 'Premium card shown in the demo (Premium is not delivered)')
+    if ev("!!document.getElementById('demoPremiumTrends')"): f.add('BUG', 'Premium sample chart shown on Trends in the demo')
+    if ev("getComputedStyle(document.getElementById('demoPremiumLink')).display") != 'none': f.add('BUG', 'See Premium link visible in the demo banner')
+    ev("mhPremiumFlow()"); page.wait_for_timeout(300)
     t = ev("(document.getElementById('mhPremiumFlow')||{}).textContent||''")
     for need in ('EXAMPLE ONLY', 'Health Connect', 'RingConn', 'Zepp', 'Device ranking', 'self-check'):
         if need not in t: f.add('BUG', f'flow missing "{need}"')

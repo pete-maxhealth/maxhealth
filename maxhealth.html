@@ -2208,6 +2208,9 @@
 </style>
 </head>
 <body>
+<script>/* A language change reloads the page and the demo restarts a moment later; hide the page meanwhile so the person's own theme and figures never flash (v3.10.1041). */
+try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createElement('style'); _v.id = 'mhResumeVeil'; _v.textContent = 'html{background:#0b0f14!important}body{visibility:hidden!important}'; document.head.appendChild(_v); setTimeout(function () { var e = document.getElementById('mhResumeVeil'); if (e) e.remove(); }, 6000); } } catch (e) {}
+</script>
 <div id="mhNetBar" role="status" aria-live="polite"></div>
 
 <!-- ONBOARDING WIZARD -->
@@ -2485,7 +2488,7 @@
 </div>
 <div id="demoBanner" style="display:none;background:rgba(245,197,66,0.12);border-bottom:1px solid rgba(245,197,66,0.35);padding:9px 16px;text-align:center;font-size:12.5px;font-weight:600;color:var(--yellow);font-family:Space Mono,monospace;letter-spacing:0.03em;">
   👁 DEMO MODE — sample data only, nothing is saved &nbsp;·&nbsp; <span style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="exitDemoMode()">Exit demo →</span>
-  &nbsp;·&nbsp; <span id="demoPremiumLink" style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="mhPremiumPreview()">See Premium →</span>
+  <span id="demoPremiumLink" hidden style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="mhPremiumPreview()">See Premium →</span>
 </div>
 <div class="tab-row" id="mainTabRow">
   <div class="tab active" id="maintab-today"   onclick="switchTab('today',this)">Today</div>
@@ -6319,7 +6322,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1040'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1041'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6462,6 +6465,14 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
 // Personal-account keys that show on screen in Settings/Trends/Today. Demo mode blanks them while
 // active and restores them on exit (and after an abandoned session). Added after the demo audit (v1033).
 const DEMO_PRIVATE_KEYS = ['mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
+// True while a demo is running, or about to resume after a language change. The server's real
+// master.csv / combined.csv must never be merged into demo data (v3.10.1041).
+function mhDemoBlocksServerSync() {
+  try { if (typeof _demoMode !== 'undefined' && _demoMode) return true; } catch (_) {}
+  try { if (localStorage.getItem('mh_demo_active')) return true; } catch (_) {}
+  try { if (sessionStorage.getItem('mh_demo_resume')) return true; } catch (_) {}
+  return false;
+}
 (function healFromAbandonedDemoSession() {
   if (!localStorage.getItem('mh_demo_active')) return; // normal case — nothing to do
   try {
@@ -6802,6 +6813,7 @@ function restoreSupplementsFromServer(){ restoreDatasetFromServer('supplements')
 // local doesn't (recovers from a local data loss), and push up anything local
 // has that the server doesn't (recovers from exactly the failure just found).
 async function restoreMissingHistoryDaysFromServer() {
+  if (mhDemoBlocksServerSync()) return;
   try {
     const res = await fetch(`${MH_SERVER}/master`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return;
@@ -24251,7 +24263,7 @@ const DASHBOARD_SECTION_IDS = {
 function getDashboardOrder() {
   try {
     let stored = JSON.parse(localStorage.getItem(DASHBOARD_SECTIONS_KEY) || 'null');
-    // Migration (v3.10.1040): Meal plan became its own card; slot it in just after Calories & macros for anyone with a saved order.
+    // Migration (v3.10.1041): Meal plan became its own card; slot it in just after Calories & macros for anyone with a saved order.
     if (Array.isArray(stored) && !stored.includes('mealplan')) {
       const mi = stored.indexOf('macros');
       stored = [...stored]; stored.splice(mi > -1 ? mi + 1 : stored.length, 0, 'mealplan');
@@ -45578,8 +45590,11 @@ function mhPremiumPreview() {
   document.body.appendChild(o);
 }
 
+// Premium is not delivered yet, so the demo does not advertise it (v3.10.1041). Flip to true when it ships.
+const MH_DEMO_SHOW_PREMIUM = false;
 // Demo-only card on Today that points at Premium (v3.10.1012). Removed on exit.
 function mhDemoPremiumCard() {
+  if (!MH_DEMO_SHOW_PREMIUM) return;
   if (!localStorage.getItem('mh_demo_active')) return;
   const host = document.getElementById('view-dash'); if (!host || document.getElementById('demoPremiumCard')) return;
   const c = document.createElement('div'); c.id = 'demoPremiumCard'; c.className = 'card-unit mh-nominh';
@@ -45673,7 +45688,10 @@ window.addEventListener('load', function () {
     const id = sessionStorage.getItem('mh_demo_resume');
     if (!id) return;
     sessionStorage.removeItem('mh_demo_resume');
-    setTimeout(function () { try { if (!_demoMode) startDemoMode(id); } catch (e) {} }, 600);
+    setTimeout(function () {
+      try { if (!_demoMode) startDemoMode(id); } catch (e) {}
+      setTimeout(function () { var v = document.getElementById('mhResumeVeil'); if (v) v.remove(); }, 450);
+    }, 600);
   } catch (_) {}
 });
 
@@ -47478,6 +47496,7 @@ async function doSync() {
 }
 
 async function autoLoadCombined() {
+  if (mhDemoBlocksServerSync()) return;
   try {
     const res = await fetch(`${MH_SERVER}/combined`);
     if (!res.ok) throw new Error('combined.csv not ready');
@@ -47523,6 +47542,7 @@ async function autoLoadCombined() {
 // automatically, without waiting for the next manual Sync or a stale
 // Trends screen to be noticed and reported.
 async function autoImportCombinedIfStale() {
+  if (mhDemoBlocksServerSync()) return;
   try {
     // cache: 'no-store' matters here - this is a cross-origin request
     // (page origin -> MH_SERVER on localhost:5757), so sw.js's own
