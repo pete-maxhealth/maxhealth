@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1043
+- Fixed: opening Settings (or starting or leaving a demo) popped up 'Carb counting: Total ✓' and 'Exercise offset disabled ✓' toasts as if you had just changed those settings. They now only appear when you actually tap them.
+- Demo: the persona's calorie target now counts as confirmed for the maintain and gain phases, so Suggested Targets no longer shows a red 'carried over from a different phase' warning for sample people.
+
 ## v3.10.1042
 - Fixed: 'Next meal idea' and 'Balance my macros' failed in demo mode with a JSON error. The demo's stand-in AI now returns sample combinations built from the demo person's own library (sensible picks for the categories chosen), so the flow shows a real result and 'Log this meal' works.
 - Fixed: the new-user welcome card and the 'back up your data' nag no longer appear in a demo (including right after a language-change restart), since neither applies to sample data.
