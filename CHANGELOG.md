@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1046
+- Changed: the demo shows Premium again, as COMING SOON. The banner link reads "Premium, coming soon", the Today card and the Trends sample chart say "Coming soon", and the preview is headed "Premium: coming soon". It was switched off in v3.10.1041 to 1045 while the demo videos were being made. The preview now gives the reasons Premium is paid for: automatic wearable sync, external data imports (Withings, RingConn, Amazfit and Zepp, Garmin, Health Connect, with new devices addable), device ranking, self-checks, "Your routine", AI included with no key to set up, and support, updates and setup help, for Android. "Register interest" still opens the register-interest page (`MH_PREMIUM_URL`). Test p132 updated.
+
 ## v3.10.1045
 - Fixed: 'Edit this day by hand' on Trends sent you to Settings > Data. It now opens that day's totals (Log > History, with 'Edit day totals' already open and scrolled into view). A day with no food logged has no History entry, so it still goes to Manual Entry, and that card is now shown again if you had hidden it (the Data tab said 'Filter · 5 hidden' and the jump silently stopped at the top). Opening any section by name from search does the same.
 
