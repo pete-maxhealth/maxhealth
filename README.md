@@ -1,0 +1,259 @@
+# MaxedHealth
+
+**Personal health intelligence PWA** — AI-powered nutrition tracking, wearable data integration, and metabolic analytics. Built for a strict therapeutic ketogenic protocol post-GBM diagnosis.
+
+**Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
+**Local:** `http://localhost:5757` (via Termux + server.py)
+**Version:** v3.10.1044
+
+---
+
+## What it does
+
+**Newest (v3.10.981 – 999):**
+
+- **Starter packs and "Change my focus"** — 27 ready-made symptom, treatment and screen-layout starting points (brain tumour, epilepsy, migraine, cluster headache, diabetes, MS, Parkinson's, asthma, high blood pressure, menopause, IBS, muscle growth and more). Packs carry lists only, never advice or personal data. Switch focus, or **add another focus** to combine layouts and keep both sets of lists. Nothing is overwritten without a preview.
+- **Several conditions at once** — symptoms and treatments carry condition labels; chips filter Compare Metrics, Treatment Sessions and report building by condition.
+- **Tags as before / during / after anchors** — any day tag (or tag category such as "Any Exercise") can be analysed like a treatment, and tags used on three or more days become pills on the Compare Metrics graph. Tag manager to rename, merge or remove. Report profiles can be about a treatment or a tag.
+- **"How are you today?" scoring** — 1 to 5 per symptom, kept on no-food days, back-fillable for the last 14 days, and fed into Compare Metrics, before/after, reports and the AI analyst.
+- **Meal planner** — "I'm planning on eating 2 eggs at 1pm": a separate plan with eaten + planned totals against your targets (including fat), a "Did you eat this?" prompt at the time, optional auto-log, and a fasting heads-up if you track fasting.
+- **Nine languages** — English, Spanish, German, French, Turkish, Portuguese (Brazil), Italian, Polish and Dutch, with flags, a picker in onboarding and Settings, and a one-tap way back to English. **✨ Translate this screen with AI** fills in anything not yet covered, with your consent, and remembers the answers on your phone. Machine-assisted translations, not clinician-reviewed.
+- **One Filter toolbar everywhere** — Filter, Open all, Close all, Default in the same place on every screen; every card can be hidden, folded and reordered; first-run "what would you like to start with?".
+- **Seventeen demo personas**, six of them new cohorts with tag data, so every feature can be explored without entering anything.
+
+**Earlier:**
+
+- **Ketosis impact preview** — every "Ready to log" screen shows exactly what would happen if logged: calories/protein/fat as before → after against today's real targets, plus a clear ceiling check (still within it, or over by how much, including whether it would end a current streak). Updates live as the portion amount is adjusted.
+- **Exercise Offset for carb overage** — off by default (Settings). Distinguishes a carb overage meaningfully addressed by logged exercise that day from one left unaddressed, without ever hiding or replacing the raw over-ceiling fact.
+- **Dashboard traffic-light status** — small coloured dots on Calories/Protein/Carbs/Fat. Carbs uses ceiling logic; the other three use gaining-phase logic by default (under-eating is the real risk on a surplus protocol, not exceeding).
+- **Weight intention status** — reads the actual Goal/Phase setting and colours the 14-day weight trend by whether it's serving that goal (losing during a Lose phase is green; gaining is red). No-consequence preview mode to see other goals without changing anything real.
+- **Your Journey** — weight across the entire tracked history, always, independent of any date filter. Points coloured by ketosis status, treatment days marked along the bottom.
+- **Treatment Analysis** — nutrition/ketosis/weight on treatment days vs standard days, plus detected treatment cycles and a comparison against the immediate post-treatment recovery window.
+- **Carb Pattern breakdown** — % of days at Strict Keto/Keto/Low Carb (or neutral equivalents for non-keto conditions), framed around hitting your own chosen target, not a ranking against strict keto.
+- **GBM Research Digest** — persistent, dated home for real research findings, colour-coded Proven/Early Stage/Speculative. Deliberately not automated — the app's AI calls have no live web search, so a "Research Now" attempt was tried, confirmed unreliable, and replaced with a one-tap "Copy Research Request" for pasting into a real chat conversation instead.
+- **Formulas & Technical Reference** — every calculation the app uses, in plain language, in-app. No black boxes.
+- **Unified AI reliability** — all 9 AI call sites (Ask AI, Full Summary, GBM Summary, Oncology narrative, meal parsing, portion estimation, barcode reading, missed-day calculators) now share one function with real error surfacing instead of generic swallowed failures, and image support for vision calls.
+- **Voice logging, refined** — one-tap "Log it" directly on the transcript, real error messages instead of raw codes, subtle mic highlight on treatment-tagged days.
+- **Library duplicate protection, properly consistent** — the same category-mismatch check (a food-category word like "bread" vs "cheese" disqualifies a match, regardless of incidental word overlap) now applies across all four library-matching functions, not just one — found after a generic descriptor match ("white", "slices") slipped a wrong suggestion through three sibling functions that had never been fixed.
+- **Suggested Targets calculator** ⭐ — the app's most powerful feature. Enter height, age, sex, weight, condition and goal → it calculates personalised TDEE (Mifflin-St Jeor × activity from real step data), phase-adjusted calories, protein (1.8g/kg for GBM/Epilepsy/Migraine/Cluster Headache, 1.6g/kg otherwise), and fat to fill remaining calories. Condition overlay checks ketogenic ratio for the therapeutic-protocol conditions. One tap applies all targets. Works on day one with no history, and improves as wearable data accumulates.
+- **Library-aware meal suggestions** — "📚 From my library" proposes real combinations of saved ingredients and Recipes (proper per-serving math) against today's actual remaining macros, never inventing values. One-tap logging straight from the suggestion.
+- **Balance My Macros** — the deliberate opposite of Next Meal Idea: that one starts from categories you pick, this one starts from what today's macros still need, no picker required. Same library-only engine underneath, so it's never inventing a suggestion — and if there's genuinely too little budget left in the day, it says so plainly and offers smaller ideas instead.
+- **Ingredient substitution** — a genuine searchable picker across recipes, Cook Mode, and suggested meals, with an online-search fallback when nothing in your library fits. Deliberately not auto-matching — an earlier automatic version once suggested peanut butter as a substitute for dairy butter, which is the kind of mistake a real search list in front of a person doesn't make regardless of how good the matching heuristic gets.
+- **Saved Prompts library** — every AI question draws from one shared, searchable, editable store rather than fixed buttons. Add, edit, delete, dictate new ones by voice, sorted by how often you actually use each one. Each prompt is tagged **Today**, **History**, or **Both** — the Log tab and Reports tab each show only the prompts that fit what they can actually answer, so a question needing your history can't be run through the tab that only ever sees today. Tags are suggested automatically from the words in your question as you type, always overridable, and a one-tap batch action classifies any prompts saved before this existed.
+- **Recipes** — proper servings math for anything batch-cooked (log 1, 2, or half a portion correctly), with a real review step (add/remove/swap any ingredient) before it hits your log, and a "Refresh from Library" action if an ingredient's values have since been corrected. Meals as a separate concept has been retired — saving a logged combo now creates a genuine recipe directly, with real per-item ingredients.
+- **Real food categories, fully in-app editable** — every library item auto-categorizes into genuine food groups (meat, fish, dairy, vegetable, fruit, fat, protein, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad) rather than the ingredient's own name being treated as its category. Add, edit, or remove any category mapping directly in Manage Categories, including a rename tool for fixing existing data in bulk and typo protection. Browse by Category to see and log from a group directly. Category edits stay live in place — the edit form no longer closes itself after each chip added or removed. Categories are protected on the chat "Save only" path: saving an existing library item there used to silently wipe its categories if none were freshly typed; it now merges instead, and shows what's already saved so the two screens agree. The individual per-item edit form (✏️ on a meal-preview item) also has its own categories field now, and a brand-new item always gets real categories stored at creation rather than relying on display-time auto-detection alone.
+- **Structured meal requests** — a multi-select category picker (tap to select, set a count per category, Send) builds requests like "meat + 3 veg" or "protein + grain + salad" directly, or type it in chat ("protein and pasta"). Honest partial-match handling when the library can't fully cover what was asked.
+- **Fibre and polyols, fully editable** — can be added or corrected directly on any library item, not just when the AI happens to read them correctly at add-time. Anywhere carbs are shown for an item with polyols, a "was X, Yg after polyols" line makes clear whether the net figure has already accounted for them — Today's Log, the Edit Entry form (live-updating), and the chat "LOGGED ✓" confirmation.
+- **Read-aloud** — AI chat responses, the GBM Monthly Summary, and Research Digest entries can be read aloud via a speaker icon, using the browser's built-in text-to-speech, fully offline.
+- **Dashboard & tab reordering** — every section on Today, the Library tab's Recipes/Food Library split, and Reports/Manage/Import can be reordered via ▲▼ buttons, with preferences persisted.
+- **Ketosis streak milestones** — one-time celebration at 7/14/30/50/100/200/365 consecutive days.
+- **Nutrition logging sanity checks** — Atwater kcal-consistency, implausible low-carb-on-fruit, implausible portion size, and macro-mass-exceeds-food-weight — now also checked at the point of adding a library item, not just when logging one, catching bad data at the source.
+- **Itemized ingredient editors** — multi-item log entries (Today's Log and History) get a real per-ingredient editor: add, remove, or adjust any single ingredient, with amount edits auto-scaling that item's macros from a stable baseline. **Scale entire entry to X%** applies proportionally across every ingredient at once in one action — for logging a partial serving of a bigger batch without recalculating each item by hand.
+- **Weight Phase History** — log intentional weight phases (loss/maintain/gain) with dates. Automatically updated when you change goal. Used by all AI reports to correctly interpret weight trends — deliberate loss is never flagged as a concern.
+- **Condition History** — same pattern as Weight Phase History, for condition instead of goal. Auto-logs whenever your condition genuinely changes, so a later switch can't retroactively distort how old data gets judged. Ask AI and Full Summary become period-aware automatically once more than one condition has been used — ask naturally ("compare my general and migraine periods") and the AI handles the comparison itself, no filter or dropdown needed.
+- **Activity Level, personalised and self-updating** — a real, editable Profile setting (previously asked once at onboarding and discarded). Walking effort (Easy/Moderate/Hard) is calibrated to it — real research confirmed there's no single universal "brisk" pace threshold, since even the AHA and CDC officially disagree on the number, explicitly because it depends on individual fitness. Auto-switches from sustained real step-count trends (smoothed 30-day average, resistant to single noisy or rest days), with a celebration for genuine improvement and a plain notification for decline. Full Activity Level History, same pattern as Condition History.
+- **Site-wide search** — 🔍 in the header, always accessible. One box searches Library, Recipes, Saved Prompts, and every Settings section across all three sub-tabs. Tapping a result takes you straight there — opens the right picker pre-filled, runs the prompt directly, or scrolls straight to the settings section (expanding it first if collapsed).
+- **⭐ Full Summary** — one-tap comprehensive 9-section health analysis: nutrition, weight phases, ketosis quality, sleep, HRV, activity, best periods, areas to improve, protocol verdict. Phase-aware, condition-specific, nil days excluded.
+- **AI meal logging** — type, paste, photo, barcode or voice. Step 0 photo classification (label vs meal), ambiguity detection (asks before logging uncertain items), sanity-checked portion estimation, per-component delete and inline edit in preview.
+- **Food library** — Meals, Recipes, and Ingredients. Search, A-Z nav (ingredients only), long-press to log, recently scanned items.
+- **Condition/Protocol** — Settings dropdown, all 9 offered at onboarding too: GBM, Epilepsy, Strict Ketosis, Migraine, Cluster Headache, Type 1 Diabetes, Type 2 Diabetes, General Health, Body Recomposition. All AI reports adapt framing, evidence categorisation and thresholds — Migraine/Cluster Headache explicitly framed as promising, real trial evidence rather than established standard of care.
+- **Activity card** — Walking, Resistance + custom exercises. Distance-aware effort auto-calculation. All macro targets adjust dynamically. Strength Training log and Routine Templates for saved exercise groupings, editable in place (Apply/Copy/Delete/Edit) without needing to delete and rebuild one to change it.
+- **Occasion tags** — Chemotherapy, Hospital day, Illness, Social event, Travel, Fasting. Multi-select, retroactively editable.
+- **Reports** — condition-aware, day-type aware (holiday/occasion days evaluated against their own ceilings), nil days excluded from all calculations and AI context.
+- **Boot survival & auto-update** — Termux:Boot + wake-lock + watchdog cron. Server auto-restarts after reboots, zero user interaction required. A separate 30-minute check also pulls any update from GitHub automatically, so a device never falls behind without someone manually running `git pull` on it.
+- **Remote diagnostics** — Settings → Manage → Advanced Troubleshooting Tools → App Health Check shows the real auto-update log, crontab, and whether crond/the server are actually running, alongside the existing version-sync and div-balance checks. One tap, then copy the output — lets a stuck device get debugged by someone else entirely, without needing Termux access on the affected phone. **📋 Copy Diagnostics for Claude** bundles every diagnostic source (Log Mutation Debug, AI-Assist trace, category traces, Body Comp Debug, Rollover log) into one paste-ready block, showing a live entry count per source so it's clear up front which ones actually have anything to contribute.
+- **In-app update check** — the PWA itself (separate from the server-side auto-update above) normally notices a new version via its service worker and shows a banner automatically; Settings → About also has a **🔄 CHECK FOR UPDATES** button for checking on demand instead of waiting.
+- **Supplements** — Tablet counts (e.g. "2 capsules") shown separately from the mg dose, and time-of-day lists are reorderable per period via ▲▼ buttons — a supplement in both the morning and evening lists isn't forced to the same relative position in both.
+- **Offline mode** — the app opens with no connection at all (service worker keeps the last good page; Chart.js, jsPDF and JSZip ship with the app). An offline banner shows on every screen, internet-only features (3-AI check, Ask AI, barcode, food search) say "needs internet", and meals the local database can't recognise can be saved for later and reviewed one by one when the connection returns. If AI is unreachable, a manual macro entry form still appears.
+- **Weight carry-forward** — dashboard shows last known weight when today has no reading, labelled "last known".
+- **One weight unit everywhere** — kg, lbs or st + lb (Settings → Profile). Display only; storage stays kg. st + lb takes "14 st 2" in one box. Charts, drill-downs and Compare Metrics follow the unit.
+- **Backdated and edited weights** — Update Weight has a Date box; a missed day's weight can also be added or fixed from the Trends weight card, Your Journey, the weight drill-down and History → Edit day totals.
+- **Faint "last known" weight line** — Your Journey and the Trends weight chart draw a dotted flat line across gaps. Display only, never saved. Gaps over 7 days show a "⋯ Nd" marker on Your Journey.
+- **Journey overlays** — chips on Your Journey add Calories, Protein, Carbs, Water, Logged exercise, Active calories or Steps as dashed lines on the weight chart. Compare Metrics gains Logged exercise, Active calories and Fat (g).
+- **Compare Two Periods** (Trends) — compares a recent stretch (default: latest Holiday-mode run) with the weeks before, on logged kcal, steps and weight trend, to check whether photo estimates are running high or low. Verdict always carries a margin of error, plus an expected-trend row and a list of exactly which days were counted.
+- **One-tap bug report** (Settings → About) — opens a GitHub issue pre-filled with app version, device and a health check, with a prompt for a screenshot; a copy-text option for anyone without GitHub.
+- **Photo ruler** (Settings → Tableware, 📏) — photograph a plate, bowl or spoon beside a bank card, tap the card's edge then the item's edges, and its width is filled in for you.
+- **Body Composition card** (Trends) — plain-words verdict (gaining fat / losing muscle / recomposition and so on) from smart-scale readings, with a share bar and change badges.
+- **Topic chips** on Trends, Reports, Settings → Manage and Settings → Data — view filters only, nothing is moved or hidden.
+- **Copy previous set** — in the routine editor and workout Apply screen, one tap repeats the last set's reps, weight and note.
+- **Tableware & portion sizes** (Settings) — plate, bowl, mug, glass and spoon sizes in named sets (Home, holiday, parents' house...) so photo estimates and the 3-AI check know your crockery.
+- **Better photo and portion checks** — small countable items are sized piece by piece, jarred fruit is told from fresh, and each of Claude, Gemini and ChatGPT now gives its own portion guess in the 3-AI check, flagging when they disagree.
+- **Local weather card** — optional (Open-Meteo, no account): water target rises on hot days, suggested exercise effort, an hourly strip and best time to exercise outdoors. Always overridable.
+- **Barcode scanning** ignores QR codes and, when a product isn't found, offers to read the label with AI.
+- **Slow-wait pulsing border** — AI and report waits show the same pulsing box as the chat's "Analysing photo" bubble.
+- **Self-monitoring** — Settings → About → System health summarises data freshness, pipeline errors, recorded app errors and backup age.
+- **Wearable integration** — Withings, RingConn, Amazfit via `update_health.py`. AES-encrypted Zepp exports via `pyzipper`. Health Connect (Android) also supported — steps, heart rate, weight, and sleep read directly from Android's own health data hub, deliberately last in precedence behind any dedicated device's own reading. Device precedence is user-configurable per metric, including custom devices beyond the built-in list.
+- **Demo mode, now with real personas** — "Try a demo first" opens a picker of genuinely different starting points (currently twenty-nine, covering every one of the 27 starter packs: two goal-based — general weight loss, body recomposition with real training-block/HRV progression data — and personas across a spread of the supported conditions, including two deliberately contrasting outcomes on the same evidence base, and a nutrition/effort-focused "still struggling" case with no medical condition at all). Nutrition history, weight trend, and (for several) treatment sessions/symptoms/a ready-made Report Profile are generated to genuinely match that persona's stated targets and story, not a single fixed dataset relabelled. Entirely in memory — never touches real storage during a session, and now self-heals automatically on the next load even if the session ends without an explicit "Exit demo" (closing the tab, switching apps, or the phone locking no longer leaves demo data stuck in a real account).
+- **Log food to a past day** — from History, add a forgotten or mis-logged item to any previous day through the exact same AI-parsing pipeline used for today (text, photo, barcode, library). Recalculates that day's totals from its full log automatically, no manual arithmetic.
+- **Multi-AI consensus check** — verify any logged item against Claude, Gemini, and ChatGPT independently, one tap. Three estimates agreeing is a genuine reassurance signal; disagreeing by more than 25% on calories is flagged as worth finding a real label rather than trusting any of them. Each provider's own numbers are checked for internal consistency before comparing. Per-provider checkboxes let you exclude an outlier before applying an average to a single item.
+- **Activity Credit Balance** — rolling-window tracking (Insights → Trends) of exercise calorie credit earned vs actually eaten back, built from real stored history. A single day under an exercise-boosted target is harmless; this surfaces the pattern if it's happening often enough to compound into something real, with interpretation tailored to your actual Goal/Phase setting.
+- **Phase-aware calorie context** — Remaining Today distinguishes harmless unclaimed exercise credit from genuine under-eating against your actual base target, worded differently for maintain/gain/lose goals.
+
+---
+
+## Getting started (Android)
+
+**The native launcher app is now the real answer to onboarding friction** — every early tester hit the same wall (seeing/manually running Termux), which is exactly what this solves. One APK, installed like any Android app, walks through Termux/Termux:Boot/Termux:API installation and one-time permission steps automatically via `RUN_COMMAND`, with only one unavoidable manual step (a one-time clipboard paste inside Termux, required because Termux blocks external apps from writing `allow-external-apps` to its own settings otherwise). No terminal typing required from the person installing it.
+
+**Download:** [`apk/MaxedHealth-launcher.apk`](apk/MaxedHealth-launcher.apk) in this repo is always the current build — install it like any Android app (you'll need to allow installs from this source the first time). Still a debug build, not published to any app store. The launcher project itself lives in its own Android Studio project (package `com.maxedhealth.launcher`), separate from this repo — only the built APK is kept here.
+
+The launcher checks `apk/version.json` on its own each time it opens and shows a banner (linking back to this folder) if a newer build than the one installed is available — so once someone's on this mechanism, future updates don't need a fresh link handed to them each time. To update: download the APK again and install over the existing app; settings and Health Connect permissions aren't affected.
+
+For anyone building/running from source instead (the launcher's own provisioning does this on-device automatically) — the manual path below still works and is what the launcher itself runs under the hood.
+
+## Quick start (manual / advanced)
+
+```bash
+git clone https://github.com/pete-maxhealth/maxhealth.git
+cd maxhealth
+bash setup.sh
+mhstart
+# Open http://localhost:5757
+```
+
+**Note:** `setup.sh` does the full job in one run — packages, storage permission, cloning/updating the repo, and installing the watchdog, auto-updater, boot scripts, and the `mhstart` command itself (into `$PREFIX/bin`, so it works from any directory). `mhstart` doesn't need a separate manual step; running `setup.sh` once is enough.
+
+## Auto-start on boot — self-healing, fully automatic
+
+**Confirmed directly against `setup.sh`'s real content — this is what it actually installs, not a target/aspirational description.**
+
+- **Watchdog** (`~/mh_watchdog.sh`, via cron every minute) — checks the server is alive, restarts it if not, kills duplicate instances if more than one is somehow running
+- **Auto-update** (`~/mh_autoupdate.sh`, via cron every 30 minutes and once on every boot) — checks GitHub for anything new and pulls it automatically, so a device never needs a manual `git pull` to stay current
+- **Boot scripts** in `~/.termux/boot/` start crond, hold a wake-lock (stops Android's battery-saving Doze mode suspending the checks between cron ticks), and start the server itself
+
+After a reboot, give it a minute, then confirm the server's running on its own (`curl http://localhost:5757/ping`) — no manual Termux interaction needed.
+
+Requires **Termux:Boot** and **Termux:API** from F-Droid (same signing key as Termux) — `setup.sh` checks for both at the start of Step 1.5 and walks through installing them (opens each F-Droid page directly) if either is missing.
+
+Note for cloud/GitHub Pages users: none of this is required — it only applies to local Termux setups.
+
+## Local server access — pin the shortcut directly
+
+As of Chrome's Local Network Access (LNA) enforcement (rolled out across Chrome ~142–149), public HTTPS pages — including the GitHub Pages version of MaxedHealth — can no longer auto-detect or redirect to a local server at `localhost:5757`. This is a browser security restriction, not a MaxedHealth bug, and it affects every site that tries this trick, not just this one.
+
+**What this means for you:** instead of opening the GitHub Pages link and letting the page jump to local mode automatically, open `http://localhost:5757` directly (with the local server running) and add **that** to your home screen. `setup.sh` does this for you automatically on first install.
+
+If you already have an older shortcut pointing at the GitHub Pages URL, delete it and re-add one pointing at `localhost:5757` instead — the page itself will tell you (via a one-time toast) when it detects a local server is running but auto-redirect isn't possible.
+
+## Deploy after update
+
+```bash
+cp /storage/emulated/0/Download/maxhealth.html /storage/emulated/0/maxhealth/app/maxhealth/maxhealth.html
+cd /storage/emulated/0/maxhealth/app/maxhealth
+bash bump_and_deploy.sh X.X.X "description"
+```
+
+`bump_and_deploy.sh` bumps both version references, checks div balance, commits, pushes, and — critically — verifies the push actually landed on `origin/main` rather than trusting that `git push` printing something reassuring means it worked (this was silently failing for roughly 100 versions before the check existed). A `.gitignore` now excludes `__pycache__/`, backup files, and trash artifacts, so `git status` stays meaningful.
+
+For anything other than `maxhealth.html` itself (worker.js, docs, scripts), commit manually and selectively — avoid `git add -A`, which will happily stage pycache and stray backup files alongside real changes.
+
+## Full backup
+
+```bash
+pkg install zip -y
+cd /storage/emulated/0/maxhealth
+zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/maxhealth/ data/tables/
+```
+
+---
+
+## File structure
+
+```
+/storage/emulated/0/maxhealth/          ← root, in shared storage (visible to Termux via ~/storage/shared/)
+├── app/
+│   ├── maxhealth/
+│   │   ├── maxhealth.html      # Complete PWA (~1.3MB)
+│   │   ├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
+│   │   ├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
+│   │   ├── why-free.html       # Why MaxedHealth is free
+│   │   ├── user-guide.html     # User guide
+│   │   ├── server.py           # Local HTTP server (Termux)
+│   │   ├── update_health.py    # Wearable data pipeline
+│   │   ├── setup.sh            # First-time install (creates this whole tree — that's all it does)
+│   │   ├── bump_and_deploy.sh  # Version bump + commit + push
+│   │   ├── TECHNICAL.md        # Technical reference
+│   │   ├── CHANGELOG.md        # Version history
+│   │   ├── changelog.html
+│   │   └── README.md
+│   └── extractors/             # Wearable data extractors (Withings, RingConn, Amazfit, Health Connect)
+└── data/
+    ├── tables/
+    │   ├── master.csv      # Daily nutrition + tags (pipe-delimited)
+    │   ├── combined.csv    # Wearable data
+    │   └── library.csv     # Food library backup
+    ├── inbox/               # Incoming wearable export files land here before processing
+    └── archive/             # Processed exports get moved here
+```
+
+The `app/maxhealth/` nesting (not just `maxhealth/`) is real and load-bearing — `update_health.py`'s extractor path and every deploy command depend on it. `data/` is a sibling of `app/`, not nested inside it.
+
+**Important:** `setup.sh` only creates the five folders above (`mkdir -p`, nothing else) — it does not install packages, clone the repo, write the boot scripts, set up crontab, or install `mhstart`. Everything else described in this README as automatic currently has to happen some other way — worth documenting properly rather than leaving as tribal knowledge, since it's the most likely source of an install going wrong on a new device.
+
+**Outside this tree entirely**, anchored to Termux's own home directory rather than shared storage:
+
+```
+$PREFIX/bin/mhstart              # installed by setup.sh, works from any directory
+~/mh_autoupdate.sh
+~/mh_watchdog.sh
+~/.termux/boot/start-crond.sh
+~/.termux/boot/start-watchdog.sh
+~/.termux/boot/maxhealth.sh
+```
+
+---
+
+## master.csv format
+
+```
+date|kcal|protein|carbs|fat|notes
+15/06/26|3506|188|18.4|265|Chemotherapy, 76min Walking, 45min Resistance
+```
+
+---
+
+## Activity MET values
+
+| Activity | Easy | Moderate | Hard |
+|----------|------|----------|------|
+| Walking | 2.8 | 3.5 | 4.5 |
+| Resistance | 3.0 | 5.0 | 6.0 |
+| Cycling | 4.0 | 6.8 | 10.0 |
+| Custom exercise (generic) | 3.5 | 5.0 | 7.0 |
+
+`kcal = MET × weight(kg) × duration(hours)`
+
+Walking and any custom activity flagged distance-based also gets effort auto-calculated from pace + distance — see TECHNICAL.md for the full pace-band reference.
+
+---
+
+## Nutrition targets (current)
+
+These are user-configured in Settings (`mh_target_kcal`, `mh_target_protein`, etc.) and read fresh via `getTargets()` — not hardcoded.
+
+| Metric | Target |
+|--------|--------|
+| Calories | 3,223 kcal base gain-phase (+ activity) |
+| Protein | 166g (1.8g/kg) |
+| Carbs | ≤50g standard / ≤75g occasion / ≤75g holiday |
+| Fat | ≥240g (≥65% of calories, GBM therapeutic floor) |
+| Water | 2,000ml (+ 500ml/hr exercise) |
+
+---
+
+## Tech stack
+
+- Single-file HTML/CSS/JS PWA (~900KB)
+- Claude (Anthropic), Gemini (Google), and ChatGPT (OpenAI) via a shared Cloudflare Worker proxy — Claude for all standard AI features, all three in parallel for the multi-AI consensus check
+- Open Food Facts API (barcode)
+- Web Speech API (voice input)
+- Python HTTP server (Termux/Android)
+- GitHub Pages (hosting)
+
+---
+
+## Why it exists
+
+Built following a GBM diagnosis. My therapeutic ketogenic protocol requires precise macro tracking — this makes that possible daily. See [why-free.html](why-free.html).
+
+*Built with Claude by Anthropic.*
