@@ -3372,7 +3372,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         <div style="text-align:center;">
           <div id="trendsDayLabel" style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);"></div>
           <div id="trendsDayRelative" style="font-size:11px;color:var(--text3);margin-top:2px;"></div>
-          <div id="trendsDayEdit" onclick="mhOpenManualEntry(-_trendsDayOffset)" style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer;margin-top:3px;">✏️ Edit this day by hand</div>
+          <div id="trendsDayEdit" onclick="mhEditTrendsDay()" style="font-size:11px;color:var(--accent);text-decoration:underline;cursor:pointer;margin-top:3px;">✏️ Edit this day by hand</div>
         </div>
         <button onclick="shiftTrendsDay(1)" id="trendsDayNext" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;padding:0 8px;">→</button>
       </div>
@@ -6322,7 +6322,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1044'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1045'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -12393,6 +12393,25 @@ async function mhLoadDataGaps() {
 }
 
 // v3.10.915: jump from the sync warning straight to Manual Entry with the missed day (default yesterday) already chosen.
+// Trends > "Edit this day by hand": go to that day's totals (Log > History > Edit day totals),
+// not Settings. A day with no food logged has no History entry, so those still use Manual Entry.
+function mhEditTrendsDay() {
+  const d = new Date(); d.setDate(d.getDate() + _trendsDayOffset);
+  const date = d.getDate().toString().padStart(2, '0') + '/' + (d.getMonth() + 1).toString().padStart(2, '0') + '/' + d.getFullYear().toString().slice(2);
+  const has = (state.history || []).some(h => h.date === date && ((h.totals && h.totals.kcal) || 0) > 0);
+  if (!has) { mhOpenManualEntry(-_trendsDayOffset); return; }
+  switchTab('log');
+  switchSubTab('log', 'hist');
+  histFilter = 'all';
+  document.querySelectorAll('.hist-filter-btn').forEach(b => { b.classList.toggle('active', b.textContent.trim() === 'All'); });
+  renderHistory();
+  setTimeout(() => {
+    editHistDayTotalsByDate(date);
+    const dayEl = [...document.querySelectorAll('.hist-day-date')].find(e => e.textContent.trim() === date);
+    const f = document.querySelector('.hist-day-totals-edit');
+    (f || dayEl) && (f || dayEl).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 250);
+}
 function mhOpenManualEntry(daysAgo) {
   const picked = (typeof daysAgo === 'string') ? daysAgo : (document.getElementById('mhSyncHelpDate') || {}).value;
   document.getElementById('mhSyncHelp')?.remove();
@@ -18511,6 +18530,16 @@ function siteSearchOpenSettings(key, subtab, tab, wrapId) {
   // the Import sub-tab's sections were never even switched into view for
   // scrollIntoView to find.
   if (subtab) switchSubTab(tab || 'settings', subtab);
+  // A card the person has hidden (eye icon / Filter "n hidden") has nothing to scroll to, so
+  // "Edit this day by hand" and search results silently stopped at the top of the tab.
+  // Asking for it by name is a clear request to see it: show it again and say so.
+  try {
+    const gScope = subtab || tab || 'settings';
+    if (typeof GENERIC_SECTION_IDS !== 'undefined' && GENERIC_SECTION_IDS[gScope] && getGenericHidden(gScope).includes(key)) {
+      toggleGenericSectionHidden(gScope, key);
+      showToast((genericSectionLabel(gScope, key) || 'That card') + ' was hidden, so it is shown again');
+    }
+  } catch (e) {}
   setTimeout(() => {
     // Most sections follow key+'-wrap' as their real DOM id, but a few
     // (dash-symptoms/dash-treatment, built well before this index existed)

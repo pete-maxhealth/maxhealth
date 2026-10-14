@@ -320,6 +320,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.1012 | 24 | `mhDemoPremiumCard()`, `mhPremiumFlow()` static sync example; p132. |
 | v3.10.1013 | 25 | `lang/pt.json`, `it.json`, `pl.json`, `nl.json`; `MH_LANGS` and `MH_FLAG_SVG` entries; p133. |
 | v3.10.1044 | 25 | Settings label 'Diet protocol' (was 'Condition / Protocol') in `maxhealth.html` and all `lang/*.json`; README restored; p152. |
+| v3.10.1045 | 25 | `mhEditTrendsDay()` (Trends day nav) opens Log > History > `editHistDayTotalsByDate`; food-less days fall back to `mhOpenManualEntry`; `siteSearchOpenSettings` un-hides a hidden generic card before scrolling; p153. |
 | v3.10.1011 | 24 | Worker allowance (`STARTER_TOTAL`/`STARTER_TOPUP`/`LICENCE_DAILY`, HMAC licence token), model/token/tool hardening; client headers gated on a probe; `premium-site/licence.php`; licence card; `tools/split_premium.py`; p126-p131. |
 | v3.10.1010 | 24 | `window.fetch` wrapper answers AI hosts with labelled samples while `mh_demo_active` is set; `mhPremiumPreview()`; p125. |
 | v3.10.1009 | 24 | Eleven new demo personas (28 total, one per starter pack); p124. |
