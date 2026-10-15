@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1059
+- Fixed: the ingredient swap picker (recipe builder, Cook Mode and the suggested-meal cards) is pre-filled with the old ingredient's full name, so it matched only itself and left nothing to swap with, which offline is a dead end. It now always lists the rest of your library underneath ("Other options in your library"), with the most similar foods first (most shared categories, then A-Z). Test p160 covers both the in-library and no-match cases, for an everyday and a low-carb persona, offline.
+
 ## v3.10.1058
 - Fixed: swapping a recipe ingredient (recipe builder and Cook Mode) dead-ended when nothing in the library matched the old ingredient's name, which is common offline because the only way out was an online search. The picker now lists the whole library A-Z underneath, and says plainly that online search needs internet when you are offline. New test p160 (demo personas, offline).
 

@@ -23,6 +23,16 @@ with fresh_server() as root, sync_playwright() as pw:
         if r['rows'] < 40: f.add('FAIL', f'{pid}: picker shows only {r["rows"]} items when nothing matches the typed name')
         if 'needs internet' not in r['txt']: f.add('FAIL', f'{pid}: no honest offline message')
         if 'Search online instead' in r['txt']: f.add('FAIL', f'{pid}: still offering online search while offline')
+        # the realistic case: swapping an ingredient that IS in the library (pre-filled name matches only itself)
+        page.evaluate("document.getElementById('recipeLibPickerList') && closeRecipeLibPicker()")
+        r2 = page.evaluate("""() => { const lib = loadLibrary(); const it = lib.find(l => /chicken breast/i.test(l.name)) || lib[0];
+          _recipeIngredients = [Object.assign({}, _libItemToScalableIngredient(it, 100))]; substituteBuilderIngredient(0);
+          const el = document.getElementById('recipeLibPickerList'); const rows = [...el.querySelectorAll('[onclick*="_libPickerItemChosen"]')].map(x => x.innerText.split('\\n')[0]);
+          return {name: it.name, rows: rows.length, first: rows.slice(0, 4), head: /other options/i.test(el.innerText)}; }""")
+        print(pid, 'in-library swap:', r2)
+        if r2['rows'] < 40 or not r2['head']: f.add('FAIL', f'{pid}: swapping an in-library ingredient only offers {r2["rows"]} items')
+        page.evaluate("closeRecipeLibPicker()")
+        page.evaluate("substituteBuilderIngredient(0)"); page.wait_for_timeout(300)
         # pick the first listed item, ingredient must change
         page.evaluate("document.querySelector('#recipeLibPickerList [onclick*=\"_libPickerItemChosen\"]').click()"); page.wait_for_timeout(600)
         nm = page.evaluate("_recipeIngredients[0] && _recipeIngredients[0].name")
