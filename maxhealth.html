@@ -4598,6 +4598,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:2px;"><span class="help-slot" data-id="conditionprotocol" data-text="Used to personalise AI report framing, recommendations and carb compliance thresholds. Does not change your carb ceilings — update those separately in Carb Ceilings below."></span></div>
         <div style="font-size:11px;color:var(--text3);line-height:1.5;">This sets your carb target and how reports are framed. What you track (symptoms, treatments, screens) comes from 27 starter packs: <a href="#" onclick="event.preventDefault();mhFocusOpen()" style="color:var(--accent);">Change my focus</a>.</div>
+        <div id="mhGoKetoRow" style="margin-top:8px;"></div>
         <div id="info-therapeutic-escalation" class="info-note" style="display:none;">
           <strong>50g is genuinely ketogenic</strong> and is the current target here. The stricter sub-20g level is the more rigorously studied "classic" therapeutic threshold in the research literature — it's the level that would typically be moved to if recurrence or progression occurred, not the default starting point. It's not used as the baseline here because sustained adherence at that level is genuinely difficult: food and drink choices become significantly more restricted, and long-term sustainability becomes a real concern. Discuss any change to either target with your care team.
         </div>
@@ -6322,7 +6323,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1049'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1050'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6520,7 +6521,7 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
 // rather than relying on a graceful exit that real usage often skips.
 // Personal-account keys that show on screen in Settings/Trends/Today. Demo mode blanks them while
 // active and restores them on exit (and after an abandoned session). Added after the demo audit (v1033).
-const DEMO_PRIVATE_KEYS = ['mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
+const DEMO_PRIVATE_KEYS = ['mh_keto_opt','mh_keto_prev','mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
 // True while a demo is running, or about to resume after a language change. The server's real
 // master.csv / combined.csv must never be merged into demo data (v3.10.1041).
 function mhDemoBlocksServerSync() {
@@ -11335,6 +11336,7 @@ function saveCondition() {
   // it last calculated under the old condition until something else
   // happened to trigger a refresh.
   if (typeof renderSuggestedTargets === 'function') renderSuggestedTargets();
+  if (typeof mhGoKetoRender === 'function') mhGoKetoRender();
 }
 
 // Surfaces the sub-20g-vs-sub-50g nuance automatically for GBM/Epilepsy,
@@ -12620,6 +12622,7 @@ function initSettings() {
   if (savedSex) setSex(savedSex);
   const condEl = document.getElementById('settingsCondition');
   if (condEl) condEl.value = localStorage.getItem('mh_condition') || 'general';
+  if (typeof mhGoKetoRender === 'function') mhGoKetoRender();
   updateTherapeuticEscalationNote(localStorage.getItem('mh_condition') || 'general');
   const actEl = document.getElementById('settingsActivityLevel');
   if (actEl) actEl.value = localStorage.getItem('mh_activity_level') || 'moderate';
@@ -44146,7 +44149,55 @@ function buildPatientContext(history, conditionFilter = null) {
 // Diabetes, Body Recomposition, or General Health, none of which are
 // ketogenic. Reuses CONDITION_META's own protocol text rather than a
 // second hardcoded list that could drift out of sync with it.
+// ── Go Keto! (v3.10.1050) ────────────────────────────────────────────────────────────────────────────────
+// An opt-in for people whose profile is not already ketogenic: turns on the keto cards and wording (ketosis zones, carb ceilings,
+// ketone prompts) and sets a ≤50g carb ceiling, WITHOUT changing the profile. Needs a read-and-tick disclaimer. Stopping puts the old
+// ceilings back. Works the same inside a demo (the keys are in DEMO_PRIVATE_KEYS, so a demo never leaks into or out of a real account).
+function mhGoKetoRender() {
+  const row = document.getElementById('mhGoKetoRow'); if (!row) return;
+  const cond = localStorage.getItem('mh_condition') || 'general';
+  const base = (CONDITION_META[cond] || CONDITION_META.general).protocol.toLowerCase().includes('ketogenic');
+  const on = localStorage.getItem('mh_keto_opt') === '1';
+  if (base && !on) { row.innerHTML = ''; return; }
+  row.innerHTML = on
+    ? '<div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:6px;">🥑 Keto cards are on for you. Your profile is unchanged.</div><button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhGoKetoStop()">Stop keto mode</button>'
+    : '<button class="copy-btn" id="mhGoKetoBtn" style="width:100%;font-size:13px;font-weight:700;" onclick="mhGoKetoOpen()">🥑 Go Keto!</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Curious about low-carb eating? Turns on the ketosis cards and a ≤50g carb ceiling. Your profile stays as it is.</div>';
+}
+function mhGoKetoOpen() {
+  document.getElementById('mhGoKetoModal')?.remove();
+  const m = document.createElement('div'); m.id = 'mhGoKetoModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:800;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  m.innerHTML = '<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;">'
+    + '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">🥑 Go Keto!</div>'
+    + '<div style="font-size:13px;line-height:1.6;color:var(--text2);">A ketogenic way of eating keeps carbs very low (here, 50g a day or under) so the body makes ketones for fuel. Switching it on shows the ketosis zones, carb ceilings and ketone prompts, and frames your reports that way.</div>'
+    + '<div style="font-size:13px;line-height:1.6;margin:10px 0;padding:10px;border:1px solid var(--border);border-radius:10px;"><strong>Please check first.</strong> Keto is not right for everyone. Talk to your doctor, dietitian or other qualified health professional before you start, especially if you take medication for diabetes or blood pressure, are pregnant or breastfeeding, have kidney, liver, pancreas or gallbladder problems, or have ever had an eating disorder. MaxedHealth tracks and reports; it does not tell you whether keto is right for you.</div>'
+    + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;margin-bottom:12px;"><input type="checkbox" id="mhGoKetoTick" style="margin-top:3px;" onchange="document.getElementById(\'mhGoKetoGo\').disabled=!this.checked"> <span>I have read this and will check with my health professional.</span></label>'
+    + '<button class="run-btn" id="mhGoKetoGo" disabled onclick="mhGoKetoApply()" style="width:100%;">Go Keto!</button>'
+    + '<button class="copy-btn" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'mhGoKetoModal\').remove()">Not now</button></div>';
+  document.body.appendChild(m);
+}
+function mhGoKetoRefresh() {
+  mhGoKetoRender();
+  ['updateDashboard', 'renderSuggestedTargets', 'updateGBMSectionVisibility', 'updateCarbZonesCopy'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} });
+}
+function mhGoKetoApply() {
+  if (!document.getElementById('mhGoKetoTick')?.checked) return;
+  localStorage.setItem('mh_keto_prev', JSON.stringify({ s: localStorage.getItem('mh_ceil_standard'), o: localStorage.getItem('mh_ceil_occasion'), h: localStorage.getItem('mh_ceil_holiday') }));
+  localStorage.setItem('mh_keto_opt', '1');
+  localStorage.setItem('mh_ceil_standard', 50); localStorage.setItem('mh_ceil_occasion', 75); localStorage.setItem('mh_ceil_holiday', 100);
+  document.getElementById('mhGoKetoModal')?.remove();
+  mhGoKetoRefresh(); showToast('Keto mode is on. Your carb ceiling is 50g. You can change it or stop any time in Settings.');
+}
+function mhGoKetoStop() {
+  let prev = null; try { prev = JSON.parse(localStorage.getItem('mh_keto_prev') || 'null'); } catch (e) {}
+  const put = (k, v) => { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); };
+  if (prev) { put('mh_ceil_standard', prev.s); put('mh_ceil_occasion', prev.o); put('mh_ceil_holiday', prev.h); }
+  localStorage.removeItem('mh_keto_opt'); localStorage.removeItem('mh_keto_prev');
+  mhGoKetoRefresh(); showToast('Keto mode is off. Your old carb ceilings are back.');
+}
+
 function isKetogenicCondition() {
+  if (localStorage.getItem('mh_keto_opt') === '1') return true; // 'Go Keto!' opt-in (v3.10.1050): keto cards and wording without changing the profile
   const cond = localStorage.getItem('mh_condition') || 'general';
   const meta = CONDITION_META[cond] || CONDITION_META.general;
   return meta.protocol.toLowerCase().includes('ketogenic');
