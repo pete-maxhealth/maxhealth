@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1049
+- Changed: the demo library is now much bigger and depends on the persona. Everyone gets 33 everyday foods plus either 27 moderate-carb foods or 17 keto foods (60 or 50 in all) and 24 recipes. Low-carb personas get keto recipes (beef in cream sauce, cheesy chicken bake, salmon with garlic butter spinach, fat bombs, bacon and eggs and more); everyone else gets muscle-gain and general-health meals (chicken and rice bowl, protein porridge, turkey chilli, overnight oats and more). All generic and brand-free, with full macros. Tests p152 (thresholds raised) and p154 (keto vs everyday sets).
+
 ## v3.10.1048
 - Fixed: a boiled egg (or anything with "boiled" in its name) was treated as an oil by the meal-preview fat check, because "oil" sits inside "boiled". Typing "2 boiled eggs and butter" showed a red "fat looks far too low for 100g (expect roughly 90g)" warning on the egg. The oil, butter, cream, lard, ghee and dripping checks now match whole words, and "boiled onion" no longer counts as "oil added". Test p153 (fails without the fix).
 

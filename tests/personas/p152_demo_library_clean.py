@@ -12,8 +12,8 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
     ev("startDemoMode('alex')"); page.wait_for_timeout(2500)
     lib = ev("generateDemoLibrary()"); rec = ev("generateDemoRecipes()")
-    if len(lib) < 40: f.add('BUG', f'demo library too small: {len(lib)}')
-    if len(rec) < 8: f.add('BUG', f'demo recipes too few: {len(rec)}')
+    if len(lib) < 50: f.add('BUG', f'demo library too small: {len(lib)}')
+    if len(rec) < 24: f.add('BUG', f'demo recipes too few: {len(rec)}')
     import re
     brands = re.compile(r'asda|tesco|heylo|lurpak|lidl|costco|coors|carling|bud light|tennent|sol\b|verdejo|marmite|farmfoods|centra|oakhahen|elmlea|strathroy|green & blacks|optimum|warrior', re.I)
     for x in lib: 
