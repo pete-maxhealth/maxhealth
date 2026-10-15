@@ -6355,7 +6355,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1062'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1063'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -22298,10 +22298,18 @@ function mhLangStartObserver() {
 async function mhLangLoad(code) {
   let cached = null; try { cached = JSON.parse(localStorage.getItem('mh_lang_cache_' + code) || 'null'); } catch (_) {}
   if (cached && cached.d) { MH_L.dict = mhLangMerge(cached.d); }
-  try {
-    const r = await fetch(MH_LANG_BASE + code + '.json', { cache: 'no-store' });
-    if (r.ok) { const d = await r.json(); if (d && typeof d === 'object') { try { localStorage.setItem('mh_lang_cache_' + code, JSON.stringify({ v: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', d })); } catch (_) {} MH_L.dict = mhLangMerge(d); } }
-  } catch (_) {}
+  // v1063: the app's own copy first (served by the phone's server, so it works in airplane mode); GitHub only if that is missing.
+  for (const url of [new URL('lang/' + code + '.json', location.href).href, MH_LANG_BASE + code + '.json']) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d && typeof d === 'object' && !d.error && Object.keys(d).length > 20) {
+        try { localStorage.setItem('mh_lang_cache_' + code, JSON.stringify({ v: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', d })); } catch (_) {}
+        MH_L.dict = mhLangMerge(d); break;
+      }
+    } catch (_) {}
+  }
   return MH_L.dict;
 }
 async function mhLangInit() {

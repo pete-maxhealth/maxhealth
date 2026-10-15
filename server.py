@@ -1734,6 +1734,25 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'error': 'Library not found'}, 404)
 
+        # Language files ship with the app (v3.10.1063) so a translation loads with no internet.
+        # Only <2-letter-code>.json files that exist in lang/ are served (basename, no traversal).
+        elif path.startswith('/lang/'):
+            lang_name = os.path.basename(path)
+            lang_path = os.path.join(APP_DIR, 'lang', lang_name)
+            if re.fullmatch(r'[a-z]{2,3}\.json', lang_name) and os.path.isfile(lang_path):
+                with open(lang_path, 'rb') as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-cache')
+                for k, v in CORS.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_json({'error': 'Language not found'}, 404)
+
         elif path.startswith('/icons/'):
             # Serve icon files from the maxhealth app directory
             icon_name = os.path.basename(path)

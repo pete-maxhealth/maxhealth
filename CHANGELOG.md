@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1063
+- Fixed: choosing a language with no internet changed the flag but left the text in English. The translations were only fetched from GitHub. The phone's own server now serves them (`/lang/<code>.json`), so a language works in airplane mode on the first try. GitHub is only the fallback. (Needs the server to restart once after the update.)
+- New test p165: German, French and Spanish with every outside address blocked and no saved copy. It fails on v1062 and passes now.
+
 ## v3.10.1062
 - Fixed (demo): the "Default" button (and any layout change that reloads the page) ended the demo AND permanently changed your real card layout. A demo now restarts itself after any reload, and your real layout, hidden cards and filters are put back exactly when you exit, or on the next load if the tab was closed.
 - Fixed (demo): a downward drag at the top of the screen (pull-to-refresh) reloaded the page and threw you out of the demo. Pull-to-refresh is switched off in the app, and a reload resumes the demo anyway.
