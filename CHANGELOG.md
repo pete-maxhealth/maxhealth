@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1065
+- Changed: the TDEE estimate in Suggested Targets now follows your Activity Level (Sedentary 1.2, Lightly active 1.375, Moderately active 1.55, Very active 1.725 times BMR), so it can no longer disagree with the level the steps check set. Before, the level used your last two weeks of steps but the estimate used the last 30 days, which could drop it a whole tier. With no level set it still uses the 30-day step average. The card names the level beside the step average. A confirmed TDEE you have entered still overrides the formula.
+- New test p166 (all four levels, the fallback, the card wording). The function was also checked on its own in Node.
+
 ## v3.10.1064
 - Changed: pull-down-to-refresh is blocked only while a demo is running. Outside a demo it works as before, so you can still pull down to check for updates.
 
