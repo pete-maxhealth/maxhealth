@@ -25,6 +25,17 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Mediterranean' not in txt: f.add('BUG', f'ratio card does not show the Mediterranean plan: {txt[:120]!r}')
     if re.search(r'keto', txt, re.I): f.add('BUG', 'keto wording on the ratio card for Mediterranean')
     if 'Mediterranean' not in ev("mhDietWho()") or re.search('keto', ev("mhDietWho()"), re.I): f.add('BUG', f"AI phrase wrong: {ev('mhDietWho()')}")
+    # plan adherence: a day inside the Mediterranean ranges counts, a day outside does not
+    pa = ev("mhPlanAdherence([{totals:{kcal:2000,carbs:225,protein:80,fat:80}},{totals:{kcal:2000,carbs:60,protein:150,fat:110}}])")
+    if not pa or pa['n'] != 2 or pa['ok'] != 1 or pa['pct'] != 50: f.add('BUG', f'plan adherence wrong: {pa}')
+    # custom ratio: validated, stored, used with a 5 point margin
+    ev("document.getElementById('mhLifestyleSel').value='custom'; mhLifestyleSet('custom')"); page.wait_for_timeout(300)
+    ev("document.getElementById('mhLsC').value=40; document.getElementById('mhLsP').value=30; document.getElementById('mhLsF').value=30; mhLifestyleCustomSave()")
+    ls = ev("mhLifestyle()")
+    if not ls or ls['label'] != 'My own ratio' or ls['c'] != [35, 45]: f.add('BUG', f'custom ratio not applied: {ls}')
+    ev("document.getElementById('mhLsC').value=90; mhLifestyleCustomSave()")
+    if ev("JSON.parse(localStorage.getItem('mh_lifestyle_custom')).c") != 40: f.add('BUG', 'a ratio that does not add to 100 was saved')
+    ev("mhLifestyleSet('mediterranean')")
     # keto wins if both are on, and stopping keto leaves the lifestyle
     ev("localStorage.setItem('mh_keto_opt','1')")
     if not ev("isKetogenicCondition()"): f.add('BUG', 'keto opt-in not honoured alongside a lifestyle')

@@ -6323,7 +6323,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1053'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1054'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6521,7 +6521,7 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
 // rather than relying on a graceful exit that real usage often skips.
 // Personal-account keys that show on screen in Settings/Trends/Today. Demo mode blanks them while
 // active and restores them on exit (and after an abandoned session). Added after the demo audit (v1033).
-const DEMO_PRIVATE_KEYS = ['mh_lifestyle','mh_keto_opt','mh_keto_prev','mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
+const DEMO_PRIVATE_KEYS = ['mh_lifestyle','mh_lifestyle_custom','mh_keto_opt','mh_keto_prev','mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
 // True while a demo is running, or about to resume after a language change. The server's real
 // master.csv / combined.csv must never be merged into demo data (v3.10.1041).
 function mhDemoBlocksServerSync() {
@@ -34835,11 +34835,13 @@ function renderJourneyCard() {
   const treatmentDayCount = data.filter(isTreatmentDay).length;
 
   const stat = (label, val) => `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;"><div style="font-size:9px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">${label}</div><div style="font-size:16px;font-weight:700;color:var(--text);">${val}</div></div>`;
+  let _pa = null;
   const statsEl = document.getElementById('journeyStats');
   if (statsEl) statsEl.innerHTML =
     stat('Days tracked', weighed.length) +
     stat('Weight range', mhWtRange(Math.min(...weightVals), Math.max(...weightVals))) +
     stat(isKetogenicCondition() ? 'Ketosis adherence' : 'Carb target adherence', `${adherencePct}% (${ketosisDays}/${loggedDays.length})`) +
+    ((_pa = mhPlanAdherence(loggedDays)) ? stat(_pa.label + ' plan adherence', `${_pa.pct}% (${_pa.ok}/${_pa.n})`) : '') +
     stat('Current streak', `${streak} day${streak===1?'':'s'}`) +
     stat('Logging streak', `${calcLoggingStreak()} day${calcLoggingStreak()===1?'':'s'}`) +
     (treatmentDayCount ? stat('Treatment days logged', treatmentDayCount) : '');
@@ -43262,6 +43264,7 @@ function renderReportSummary() {
     card('Avg fat', avgFat+'g', `${avgFatPct}% of calories`, avgFatPct>=65?'var(--accent)':avgFatPct>=50?'var(--yellow)':'#a78bfa')+
     card('Avg carbs', av(carbs)+'g', `ceiling ${t.carbs}g`)+
     card('Carb adherence', adh+'%', `${on}/${n} days within ceiling`, adh>=80?'var(--green)':'var(--yellow)')+
+    (!isKetogenicCondition() && mhPlanAdherence(h) ? card(mhPlanAdherence(h).label + ' plan', mhPlanAdherence(h).pct + '%', `${mhPlanAdherence(h).ok}/${mhPlanAdherence(h).n} days in range`, mhPlanAdherence(h).pct>=70?'var(--accent)':'var(--yellow)') : '')+
     (isKetogenicCondition() ? card('Ketogenic ratio', ketoRatioDays+' days', `fat ≥65% of calories`, ketoRatioDays>=on*0.8?'var(--accent)':'var(--yellow)') : '')+
     card('Protein misses', h.filter(e=>(e.totals?.kcal||0)>100 && (e.totals?.protein||0)<t.protein).length+' days', `below ${t.protein}g target`)+
     card('Streak', streak+' days', 'consecutive days within ceiling', streak>=7?'var(--green)':'var(--text3)')+
@@ -44170,7 +44173,9 @@ function mhGoKetoRender() {
   const lsId = localStorage.getItem('mh_lifestyle') || '';
   const lsPicker = on ? '' : '<div style="font-size:12px;font-weight:700;margin-bottom:4px;">How I eat</div><select id="mhLifestyleSel" onchange="mhLifestyleSet(this.value)" style="width:100%;margin-bottom:4px;"><option value="">No set pattern</option>'
     + Object.keys(MH_LIFESTYLES).map(k => `<option value="${k}"${k === lsId ? ' selected' : ''}>${MH_LIFESTYLES[k].label}</option>`).join('')
-    + '</select><div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px;">' + (MH_LIFESTYLES[lsId] ? MH_LIFESTYLES[lsId].note + ' ' : '') + 'Your condition and goal set the requirements; this shapes the split inside them. Check with a health professional first if you have a condition or take medication.</div>';
+    + `<option value="custom"${lsId === 'custom' ? ' selected' : ''}>Set my own ratio</option></select>`
+    + (lsId === 'custom' ? (() => { let c = {}; try { c = JSON.parse(localStorage.getItem('mh_lifestyle_custom') || '{}') || {}; } catch (e) {} const i = (id, lab, v) => `<label style="font-size:11px;flex:1;">${lab}<input id="${id}" type="number" min="0" max="100" value="${v ?? ''}" style="width:100%;"></label>`; return '<div style="display:flex;gap:6px;margin-bottom:6px;">' + i('mhLsC', 'Carbs %', c.c) + i('mhLsP', 'Protein %', c.p) + i('mhLsF', 'Fat %', c.f) + '</div><button class="copy-btn" style="width:100%;font-size:12px;margin-bottom:6px;" onclick="mhLifestyleCustomSave()">Save my ratio</button>'; })() : '')
+    + '<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px;">' + (mhLifestyle() ? mhLifestyle().note + ' ' : '') + 'Your condition and goal set the requirements; this shapes the split inside them. Check with a health professional first if you have a condition or take medication.</div>';
   row.innerHTML = lsPicker + (on
     ? '<div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:6px;">🥑 Keto cards are on for you. Your profile is unchanged.</div><button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhGoKetoStop()">Stop keto mode</button>'
     : '<button class="copy-btn" id="mhGoKetoBtn" style="width:100%;font-size:13px;font-weight:700;" onclick="mhGoKetoOpen()">🥑 Go Keto!</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Curious about low-carb eating? Turns on the ketosis cards and a ≤50g carb ceiling. Your profile stays as it is.</div>');
@@ -44219,12 +44224,40 @@ const MH_LIFESTYLES = {
   lower_calorie:  { label: 'Lower calorie',   c: [45, 55], p: [20, 30], f: [20, 30], note: 'Calories come first; the split keeps protein up while you eat less.' },
 };
 function mhLifestyleId() { return localStorage.getItem('mh_keto_opt') === '1' ? 'keto' : (localStorage.getItem('mh_lifestyle') || ''); }
-function mhLifestyle() { const id = localStorage.getItem('mh_lifestyle') || ''; return MH_LIFESTYLES[id] ? Object.assign({ id }, MH_LIFESTYLES[id]) : null; }
+function mhLifestyle() {
+  const id = localStorage.getItem('mh_lifestyle') || '';
+  if (id === 'custom') {
+    let c = null; try { c = JSON.parse(localStorage.getItem('mh_lifestyle_custom') || 'null'); } catch (e) {}
+    if (!c || !(c.c >= 0 && c.p >= 0 && c.f >= 0)) return null;
+    const rg = v => [Math.max(0, v - 5), Math.min(100, v + 5)];
+    return { id, label: 'My own ratio', c: rg(c.c), p: rg(c.p), f: rg(c.f), note: 'Your own split of calories, with a 5-point margin either side.' };
+  }
+  return MH_LIFESTYLES[id] ? Object.assign({ id }, MH_LIFESTYLES[id]) : null;
+}
+function mhLifestyleCustomSave() {
+  const g = id => parseFloat(document.getElementById(id)?.value);
+  const c = g('mhLsC'), p = g('mhLsP'), f = g('mhLsF');
+  if (![c, p, f].every(v => v >= 0 && v <= 100)) { showToast('Enter carbs, protein and fat as percentages from 0 to 100'); return; }
+  if (Math.abs(c + p + f - 100) > 3) { showToast(`Those add up to ${Math.round(c + p + f)}%. They should come to about 100%.`); return; }
+  localStorage.setItem('mh_lifestyle_custom', JSON.stringify({ c, p, f })); localStorage.setItem('mh_lifestyle', 'custom');
+  mhGoKetoRefresh(); showToast('Saved your own ratio.');
+}
+// Share of logged days (200+ kcal) whose carb / protein / fat split sat inside the chosen lifestyle's ranges. Null without a non-keto lifestyle.
+function mhPlanAdherence(days) {
+  const ls = mhLifestyle(); if (!ls || isKetogenicCondition()) return null;
+  let n = 0, ok = 0;
+  (days || []).forEach(d => {
+    const k = d.totals?.kcal || 0; if (k < 200) return;
+    const pc = Math.round((d.totals.carbs || 0) * 4 / k * 100), pp = Math.round((d.totals.protein || 0) * 4 / k * 100), pf = Math.round(getEntryFat(d) * 9 / k * 100);
+    n++; if (mhLifestyleCheck(ls, pc, pp, pf).state === 'in') ok++;
+  });
+  return n ? { pct: Math.round(ok / n * 100), ok, n, label: ls.label } : null;
+}
 function mhLifestyleSet(id) {
-  if (id && !MH_LIFESTYLES[id]) return;
+  if (id && !MH_LIFESTYLES[id] && id !== 'custom') return;
   if (id) localStorage.setItem('mh_lifestyle', id); else localStorage.removeItem('mh_lifestyle');
   mhGoKetoRefresh();
-  if (typeof showToast === 'function') showToast(id ? `How I eat: ${MH_LIFESTYLES[id].label}. Your condition and goal targets are unchanged.` : 'How I eat: no set pattern.');
+  if (typeof showToast === 'function' && id !== 'custom') showToast(id ? `How I eat: ${MH_LIFESTYLES[id].label}. Your condition and goal targets are unchanged.` : 'How I eat: no set pattern.');
 }
 // Is a day's macro split inside the lifestyle ranges? Returns {state:'in'|'near'|'off', parts}
 function mhLifestyleCheck(ls, pc, pp, pf) {

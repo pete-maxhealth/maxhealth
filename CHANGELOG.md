@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1054
+- New: **Set my own ratio** in How I eat (carbs / protein / fat percentages, must add to about 100, 5-point margin either side).
+- New: **plan adherence** for anyone with a non-keto lifestyle: a stat in the weight-journey panel and a card in the report showing the share of logged days whose split sat inside the lifestyle's ranges. Keto users keep ketosis adherence. Test p157 extended.
+
 ## v3.10.1053
 - New: **How I eat** (Settings, under the condition). Conditions and goals set the requirements; a lifestyle works inside them. Pick Balanced, Mediterranean, Higher protein or Lower calorie: your condition, goal and carb ceilings are not changed. The Macro ratio card on Today then judges the day against that lifestyle's ranges ("In your range / Nearly there / Off your plan") instead of a fat floor, and the AI recipe and meal-idea prompts are told your way of eating. Ranges are typical starting points, not medical advice. Keto stays its own opt-in (Go Keto!) with its disclaimer, and wins if both are set. Not offered to keto profiles. The choice is in the demo's private keys, so it never leaks into or out of a real account. Test p157 (a thyroid persona on Mediterranean).
 
