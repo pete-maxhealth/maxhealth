@@ -324,6 +324,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.1046 | 25 | `MH_DEMO_SHOW_PREMIUM = true`: demo banner link, Today card, Trends sample and preview say Coming soon; `mhDemoPremiumCard` un-hides `#demoPremiumLink`; preview adds External data imports and Support rows; p132. |
 | v3.10.1047 | 25 | Demo library/recipes (`generateDemoLibrary`, `generateDemoRecipes`) rebuilt generic: 48 foods, 8 recipes, numeric ingredient amounts; `reviewRecipeBeforeLogging` parses amount with parseFloat; `_parseWithAI_impl` and the connectivity gate let a demo reach the on-device stand-in; `demoMealFromBody` matches a typed demo meal to the library; Alex carbStyle moderate, carbs 320. Test p152. |
 | v3.10.1048 | 25 | `renderMealPreview`: `isPureFat` and `impliesOil` use word boundaries (\b) so 'boiled' is not 'oil'. Test p153. |
+| v3.10.1067 | 26 | `mhTagCanon()`; `mhTagDays()`, `mhTagRename`, `mhTagDelete` use it. |
 | v3.10.1066 | 26 | `healFromAbandonedDemoSession` `restore()` ignores `undefined` fields (only explicit `null` removes). |
 | v3.10.1065 | 26 | `getCurrentTDEE()` takes its multiplier from `mh_activity_level` when set (returns `level`); step average is the fallback. |
 | v3.10.1064 | 26 | `overscroll-behavior-y` moved from `html,body` to `html.mh-demo` (class added in `startDemoMode`, removed in `exitDemoMode`). |

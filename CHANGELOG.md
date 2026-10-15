@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1067
+- Fixed: the tag lists in Reports, Compare Metrics and the before/during/after chips had one chip per exercise duration ("Exercise: 135min Cardio", "Exercise: 150min Resistance", "Exercise: 180min Walking" ...), hundreds of them on a long history. "Exercise: <minutes>min <type>" now counts as one tag per type ("Exercise: Walking", "Exercise: Resistance"), and renaming or deleting that tag changes every day that had it. Each day still keeps its own duration.
+- New test p168.
+
 ## v3.10.1066
 - Fixed (found in your own backups): your confirmed TDEE (3400) and standard carb ceiling (50g) were in the 11 Oct backup and gone by 15 Oct. Cause: a demo left running by an older app version saves a backup without those two fields; the next load restored from it and treated "field missing" as "delete". Cleanup now leaves any field the backup does not carry alone. Only an explicit "the real account had none" removes a value.
 - New test p167 (old-format backup keeps TDEE and carb ceiling; fails on v1065, passes now). p166 also run against the app: passes.
