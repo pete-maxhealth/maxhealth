@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1062
+- Fixed (demo): the "Default" button (and any layout change that reloads the page) ended the demo AND permanently changed your real card layout. A demo now restarts itself after any reload, and your real layout, hidden cards and filters are put back exactly when you exit, or on the next load if the tab was closed.
+- Fixed (demo): a downward drag at the top of the screen (pull-to-refresh) reloaded the page and threw you out of the demo. Pull-to-refresh is switched off in the app, and a reload resumes the demo anyway.
+- Fixed: tapping the target banner on Today opened a carb-zones panel that listed "Strict Ketogenic", "This Protocol 35-50g" and "Holiday ceiling 60-75g" for everyone. People who are not on keto now see only their own carb target and the plain low-carb and standard ranges. Keto users are unchanged.
+- Fixed: "Generate full summary" and the GBM summary now grey out offline like the other AI buttons, with the same "needs internet" explanation when tapped.
+- New: building a routine, and Log a workout, now offer tap-to-add exercise chips (your own logged exercises first, then common ones) and name suggestions. Tapping an exercise you have done before fills in its last sets. The routine editor adds the exercise to the first empty row instead of leaving blank rows.
+- New test p164 (carb-zones wording on 4 non-keto and 2 keto personas, Default and reload in a demo, exit and abandoned-demo restore, offline greying, exercise chips).
+
 ## v3.10.1061
 - Fixed (demo): past days in History looked empty when opened, because the demo's meals had a name but no description and History hides entries without one. You could not edit or delete a past demo meal. Demo meals now carry a description.
 - Fixed (demo): tapping the demo routine crashed (its exercises were plain names, the app expects name and sets), and a routine you created said "saved" but was not kept. Demo routines now go through the same normaliser as real ones and edits last for the demo. `getLastLoggedSets` also copes with a missing name.
