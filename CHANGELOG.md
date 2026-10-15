@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1051
+- Fixed: three places showed keto wording to people who are not on a keto profile: the Insights intro to the weight journey ("coloured by ketosis"), a "Ketogenic ratio" card in the reports, and "ketosis targets" in the weather help. They now say carb target, or only appear for keto users. New test p156 opens every main screen as four non-keto personas and fails on any visible keto, ketone or ketosis wording (the Go Keto! row is exempt), and checks a keto persona still sees it.
+
 ## v3.10.1050
 - New: **Go Keto!** for anyone whose profile is not already ketogenic (Settings, next to the condition). It shows a disclaimer (check with your doctor, dietitian or other qualified health professional first, and who should be especially careful) and needs a tick before it switches on. It then turns on the keto cards and wording (ketosis zones, carb ceilings, ketone prompts) and sets a 50g ceiling, without changing your profile. Stop keto mode puts your old ceilings back. Works in demos too and never leaks into or out of a real account. Test p155.
 
