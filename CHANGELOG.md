@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1052
+- Fixed: the AI recipe, "new recipe idea" and next-meal prompts told the AI the user was on a strict ketogenic diet, and the recipe prompt told it to keep every recipe low-carb/ketogenic, whatever the profile. They now say that only for keto profiles; everyone else is told to follow their own targets and not assume any particular diet (`mhDietWho()`).
+- Fixed: keto wording in the recipe-idea placeholder, the treatment-day comparison text, the onboarding carb hint, the treatment report prompt and the chat prompt for non-keto profiles.
+- Test p156 now also records every AI request in the next-meal, balance, recipe-idea and chat flows for non-keto personas and fails if any mentions keto.
+
 ## v3.10.1051
 - Fixed: three places showed keto wording to people who are not on a keto profile: the Insights intro to the weight journey ("coloured by ketosis"), a "Ketogenic ratio" card in the reports, and "ketosis targets" in the weather help. They now say carb target, or only appear for keto users. New test p156 opens every main screen as four non-keto personas and fails on any visible keto, ketone or ketosis wording (the Go Keto! row is exempt), and checks a keto persona still sees it.
 

@@ -19,11 +19,29 @@ def scan(ev, page, pid):
         page.wait_for_timeout(450)
         for m in rx.finditer(ev(JS)): hits.append((name, m.group(0).strip()))
     return hits
+
+def ai_prompts(ev, page, pid):
+    ev(f"startDemoMode('{pid}')"); page.wait_for_timeout(2200)
+    ev("window.__b=[]; const f0=window.fetch; window.fetch=function(u,o){ try{ if(o&&o.body) window.__b.push(String(o.body)); }catch(e){} return f0.apply(this,arguments); }")
+    steps = ["startNextMealFlow()", "startBalanceMacrosFlow()", "openRecipeDiscoverModal(); document.getElementById('recipeDiscoverInput').value='a quick dinner'; submitRecipeDiscover()",
+             "switchTab('log',document.getElementById('maintab-log')); document.getElementById('chatInput') && (document.getElementById('chatInput').value='what do I still need today?'); sendChat()"]
+    for js in steps:
+        try: ev(js)
+        except Exception as e: pass
+        page.wait_for_timeout(1800)
+    return ev("window.__b")
+
 with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 800}, service_workers='block').new_page()
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
     for pid in ('alex', 'barry', 'karen', 'doris'):
         for name, t in scan(ev, page, pid): f.add('BUG', f'{pid}/{name}: keto wording shown to a non-keto user: "{t}"')
+    for pid in ('alex', 'karen'):
+        bs = ai_prompts(ev, page, pid)
+        if not bs: f.add('BUG', f'{pid}: no AI requests captured, test cannot see prompts')
+        for b in bs:
+            m = re.search(r'.{0,60}\b(keto\w*|ketosis|ketone\w*)\b.{0,60}', b, re.I)
+            if m: f.add('BUG', f'{pid}: AI prompt mentions keto: "{m.group(0)}"')
     if not scan(ev, page, 'raj'): f.add('BUG', 'keto persona (raj) sees no keto wording at all')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

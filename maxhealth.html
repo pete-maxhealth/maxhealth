@@ -2337,7 +2337,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     <div style="margin-bottom:24px;">
       <div style="font-size:11px;color:var(--yellow);font-family:Space Mono,monospace;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Daily carb ceiling (g) — optional</div>
       <input class="modal-input" type="number" id="onboardCarbs" placeholder="e.g. 50 (blank = no limit)" style="font-size:18px;">
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Under 50g = ketosis zone.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Leave blank for no limit. You can change this any time in Settings.</div>
     </div>
     <button class="run-btn" onclick="onboardNext(5)">Next →</button>
   </div>
@@ -4354,7 +4354,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div id="rpt-treatment-wrap">
       <div class="settings-card" style="padding:14px 16px;border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.04);">
         <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">
-          Comparing nutrition, ketosis adherence, and weight on <span style="color:#a855f7;">🧪 treatment days</span> vs standard days. Based on occasion tags in your history.
+          Comparing nutrition, carb adherence, and weight on <span style="color:#a855f7;">🧪 treatment days</span> vs standard days. Based on occasion tags in your history.
         </div>
         <div id="treatment-cycles-info" style="margin-bottom:12px;"></div>
         <div id="treatment-stats-grid" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:14px;"></div>
@@ -6323,7 +6323,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1051'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1052'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -13931,7 +13931,7 @@ If the user asks for a RECIPE (not just a quick single-meal suggestion — a pro
 }
 Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch — use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: Never include calories, protein, fat or carbs in the ingredients list — name, amount and unit ONLY. Nutrition figures are looked up separately from the user's own food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol.
 
-If the user asks a question (remaining intake, ketosis, weight, suggestions), respond ONLY with:
+If the user asks a question (remaining intake, ${isKetogenicCondition() ? 'ketosis' : 'targets'}, weight, suggestions), respond ONLY with:
 {
   "type": "query",
   "message": "your answer here, concise, no markdown"
@@ -17493,6 +17493,7 @@ let _recipeDiscoverKind = null;
 function openRecipeDiscoverModal() {
   document.getElementById('recipeDiscoverInput').value = '';
   _recipeDiscoverKind = null;
+  document.getElementById('recipeDiscoverInput').placeholder = isKetogenicCondition() ? 'e.g. Keto Custard — or leave blank for a surprise' : 'e.g. Chicken and rice bowl — or leave blank for a surprise';
   document.getElementById('recipeDiscoverModal').style.display = 'flex';
   setTimeout(() => document.getElementById('recipeDiscoverInput')?.focus(), 100);
 }
@@ -17528,7 +17529,7 @@ async function submitRecipeDiscover() {
   // ("interesting keto recipe idea") hit the exact same one on itself) -
   // patching around individual words isn't sustainable for free text, so
   // this bypasses that router entirely and talks to the AI on its own terms.
-  const systemPrompt = `You are a recipe assistant for someone on a strict ketogenic diet. The user wants ${request}.
+  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. The user wants ${request}.
 
 Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
 {
@@ -17541,7 +17542,7 @@ Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
   ],
   "method": ["Fry onion and garlic in olive oil, 5 mins.", "Brown the mince.", "..."]
 }
-Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch - use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: never include calories, protein, fat or carbs in the ingredients list - name, amount and unit ONLY. Nutrition figures are looked up separately from the user's real food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol. Keep the recipe genuinely low-carb/ketogenic - no grains, sugar, starchy veg, or high-carb fruit.
+Only use unit values from: g, kg, ml, l, tsp, tbsp, cup, clove, whole, pinch - use "whole" or "clove" for count-based items (put the count in "amount", e.g. amount:3, unit:"clove", not amount:3, unit:"g"). CRITICAL: never include calories, protein, fat or carbs in the ingredients list - name, amount and unit ONLY. Nutrition figures are looked up separately from the user's real food library or entered manually; inventing them here would bypass that and risk wrong numbers on a strict tracking protocol. ${isKetogenicCondition() ? 'Keep the recipe genuinely low-carb/ketogenic - no grains, sugar, starchy veg, or high-carb fruit.' : 'Keep the recipe sensible for the targets above and do not assume any particular diet.'}
 CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name or method step needs a double-quote character (e.g. quoting a measurement like 2"), escape it as \\" - an unescaped quote breaks the entire response.`;
 
   // Attempts to parse, with two layers of recovery before giving up: first a
@@ -17630,7 +17631,7 @@ async function submitRecipeFromLibrary() {
     .map(f => `${f.name} — ${f.kcal}kcal, ${f.protein}g P, ${f.carbs}g C, ${f.fat || 0}g F per ${f.portion || '100g'}`)
     .join('\n');
 
-  const systemPrompt = `You are a recipe assistant for someone on a strict ketogenic diet. Build a recipe using ONLY ingredients from the list below — do not introduce anything not on this list. Combine 3-6 of them into something genuinely coherent as a meal, sized to roughly fit within these per-meal targets: ~${Math.round(t.kcal / 3)}kcal, ${Math.round(t.protein / 3)}g protein, keep total carbs low (daily ceiling is ${t.carbs}g, this is one meal of several).
+  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. Build a recipe using ONLY ingredients from the list below — do not introduce anything not on this list. Combine 3-6 of them into something genuinely coherent as a meal, sized to roughly fit within these per-meal targets: ~${Math.round(t.kcal / 3)}kcal, ${Math.round(t.protein / 3)}g protein, keep total carbs low (daily ceiling is ${t.carbs}g, this is one meal of several).
 
 AVAILABLE INGREDIENTS (name — macros per stated portion):
 ${forPrompt}
@@ -17930,7 +17931,7 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
     return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F`;
   }).join('\n');
 
-  const systemPrompt = `You are a nutrition assistant helping someone on a strict ketogenic protocol pick what to eat next, using ONLY foods and recipes they've actually got saved — never suggest anything not in these exact lists.
+  const systemPrompt = `You are a nutrition assistant helping ${mhDietWho()} pick what to eat next, using ONLY foods and recipes they've actually got saved — never suggest anything not in these exact lists.
 
 TODAY'S REMAINING BUDGET:
 Calories: ${remaining.kcal}kcal | Protein: ${remaining.protein}g | Carbs: ${remaining.carbs}g | Fat: ${remaining.fat}g
@@ -41876,7 +41877,7 @@ TREATMENT CYCLE DATA:
 ${cycleText}
 
 Write a concise clinical summary (3-4 short paragraphs) covering:
-1. Nutritional adherence and metabolic ketosis status over the period, with specific adherence percentage
+1. Nutritional adherence and ${isKetogenicCondition() ? 'metabolic ketosis status' : 'carb-target adherence'} over the period, with specific adherence percentage
 2. Weight and body composition trend, correctly interpreted against the patient's stated intentional phase (do not flag intentional weight change as a concern)
 3. Any observable relationship between treatment days and nutritional intake, if data permits — state clearly if data is insufficient to draw a conclusion rather than speculating
 4. A single-paragraph overall status assessment
@@ -44196,6 +44197,8 @@ function mhGoKetoStop() {
   mhGoKetoRefresh(); showToast('Keto mode is off. Your old carb ceilings are back.');
 }
 
+// Who the AI is talking to, for recipe / next-meal prompts (v3.10.1052): never assume keto for a profile that isn't.
+function mhDietWho() { return isKetogenicCondition() ? 'someone on a strict ketogenic diet' : "someone following their own calorie, protein and carb targets (do not assume any particular diet)"; }
 function isKetogenicCondition() {
   if (localStorage.getItem('mh_keto_opt') === '1') return true; // 'Go Keto!' opt-in (v3.10.1050): keto cards and wording without changing the profile
   const cond = localStorage.getItem('mh_condition') || 'general';
@@ -49503,7 +49506,7 @@ function dismissInsight() {
       <div onclick="closeRecipeDiscoverModal()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
     </div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">A genuinely new recipe idea, full ingredients/weights/method — may need things you don't have yet. For what's ready right now from what's already in, use "Next meal idea" instead.</div>
-    <input id="recipeDiscoverInput" class="modal-input" placeholder="e.g. Keto Custard — or leave blank for a surprise" style="width:100%;font-size:14px;padding:12px;margin-bottom:10px;box-sizing:border-box;text-align:left;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitRecipeDiscover();}">
+    <input id="recipeDiscoverInput" class="modal-input" placeholder="e.g. Chicken and rice bowl — or leave blank for a surprise" style="width:100%;font-size:14px;padding:12px;margin-bottom:10px;box-sizing:border-box;text-align:left;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitRecipeDiscover();}">
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='sweet';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #ec4899;border-radius:8px;color:#ec4899;font-size:12px;font-weight:600;cursor:pointer;">🍰 Surprise sweet</button>
       <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='savoury';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #f59e0b;border-radius:8px;color:#f59e0b;font-size:12px;font-weight:600;cursor:pointer;">🥘 Surprise savoury</button>
