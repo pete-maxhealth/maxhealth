@@ -28,7 +28,7 @@ with fresh_server() as root, sync_playwright() as pw:
             for k in ('kcal', 'protein', 'carbs', 'fat'):
                 if not isinstance(i.get(k), (int, float)): f.add('BUG', f"{r['name']}/{i['name']} missing {k}")
         s = r['servings']; t = r['total']
-        if not (200 <= t['kcal'] / s <= 1100): f.add('BUG', f"{r['name']}: odd kcal per serving {t['kcal']/s:.0f}")
+        if not (150 <= t['kcal'] / s <= 1100): f.add('BUG', f"{r['name']}: odd kcal per serving {t['kcal']/s:.0f}")
     # log every recipe's 1 serving through the real UI and look for NaN
     ev("switchTab('log', document.getElementById('maintab-log'))"); page.wait_for_timeout(600)
     ev("switchSubTab('log','library',document.getElementById('logtab-library'))"); page.wait_for_timeout(1500)

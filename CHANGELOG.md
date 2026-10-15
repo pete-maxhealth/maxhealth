@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1055
+- New: **starter foods and recipes**, one shared pool of 147 generic foods and 71 simple recipes (typical reference values per 100 g, no brands), embedded in the app so it works offline and generated from one source (`tools/gen_food_pool.py`, data in `starter_packs/food_pool.json`).
+  - **Onboarding** has a new step, "How do you like to eat?": pick Balanced, Mediterranean, Higher protein or Lower calorie (or none), and tick "Add starter foods and recipes" (on by default, skippable). Keto profiles are not asked to choose and get the low-carb set.
+  - **Starter packs**: all 27 pack files carry `foodPool`, so every pack preview offers a "Starter foods and recipes" tick, matched to your way of eating.
+  - **Settings** (under the condition): "Add starter foods and recipes" / "Remove starter foods and recipes". Starter items are marked source "starter", so removing takes out only those.
+  - Keto gets the low-carb recipes and leaves out foods over 15 g carbs per 100 g (unless a chosen recipe needs them); everyone else gets every non-keto recipe, or the ones matching the chosen lifestyle.
+  - **Demos** read the same pool, so a visitor sees the same foods a new user would get (low-carb personas the keto set).
+- Tests p158 (pool), p159 (onboarding step), p152 updated (150 kcal floor for light soups and salads).
+
 ## v3.10.1054
 - New: **Set my own ratio** in How I eat (carbs / protein / fat percentages, must add to about 100, 5-point margin either side).
 - New: **plan adherence** for anyone with a non-keto lifestyle: a stat in the weight-journey panel and a card in the report showing the share of logged days whose split sat inside the lifestyle's ranges. Keto users keep ketosis adherence. Test p157 extended.
