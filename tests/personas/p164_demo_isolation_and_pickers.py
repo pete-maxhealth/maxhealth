@@ -29,6 +29,11 @@ with fresh_server() as root, sync_playwright() as pw:
     for pid in ['maria', 'sam']:
         ev(f"startDemoMode('{pid}')"); page.wait_for_timeout(1800); ev("document.getElementById('maintab-today').click()"); page.wait_for_timeout(500)
         t = tip_text(); check(f'{pid}: keto persona still sees ketogenic zones', re.search(r'Ketogenic', t) is not None, t[:200])
+    ob = ev("getComputedStyle(document.body).overscrollBehaviorY")
+    check('in a demo pull-to-refresh is blocked', ob == 'contain', ob)
+    ev("exitDemoMode()"); page.wait_for_timeout(500)
+    ob = ev("getComputedStyle(document.body).overscrollBehaviorY")
+    check('outside a demo pull-down refresh still works (for updates)', ob != 'contain', ob)
     # Default layout inside a demo
     ev("startDemoMode('alex')"); page.wait_for_timeout(1800)
     ev("mhDoResetLayout(mhLayoutKeys(null))"); page.wait_for_timeout(4500)
