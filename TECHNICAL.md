@@ -324,6 +324,7 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.1046 | 25 | `MH_DEMO_SHOW_PREMIUM = true`: demo banner link, Today card, Trends sample and preview say Coming soon; `mhDemoPremiumCard` un-hides `#demoPremiumLink`; preview adds External data imports and Support rows; p132. |
 | v3.10.1047 | 25 | Demo library/recipes (`generateDemoLibrary`, `generateDemoRecipes`) rebuilt generic: 48 foods, 8 recipes, numeric ingredient amounts; `reviewRecipeBeforeLogging` parses amount with parseFloat; `_parseWithAI_impl` and the connectivity gate let a demo reach the on-device stand-in; `demoMealFromBody` matches a typed demo meal to the library; Alex carbStyle moderate, carbs 320. Test p152. |
 | v3.10.1048 | 25 | `renderMealPreview`: `isPureFat` and `impliesOil` use word boundaries (\b) so 'boiled' is not 'oil'. Test p153. |
+| v3.10.1061 | 26 | Demo history entries get `description`; `_demoRoutineSession` plus `_normalizeRoutineExercises` in the demo `loadRoutines`. |
 | v3.10.1060 | 26 | Demo ignores its own fake network successes in the offline detector; `_demoLibSession` / `_demoRecipeSession` keep demo edits in memory. |
 | v3.10.1059 | 26 | `_libPickerBrowseHtml` adds an "Other options" list (similar first) under swap-picker results; `currentName` stored on `_libPickerTarget`. |
 | v3.10.1058 | 26 | `filterRecipeLibPicker` lists the whole library when the typed name matches nothing; offline wording replaces the online-search link. |

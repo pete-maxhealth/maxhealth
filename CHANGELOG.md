@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1061
+- Fixed (demo): past days in History looked empty when opened, because the demo's meals had a name but no description and History hides entries without one. You could not edit or delete a past demo meal. Demo meals now carry a description.
+- Fixed (demo): tapping the demo routine crashed (its exercises were plain names, the app expects name and sets), and a routine you created said "saved" but was not kept. Demo routines now go through the same normaliser as real ones and edits last for the demo. `getLastLoggedSets` also copes with a missing name.
+- New test p163: Alex offline through editing and deleting today's entries, History (edit, delete entry, edit totals, delete a day, calendar), routines (create, apply, delete), fasting numbers, symptoms and treatments.
+
 ## v3.10.1060
 - Fixed: in a demo, typing a meal gets its sample answer through a network call answered on the phone. The offline check counted that as a working internet connection and flipped the app to "Back online" in airplane mode, after which barcode, food search and the AI buttons stopped giving their clean "needs internet" message. A demo's own answers no longer count; the 15-second check and the browser's online event still do.
 - Fixed: in a demo, "Add food" and "Save recipe" said "Added" but nothing was kept. Edits to the library and recipes now last for the rest of that demo (memory only, never written to storage, reset when you start another demo or exit).
