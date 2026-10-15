@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1060
+- Fixed: in a demo, typing a meal gets its sample answer through a network call answered on the phone. The offline check counted that as a working internet connection and flipped the app to "Back online" in airplane mode, after which barcode, food search and the AI buttons stopped giving their clean "needs internet" message. A demo's own answers no longer count; the 15-second check and the browser's online event still do.
+- Fixed: in a demo, "Add food" and "Save recipe" said "Added" but nothing was kept. Edits to the library and recipes now last for the rest of that demo (memory only, never written to storage, reset when you start another demo or exit).
+- New test p162: Alex end to end with no internet (49 checks across Today, Log, History, Library, Insights, Reports, Settings and Exit demo).
+
 ## Tests (no app change)
 - Added p161: core food flows with no internet on demo personas (typed meal preview, logging a library recipe, barcode and food search messages, recipe builder picker, "what fits" suggestions and their ingredient picker). Offline click-through of every main screen also run on Alex, Raj, Maria and John: no JS errors, stuck spinners or broken text.
 

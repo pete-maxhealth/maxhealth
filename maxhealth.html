@@ -6351,7 +6351,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1059'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1060'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -7169,7 +7169,7 @@ const SEED_LIBRARY = [];  // New users start with empty library
 function isMealEntry(f) { return f.isMeal === true || (f.isMeal === undefined && f.portion === '1 serving'); }
 
 function loadLibrary() {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return generateDemoLibrary();
+  if (typeof _demoMode !== 'undefined' && _demoMode) return window._demoLibSession ? JSON.parse(JSON.stringify(window._demoLibSession)) : generateDemoLibrary();   // v1060: edits made during a demo last for the demo (memory only)
   // Try all three storage locations in order
   const keys = [LIBRARY_KEY, 'mh_library_backup', 'mh_library_b2'];
   for (const key of keys) {
@@ -7206,7 +7206,7 @@ function loadLibrary() {
 }
 
 function saveLibrary(lib) {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  if (typeof _demoMode !== 'undefined' && _demoMode) { try { window._demoLibSession = JSON.parse(JSON.stringify(lib)); } catch (_) {} return; } // never touch real storage during a demo; keep the edit in memory for this demo only
   // Single choke-point for every library save, regardless of entry route
   // (manual add, AI parse, barcode, CSV import...) - normalize every name
   // here so it's applied automatically, not as a one-off cleanup (28/09/2026).
@@ -29909,7 +29909,7 @@ function _maybeOfferRecipeDraftRestore() {
 }
 
 function loadRecipes() {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return generateDemoRecipes();
+  if (typeof _demoMode !== 'undefined' && _demoMode) return window._demoRecipeSession ? JSON.parse(JSON.stringify(window._demoRecipeSession)) : generateDemoRecipes();
   // Same three-key redundancy and auto-restore pattern proven for the food
   // library — recipes represent real user effort (multi-ingredient combos) and
   // previously had zero protection at all, not even a try/catch.
@@ -29954,7 +29954,7 @@ function loadRecipes() {
   return [];
 }
 function saveRecipes(recipes) {
-  if (typeof _demoMode !== 'undefined' && _demoMode) return; // never touch real storage during a demo
+  if (typeof _demoMode !== 'undefined' && _demoMode) { try { window._demoRecipeSession = JSON.parse(JSON.stringify(recipes)); } catch (_) {} return; } // never touch real storage during a demo; kept in memory for this demo only
   // Single choke-point for every recipe save - normalize the recipe's own
   // title AND each ingredient's name, same "force all future entries down
   // the same way" rule as saveLibrary() (28/09/2026).
@@ -45676,6 +45676,7 @@ function generateDemoSupplements() {
 let _demoFullSnap = null;
 let _demoPersonaId = null;
 function startDemoMode(personaId) {
+  window._demoLibSession = null; window._demoRecipeSession = null;   // every demo starts from its own fresh library
   const persona = DEMO_PERSONAS.find(p => p.id === personaId) || DEMO_PERSONAS[0];
   _demoPersonaId = persona.id;
   // CONFIRMED BUG (24/09/26, Pete Spence's real account): picking a second persona
@@ -46030,6 +46031,7 @@ window.addEventListener('load', function () {
 });
 
 function exitDemoMode() {
+  window._demoLibSession = null; window._demoRecipeSession = null;
   _demoMode=false;
   _demoPersonaId = null;
   try { sessionStorage.removeItem('mh_demo_resume'); } catch (_) {}
@@ -50222,7 +50224,10 @@ function dismissInsight() {
     var url = typeof input === 'string' ? input : (input && input.url) || '';
     var p = _fetch(input, init);
     if (!isExternal(url)) return p;
-    return p.then(function (r) { lastOk = Date.now(); if (net.off) setOff(false); return r; },
+    // v1060: a demo answers its AI calls on the phone, so a "successful" request there proves nothing about the internet.
+    // Counting it flipped the app to "Back online" in airplane mode. The 15-second check and the browser's own online event still work.
+    var _demoFake = (typeof _demoMode !== 'undefined' && _demoMode);
+    return p.then(function (r) { if (!_demoFake) { lastOk = Date.now(); if (net.off) setOff(false); } return r; },
       function (e) { if (!(e && e.name === 'AbortError')) verify(); throw e; });
   };
   window.addEventListener('offline', function () { setOff(true); });
