@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## Tests (no app change)
+- Added p161: core food flows with no internet on demo personas (typed meal preview, logging a library recipe, barcode and food search messages, recipe builder picker, "what fits" suggestions and their ingredient picker). Offline click-through of every main screen also run on Alex, Raj, Maria and John: no JS errors, stuck spinners or broken text.
+
 ## v3.10.1059
 - Fixed: the ingredient swap picker (recipe builder, Cook Mode and the suggested-meal cards) is pre-filled with the old ingredient's full name, so it matched only itself and left nothing to swap with, which offline is a dead end. It now always lists the rest of your library underneath ("Other options in your library"), with the most similar foods first (most shared categories, then A-Z). Test p160 covers both the in-library and no-match cases, for an everyday and a low-carb persona, offline.
 
