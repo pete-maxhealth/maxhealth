@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1057
+- Fixed: onboarding only adds the starter foods and the chosen lifestyle if the person actually reached the "How do you like to eat?" step. Before this, finishing setup by any other route (including automated tests) could add 147 foods silently. Found by the full test run (p09 expects an empty library).
+- Changed: the pool data now lives at `starter_packs/data/food_pool.json`, out of the pack folder, so it is not mistaken for a starter pack (test p99 caught it). `tools/gen_food_pool.py` writes it there.
+- Full persona suite run end to end: everything passes in the real repo.
+
 ## v3.10.1056
 - Fixed (keto wording for non-keto profiles, second sweep): the "Sleep & Ketosis" search entry now reads "Sleep & carb adherence"; the default "Ketosis check" saved prompt reads "Carb check"; the protein drill-down no longer says "during therapeutic ketosis"; a settings help line no longer mentions ketosis streaks; and the AI Full Summary prompt no longer asks for a ketosis section, a ketogenic fat-ratio flag, a GKI line (unless readings exist) or ketone wording. Non-keto profiles get a "Carb & plan adherence" section that also names their lifestyle.
 - Test p156 now also opens every card on every main screen, reads help text, tooltips and placeholders, opens every metric drill-down, checks search labels and saved prompts, and records the Full Summary and brief prompts. Left alone on purpose: the fasting help line "On a ketogenic diet?" (it is advice for people who fast, not an assumption), the GKI drill-down (only reachable by someone logging blood ketones) and the net-carb explainer's mention of keto products.

@@ -124,7 +124,8 @@ for name, sv, ings, st in R:
         for a, b in (('kcal', 'kcal'), ('protein', 'protein'), ('carbs', 'carbs'), ('fat', 'fat')): tot[a] += o[b]
     recs.append({'n': name, 's': sv, 'i': [[n, g] for n, g in ings], 't': st})
 pool = {'v': 1, 'note': 'Typical reference values per 100 g for starting a library. Check against your own labels.', 'foods': foods, 'recipes': recs}
-json.dump(pool, open(os.path.join(ROOT, 'starter_packs', 'food_pool.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
+os.makedirs(os.path.join(ROOT, 'starter_packs', 'data'), exist_ok=True)
+json.dump(pool, open(os.path.join(ROOT, 'starter_packs', 'data', 'food_pool.json'), 'w'), ensure_ascii=False, separators=(',', ':'))
 # flag packs
 n = 0
 for fp in glob.glob(os.path.join(ROOT, 'starter_packs', '*.json')):
