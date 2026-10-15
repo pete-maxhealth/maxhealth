@@ -6323,7 +6323,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1052'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1053'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -6521,7 +6521,7 @@ localStorage.removeItem('mh_debug_log'); // one-time cleanup of any leftover log
 // rather than relying on a graceful exit that real usage often skips.
 // Personal-account keys that show on screen in Settings/Trends/Today. Demo mode blanks them while
 // active and restores them on exit (and after an abandoned session). Added after the demo audit (v1033).
-const DEMO_PRIVATE_KEYS = ['mh_keto_opt','mh_keto_prev','mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
+const DEMO_PRIVATE_KEYS = ['mh_lifestyle','mh_keto_opt','mh_keto_prev','mh_conditions','mh_condition_history','mh_activity_level','mh_activity_level_history','mh_activities','mh_body_fat_pct','mh_carer_email','mh_ceil_holiday','mh_ceil_occasion','mh_today_notes','mh_saved_prompts','mh_saved_queries','mh_gbm_research_digests','mh_journey_overlays','mh_steps_baseline','mh_steps_baseline_mode','mh_steps_today','mh_tableware','mh_notif_prefs','mh_device_precedence','mh_carb_method','mh_celebrated_milestones','mh_celebrated_logging_milestones','mh_recent_meal_suggestions','mh_custom_tag_parents','mh_manual_template_fields'];
 // True while a demo is running, or about to resume after a language change. The server's real
 // master.csv / combined.csv must never be merged into demo data (v3.10.1041).
 function mhDemoBlocksServerSync() {
@@ -24614,6 +24614,13 @@ function renderMacroRatioBar(totals, fatCalories) {
       } else {
         targetLine.style.display = 'none';
       }
+    }
+    // A chosen lifestyle (non-keto) judges the day against ITS ranges, not a fat floor
+    const _ls = !isKetogenicCondition() ? mhLifestyle() : null;
+    if (_ls) {
+      const chk = mhLifestyleCheck(_ls, pC, pP, pF);
+      if (ketoLabel) ketoLabel.innerHTML = chk.state === 'in' ? '<span style="color:var(--accent);">✓ In your range</span>' : chk.state === 'near' ? '<span style="color:var(--yellow);">↑ Nearly there</span>' : '<span style="color:#eb5050;">⚠ Off your plan</span>';
+      if (targetLine) { targetLine.style.display = 'block'; targetLine.innerHTML = `${_ls.label}: <span style="color:var(--yellow);">carbs ${_ls.c[0]}-${_ls.c[1]}%</span> · <span style="color:#4d9fff;">protein ${_ls.p[0]}-${_ls.p[1]}%</span> · <span style="color:#a78bfa;">fat ${_ls.f[0]}-${_ls.f[1]}%</span>`; }
     }
   } else if (ratioCard) {
     ratioCard.style.display = 'none';
@@ -44160,9 +44167,13 @@ function mhGoKetoRender() {
   const base = (CONDITION_META[cond] || CONDITION_META.general).protocol.toLowerCase().includes('ketogenic');
   const on = localStorage.getItem('mh_keto_opt') === '1';
   if (base && !on) { row.innerHTML = ''; return; }
-  row.innerHTML = on
+  const lsId = localStorage.getItem('mh_lifestyle') || '';
+  const lsPicker = on ? '' : '<div style="font-size:12px;font-weight:700;margin-bottom:4px;">How I eat</div><select id="mhLifestyleSel" onchange="mhLifestyleSet(this.value)" style="width:100%;margin-bottom:4px;"><option value="">No set pattern</option>'
+    + Object.keys(MH_LIFESTYLES).map(k => `<option value="${k}"${k === lsId ? ' selected' : ''}>${MH_LIFESTYLES[k].label}</option>`).join('')
+    + '</select><div style="font-size:11px;color:var(--text3);line-height:1.5;margin-bottom:10px;">' + (MH_LIFESTYLES[lsId] ? MH_LIFESTYLES[lsId].note + ' ' : '') + 'Your condition and goal set the requirements; this shapes the split inside them. Check with a health professional first if you have a condition or take medication.</div>';
+  row.innerHTML = lsPicker + (on
     ? '<div style="font-size:12px;line-height:1.5;color:var(--text2);margin-bottom:6px;">🥑 Keto cards are on for you. Your profile is unchanged.</div><button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhGoKetoStop()">Stop keto mode</button>'
-    : '<button class="copy-btn" id="mhGoKetoBtn" style="width:100%;font-size:13px;font-weight:700;" onclick="mhGoKetoOpen()">🥑 Go Keto!</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Curious about low-carb eating? Turns on the ketosis cards and a ≤50g carb ceiling. Your profile stays as it is.</div>';
+    : '<button class="copy-btn" id="mhGoKetoBtn" style="width:100%;font-size:13px;font-weight:700;" onclick="mhGoKetoOpen()">🥑 Go Keto!</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Curious about low-carb eating? Turns on the ketosis cards and a ≤50g carb ceiling. Your profile stays as it is.</div>');
 }
 function mhGoKetoOpen() {
   document.getElementById('mhGoKetoModal')?.remove();
@@ -44197,8 +44208,37 @@ function mhGoKetoStop() {
   mhGoKetoRefresh(); showToast('Keto mode is off. Your old carb ceilings are back.');
 }
 
+// ── How I eat (v3.10.1053) ───────────────────────────────────────────────────────────────────────────────
+// Conditions and goals set the requirements (calories, protein, carb limits, cautions). A lifestyle works INSIDE them: it shapes the
+// share of calories from carbs / protein / fat and the food choices, and never loosens a requirement. Ranges are typical starting
+// points (% of calories), not medical advice. Keto is one entry and keeps its own disclaimer flow (Go Keto!).
+const MH_LIFESTYLES = {
+  balanced:       { label: 'Balanced',        c: [45, 55], p: [15, 25], f: [25, 35], note: 'A middle-of-the-road split. Nothing cut out.' },
+  mediterranean:  { label: 'Mediterranean',   c: [40, 50], p: [15, 20], f: [35, 40], note: 'Plenty of vegetables, legumes, fish and olive oil; fewer processed foods.' },
+  higher_protein: { label: 'Higher protein',  c: [30, 45], p: [25, 35], f: [25, 35], note: 'More protein at each meal, useful for building or keeping muscle.' },
+  lower_calorie:  { label: 'Lower calorie',   c: [45, 55], p: [20, 30], f: [20, 30], note: 'Calories come first; the split keeps protein up while you eat less.' },
+};
+function mhLifestyleId() { return localStorage.getItem('mh_keto_opt') === '1' ? 'keto' : (localStorage.getItem('mh_lifestyle') || ''); }
+function mhLifestyle() { const id = localStorage.getItem('mh_lifestyle') || ''; return MH_LIFESTYLES[id] ? Object.assign({ id }, MH_LIFESTYLES[id]) : null; }
+function mhLifestyleSet(id) {
+  if (id && !MH_LIFESTYLES[id]) return;
+  if (id) localStorage.setItem('mh_lifestyle', id); else localStorage.removeItem('mh_lifestyle');
+  mhGoKetoRefresh();
+  if (typeof showToast === 'function') showToast(id ? `How I eat: ${MH_LIFESTYLES[id].label}. Your condition and goal targets are unchanged.` : 'How I eat: no set pattern.');
+}
+// Is a day's macro split inside the lifestyle ranges? Returns {state:'in'|'near'|'off', parts}
+function mhLifestyleCheck(ls, pc, pp, pf) {
+  const gap = (v, r) => v < r[0] ? r[0] - v : v > r[1] ? v - r[1] : 0;
+  const g = [gap(pc, ls.c), gap(pp, ls.p), gap(pf, ls.f)], worst = Math.max.apply(null, g);
+  return { state: worst === 0 ? 'in' : worst <= 5 ? 'near' : 'off', gaps: g };
+}
 // Who the AI is talking to, for recipe / next-meal prompts (v3.10.1052): never assume keto for a profile that isn't.
-function mhDietWho() { return isKetogenicCondition() ? 'someone on a strict ketogenic diet' : "someone following their own calorie, protein and carb targets (do not assume any particular diet)"; }
+function mhDietWho() {
+  if (isKetogenicCondition()) return 'someone on a strict ketogenic diet';
+  const ls = mhLifestyle();
+  if (ls) return `someone following a ${ls.label} way of eating (roughly ${ls.c[0]}-${ls.c[1]}% of calories from carbs, ${ls.p[0]}-${ls.p[1]}% protein, ${ls.f[0]}-${ls.f[1]}% fat) within their own calorie and protein targets`;
+  return "someone following their own calorie, protein and carb targets (do not assume any particular diet)";
+}
 function isKetogenicCondition() {
   if (localStorage.getItem('mh_keto_opt') === '1') return true; // 'Go Keto!' opt-in (v3.10.1050): keto cards and wording without changing the profile
   const cond = localStorage.getItem('mh_condition') || 'general';
