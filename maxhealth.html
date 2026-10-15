@@ -5030,7 +5030,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.6;">
           Same thresholds the existing TDEE activity multiplier already uses — one definition of each tier, not two that could disagree. For each of the last N days (Auto-Switch Threshold, default 14, shared with the weight/goal auto-switch above), computes what the rolling 30-day step average would have suggested as of that day. If all N of those daily-computed averages agree on one tier that differs from your current Activity Level setting, it switches automatically — walking pace bands and calorie/TDEE targets update immediately.<br><br>
           Deliberately checks the smoothed 30-day average at each point rather than each single day's raw step count — steps are naturally far noisier day-to-day than a weight trend, so requiring every individual day to match would let one low-step rest day break an otherwise genuine, sustained improvement.<br><br>
-          A move to a more active tier shows a celebration (matching ketosis streak milestones); a move to a less active tier is a plain, factual notification only — informed either way, celebrated only when it's genuinely something to celebrate. Every switch is logged to Activity Level History (Profile), so a later change never retroactively distorts how older logged days get interpreted.
+          A move to a more active tier shows a celebration (matching streak milestones); a move to a less active tier is a plain, factual notification only — informed either way, celebrated only when it's genuinely something to celebrate. Every switch is logged to Activity Level History (Profile), so a later change never retroactively distorts how older logged days get interpreted.
         </div>
       </div>
 
@@ -6351,7 +6351,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1055'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1056'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -18427,7 +18427,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Query Builder', key: 'rpt-query', subtab: 'reports', tab: 'insights', keywords: 'custom query filter above below between saved queries' },
   { label: 'Export & Share', key: 'rpt-export', subtab: 'reports', tab: 'insights', keywords: 'PDF print clinical personal custom send doctor clinician' },
   { label: 'Fasting (Reports)', key: 'rpt-fasting', subtab: 'reports', tab: 'insights', keywords: 'fast fasting overnight eating window intermittent meal timing first last meal' },
-  { label: 'Sleep & Ketosis', key: 'rpt-sleepketo', subtab: 'reports', tab: 'insights', keywords: 'correlation sleep quality carbs adherence' },
+  { get label() { return isKetogenicCondition() ? 'Sleep & Ketosis' : 'Sleep & carb adherence'; }, key: 'rpt-sleepketo', subtab: 'reports', tab: 'insights', keywords: 'correlation sleep quality carbs adherence' },
   { label: 'Weight vs Protocol', key: 'rpt-weightproto', subtab: 'reports', tab: 'insights', keywords: 'weight trend target ceiling adherence' },
   { label: 'Treatment Analysis (Reports)', key: 'rpt-treatment', subtab: 'reports', tab: 'insights', keywords: 'chemotherapy radiotherapy keyword notes' },
   { label: 'Treatment Sessions (Reports)', key: 'rpt-sessions', subtab: 'reports', tab: 'insights', keywords: 'pemf physio massage before after day window period' },
@@ -18627,6 +18627,11 @@ function siteSearchOpenSettings(key, subtab, tab, wrapId) {
 }
 
 
+// The default 'Ketosis check' prompt reads as a carb check unless the person is on a keto profile (v3.10.1056). Display-only: stored text is untouched.
+function _spAdapt(list) {
+  if (isKetogenicCondition()) return list;
+  return (list || []).map(p => (p && p.name === 'Ketosis check') ? Object.assign({}, p, { name: 'Carb check', text: 'Did I go over my carb ceiling on any recent days? Weigh each overage against my TDEE, what I ate, and any exercise that day.' }) : p);
+}
 function loadSavedPrompts() {
   const raw = localStorage.getItem('mh_saved_prompts');
   if (raw === null) {
@@ -18663,9 +18668,9 @@ function loadSavedPrompts() {
       { id: 12, name: 'Compliant + well-rested days', text: 'How many days this month was I both under my carb ceiling and got at least 7 hours of sleep?', scope: 'history' },
     ];
     localStorage.setItem('mh_saved_prompts', JSON.stringify(seed));
-    return seed;
+    return _spAdapt(seed);
   }
-  try { return JSON.parse(raw) || []; } catch { return []; }
+  try { return _spAdapt(JSON.parse(raw) || []); } catch { return []; }
 }
 
 function saveSavedPrompts(prompts) {
@@ -38997,7 +39002,7 @@ function renderDrillContext(metric, data, vals, avg, min, max, last, cfg) {
           ['Your average', avg ? avg + 'g' : '—'],
           ['Best day', max ? max + 'g' : '—'],
         ].map(([l,v]) => `<div class="drill-row"><span class="drill-row-label">${l}</span><span class="drill-row-val">${v}</span></div>`).join('')}
-        <div class="drill-insight">Adequate protein (≥${target}g/day) is essential for lean mass preservation during therapeutic ketosis. Muscle mass is a key metabolic asset${isGBMorEpilepsy ? ' and correlates with outcomes in GBM patients' : ''}. [Proven]</div>
+        <div class="drill-insight">Adequate protein (≥${target}g/day) is essential for lean mass preservation${isKetogenicCondition() ? ' during therapeutic ketosis' : ''}. Muscle mass is a key metabolic asset${isGBMorEpilepsy ? ' and correlates with outcomes in GBM patients' : ''}. [Proven]</div>
       </div>`;
   }
 
@@ -44413,7 +44418,7 @@ ${ctx.nonCompliantDetail ? `NON-COMPLIANT DAY DETAIL (use this, not guesswork, t
 CURRENT STREAK: ${ctx.streak} days within ceiling
 LOGGING STREAK (distinct from the above — days with anything logged at all, regardless of whether it stayed within the carb ceiling): ${ctx.loggingStreak != null ? `${ctx.loggingStreak} day(s)` : 'not available'}
 WEIGHT: ${ctx.wtStatus}${ctx.wtTrend ? ` | Trend: ${parseFloat(ctx.wtTrend) > 0 ? '+' : ''}${ctx.wtTrend}kg over period` : ''}
-GKI (real blood glucose/ketone meter readings — the actual measured biomarker, distinct from CARB COMPLIANCE above which is diet-inferred, not measured): ${ctx.gkiReadingsCount > 0 ? `${ctx.gkiReadingsCount} reading(s) this period, avg ${ctx.avgGKI}, most recent ${ctx.latestGKIReading.gki} on ${ctx.latestGKIReading.date} (target < 2.0 for therapeutic ketosis)` : 'No real GKI readings logged this period — only the diet-inferred carb-ceiling adherence above is available, do not present that as a measured GKI figure.'}
+${ctx.gkiReadingsCount > 0 || isKetogenicCondition() ? `GKI (real blood glucose/ketone meter readings — the actual measured biomarker, distinct from CARB COMPLIANCE above which is diet-inferred, not measured): ${ctx.gkiReadingsCount > 0 ? `${ctx.gkiReadingsCount} reading(s) this period, avg ${ctx.avgGKI}, most recent ${ctx.latestGKIReading.gki} on ${ctx.latestGKIReading.date} (target < 2.0 for therapeutic ketosis)` : 'No real GKI readings logged this period — only the diet-inferred carb-ceiling adherence above is available, do not present that as a measured GKI figure.'}` : ''}
 MOST RECENT LAB PANEL (bloodwork — NOT limited to the current report period, since a lab draw is periodic, not daily; this is simply the latest one logged, however old): ${ctx.latestLabPanel ? `${ctx.latestLabPanel.date}${ctx.latestLabPanel.labName ? ` (${ctx.latestLabPanel.labName})` : ''} — ${ctx.latestLabSummary || 'no markers recorded'}. Flag anything marked outside its reference range as worth discussing with the treating clinician — do not offer a diagnosis or treatment change yourself.` : 'No lab panels logged yet.'}
 LAB MARKER TRENDS (across all draws logged for a marker, not just the most recent — also NOT limited to the report period, same reasoning as above): ${ctx.labTrendSummary ? `\n  ${ctx.labTrendSummary}` : 'No marker has 2+ readings yet to show a real trend — only single, isolated values are available (see MOST RECENT LAB PANEL above).'}
 BODY COMPOSITION: ${ctx.latestFatMassKg != null || ctx.latestMuscleMassKg != null ? `Fat mass ${ctx.latestFatMassKg ?? 'n/a'}kg${ctx.fatMassTrend != null ? ` (${ctx.fatMassTrend > 0 ? '+' : ''}${ctx.fatMassTrend}kg over period)` : ''} | Muscle mass ${ctx.latestMuscleMassKg ?? 'n/a'}kg${ctx.muscleMassTrend != null ? ` (${ctx.muscleMassTrend > 0 ? '+' : ''}${ctx.muscleMassTrend}kg over period)` : ''}. Use this, not total weight alone, to judge whether a gain/loss phase is adding fat or lean tissue.` : 'Not available — needs a body-composition scale (e.g. Withings) syncing.'}
@@ -44424,11 +44429,11 @@ ${(ctx.latestVisceralFat != null || ctx.latestVascularAge != null || ctx.latestB
   ctx.latestMetabolicAge != null ? `Metabolic age ${ctx.latestMetabolicAge}` : null,
 ].filter(Boolean).join(' | ')}. These come from the scale's own app, not a clinical/imaging measurement — genuinely useful signals but not a substitute for an actual lipid panel or vascular assessment when discussing cardiovascular risk specifically.` : ''}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
-${ctx.fasting ? `FASTING (last 30 days, measured from logged meal times: the overnight gap between the last meal one day and the first the next; entries under ${mhFastThresholdKcal()} kcal do not break a fast): avg overnight fast ${mhFastFmt(ctx.fasting.avgFastH)} over ${ctx.fasting.nFasts} fasts, longest ${mhFastFmt(ctx.fasting.longestH)}, ${ctx.fasting.pctGoal}% at the patient's own ${mhFastFmt(ctx.fasting.goal)} goal; avg eating window ${mhFastFmt(ctx.fasting.avgWindowH)}${ctx.fasting.avgFirst ? ` (usually ${ctx.fasting.avgFirst}-${ctx.fasting.avgLast})` : ''}. The goal is the patient's own, not a medical target: do not tell them to fast more or less, and treat any link with ketones, glucose, sleep or symptoms as an association only.
+${ctx.fasting ? `FASTING (last 30 days, measured from logged meal times: the overnight gap between the last meal one day and the first the next; entries under ${mhFastThresholdKcal()} kcal do not break a fast): avg overnight fast ${mhFastFmt(ctx.fasting.avgFastH)} over ${ctx.fasting.nFasts} fasts, longest ${mhFastFmt(ctx.fasting.longestH)}, ${ctx.fasting.pctGoal}% at the patient's own ${mhFastFmt(ctx.fasting.goal)} goal; avg eating window ${mhFastFmt(ctx.fasting.avgWindowH)}${ctx.fasting.avgFirst ? ` (usually ${ctx.fasting.avgFirst}-${ctx.fasting.avgLast})` : ''}. The goal is the patient's own, not a medical target: do not tell them to fast more or less, and treat any link with ${isKetogenicCondition() ? 'ketones, glucose' : 'blood sugar'}, sleep or symptoms as an association only.
 ` : ''}SLEEP: ${ctx.avgSleepHrs != null ? `avg ${ctx.avgSleepHrs}h/night over ${ctx.sleepDaysCount} tracked night(s) this period${ctx.sleepBelowRecommended ? ' — BELOW the 7-9h recommended range. If nothing else in this data stands out, this is worth raising as a genuine concern in its own right.' : ' — within/above the 7-9h recommended range.'}` : 'Not available — needs a wearable that tracks sleep (RingConn, Amazfit/Zepp, or Health Connect) syncing.'}
 CALORIE BALANCE: when discussing calorie intake relative to target or TDEE, a sustained deficit or surplus is only worth flagging as a concern if it is either unintentional (contradicts the stated GOAL/phase above) or the weight/body-composition trend above shows it is actually having an unwanted effect. A deficit that matches the patient's stated goal, with weight stable at or near target, is working as intended — do not name it as a concern. Look at what the data above actually shows is off-track (sleep is a common one that gets missed) rather than defaulting to calorie balance as the go-to answer.
 TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? `${ctx.name}'s own confirmed, weight-trend-validated figure (use this as the authoritative number)` : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against ${ctx.name}'s actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
-When reasoning about carb overages, ketosis likelihood, or "did I break ketosis" style questions, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
+When reasoning about carb overages${isKetogenicCondition() ? ', ketosis likelihood, or "did I break ketosis" style questions' : ''}, weigh the day's actual net carbs against this TDEE and that day's active_kcal — a carb overage on a high-burn day is metabolically different from the same overage on a sedentary day. State your reasoning, not just a yes/no.
 
 EVIDENCE FRAMEWORK: ${meta.evidenceNote}
 IMPORTANT: Holiday/occasion days have higher carb ceilings — do NOT penalise these against standard targets. No medical disclaimers needed — patient has acknowledged the evidence base.`;
@@ -44452,9 +44457,9 @@ async function runFullSummary() {
   const _protocolLabel = (CONDITION_META[_cond] || CONDITION_META.general).label;
   const fullSummaryPrompt = `Give me a comprehensive plain-English health summary covering ALL of the following areas. Be direct, specific and actionable. Use the weight phase history to correctly interpret weight trends — do not treat intentional loss as a concern.
 
-1. NUTRITION OVERVIEW — calorie adequacy vs target, protein consistency, fat ratio (flag if below 65% of calories for ketogenic protocol), carb adherence by day type
+1. NUTRITION OVERVIEW — calorie adequacy vs target, protein consistency, ${isKetogenicCondition() ? 'fat ratio (flag if below 65% of calories for ketogenic protocol), ' : ''}carb adherence by day type
 2. WEIGHT & BODY COMPOSITION — trend interpretation against the correct phase (loss/maintain/gain), current status vs target range, rate of change
-3. KETOSIS QUALITY — how many days at therapeutic vs standard keto ratio, best and worst stretches (skip this section entirely if the protocol isn't ketogenic)
+3. ${isKetogenicCondition() ? 'KETOSIS QUALITY — how many days at therapeutic vs standard keto ratio, best and worst stretches' : `CARB & PLAN ADHERENCE — how many days sat within the carb ceiling${mhLifestyle() ? ' and within the ' + mhLifestyle().label + ' ranges' : ''}, best and worst stretches`}
 4. SLEEP — average duration, deep/REM quality, any concerning patterns
 5. HRV & RECOVERY — trend, low days, any correlations with nutrition or sleep
 6. ACTIVITY — steps consistency, active calories, any notable changes

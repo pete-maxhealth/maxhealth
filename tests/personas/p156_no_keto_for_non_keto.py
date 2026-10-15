@@ -20,10 +20,35 @@ def scan(ev, page, pid):
         for m in rx.finditer(ev(JS)): hits.append((name, m.group(0).strip()))
     return hits
 
+SCAN2 = """(()=>{const o=[];document.querySelectorAll('body *').forEach(e=>{if(e.offsetParent===null||e.closest('#mhGoKetoRow'))return;if(e.children.length===0){const t=(e.innerText||'').trim();if(t)o.push(t)}
+ const d=e.getAttribute&&e.getAttribute('data-text');if(d&&!/On a ketogenic diet\\?/.test(d))o.push('[help] '+d.replace(/&lt;/g,'<').replace(/<[^>]+>/g,' '));const ti=e.getAttribute&&e.getAttribute('title');if(ti)o.push('[title] '+ti);const ph=e.getAttribute&&e.getAttribute('placeholder');if(ph)o.push('[placeholder] '+ph)});return o.join('\\n')})()"""
+def deep(ev, page, pid):
+    ev(f"startDemoMode('{pid}')"); page.wait_for_timeout(2200); hits = []
+    for name, js in VIEWS:
+        try: ev(js)
+        except Exception: continue
+        page.wait_for_timeout(350)
+        try: ev("(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.offsetParent&&/^Open all$/i.test(x.textContent.trim())); if(b) b.click()})()")
+        except Exception: pass
+        page.wait_for_timeout(350)
+        for m in rx.finditer(ev(SCAN2)): hits.append((name, m.group(0).strip()))
+    for key in ev("Object.keys(DRILL_CONFIG)"):
+        try:
+            if key == 'gki': continue  # only reachable by someone who logs blood-ketone readings
+            ev(f"openMetricDrill('{key}')"); page.wait_for_timeout(300)
+            for m in rx.finditer(ev(SCAN2)): hits.append((f'drill:{key}', m.group(0).strip()))
+        except Exception: pass
+        try: ev("closeMetricDrill()")
+        except Exception: pass
+    for lab in ev("SITE_SEARCH_SETTINGS.map(x=>x.label)"):
+        if rx.search(lab): hits.append(('search', lab))
+    for t in ev("loadSavedPrompts().map(p=>p.name+': '+p.text)"):
+        if rx.search(t): hits.append(('saved prompt', t[:100]))
+    return hits
 def ai_prompts(ev, page, pid):
     ev(f"startDemoMode('{pid}')"); page.wait_for_timeout(2200)
     ev("window.__b=[]; const f0=window.fetch; window.fetch=function(u,o){ try{ if(o&&o.body) window.__b.push(String(o.body)); }catch(e){} return f0.apply(this,arguments); }")
-    steps = ["startNextMealFlow()", "startBalanceMacrosFlow()", "openRecipeDiscoverModal(); document.getElementById('recipeDiscoverInput').value='a quick dinner'; submitRecipeDiscover()",
+    steps = ["startNextMealFlow()", "generateAIBrief()", "runFullSummary()", "startBalanceMacrosFlow()", "openRecipeDiscoverModal(); document.getElementById('recipeDiscoverInput').value='a quick dinner'; submitRecipeDiscover()",
              "switchTab('log',document.getElementById('maintab-log')); document.getElementById('chatInput') && (document.getElementById('chatInput').value='what do I still need today?'); sendChat()"]
     for js in steps:
         try: ev(js)
@@ -36,7 +61,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
     for pid in ('alex', 'barry', 'karen', 'doris'):
-        for name, t in scan(ev, page, pid): f.add('BUG', f'{pid}/{name}: keto wording shown to a non-keto user: "{t}"')
+        for name, t in scan(ev, page, pid) + deep(ev, page, pid): f.add('BUG', f'{pid}/{name}: keto wording shown to a non-keto user: "{t}"')
     for pid in ('alex', 'karen'):
         bs = ai_prompts(ev, page, pid)
         if not bs: f.add('BUG', f'{pid}: no AI requests captured, test cannot see prompts')
