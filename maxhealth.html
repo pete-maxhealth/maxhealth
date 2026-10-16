@@ -6421,7 +6421,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1083'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1084'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -35022,8 +35022,35 @@ function renderChartStyleToggle(storageKey, metricKey, rerenderFnName, extraOpts
   // instance of it.
   return `<div style="display:flex;gap:2px;" onclick="event.stopPropagation();">
     ${opts.map(([style, icon]) => `<button class="mh-chart-style-btn" data-storage-key="${storageKey}" data-metric-key="${metricKey}" data-style="${style}" data-rerender="${rerenderFnName}" title="${style}" style="background:${current === style ? 'var(--accent-dim)' : 'none'};border:1px solid ${current === style ? 'var(--accent)' : 'var(--border)'};border-radius:6px;color:${current === style ? 'var(--accent)' : 'var(--text3)'};font-size:11px;padding:2px 7px;cursor:pointer;touch-action:manipulation;line-height:1.4;">${icon}</button>`).join('')}
+    ${storageKey === CHART_STYLE_KEY ? `<label title="Chart colour (double-tap the swatch to reset)" class="mh-chart-colour-lbl" style="width:22px;height:22px;border-radius:6px;overflow:hidden;position:relative;cursor:pointer;box-sizing:border-box;border:1px solid var(--border);background:conic-gradient(#f87171,#fbbf24,#34d399,#38bdf8,#a78bfa,#f87171);margin-left:2px;"><input type="color" class="mh-chart-colour" data-rerender="${rerenderFnName}" value="#38bdf8" style="opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer;"></label>` : ''}
   </div>`;
 }
+// Chart colour overrides (v3.10.1084): the Trends cards' main line can take any colour, stored by canvas id.
+const MH_CHART_COLOR_KEY = 'mh_chart_colors';
+function mhChartColours() { try { const o = JSON.parse(localStorage.getItem(MH_CHART_COLOR_KEY) || '{}'); return o && typeof o === 'object' ? o : {}; } catch (_) { return {}; } }
+function mhChartSetColour(canvasId, hex) {
+  const o = mhChartColours(); if (/^#[0-9a-fA-F]{6}$/.test(hex || '')) o[canvasId] = hex; else delete o[canvasId];
+  try { localStorage.setItem(MH_CHART_COLOR_KEY, JSON.stringify(o)); } catch (_) {}
+}
+function mhHexAlpha(hex, a) { const n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
+const mhChartColourPlugin = {
+  id: 'mhChartColour',
+  beforeUpdate(chart) {
+    const hex = chart.canvas && mhChartColours()[chart.canvas.id]; if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    const ds = chart.data.datasets.find(d => d && d.label && !String(d.label).startsWith('_')) || chart.data.datasets[0]; if (!ds) return;
+    ds.borderColor = hex; ds.pointBackgroundColor = hex; ds.pointBorderColor = hex; ds.backgroundColor = ds.type === 'bar' ? mhHexAlpha(hex, 0.75) : mhHexAlpha(hex, 0.12);
+  }
+};
+document.addEventListener('change', (e) => {
+  const inp = e.target.closest && e.target.closest('.mh-chart-colour'); if (!inp) return;
+  const card = inp.closest('.metric-card'), cv = card && card.querySelector('canvas'); if (!cv || !cv.id) return;
+  mhChartSetColour(cv.id, inp.value); if (inp.dataset.rerender === 'renderTrends') renderTrends();
+}, true);
+document.addEventListener('dblclick', (e) => {
+  const l = e.target.closest && e.target.closest('.mh-chart-colour-lbl'); if (!l) return;
+  const card = l.closest('.metric-card'), cv = card && card.querySelector('canvas'); if (!cv || !cv.id) return;
+  mhChartSetColour(cv.id, null); renderTrends(); showToast('Chart colour reset');
+});
 // One delegated listener for every chart-style button, attached once at
 // boot - survives every re-render naturally (renderTrends/renderMMChart
 // replace the buttons' innerHTML constantly, but delegation only cares
@@ -35199,7 +35226,7 @@ const mhDataLabelPlugin = {
 // the session — confirmed this is exactly how Device Precedence's reorder
 // stopped persisting with zero visible error. try/catch here means a
 // genuinely broken Chart.js only costs charts, never the rest of the app.
-try { Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin); } catch (e) { console.warn('Chart.register failed — charts may not render, rest of the app continues:', e); }
+try { Chart.register(mhTodayHighlightPlugin, mhDataLabelPlugin, mhChartColourPlugin); } catch (e) { console.warn('Chart.register failed — charts may not render, rest of the app continues:', e); }
 
 // Threshold-aware colour, reused for both segment coloring (line style)
 // and per-point coloring (bar/point style) - one metric, one rule, applied
