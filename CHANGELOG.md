@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1087 – Impossible device values are blanked at import
+- Found by the new import test: a glitchy row in a wearable file (99,999,999 steps, a 5,000 kg weight, a negative night, a heart rate of 300) went into History as real and skewed every chart and statistic. Each column now has a plausible range; a value outside it is blanked and the rest of the row is kept. New test p190 also covers exported PDFs, every language file (valid, placeholders intact, loads from the app's own copy), and the reminder self-test.
+
 ## v3.10.1086 – Micronutrients in Statistics
 - Fibre, iron, potassium, magnesium, vitamin D and omega-3 are now statistics you can build: by food, by day, by week. Foods carry them from Open Food Facts or your own entry (Library edit gained vitamin D and omega-3 boxes). A day with no figure is left out, never counted as zero. Four ready-made ones in the library. Test p189.
 

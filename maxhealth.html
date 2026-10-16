@@ -6421,7 +6421,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1086'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1087'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -40630,6 +40630,26 @@ function importCombinedCSV(input, silent) {
   input.value = '';
 }
 
+// Plausible ranges for device-file columns (v3.10.1086). A glitchy export row (99,999,999 steps, a 5,000 kg weight, a negative night,
+// a heart rate of 300) used to land in History as if it were real and flatten every chart and statistic. Out-of-range values are
+// blanked (the rest of that row is kept); a clearly impossible figure is never better than no figure.
+const MH_IMPORT_RANGES = {
+  steps: [0, 100000], calories_active: [0, 15000], calories_passive: [0, 15000], elevation_m: [0, 20000], distance_m: [0, 300000],
+  sleep_duration: [1, 1100], sleep_deep: [0, 600], sleep_rem: [0, 600], sleep_light: [0, 900], sleep_wake: [0, 600], sleep_onset: [0, 300],
+  sleep_efficiency: [1, 100], sleep_hr_avg: [25, 140], sleep_hr_min: [20, 140], sleep_hr_max: [25, 220], snoring_min: [0, 1000], sleep_nap_min: [0, 600],
+  hrv: [1, 400], hrv_min: [1, 400], hrv_max: [1, 400], spo2: [50, 100], spo2_min: [50, 100], spo2_max: [50, 100],
+  hr_avg: [25, 220], hr_min: [20, 220], hr_max: [25, 250], hr_resting: [20, 150],
+  fat_pct: [1, 80], fat_mass_kg: [0.5, 300], muscle_pct: [5, 90], muscle_mass_kg: [3, 150], bone_mass_kg: [0.3, 12], hydration_kg: [5, 120],
+  pwv: [1, 40], weight: [20, 400]
+};
+function mhImportSanitiseCols(cols, I) {
+  Object.keys(MH_IMPORT_RANGES).forEach(f => {
+    const i = I[f]; if (i == null || i < 0 || cols[i] === undefined) return;
+    const raw = String(cols[i]).trim(); if (raw === '') return;
+    const v = parseFloat(raw), r = MH_IMPORT_RANGES[f];
+    if (isNaN(v) || v < r[0] || v > r[1]) cols[i] = '';
+  });
+}
 function processCombinedText(text, silent, outEl) {
   const out = outEl || document.getElementById('csvImportOutput');
   const setOut = (cls, msg) => { if (out) { out.className = cls; out.textContent = msg; } };
@@ -40687,6 +40707,7 @@ function processCombinedText(text, silent, outEl) {
 
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',');
+        mhImportSanitiseCols(cols, I);
         const isoDate = getF(cols, I.date); // YYYY-MM-DD
         if (!isoDate || !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) continue;
 
