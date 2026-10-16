@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1076
+- **AI and reports know your exercise.** Prompts and generated reports now carry a LOGGED EXERCISE summary for the period (active days, minutes, kcal, effort mix, mix by category, resistance volume, recent days by name and effort), with a standing instruction to treat any link to sleep, weight, symptoms or ketosis as an association rather than a cause.
+- **What your own days suggest (Early Stage).** Reports → Exercise compares next-night sleep and next-day HRV after each kind of exercise day against rest days. It only speaks with 5+ days in each group, a difference big enough to matter and a clear signal over noise; otherwise it says nothing stands out yet. Always labelled as an association, never cause. The same findings go into the AI context.
+- **Sharing.** The weekly summary shows each day's exercise (activities, minutes, resistance sets and volume) in both the on-screen and copied text. The carer link carries minutes per active day, and each week card on the carer page adds "N active days, M minutes of exercise".
+- The performance report picks up the new Exercise minutes and Resistance volume metrics automatically through Compare Metrics.
+
 ## v3.10.1075
 - **Exercise now has its own memory.** One per-day summary (minutes, sessions, kcal, effort mix, kcal and minutes by category, resistance sets and volume) is derived from what is already saved, so every past day counts and nothing needs migrating.
 - **History days** show an Exercise panel: each activity with minutes, effort and kcal, plus Resistance exercises with their sets ("2 × 12 @ 20kg, 1 × 8 @ 25kg") and total volume.
