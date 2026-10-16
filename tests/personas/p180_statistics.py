@@ -44,6 +44,9 @@ with fresh_server() as root, sync_playwright() as pw:
     check('period filter limits days', r['total'] == 2, str(r))
     r = R({'subject':'foods','measure':'zzz','agg':'zzz','order':'zzz','top':99,'period':30,'output':'nope'})
     check('invalid settings are repaired, not crashed', len(r['rows']) >= 1)
+    ev("(()=>{state.history.forEach((d,i)=>{d.sleep_duration=420+i*30;d.sleep_deep=60+i*10;d.sleep_efficiency=90;});})()")
+    r = R({'subject':'days','measure':'deep','agg':'sum','order':'high','top':10,'period':0})
+    check('sleep stages are statistics too', r['rows'][0][1] == 80 and R({'subject':'weeks','measure':'sleepeff','agg':'avg','order':'time','top':12,'period':0})['rows'][0][1] == 90, str(r))
     # outputs render for every subject x output
     ok = ev("""(()=>{let n=0;for(const s of Object.keys(MH_ST_SUBJECTS)){for(const o of MH_ST_SUBJECTS[s].outputs){const d=Object.assign({},MH_ST_SUBJECTS[s].def,{subject:s,output:o,period:0});const h=mhStatRender(mhStatRun(d));if(!h||h.length<10)return s+'/'+o;n++;mhStatText(d);mhStatCsv(d);}}return n;})()""")
     check('every subject and display type renders, copies and exports', isinstance(ok, int) and ok > 20, str(ok))
@@ -77,7 +80,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhStatSetUI('sec','hidden')")
     check('hidden filter shows it', ev("!!document.getElementById('stcard-%s')"%first))
     ev(f"mhStatHide('{first}')"); ev("mhStatSetUI('sec','all')")
-    n0 = ev("mhStatLoad().length"); ev("mhStatLibAdd(14)")
+    n0 = ev("mhStatLoad().length"); ev("mhStatLibAdd(MH_ST_LIBRARY.findIndex(p=>p[1].output==='donut'))")
     check('library adds a ready-made statistic (donut)', ev("mhStatLoad().length")==n0+1 and ev("mhStatLoad()[0].output")=='donut')
     check('donut renders', 'circle' in ev("mhStatRender(mhStatRun(mhStatLoad()[0]))"))
     ev("(()=>{const a=mhStatLoad();a[0].color='#fb7185';mhStatSave(a)})()")
