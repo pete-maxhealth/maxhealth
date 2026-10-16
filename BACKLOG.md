@@ -49,6 +49,38 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [ ] Filter row on Supplements, Log, History, Library and Customise (they have no hide/reorder system today).
 - [ ] Starter packs per remaining condition (strict keto, type 1 diabetes, cluster headache).
 
+## Ideas register (compiled 16 Oct 2026 from this phase, the repo, memory and the earlier phase chats)
+
+Built in the Move / Sleep / Statistics phase (v3.10.1071 - 1081), see CHANGELOG:
+- [x] Live Health Connect steps trump planned steps; exercise planner (Plan ahead) and In/Out strip.
+- [x] Catalogue of 55+ known exercises (indoor/outdoor, racket, water...), per-kind watch calibration, scroll-hold fix on Resistance.
+- [x] Exercise and sleep as full citizens: History, chart, Reports, AI, summaries, clinician view, carer page, backup.
+- [x] What seems to move what (Early Stage): habits against next-night sleep, HRV, symptoms; short nights against the same day's eating and movement; treatment sessions as a habit.
+- [x] Statistics tab: build, save, group, search, hide, reorder, library, colours, compare with previous period, CSV, copy, export/import of definitions, pin to Today, share into summaries/clinician/AI.
+- [x] Speed-based MET (2011 Compendium) and exercise energy net of resting; weather location follows GPS.
+
+Open, this phase:
+- [ ] Re-record the tour videos with Move, Sleep and Statistics chapters (and the "general health and muscle gain" framing).
+- [ ] Fold the new features into the story page; check docs/changelog.html is regenerated (it stops well before v3.10.1081).
+- [ ] Phone checks for v3.10.1081 (Today statistics card, Statistics tab on light theme, net exercise energy figures, weather follow).
+- [ ] Drag-reorder on the Statistics tab (arrows only today); light-theme / high-contrast pass on the exercise, sleep and statistics looks.
+- [ ] What-moves-what: weight trend and whole treatment cycles as outcomes (today only treatment-session days are a habit); sleep consistency by bedtime (needs bedtime stored in a parseable form).
+- [ ] Remaining personas through `alex_deep.py`; untested: exported PDFs, reminders and notifications, more languages offline, device and wearable import.
+
+Older ideas, found in earlier phase chats and NOT confirmed built (check the code before starting):
+- [ ] Watch companion (square and round layouts): quick water / supplement / ketosis status, a daily touchpoint that drives people into the app.
+- [ ] Meal suggestions: recipe-aware (use saved recipes), avoid repeating recent meals, "nearly there" mode for small gaps, "save this combo as a recipe?" (grep shows some of these may exist: verify).
+- [ ] Micronutrients beyond fibre (vitamin D, magnesium, omega-3).
+- [ ] Voice logging for low-energy days (speech input exists for recipes; check the main log).
+- [ ] Elevation from Zepp per-activity files (needs per-activity parsing).
+- [ ] Vascular age: needs PWV readings, which stopped in June 2025; revisit only if measuring resumes.
+- [ ] Decided against: protocol adherence view (risk of confusion), Simple/Full view switch.
+
+Business and launch (from memory, see `premium/HOME_CHECKLIST.md`):
+- [ ] Register-interest page live on pspence.co.uk before any ad links to it; Premium "coming soon" in demo personas, Ko-fi gallery and videos.
+- [ ] Move the APK off public GitHub, secure Premium code; launcher plan above.
+- [ ] Cloudflare Worker AI proxy has no authentication (cost exposure): add per-user allowance or key before scaling.
+
 ## Other
 - [x] v3.10.950 Incidental Steps Baseline automatic; Activity Level reads real weekly steps.
 - [ ] Strength Log CSV import still replaces (now asks first).
