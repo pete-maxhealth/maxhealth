@@ -47,6 +47,13 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(()=>{state.history.forEach((d,i)=>{d.sleep_duration=420+i*30;d.sleep_deep=60+i*10;d.sleep_efficiency=90;});})()")
     r = R({'subject':'days','measure':'deep','agg':'sum','order':'high','top':10,'period':0})
     check('sleep stages are statistics too', r['rows'][0][1] == 80 and R({'subject':'weeks','measure':'sleepeff','agg':'avg','order':'time','top':12,'period':0})['rows'][0][1] == 90, str(r))
+    ev("""(()=>{const x=new Date();x.setDate(x.getDate()-40);const dd=String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'/'+String(x.getFullYear()).slice(2);state.history.push({date:dd,totals:{kcal:1000,protein:50,carbs:5,fat:50},log:[{id:90,time:'08:00',description:'Eggs',kcal:900,protein:50,carbs:2,fat:50,items:[{name:'Eggs',kcal:900,protein:50,carbs:2,fat:50}]}],exercises:[]});})()""")
+    cmp_ = ev("(()=>{const r=mhStatRun({subject:'foods',measure:'kcal',agg:'sum',order:'high',top:10,period:30,compare:true});return r.rows.map(x=>[x.label,Math.round(x.value),x.prev,x.delta,!!x.isNew])})()")
+    eggs = [r for r in cmp_ if r[0]=='Eggs'][0]; steak=[r for r in cmp_ if r[0]=='Steak'][0]
+    check('compare finds the previous period value and percentage change', eggs[2]==900 and eggs[3]==-33, str(cmp_))
+    check('compare marks foods that were not eaten before as new', steak[4], str(cmp_))
+    check('compare is switched off for all-time and per-day subjects', ev("mhStatNormalise({subject:'foods',period:0,compare:true}).compare")==False and ev("mhStatNormalise({subject:'days',period:30,compare:true}).compare")==False)
+    check('compare shows in the rendered list', '▼' in ev("mhStatRender(mhStatRun({subject:'foods',measure:'kcal',agg:'sum',order:'high',top:10,period:30,compare:true,output:'list'}))"))
     # outputs render for every subject x output
     ok = ev("""(()=>{let n=0;for(const s of Object.keys(MH_ST_SUBJECTS)){for(const o of MH_ST_SUBJECTS[s].outputs){const d=Object.assign({},MH_ST_SUBJECTS[s].def,{subject:s,output:o,period:0});const h=mhStatRender(mhStatRun(d));if(!h||h.length<10)return s+'/'+o;n++;mhStatText(d);mhStatCsv(d);}}return n;})()""")
     check('every subject and display type renders, copies and exports', isinstance(ok, int) and ok > 20, str(ok))

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1080 – Sleep everywhere, what moves what, compare periods, weather follows you
+- **Sleep is now a full citizen.** History days show a sleep panel (duration, stage bar, efficiency, sleeping heart rate). Reports gain a Sleep section (average, 7h+ nights, consistency, stages, each night, weekday vs weekend, change on the period before). Sleep flows into the AI context, the weekly summary, the clinician view and the carer page.
+- **What seems to move what (Early Stage).** One engine compares days with a habit against days without it: exercise by kind and by activity, resistance, hard effort, a late last meal, an over-ceiling carb day, a very active day, or a logged treatment session. It looks at the next night's sleep, deep sleep, efficiency and sleeping heart rate, next-day HRV and symptoms, and the other way round: what a short night does to the same day's eating and movement. Only differences that are large and clearly beyond normal day-to-day wobble are shown, always as associations, never as cause.
+- **Compare with the period before** inside any statistic about foods, exercises, lifts or weekdays: percentage change, new entries marked, a Before column in tables.
+- **Weather location follows you.** A place set with "Use my location" is re-read on Refresh and when you open the app (at most every 30 minutes) and moves if you are more than about 3 km from the saved spot. A town you typed is never overridden.
+
 ## v3.10.1079 – Sleep in Statistics
 - Statistics can now measure deep, REM and light sleep, time awake, sleep efficiency and sleeping heart rate, as well as total sleep. Three sleep statistics added to the Library.
 
