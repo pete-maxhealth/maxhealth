@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1072
+- **Exercise catalogue**: "＋ Add exercise" now opens a picker of 55+ known activities (walk & hike, running, cycling, water, racket & court, team & ball, gym & fitness, mind & body, outdoors & home, ice & snow) with search, an Anywhere / Indoor / Outdoor filter and category chips. Each card shows an indicative kcal for a Moderate 30 minutes at your weight.
+- Each activity carries its own MET (Compendium of Physical Activities, rounded), so badminton, squash, kayaking or kettlebells are no longer all costed as a generic 5 MET. Padel, pickleball, e-bike and paddleboard are marked "est.".
+- Activity rows show an indoor / outdoor tag and plain-words effort levels per activity (for example Badminton: Social knock-about / Rallies, good pace / Competitive match). Distance boxes appear only where distance matters, with the right pace bands, so no more "does it need distance?" question.
+- One manual line remains ("Something else"); typed names such as "Padel with the lads" are recognised and use the real energy cost, and the History editor recognises them too.
+- Plan ahead can use any catalogue activity (＋ More), and Done adds it to your activities automatically.
+
 ## v3.10.1071
 - **Plan ahead** (Activity card): pick Steps, Walk, Run, Cycle or Resistance, an amount and an effort, and see what it would earn before you do it: kcal from the same MET and steps-above-baseline formulas the day uses (at your activity level), plus the +15g protein on a resistance day, and the room left it would give. Planned items show on Today's In/Out strip and only count when marked Done ✓.
 - Planned steps are a target: your real count, typed or live from Health Connect, takes over, the plan shrinks as you walk and clears itself once you pass it.
