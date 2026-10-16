@@ -1081,6 +1081,7 @@
   .mh-pick-chips { display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none; }
   .mh-pick-chips::-webkit-scrollbar { display:none; }
   .mh-chip { flex:0 0 auto;cursor:pointer;font-size:12px;padding:5px 11px;border-radius:14px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);white-space:nowrap; }
+  .mh-nostats { display:none !important; }
   .mh-chip.on { border-color:var(--accent);background:var(--accent-dim);color:var(--accent);font-weight:600; }
   .mh-pick-list { flex:1;overflow-y:auto;padding:10px 12px 18px; }
   .mh-pick-cat { font-size:10px;letter-spacing:0.08em;font-family:'Space Mono',monospace;color:var(--text3);margin:14px 2px 6px; }
@@ -2863,6 +2864,18 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     </div>
 
     <div id="mhWxCard"></div>
+
+    <div class="water-card mh-nostats" id="dashSection-stats">
+      <div class="water-header">
+        <div class="water-title">📊 My statistics</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
+          <span onclick="moveDashboardSection('stats','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▲</span>
+          <span onclick="moveDashboardSection('stats','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▼</span>
+          <span onclick="toggleDashboardSectionHidden('stats')" title="Hide" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">👁</span>
+        </div>
+      </div>
+      <div id="dashStatsBody"></div>
+    </div>
 
     <div class="water-card" id="dashSection-fasting">
       <div class="water-header">
@@ -4999,6 +5012,15 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;"><span class="help-slot" data-id="formulasintro" data-text="Every formula this app actually uses, in one place — no black boxes."></span></div>
 
       <div style="margin-bottom:16px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;">Exercise energy</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.6;">Calories = MET × weight (kg) × hours. For walks, runs and rides with a distance and a time, the MET follows your real speed (2011 Compendium of Physical Activities, level ground); otherwise it follows the Easy / Moderate / Hard level. Counted <strong>net of resting energy</strong> (MET minus 1), because your daily target already includes what you would burn sitting still. Once your watch has calibrated a kind of exercise, its measured ratio replaces this. Pick Gross to count the full MET value instead.</div>
+        <select id="exBasisSelect" onchange="localStorage.setItem('mh_ex_energy_basis',this.value);try{updateDashboard();}catch(e){};showToast('Exercise energy basis saved')" class="modal-input" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:6px;">
+          <option value="net">Net of resting energy (recommended)</option>
+          <option value="gross">Gross (full MET value)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:16px;">
         <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px;">BMR (Basal Metabolic Rate)</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Formula used:</div>
         <select id="bmrFormulaSelect" onchange="saveBMRFormula()" class="modal-input" style="width:100%;padding:8px 10px;font-size:13px;margin-bottom:10px;">
@@ -6399,7 +6421,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1080'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1081'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -11848,6 +11870,7 @@ function updateBodyFatSourceStatus() {
 }
 
 function initBMRFormulaUI() {
+  const _xb = document.getElementById('exBasisSelect'); if (_xb) _xb.value = mhExNet() ? 'net' : 'gross';
   const sel = document.getElementById('bmrFormulaSelect');
   const bfEl = document.getElementById('bodyFatPctInput');
   const row = document.getElementById('bodyFatPctRow');
@@ -15599,6 +15622,43 @@ function milesFromDistance(distance, unit) {
 // Calculates suggested effort (Easy/Moderate/Hard) from duration + distance.
 // Returns null if there isn't enough info (no distance entered yet) — caller should
 // fall back to manual selection in that case rather than guessing.
+function mhPaceBandKey(act) {
+  let bandKey = 'generic';
+  const nameLower = (act.name || '').toLowerCase();
+  const _cx = MH_EX_BY_ID[act.type];
+  if (_cx && _cx.band) bandKey = _cx.band;
+  else if (act.type === 'walking' || nameLower.includes('walk')) bandKey = 'walking';
+  else if (!_cx && (act.type === 'cycling' || nameLower.includes('cycl') || nameLower.includes('bike'))) bandKey = 'cycling';
+  else if (!_cx && (act.type === 'running' || nameLower.includes('run') || nameLower.includes('jog'))) bandKey = 'running';
+  return bandKey;
+}
+// Speed-based METs (v3.10.1081): when a walk, run or ride has both a distance and a time, the energy cost follows the real
+// speed, not just an Easy/Moderate/Hard band. Values are from the 2011 Compendium of Physical Activities (level ground);
+// cycling is the Compendium's speed bands joined at their mid-points. Hills, wind and load are not known, so treat it as a
+// good estimate, not a measurement. Choosing an effort by hand always overrides it.
+const MH_SPEED_MET = {
+  walking: [[2, 2.8], [2.5, 3.0], [3, 3.5], [3.5, 4.3], [4, 5.0], [4.5, 7.0], [5, 8.3]],
+  running: [[5, 8.3], [6, 9.8], [7, 11.0], [8, 11.8], [9, 12.8], [10, 14.5], [11, 16.0]],
+  cycling: [[9, 4.0], [11, 6.8], [13, 8.0], [15, 10.0], [17.5, 12.0], [20, 15.8]],
+};
+const MH_SPEED_LIMIT = { walking: 7.5, running: 15, cycling: 35 };
+function mhSpeedMet(act) {
+  if (!act || !act.needsDistance || act._manualEffort || !act.distance || !act.duration) return null;
+  const key = mhPaceBandKey(act), tbl = MH_SPEED_MET[key]; if (!tbl) return null;
+  const hours = parseFloat(act.duration) / 60, miles = milesFromDistance(act.distance, act.distanceUnit || 'km');
+  if (!(hours > 0) || !(miles > 0)) return null;
+  const mph = miles / hours; if (mph > MH_SPEED_LIMIT[key] || mph < 1) return null; // a typo, not a real speed
+  let met;
+  if (mph <= tbl[0][0]) met = tbl[0][1] * (key === 'walking' ? Math.max(0.7, mph / tbl[0][0]) : 1);
+  else if (mph >= tbl[tbl.length - 1][0]) met = tbl[tbl.length - 1][1];
+  else { for (let i = 1; i < tbl.length; i++) if (mph <= tbl[i][0]) { const a = tbl[i - 1], b = tbl[i]; met = a[1] + (b[1] - a[1]) * (mph - a[0]) / (b[0] - a[0]); break; } }
+  return { met: Math.round(met * 10) / 10, mph: Math.round(mph * 10) / 10 };
+}
+// Energy basis: by default exercise is counted NET of resting energy (MET minus 1), because the daily energy target already
+// contains the energy you would burn sitting still. Once a watch has calibrated that kind of exercise, the calibration factor
+// already absorbs the difference, so net is applied only to estimates with no calibration behind them (no double correction).
+function mhExNet() { return localStorage.getItem('mh_ex_energy_basis') !== 'gross'; }
+function mhCalibrationActive(cat) { try { if (getCategoryCalibration(cat)) return true; return getCalibrationFactor().confidence !== 'none'; } catch (_) { return false; } }
 function calcSuggestedEffort(act) {
   if (!act.needsDistance || !act.distance || !act.duration) return null;
   const hours = parseFloat(act.duration) / 60;
@@ -15607,13 +15667,7 @@ function calcSuggestedEffort(act) {
   if (!miles || miles <= 0) return null;
   const pace = miles / hours; // mph
 
-  let bandKey = 'generic';
-  const nameLower = (act.name || '').toLowerCase();
-  const _cx = MH_EX_BY_ID[act.type];
-  if (_cx && _cx.band) bandKey = _cx.band;
-  else if (act.type === 'walking' || nameLower.includes('walk')) bandKey = 'walking';
-  else if (!_cx && (act.type === 'cycling' || nameLower.includes('cycl') || nameLower.includes('bike'))) bandKey = 'cycling';
-  else if (!_cx && (act.type === 'running' || nameLower.includes('run') || nameLower.includes('jog'))) bandKey = 'running';
+  const bandKey = mhPaceBandKey(act);
   const bands = bandKey === 'walking' ? getWalkingPaceBands() : PACE_BANDS[bandKey];
 
   let effort = pace <= bands.easyMax ? 'Easy' : pace <= bands.moderateMax ? 'Moderate' : 'Hard';
@@ -15885,19 +15939,23 @@ function calcActivityKcalRaw(act) {
     if (suggested) act.effort = suggested;
   }
   const met = MET[act.type] || MET.exercise;
-  const effortMet = met[act.effort] || met.Moderate;
+  const sp = mhSpeedMet(act);
+  const effortMet = sp ? sp.met : (met[act.effort] || met.Moderate);
   const weight = state.weight || 90;
   const hours = parseFloat(act.duration) / 60;
   return Math.round(effortMet * weight * hours);
 }
 
+function mhNetKcal(raw, act) { const hours = parseFloat(act.duration) / 60, weight = state.weight || 90; return Math.max(0, Math.round(raw - 1 * weight * hours)); }
 function calcActivityKcal(act) {
   // User-facing figure — applies the personal calibration factor once enough
   // comparison data exists (see getCalibratedKcal). This is what shows on the
   // dashboard and feeds the daily calorie target adjustment.
   const raw = calcActivityKcalRaw(act);
   if (raw === 0) return 0;
-  return getCalibratedKcal(raw, mhActCat(act));
+  const cat = mhActCat(act);
+  if (mhExNet() && !mhCalibrationActive(cat)) return mhNetKcal(raw, act);
+  return getCalibratedKcal(raw, cat);
 }
 
 function renderActivityCard() {
@@ -24853,7 +24911,7 @@ function renderActivityCreditBalance() {
 // This gets the same real value — cards in whatever order you actually want —
 // at a fraction of the risk.
 const DASHBOARD_SECTIONS_KEY = 'mh_dashboard_order';
-const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'mealplan', 'macroratio', 'goalcheck', 'steps', 'symptoms', 'treatment', 'activity', 'weather', 'fasting', 'water', 'log', 'guides'];
+const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'mealplan', 'macroratio', 'goalcheck', 'steps', 'symptoms', 'treatment', 'activity', 'weather', 'stats', 'fasting', 'water', 'log', 'guides'];
 // Some sections are more than one DOM element (a card plus its own paired verdict
 // or tooltip) — these must move together as a unit, or you'd end up with a card
 // separated from its own conclusion. Each key can list multiple ids in order.
@@ -24871,6 +24929,7 @@ const DASHBOARD_SECTION_IDS = {
   treatment:  ['dashSection-treatment'],
   activity:   ['activityCard'],
   weather:    ['mhWxCard'],
+  stats:      ['dashSection-stats'],
   fasting:    ['dashSection-fasting'],
   water:      ['dashSection-water'],
   log:        ['dashSection-log'],
@@ -24879,6 +24938,11 @@ const DASHBOARD_SECTION_IDS = {
 function getDashboardOrder() {
   try {
     let stored = JSON.parse(localStorage.getItem(DASHBOARD_SECTIONS_KEY) || 'null');
+    // Migration (v3.10.1081): the My statistics card slots in just after Weather (or above Fasting/Water) for anyone with a saved order.
+    if (Array.isArray(stored) && !stored.includes('stats')) {
+      let wi = stored.indexOf('weather'); wi = wi > -1 ? wi + 1 : (stored.indexOf('fasting') > -1 ? stored.indexOf('fasting') : (stored.indexOf('water') > -1 ? stored.indexOf('water') : stored.length));
+      stored = [...stored]; stored.splice(wi, 0, 'stats'); localStorage.setItem(DASHBOARD_SECTIONS_KEY, JSON.stringify(stored));
+    }
     // Migration (v3.10.1041): Meal plan became its own card; slot it in just after Calories & macros for anyone with a saved order.
     if (Array.isArray(stored) && !stored.includes('mealplan')) {
       const mi = stored.indexOf('macros');
@@ -24919,7 +24983,7 @@ const DASHBOARD_SECTION_LABELS = {
   weight: 'Weight', daymode: 'Day Mode', ketosis: 'Ketosis', macros: 'Macros',
   remaining: 'Remaining', mealplan: 'Meal plan', macroratio: 'Macro Ratio', goalcheck: 'Goal Check',
   steps: 'Daily Steps', symptoms: 'Symptoms', treatment: "Today's Treatment",
-  activity: "Today's Activity", weather: 'Weather', fasting: 'Fasting', water: 'Water', log: 'Log', guides: 'Guides',
+  activity: "Today's Activity", weather: 'Weather', stats: 'My statistics', fasting: 'Fasting', water: 'Water', log: 'Log', guides: 'Guides',
 };
 function getDashboardHidden() {
   try {
@@ -26329,6 +26393,7 @@ function updateDashboard(skipActivityRender) {
   // Macro Ratio was the one Pete Spence actually caught, but the same ordering bug
   // could have masked a hide on any dashboard section, not just that one.
   applyDashboardOrder();
+  try { mhStatTodayRender(); } catch (_) {}
 }
 
 // Ketosis streak milestones — the counter previously just ticked up silently
@@ -42319,6 +42384,7 @@ function generateWeeklySummary() {
           </div>`).join('')}
       </div>
       ${dayRows}
+      ${mhStatShareHtml('dark')}
       <div style="margin-top:8px;font-size:9px;color:var(--text3);font-family:Space Mono,monospace;text-align:right;">Generated by MaxedHealth · ${new Date().toLocaleDateString('en-GB')}</div>
     </div>`;
 
@@ -42335,7 +42401,7 @@ function generateWeeklySummary() {
       const tags = (d.notes||'').split(',').map(t=>t.trim()).filter(t=>t && !['standard','occasion','holiday','missed day entry','missed day'].includes(t.toLowerCase()));
       return `${d.date}: ${Math.round(d.totals?.kcal||0)}kcal | ${Math.round(d.totals?.protein||0)}g P | ${Math.round(d.totals?.fat||0)}g F | ${Math.round(d.totals?.carbs||0)}g C${tags.length > 0 ? ' | '+tags.join(', ') : ''}${(() => { const x = mhExerciseDay(d); return (x.sessions || x.res.sets) ? ' | Exercise: ' + x.items.map(i => i.minutes + 'min ' + i.name + ' (' + i.effort + ')').concat(x.res.sets ? [x.res.sets + ' resistance sets, ' + x.res.volumeKg + 'kg'] : []).join(', ') : ''; })()}`;
     }).join('\n') +
-    '\n\nGenerated by MaxedHealth';
+    mhStatShareText() + '\n\nGenerated by MaxedHealth';
   } catch(e) { showToast('Error: ' + e.message); console.error(e); }
 }
 
@@ -42630,6 +42696,7 @@ function generateOncologyView() {
       ${fastSection}
       ${exSection}
       ${sleepSection}
+      ${mhStatShareHtml('light')}
       ${cycleSection}
       ${treatDays.length > 0 ? `
       <div style="overflow-x:auto;">
@@ -42655,7 +42722,7 @@ function generateOncologyView() {
     `Generated: ${new Date().toLocaleDateString('en-GB')}\n\n` +
     `Days logged: ${h.length} | ${isKetogenicCondition() ? 'Ketosis' : 'Carb target'} adherence: ${ketoAdh}%\n` +
     `Avg: ${avgKcal}kcal | ${avgProt}g P | ${avgFat}g F | ${avgCarbs}g C\n` +
-    `Weight: ${currentWeight ? currentWeight+'kg' : 'N/A'}${weightChange ? ' ('+( weightChange > 0 ? '+' : '')+weightChange+'kg)' : ''}\n` + exText + sleepText +
+    `Weight: ${currentWeight ? currentWeight+'kg' : 'N/A'}${weightChange ? ' ('+( weightChange > 0 ? '+' : '')+weightChange+'kg)' : ''}\n` + exText + sleepText + mhStatShareText() +
     (refRows.length > 0 ? `\nSince last logged event:\n` + refRows.map(r=>`  ${r.label} (${r.mostRecentDate}, ${r.daysSince}d ago): weight ${fmtDelta(r.weightDelta,'kg')}, muscle ${fmtDelta(r.muscleDelta,'kg')}, fat ${fmtDelta(r.fatDelta,'kg')}`).join('\n') : '') +
     (cycleData ? `\n\nTreatment cycles: ${cycleData.cycles.length} (${cycleData.chemoDays.length} treatment days, ${cycleData.recoveryDays.length} recovery days)\n` +
       `  Treatment days: ${cycleData.chemoKcal}kcal | ${cycleData.chemoProt}g P | ${cycleData.chemoCarbs}g C\n` +
@@ -45221,6 +45288,7 @@ function buildPatientContext(history, conditionFilter = null) {
     exerciseSummary: mhExerciseContext(history),
     sleepSummary: mhSleepContext(history),
     outcomesSummary: mhOutcomesContext(state.history),
+    savedStats: mhStatsContext(),
     latestLabPanel, latestLabSummary, labTrendSummary,
     loggingStreak: (typeof calcLoggingStreak === 'function') ? calcLoggingStreak() : null,
     tdee: tdeeVal,
@@ -45511,7 +45579,7 @@ ${(ctx.latestVisceralFat != null || ctx.latestVascularAge != null || ctx.latestB
   ctx.latestMetabolicAge != null ? `Metabolic age ${ctx.latestMetabolicAge}` : null,
 ].filter(Boolean).join(' | ')}. These come from the scale's own app, not a clinical/imaging measurement — genuinely useful signals but not a substitute for an actual lipid panel or vascular assessment when discussing cardiovascular risk specifically.` : ''}
 ACTIVITY: avg ${ctx.avgSteps} steps/day | avg ${ctx.avgActiveKcal} active kcal/day
-${ctx.exerciseSummary ? `LOGGED EXERCISE (this period): ${ctx.exerciseSummary}\nWhen exercise is relevant, treat any link to sleep, weight, symptoms or ketosis as an association seen in these days, never proof of cause, and say when the number of days is small.\n` : ''}${ctx.sleepSummary ? `SLEEP DETAIL (this period): ${ctx.sleepSummary}\n` : ''}${ctx.outcomesSummary ? `OWN-DATA ASSOCIATIONS (Early Stage; habits compared with what followed in these days, never proof of cause; say when the number of days is small): ${ctx.outcomesSummary}\n` : ''}${ctx.fasting ? `FASTING (last 30 days, measured from logged meal times: the overnight gap between the last meal one day and the first the next; entries under ${mhFastThresholdKcal()} kcal do not break a fast): avg overnight fast ${mhFastFmt(ctx.fasting.avgFastH)} over ${ctx.fasting.nFasts} fasts, longest ${mhFastFmt(ctx.fasting.longestH)}, ${ctx.fasting.pctGoal}% at the patient's own ${mhFastFmt(ctx.fasting.goal)} goal; avg eating window ${mhFastFmt(ctx.fasting.avgWindowH)}${ctx.fasting.avgFirst ? ` (usually ${ctx.fasting.avgFirst}-${ctx.fasting.avgLast})` : ''}. The goal is the patient's own, not a medical target: do not tell them to fast more or less, and treat any link with ${isKetogenicCondition() ? 'ketones, glucose' : 'blood sugar'}, sleep or symptoms as an association only.
+${ctx.exerciseSummary ? `LOGGED EXERCISE (this period): ${ctx.exerciseSummary}\nWhen exercise is relevant, treat any link to sleep, weight, symptoms or ketosis as an association seen in these days, never proof of cause, and say when the number of days is small.\n` : ''}${ctx.sleepSummary ? `SLEEP DETAIL (this period): ${ctx.sleepSummary}\n` : ''}${ctx.savedStats ? `PATIENT'S SAVED STATISTICS (questions the patient chose to keep; each states its own period): ${ctx.savedStats}\n` : ''}${ctx.outcomesSummary ? `OWN-DATA ASSOCIATIONS (Early Stage; habits compared with what followed in these days, never proof of cause; say when the number of days is small): ${ctx.outcomesSummary}\n` : ''}${ctx.fasting ? `FASTING (last 30 days, measured from logged meal times: the overnight gap between the last meal one day and the first the next; entries under ${mhFastThresholdKcal()} kcal do not break a fast): avg overnight fast ${mhFastFmt(ctx.fasting.avgFastH)} over ${ctx.fasting.nFasts} fasts, longest ${mhFastFmt(ctx.fasting.longestH)}, ${ctx.fasting.pctGoal}% at the patient's own ${mhFastFmt(ctx.fasting.goal)} goal; avg eating window ${mhFastFmt(ctx.fasting.avgWindowH)}${ctx.fasting.avgFirst ? ` (usually ${ctx.fasting.avgFirst}-${ctx.fasting.avgLast})` : ''}. The goal is the patient's own, not a medical target: do not tell them to fast more or less, and treat any link with ${isKetogenicCondition() ? 'ketones, glucose' : 'blood sugar'}, sleep or symptoms as an association only.
 ` : ''}SLEEP: ${ctx.avgSleepHrs != null ? `avg ${ctx.avgSleepHrs}h/night over ${ctx.sleepDaysCount} tracked night(s) this period${ctx.sleepBelowRecommended ? ' — BELOW the 7-9h recommended range. If nothing else in this data stands out, this is worth raising as a genuine concern in its own right.' : ' — within/above the 7-9h recommended range.'}` : 'Not available — needs a wearable that tracks sleep (RingConn, Amazfit/Zepp, or Health Connect) syncing.'}
 CALORIE BALANCE: when discussing calorie intake relative to target or TDEE, a sustained deficit or surplus is only worth flagging as a concern if it is either unintentional (contradicts the stated GOAL/phase above) or the weight/body-composition trend above shows it is actually having an unwanted effect. A deficit that matches the patient's stated goal, with weight stable at or near target, is working as intended — do not name it as a concern. Look at what the data above actually shows is off-track (sleep is a common one that gets missed) rather than defaulting to calorie balance as the go-to answer.
 TDEE: ${ctx.tdee ? `${ctx.tdee} kcal/day — ${ctx.tdeeSource === 'confirmed' ? `${ctx.name}'s own confirmed, weight-trend-validated figure (use this as the authoritative number)` : `${getBMRFormulaLabel()} formula estimate (BMR ${ctx.bmr} kcal, activity-adjusted from 30-day avg steps) — no confirmed figure set, so this is a population-formula guess, not validated against ${ctx.name}'s actual data`}${ctx.tdeeSource === 'confirmed' && ctx.formulaTdee && Math.abs(ctx.formulaTdee - ctx.tdee) > 200 ? ` [Note: the ${getBMRFormulaLabel()} formula estimates ${ctx.formulaTdee} kcal/day for comparison — a ${Math.abs(ctx.formulaTdee - ctx.tdee)}kcal gap from the confirmed figure, likely reflecting individual metabolic variation the formula can't capture]` : ''}` : 'Not available — height/age/sex missing from Profile'}
@@ -50522,7 +50590,7 @@ function mhStatNormalise(def) {
   if (!s.outputs.includes(d.output)) d.output = s.def.output;
   if (!['high', 'low', 'time'].includes(d.order)) d.order = s.def.order;
   if ((d.order === 'time') && !['days', 'weeks', 'months', 'weekdays'].includes(d.subject)) d.order = 'high';
-  d.top = [5, 10, 20, 50, 0].includes(d.top) ? d.top : s.def.top;
+  d.top = [3, 5, 10, 20, 50, 0].includes(d.top) ? d.top : s.def.top; // 3 is used by the Today tile
   if (d.period == null) d.period = 30;
   d.compare = !!d.compare && mhStatCanCompare(d);
   return d;
@@ -50639,7 +50707,7 @@ function mhStatTitle(def) {
   const by = d.subject === 'foods' && d.measure === 'count' ? 'most often' : ((aggWord ? aggWord + ' ' : '') + m);
   return (head + (timeSub && d.subject !== 'days' ? '' : what + ' ') + (timeSub && d.subject !== 'days' ? by + ' per ' + ({ weeks: 'week', months: 'month', weekdays: 'weekday' })[d.subject] : 'by ' + by)).replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
 }
-function mhStatSubtitle(def) { const n = mhStatNormalise(def); return mhStatTitle(def) + ' · ' + mhStatPeriodText(n) + (n.compare ? ' · against the period before' : ''); }
+function mhStatSubtitle(def) { const n = mhStatNormalise(def); return mhStatTitle(def) + ' · ' + mhStatPeriodText(n) + (n.compare ? ' · against the period before' : '') + (def.share ? ' · in summaries & AI' : ''); }
 function mhStatDeltaHtml(r) { if (r.isNew) return '<span style="color:var(--accent);font-size:10px;"> new</span>'; if (r.delta == null) return ''; return '<span style="color:var(--text2);font-size:10px;"> ' + (r.delta > 0 ? '▲ ' : r.delta < 0 ? '▼ ' : '● ') + Math.abs(r.delta) + '%</span>'; }
 function mhStatEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
@@ -50743,7 +50811,7 @@ function mhStatCardHtml(d, all) {
   try { body = d.collapsed ? '' : mhStatRender(mhStatRun(d)); } catch (e) { err = 'This statistic could not be worked out: ' + e.message; }
   const i = all.findIndex(x => x.id === d.id), btn = (fn, t, extra) => '<button class="drill-period" ' + (extra || '') + ' onclick="' + fn + '">' + t + '</button>';
   return '<div class="metric-card card-unit" style="margin-bottom:14px;' + (d.hidden ? 'opacity:0.6;' : '') + (d.color ? 'border-left:3px solid ' + d.color + ';' : '') + '" id="stcard-' + d.id + '"><div style="display:flex;align-items:flex-start;gap:6px;"><div style="flex:1;cursor:pointer;" onclick="mhStatToggle(\'' + d.id + '\')"><div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">' + mhStatEsc(d.name || mhStatTitle(d)) + ' <span style="font-size:10px;color:var(--text3);font-weight:400;">' + (d.collapsed ? '▸' : '▾') + '</span></div><div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mhStatEsc(mhStatSubtitle(d)) + '</div></div>' +
-    '<div style="display:flex;gap:4px;">' + btn('mhStatMove(\'' + d.id + '\',-1)', '▲', i === 0 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatMove(\'' + d.id + '\',1)', '▼', i === all.length - 1 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatHide(\'' + d.id + '\')', d.hidden ? '👁 Show' : '🙈') + '</div></div>' +
+    '<div style="display:flex;gap:4px;">' + btn('mhStatMove(\'' + d.id + '\',-1)', '▲', i === 0 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatMove(\'' + d.id + '\',1)', '▼', i === all.length - 1 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatTogglePin(\'' + d.id + '\')', d.pinned ? '📌' : '📍', 'title="' + (d.pinned ? 'Pinned to Today. Tap to unpin' : 'Pin to the Today screen') + '"' + (d.pinned ? ' style="border-color:var(--accent);"' : '')) + btn('mhStatHide(\'' + d.id + '\')', d.hidden ? '👁 Show' : '🙈') + '</div></div>' +
     '<div style="margin-top:10px;">' + (err ? '<div style="color:var(--red);font-size:12px;">' + mhStatEsc(err) + '</div>' : body) + '</div>' +
     '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">' + btn('mhStatEdit(\'' + d.id + '\')', '✎ Edit') + btn('mhStatCopy(\'' + d.id + '\')', '📋 Copy') + btn('mhStatDownload(\'' + d.id + '\')', '⤓ CSV') + btn('mhStatExport([\'' + d.id + '\'])', '📤 Share') + '<span style="flex:1"></span>' + btn('mhStatDelete(\'' + d.id + '\')', '🗑 Delete', 'style="color:var(--red);"') + '</div></div>';
 }
@@ -50757,7 +50825,7 @@ function mhStatMove(id, dir) {
 }
 function mhStatDelete(id) {
   const d = mhStatLoad().find(x => x.id === id); if (!d) return;
-  appConfirm('Delete "' + (d.name || mhStatTitle(d)) + '"? Your food and exercise history is not touched, only this saved question.', () => { mhStatSave(mhStatLoad().filter(x => x.id !== id)); mhStatRenderList(); showToast('Statistic deleted'); }, null, true, { confirm: 'Delete', cancel: 'Keep' });
+  appConfirm('Delete "' + (d.name || mhStatTitle(d)) + '"? Your food and exercise history is not touched, only this saved question.', () => { mhStatSave(mhStatLoad().filter(x => x.id !== id)); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast('Statistic deleted'); }, null, true, { confirm: 'Delete', cancel: 'Keep' });
 }
 
 // ── library ──
@@ -50797,7 +50865,7 @@ function mhStatLibAdd(i) { const p = MH_ST_LIBRARY[i]; if (!p) return; const a =
 
 // ── share: export / import ──
 function mhStatExportObj(ids) {
-  const a = mhStatLoad().filter(d => !ids || ids.includes(d.id)).map(d => { const o = Object.assign({}, d); delete o.id; delete o.created; delete o.collapsed; return o; });
+  const a = mhStatLoad().filter(d => !ids || ids.includes(d.id)).map(d => { const o = Object.assign({}, d); delete o.id; delete o.created; delete o.collapsed; delete o.pinned; delete o.share; delete o.hidden; return o; });
   return { maxedhealth_statistics: 1, app: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', exported: new Date().toISOString().slice(0, 10), stats: a };
 }
 function mhStatExport(ids) {
@@ -50831,6 +50899,44 @@ function mhStatShareOpen() {
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// ── Statistics on Today, and in reports / summaries / the AI (v3.10.1081) ─────────────────────────────────────
+// A statistic can be pinned (a compact tile on the Today screen) and/or shared (included in the weekly summary, the clinician
+// view, the AI context and so on). Both are switches in the builder; 📌 on a card toggles the pin.
+function mhStatPinnedDefs() { return mhStatLoad().filter(d => d.pinned && !d.hidden).slice(0, 4); }
+function mhStatSharedDefs() { return mhStatLoad().filter(d => d.share && !d.hidden).slice(0, 6); }
+function mhStatTogglePin(id) { const a = mhStatLoad(), d = a.find(x => x.id === id); if (!d) return; d.pinned = !d.pinned; mhStatSave(a); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast(d.pinned ? 'Pinned to Today 📌' : 'Unpinned'); }
+function mhStatTodayRender() {
+  const card = document.getElementById('dashSection-stats'), body = document.getElementById('dashStatsBody'); if (!card || !body) return;
+  const defs = mhStatPinnedDefs();
+  card.classList.toggle('mh-nostats', !defs.length); if (!defs.length) { body.innerHTML = ''; return; }
+  body.innerHTML = defs.map(d => {
+    let inner = ''; try {
+      const n = mhStatNormalise(d), small = Object.assign({}, n, { compare: false });
+      if (n.output === 'table') small.output = 'list';
+      if (small.output === 'list' || small.output === 'donut') small.top = 3, small.output = 'list';
+      inner = mhStatRender(mhStatRun(small));
+    } catch (e) { inner = '<div style="color:var(--red);font-size:12px;">Could not work this out.</div>'; }
+    return '<div style="padding:10px 0;border-top:1px solid var(--border);"><div style="display:flex;align-items:baseline;gap:8px;cursor:pointer;" onclick="switchTabById(\'stats\')"><span style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text);flex:1;">' + mhStatEsc(d.name || mhStatTitle(d)) + '</span><span style="font-size:10px;color:var(--text3);">' + mhStatEsc(mhStatPeriodText(mhStatNormalise(d))) + '</span></div>' + inner + '</div>';
+  }).join('');
+}
+function mhStatRowsText(d, maxRows) {
+  const res = mhStatRun(Object.assign({}, d, { compare: false })), f = v => mhStatFmt(res.def.measure, v, res.unit);
+  return { title: d.name || mhStatTitle(d), sub: mhStatSubtitle(Object.assign({}, d, { compare: false })), rows: res.rows.slice(0, maxRows || 10).map((r, i) => (i + 1) + '. ' + r.label + ' — ' + f(r.value)), none: !res.rows.length };
+}
+function mhStatShareText() {
+  const defs = mhStatSharedDefs(); if (!defs.length) return '';
+  return '\n\nSAVED STATISTICS\n' + defs.map(d => { try { const x = mhStatRowsText(d); return x.title + ' (' + x.sub + ')\n' + (x.none ? '  nothing logged in this period' : x.rows.map(r => '  ' + r).join('\n')); } catch (_) { return ''; } }).filter(Boolean).join('\n\n');
+}
+function mhStatShareHtml(theme) {
+  const defs = mhStatSharedDefs(); if (!defs.length) return '';
+  const ink = theme === 'light' ? '#333' : 'var(--text)', soft = theme === 'light' ? '#777' : 'var(--text3)';
+  return '<div style="margin:12px 0 16px;"><div style="font-size:11px;font-weight:700;color:' + ink + ';margin-bottom:6px;">SAVED STATISTICS</div>' + defs.map(d => { try { const x = mhStatRowsText(d, 8);
+    return '<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:700;color:' + ink + ';">' + mhStatEsc(x.title) + '</div><div style="font-size:9px;color:' + soft + ';margin-bottom:2px;">' + mhStatEsc(x.sub) + '</div>' + (x.none ? '<div style="font-size:11px;color:' + soft + ';">nothing logged in this period</div>' : x.rows.map(r => '<div style="font-size:11px;color:' + ink + ';">' + mhStatEsc(r) + '</div>').join('')) + '</div>'; } catch (_) { return ''; } }).join('') + '</div>';
+}
+function mhStatsContext() {
+  try { const defs = mhStatSharedDefs(); if (!defs.length) return null; return defs.map(d => { const x = mhStatRowsText(d, 10); return x.title + ' (' + x.sub + '): ' + (x.none ? 'nothing logged' : x.rows.join('; ')); }).join('\n  '); } catch (_) { return null; }
+}
+
 // ── builder ──
 let _stDraft = null, _stEditing = null;
 function mhStatOpenBuilder(def, id) {
@@ -50848,6 +50954,7 @@ function mhStatSet(field, value) {
   else if (field === 'top') _stDraft.top = parseInt(value) || 0;
   else if (field === 'period') { _stDraft.period = parseInt(value); }
   else if (field === 'compare') _stDraft.compare = !!value;
+  else if (field === 'pinned' || field === 'share') _stDraft[field] = !!value;
   else if (field === 'section' || field === 'color') _stDraft[field] = value || undefined;
   else _stDraft[field] = value;
   _stDraft = Object.assign(mhStatNormalise(_stDraft), { name: _stDraft.name, from: _stDraft.from, to: _stDraft.to, id: _stDraft.id, section: _stDraft.section, color: _stDraft.color, compare: _stDraft.compare, pinned: _stDraft.pinned, share: _stDraft.share });
@@ -50871,6 +50978,7 @@ function mhStatRenderBuilder() {
   if (d.period === -1) h += '<div style="display:flex;gap:8px;margin-bottom:10px;"><input type="date" value="' + (d.from || '') + '" onchange="_stDraft.from=this.value;mhStatPreview()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"><input type="date" value="' + (d.to || '') + '" onchange="_stDraft.to=this.value;mhStatPreview()" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></div>';
   if (mhStatCanCompare(d)) h += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (d.compare ? 'checked ' : '') + 'onchange="mhStatSet(\'compare\',this.checked)" style="width:18px;height:18px;"> Compare with the period before</label>';
   h += '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">DISPLAY AS</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">' + s.outputs.map(o => '<span class="mh-chip' + (d.output === o ? ' on' : '') + '" onclick="mhStatSet(\'output\',\'' + o + '\')">' + MH_ST_OUT[o][1] + ' ' + MH_ST_OUT[o][0] + '</span>').join('') + '</div>';
+  h += '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (d.pinned ? 'checked ' : '') + 'onchange="mhStatSet(\'pinned\',this.checked)" style="width:18px;height:18px;"> 📌 Show on the Today screen</label><label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (d.share ? 'checked ' : '') + 'onchange="mhStatSet(\'share\',this.checked)" style="width:18px;height:18px;"> 🤖 Include in summaries, clinician view and AI</label>';
   h += '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">COLOUR</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' + MH_ST_COLORS.map(c => '<span onclick="mhStatSet(\'color\',\'' + c + '\')" style="width:28px;height:28px;border-radius:50%;cursor:pointer;box-sizing:border-box;border:2px solid ' + ((d.color || '') === c ? 'var(--text)' : 'var(--border)') + ';background:' + (c || 'var(--accent)') + ';display:flex;align-items:center;justify-content:center;font-size:9px;color:#000;">' + (c ? '' : 'auto') + '</span>').join('') + '</div>';
   h += '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">PREVIEW</div><div id="statsPreview" style="padding:10px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:12px;"></div>';
   h += '<div style="display:flex;gap:8px;"><button class="run-btn" style="flex:2;padding:11px;" onclick="mhStatSaveDraft()">' + (_stEditing ? 'Save changes' : 'Save statistic') + '</button><button class="drill-period" style="flex:1;padding:11px;" onclick="mhStatCloseBuilder()">Cancel</button></div></div>';
@@ -50884,11 +50992,11 @@ function mhStatPreview() {
 function mhStatPreset(i) { const p = MH_ST_PRESETS[i]; if (!p) return; const keep = _stDraft ? _stDraft.name : ''; _stDraft = mhStatNormalise(Object.assign({}, p[1])); _stDraft.name = keep && keep.length ? keep : ''; mhStatRenderBuilder(); }
 function mhStatSaveDraft() {
   if (!_stDraft) return;
-  const d = mhStatNormalise(_stDraft); d.name = (_stDraft.name || '').trim() || mhStatTitle(d); if (!d.section) delete d.section; if (!d.color) delete d.color; if (_stDraft.period === -1) { d.from = _stDraft.from; d.to = _stDraft.to; }
+  const d = mhStatNormalise(_stDraft); d.name = (_stDraft.name || '').trim() || mhStatTitle(d); if (!d.section) delete d.section; if (!d.color) delete d.color; if (!d.pinned) delete d.pinned; if (!d.share) delete d.share; if (_stDraft.period === -1) { d.from = _stDraft.from; d.to = _stDraft.to; }
   const a = mhStatLoad();
   if (_stEditing) { const i = a.findIndex(x => x.id === _stEditing); if (i >= 0) a[i] = Object.assign({}, a[i], d, { id: _stEditing }); else a.push(Object.assign(d, { id: _stEditing })); }
   else a.unshift(Object.assign(d, { id: 'st' + Date.now() + Math.random().toString(36).slice(2, 6), created: Date.now() }));
-  mhStatSave(a); mhStatCloseBuilder(); mhStatRenderList(); showToast('Saved ✓');
+  mhStatSave(a); mhStatCloseBuilder(); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast('Saved ✓');
 }
 
 // typing in, which used to make the page jump. Run an update, then put the Activity card back where it was on screen.

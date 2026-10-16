@@ -65,7 +65,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("localStorage.setItem('mh_plan_open','1'); mhXPlanSetType('kayak'); mhXPlanSetAmt(60)")
     check('plan shows kayak chip', 'Kayaking' in ev("document.getElementById('planAhead').textContent"))
     ev("mhXPlanAdd('activity','kayak',60,'Moderate')"); pid = ev("mhXPlanItems()[0].id")
-    check('planned kayak earns 5.0 MET x kg', ev("mhXPlanItemEffect(mhXPlanItems()[0]).kcal") == round(5.0 * w))
+    check('planned kayak earns (5.0 - 1) MET x kg net of resting', ev("mhXPlanItemEffect(mhXPlanItems()[0]).kcal") == round(4.0 * w))
     ev(f"mhXPlanDone('{pid}')"); page.wait_for_timeout(300)
     kk = ev("getActivities().find(a=>a.type==='kayak')")
     check('Done auto-adds kayak and logs it', kk and kk['enabled'] and kk['duration'] == '60', str(kk))
