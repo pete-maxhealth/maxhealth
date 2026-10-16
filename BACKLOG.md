@@ -61,17 +61,18 @@ Built in the Move / Sleep / Statistics phase (v3.10.1071 - 1081), see CHANGELOG:
 
 Open, this phase:
 - [ ] Re-record the tour videos with Move, Sleep and Statistics chapters (and the "general health and muscle gain" framing).
-- [ ] Fold the new features into the story page; check docs/changelog.html is regenerated (it stops well before v3.10.1081).
+- [x] Story page and docs/changelog.html updated 16 Oct.
 - [ ] Phone checks for v3.10.1081 (Today statistics card, Statistics tab on light theme, net exercise energy figures, weather follow).
-- [ ] Drag-reorder on the Statistics tab (arrows only today); light-theme / high-contrast pass on the exercise, sleep and statistics looks.
-- [ ] What-moves-what: weight trend and whole treatment cycles as outcomes (today only treatment-session days are a habit); sleep consistency by bedtime (needs bedtime stored in a parseable form).
+- [x] v1083 Drag-reorder on Statistics; light-theme checked for the Statistics tab and the sleep and outcomes reports (high-contrast theme not checked).
+- [x] v1082/1084 Colour and chart type per statistic and per Trends chart.
+- [x] v1085 What-moves-what: bedtime, next-morning weight change, treatment-session windows. (Whole treatment cycles as a unit are not modelled.)
 - [ ] Remaining personas through `alex_deep.py`; untested: exported PDFs, reminders and notifications, more languages offline, device and wearable import.
 
 Older ideas, found in earlier phase chats and NOT confirmed built (check the code before starting):
 - [ ] Watch companion (square and round layouts): quick water / supplement / ketosis status, a daily touchpoint that drives people into the app.
-- [ ] Meal suggestions: recipe-aware (use saved recipes), avoid repeating recent meals, "nearly there" mode for small gaps, "save this combo as a recipe?" (grep shows some of these may exist: verify).
-- [ ] Micronutrients beyond fibre (vitamin D, magnesium, omega-3).
-- [ ] Voice logging for low-energy days (speech input exists for recipes; check the main log).
+- [x] (already in code, 16 Oct) Meal suggestions: recipe-aware (use saved recipes), avoid repeating recent meals, "nearly there" mode for small gaps, "save this combo as a recipe?" (grep shows some of these may exist: verify).
+- [ ] Micronutrients: iron, potassium and magnesium are tracked. Vitamin D and omega-3 left out: no trustworthy food data source to fill them.
+- [x] Voice logging exists on the main log (🎤 button) as well as add-food, water and batch library build.
 - [ ] Elevation from Zepp per-activity files (needs per-activity parsing).
 - [ ] Vascular age: needs PWV readings, which stopped in June 2025; revisit only if measuring resumes.
 - [ ] Decided against: protocol adherence view (risk of confusion), Simple/Full view switch.
@@ -79,11 +80,11 @@ Older ideas, found in earlier phase chats and NOT confirmed built (check the cod
 Business and launch (from memory, see `premium/HOME_CHECKLIST.md`):
 - [ ] Register-interest page live on pspence.co.uk before any ad links to it; Premium "coming soon" in demo personas, Ko-fi gallery and videos.
 - [ ] Move the APK off public GitHub, secure Premium code; launcher plan above.
-- [ ] Cloudflare Worker AI proxy has no authentication (cost exposure): add per-user allowance or key before scaling.
+- [x] Worker already has a per-device starter allowance, licence tokens, per-IP daily cap, global monthly cap, model allowlist and token cap (worker.js). Residual: a fresh device id gets a new 60-call starter, bounded by the IP and monthly caps. Needs checking that the DEPLOYED worker matches this file (home job).
 
 ## Other
 - [x] v3.10.950 Incidental Steps Baseline automatic; Activity Level reads real weekly steps.
-- [ ] Strength Log CSV import still replaces (now asks first).
+- [x] Strength Log CSV import merges by (date, exercise) (checked in code 16 Oct).
 
 ## Deferred until home
 - GoDaddy upload of premium-site/, ICO fee check, move APK off public GitHub, launcher items.

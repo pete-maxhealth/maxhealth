@@ -324,6 +324,10 @@ The API Token needs the "Edit Cloudflare Workers" template (Cloudflare dashboard
 | v3.10.1046 | 25 | `MH_DEMO_SHOW_PREMIUM = true`: demo banner link, Today card, Trends sample and preview say Coming soon; `mhDemoPremiumCard` un-hides `#demoPremiumLink`; preview adds External data imports and Support rows; p132. |
 | v3.10.1047 | 25 | Demo library/recipes (`generateDemoLibrary`, `generateDemoRecipes`) rebuilt generic: 48 foods, 8 recipes, numeric ingredient amounts; `reviewRecipeBeforeLogging` parses amount with parseFloat; `_parseWithAI_impl` and the connectivity gate let a demo reach the on-device stand-in; `demoMealFromBody` matches a typed demo meal to the library; Alex carbStyle moderate, carbs 320. Test p152. |
 | v3.10.1048 | 25 | `renderMealPreview`: `isPureFat` and `impliesOil` use word boundaries (\b) so 'boiled' is not 'oil'. Test p153. |
+| v3.10.1085 | Outcomes: `mhBedMin`/`mhClock`, exposures `bed` (same-record) and `trtwin`, forward outcome `dwt` (pair getter). Demo history gains `bedtime`. Test p188. |
+| v3.10.1084 | `mhChartColourPlugin`, `mh_chart_colors` (by canvas id, `#rrggbb` only), swatch in `renderChartStyleToggle`. Test p187. |
+| v3.10.1083 | Statistics drag reorder (`.mh-stdrag`, pointer events, `mhStatMoveTo`). Test p186. |
+| v3.10.1082 | `mhStatLook/LookHtml/Quick/Swatches`: per-card chart type and colour, custom colour. Test p185. |
 | v3.10.1081 | `dashSection-stats` (`mhStatTodayRender`, dashboard order migration, `.mh-nostats`); statistic `pinned`/`share` flags, `mhStatShareText/Html`, `mhStatsContext`; `mhSpeedMet` + `MH_SPEED_MET`, `mhPaceBandKey`, `mhNetKcal`, `mhExNet` (`mh_ex_energy_basis`). Tests p183, p184; p172 updated for net. |
 | v3.10.1080 | `mhSleepDay/DayHtml/RangeStats/Context`, `renderSleepReport`; outcomes engine `mhOutcomeFindings` (exposures x forward/reverse outcomes, Welch t>=2, dedupe) with `renderOutcomesReport`, `mhOutcomesContext`; statistic compare (`_shift`, `mhStatCanCompare`); weather `followGps`. Tests p181, p182, p180 extended. |
 | v3.10.1079 | Sleep stage measures added to `MH_ST_DAYM` (deep/rem/light/wake/sleepeff/sleephr); 3 sleep library items. p180 extended. |

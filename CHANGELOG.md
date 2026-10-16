@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1083 – 1085 – Drag reorder, chart colours, more "what moves what"
+- **v1083:** drag a statistic card by its ⠿ handle to reorder (arrows still work).
+- **v1084:** a colour swatch on each Trends chart's style row recolours its main line (double-tap to reset).
+- **v1085:** What seems to move what now also looks at bedtime (nights later than usual against that night's sleep), next-morning weight change, and the day of a treatment session plus the two days after. The sleep report states how steady your bedtime is. Demo nights carry bedtimes.
+- Housekeeping: BACKLOG items found already built (Strength CSV merges, main-log voice logging, recipe-aware suggestions, magnesium/iron/potassium, Worker allowance and caps).
+
 ## v3.10.1082 – Colour and chart type, one tap away on every statistic
 - **🎨 on each statistics card** opens a small strip: change how it is shown (ranked list, bars, line, table, donut, whatever suits that statistic) and its colour, without opening Edit. Nine ready colours plus a colour wheel for any shade; the builder gets the wheel too.
 - Colours are checked as plain `#rrggbb` everywhere (card, builder, imported files), so a shared statistic cannot carry anything else. Test p185.
