@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1088 – Readable in every theme
+- New test p191 measures text contrast on the Statistics tab and the Sleep and outcomes reports in all four colour themes crossed with the three visual themes. Small secondary text was 2.4 to 2.9:1 in every theme, and the bright label colours on the sleep tiles fell to 1.7:1 in the light theme. Secondary text on those surfaces is now one step stronger, and the light theme uses deeper shades of the same hues. All 16 combinations now pass 3:1. (The app-wide secondary text colour elsewhere was not changed.)
+
 ## v3.10.1087 – Impossible device values are blanked at import
 - Found by the new import test: a glitchy row in a wearable file (99,999,999 steps, a 5,000 kg weight, a negative night, a heart rate of 300) went into History as real and skewed every chart and statistic. Each column now has a plausible range; a value outside it is blanked and the rest of the row is kept. New test p190 also covers exported PDFs, every language file (valid, placeholders intact, loads from the app's own copy), and the reminder self-test.
 
