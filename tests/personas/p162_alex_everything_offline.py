@@ -61,7 +61,8 @@ with fresh_server() as root, sync_playwright() as pw:
     step('today','hide/show a dashboard section',hidesec)
     step('today','move a dashboard section',lambda: ev("(()=>{const e=document.querySelector('[onclick*=moveDashboardSection]'); if(!e) return 'none'; e.click(); return true})()"))
     def activity():
-        ev("addCustomActivity()"); page.wait_for_timeout(400); r=answer('Swimming'); page.wait_for_timeout(500)
+        ev("addCustomActivity()"); page.wait_for_timeout(400)   # since v1074 the button opens the exercise picker; 'Something else' is the free-text route
+        ev("mhPickCustom()"); page.wait_for_timeout(400); r=answer('Swimming'); page.wait_for_timeout(500)
         return r=='ok' and 'Swimming' in ev("document.body.innerText")
     step('today','add custom exercise',activity)
     step('today','strength add form',lambda: (ev("showStrengthAddForm()"), page.wait_for_timeout(400), ev("!!document.querySelector('#strengthAddForm,[id*=trengthForm],[id*=trengthAdd]')"))[2])
