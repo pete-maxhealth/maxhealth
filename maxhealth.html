@@ -6384,7 +6384,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1073'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1074'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -15883,7 +15883,7 @@ function calcActivityKcal(act) {
   // dashboard and feeds the daily calorie target adjustment.
   const raw = calcActivityKcalRaw(act);
   if (raw === 0) return 0;
-  return getCalibratedKcal(raw);
+  return getCalibratedKcal(raw, mhActCat(act));
 }
 
 function renderActivityCard() {
@@ -15976,7 +15976,8 @@ function renderActivityCard() {
     // single bad point would poison the personal correction factor going forward.
     const wearDataLooksStale = wearKcal && metKcal > 0 && wearKcal < metKcal * 0.4;
     if (wearKcal && metKcal > 0 && !wearDataLooksStale) {
-      recordCalibrationPoint(metKcal, wearKcal, todayStr());
+      const _cats = [...new Set(acts.filter(a => calcActivityKcalRaw(a) > 0).map(mhActCat))];
+      recordCalibrationPoint(metKcal, wearKcal, todayStr(), _cats.length === 1 ? _cats[0] : undefined);
       const diff = wearKcal - metKcal;
       const diffPct = Math.round(Math.abs(diff) / metKcal * 100);
       const cal = getCalibrationFactor();
@@ -15988,6 +15989,13 @@ function renderActivityCard() {
       } else if (cal.confidence === 'low') {
         html += ` ${cal.points} comparison days logged so far — personal calibration kicks in at 10 days.`;
       }
+      try {
+        const _catLines = [...new Set(acts.filter(a => a.enabled && a.duration).map(mhActCat))].map(c => ({ c, cc: getCategoryCalibration(c) })).filter(x => x.cc);
+        _catLines.forEach(x => {
+          const lab = (MH_EX_CATS[x.c] || {}).label || x.c, pc = Math.round((x.cc.factor - 1) * 100);
+          html += ` For ${lab.toLowerCase()} specifically, ${x.cc.points} comparison days say your watch reads ${pc === 0 ? 'in line with' : Math.abs(pc) + '% ' + (pc > 0 ? 'higher than' : 'lower than')} the formula, so that is what is applied.`;
+        });
+      } catch (_) {}
       activityDetailEl.innerHTML = html;
     } else if (wearDataLooksStale) {
       activityHeadlineEl.style.display = 'block';
@@ -16019,6 +16027,7 @@ function updateActivity(idx, field, val, isLive) {
   acts[idx][field] = val;
   if (field === 'effort') {
     acts[idx]._manualEffort = true;
+    mhRememberEffort(acts[idx].type, val);
   } else if (field === 'distance' || field === 'duration') {
     acts[idx]._manualEffort = false;
   }
@@ -16185,12 +16194,14 @@ function saveActivityToNotes(acts) {
 function addCustomActivity() { mhOpenExPicker(); }
 
 // Add a catalogue activity to the Activities list (no questions: distance, indoor/outdoor and effort wording all come from it).
+function mhLastEffort(type) { try { return (JSON.parse(localStorage.getItem('mh_last_effort') || '{}'))[type] || 'Moderate'; } catch (_) { return 'Moderate'; } }
+function mhRememberEffort(type, effort) { try { const m = JSON.parse(localStorage.getItem('mh_last_effort') || '{}'); m[type] = effort; localStorage.setItem('mh_last_effort', JSON.stringify(m)); } catch (_) {} }
 function mhAddCatalogActivity(id, enabled) {
   const e = MH_EX_BY_ID[id]; if (!e) return false;
   const acts = getActivities();
   if (acts.some(a => a.type === id)) return false;
   acts.push({ id: 'cat_' + id, name: e.emoji + ' ' + e.name.replace(/\s*\(est\.\)/, ''), type: id, needsDistance: !!e.dist,
-    duration: '', distance: '', distanceUnit: localStorage.getItem('mh_distance_unit') || 'km', effort: 'Moderate', enabled: enabled !== false, _manualEffort: false });
+    duration: '', distance: '', distanceUnit: localStorage.getItem('mh_distance_unit') || 'km', effort: mhLastEffort(id), enabled: enabled !== false, _manualEffort: false });
   saveActivities(acts);
   return true;
 }
@@ -37653,13 +37664,19 @@ const DRILL_CONFIG = {
 const CALIBRATION_KEY = 'mh_calibration_log';
 const CALIBRATION_MAX_POINTS = 60; // roughly 2 months of data points is plenty
 
-function recordCalibrationPoint(metKcal, wearKcal, date) {
+function mhActCat(act) {
+  // Calibration category for an activity: the catalogue category (racket, water, gym...), the type for the core activities, 'other' for custom ones.
+  const x = mhExInfo(act); if (x && x.cat) return x.cat;
+  return (!act || !act.type || act.type === 'exercise') ? 'other' : act.type;
+}
+function recordCalibrationPoint(metKcal, wearKcal, date, cat) {
   if (!metKcal || !wearKcal || metKcal <= 0) return;
   let log;
   try { log = JSON.parse(localStorage.getItem(CALIBRATION_KEY) || '[]'); } catch(e) { log = []; }
   // One point per day — if today's already recorded, update it rather than duplicate
   const existing = log.findIndex(p => p.date === date);
   const point = { date, metKcal: Math.round(metKcal), wearKcal: Math.round(wearKcal), ratio: wearKcal / metKcal };
+  if (cat) point.cat = cat; // only set on days where one category was logged, so the watch's single daily figure can be attributed to it
   if (existing >= 0) log[existing] = point; else log.push(point);
   // Keep only the most recent N points
   log.sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
@@ -37667,6 +37684,21 @@ function recordCalibrationPoint(metKcal, wearKcal, date) {
   localStorage.setItem(CALIBRATION_KEY, JSON.stringify(log));
 }
 
+const MH_CAT_CAL_PRIOR = 5; // days' worth of the overall factor blended in, so a category with few days leans on the overall number
+function getCategoryCalibration(cat) {
+  // Personal correction for one kind of exercise, from days when only that kind was logged. Blended toward the overall factor
+  // (shrinkage) so 3 odd days can't swing it, and clamped to a sane range. Returns null until there are 4 such days.
+  if (!cat) return null;
+  let log; try { log = JSON.parse(localStorage.getItem(CALIBRATION_KEY) || '[]'); } catch (e) { log = []; }
+  const mine = log.filter(p => p.cat === cat);
+  if (mine.length < 4) return null;
+  const g = getCalibrationFactor();
+  const gf = g.confidence === 'none' ? 1 : g.factor;
+  const fc = mine.reduce((sum, p) => sum + p.ratio, 0) / mine.length;
+  const n = mine.length;
+  const factor = Math.min(1.5, Math.max(0.6, (n * fc + MH_CAT_CAL_PRIOR * gf) / (n + MH_CAT_CAL_PRIOR)));
+  return { factor, points: n, confidence: n >= 8 ? 'good' : 'low' };
+}
 function getCalibrationFactor() {
   // Returns { factor, points, confidence } — factor is the personal correction
   // multiplier to apply to MET estimates. confidence is 'none'|'low'|'good' based on
@@ -37680,7 +37712,9 @@ function getCalibrationFactor() {
   return { factor: avgRatio, points: log.length, confidence };
 }
 
-function getCalibratedKcal(rawMetKcal) {
+function getCalibratedKcal(rawMetKcal, cat) {
+  const cc = getCategoryCalibration(cat);
+  if (cc) return Math.round(rawMetKcal * cc.factor);
   const cal = getCalibrationFactor();
   if (cal.confidence === 'none') return rawMetKcal; // not enough data yet — use the formula as-is
   return Math.round(rawMetKcal * cal.factor);
