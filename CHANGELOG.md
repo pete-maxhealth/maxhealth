@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1077
+- **Clinician view** (and its copied text) now includes an Exercise block for the chosen period: active days, minutes, share at hard effort, mix by category, resistance sets and volume, with a note that energy figures are self-logged estimates.
+- Verified and tested (no code change needed): a full backup carries dated exercise history, resistance sets and notes, the planned exercise, routines with template sets, the activity list, per-category calibration, remembered effort, activity level and steps baseline, and a restore brings all of it back.
+
 ## v3.10.1076
 - **AI and reports know your exercise.** Prompts and generated reports now carry a LOGGED EXERCISE summary for the period (active days, minutes, kcal, effort mix, mix by category, resistance volume, recent days by name and effort), with a standing instruction to treat any link to sleep, weight, symptoms or ketosis as an association rather than a cause.
 - **What your own days suggest (Early Stage).** Reports → Exercise compares next-night sleep and next-day HRV after each kind of exercise day against rest days. It only speaks with 5+ days in each group, a difference big enough to matter and a clear signal over noise; otherwise it says nothing stands out yet. Always labelled as an association, never cause. The same findings go into the AI context.
