@@ -6421,7 +6421,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1082'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1083'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -50823,7 +50823,7 @@ function mhStatCardHtml(d, all) {
   let body = '', err = '';
   try { body = d.collapsed ? '' : mhStatRender(mhStatRun(d)); } catch (e) { err = 'This statistic could not be worked out: ' + e.message; }
   const i = all.findIndex(x => x.id === d.id), btn = (fn, t, extra) => '<button class="drill-period" ' + (extra || '') + ' onclick="' + fn + '">' + t + '</button>';
-  return '<div class="metric-card card-unit" style="margin-bottom:14px;' + (d.hidden ? 'opacity:0.6;' : '') + (d.color ? 'border-left:3px solid ' + d.color + ';' : '') + '" id="stcard-' + d.id + '"><div style="display:flex;align-items:flex-start;gap:6px;"><div style="flex:1;cursor:pointer;" onclick="mhStatToggle(\'' + d.id + '\')"><div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">' + mhStatEsc(d.name || mhStatTitle(d)) + ' <span style="font-size:10px;color:var(--text3);font-weight:400;">' + (d.collapsed ? '▸' : '▾') + '</span></div><div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mhStatEsc(mhStatSubtitle(d)) + '</div></div>' +
+  return '<div class="metric-card card-unit" style="margin-bottom:14px;' + (d.hidden ? 'opacity:0.6;' : '') + (d.color ? 'border-left:3px solid ' + d.color + ';' : '') + '" id="stcard-' + d.id + '"><div style="display:flex;align-items:flex-start;gap:6px;"><span class="mh-stdrag" data-stid="' + d.id + '" title="Drag to reorder" style="touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;padding:2px 4px 6px 0;font-size:16px;line-height:1;color:var(--text3);">⠿</span><div style="flex:1;cursor:pointer;" onclick="mhStatToggle(\'' + d.id + '\')"><div style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;color:var(--text);">' + mhStatEsc(d.name || mhStatTitle(d)) + ' <span style="font-size:10px;color:var(--text3);font-weight:400;">' + (d.collapsed ? '▸' : '▾') + '</span></div><div style="font-size:11px;color:var(--text3);margin-top:2px;">' + mhStatEsc(mhStatSubtitle(d)) + '</div></div>' +
     '<div style="display:flex;gap:4px;">' + btn('mhStatMove(\'' + d.id + '\',-1)', '▲', i === 0 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatMove(\'' + d.id + '\',1)', '▼', i === all.length - 1 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatTogglePin(\'' + d.id + '\')', d.pinned ? '📌' : '📍', 'title="' + (d.pinned ? 'Pinned to Today. Tap to unpin' : 'Pin to the Today screen') + '"' + (d.pinned ? ' style="border-color:var(--accent);"' : '')) + btn('mhStatLook(\'' + d.id + '\')', '🎨', 'title="Change the colour or chart type"' + (_stUI.look === d.id ? ' style="border-color:var(--accent);"' : '')) + btn('mhStatHide(\'' + d.id + '\')', d.hidden ? '👁 Show' : '🙈') + '</div></div>' +
     (_stUI.look === d.id ? mhStatLookHtml(d) : '') +
     '<div style="margin-top:10px;">' + (err ? '<div style="color:var(--red);font-size:12px;">' + mhStatEsc(err) + '</div>' : body) + '</div>' +
@@ -50857,6 +50857,30 @@ function mhStatMove(id, dir) {
   const sec = mhStatSection(a[i]); let j = i + dir; while (j >= 0 && j < a.length && (a[j].hidden !== a[i].hidden || mhStatSection(a[j]) !== sec)) j += dir;
   if (j < 0 || j >= a.length) return; const t = a[i]; a[i] = a[j]; a[j] = t; mhStatSave(a); mhStatRenderList();
 }
+function mhStatMoveTo(id, targetId, after) {
+  if (id === targetId) return;
+  const a = mhStatLoad(), i = a.findIndex(x => x.id === id); if (i < 0 || !a.some(x => x.id === targetId)) return;
+  const it = a.splice(i, 1)[0], t = a.findIndex(x => x.id === targetId);
+  a.splice(after ? t + 1 : t, 0, it); mhStatSave(a); mhStatRenderList();
+}
+(function () {
+  let drag = null;
+  const cardAt = (x, y) => { const e = document.elementFromPoint(x, y), c = e && e.closest ? e.closest('[id^="stcard-"]') : null; return c && c.id.slice(7) !== drag.id ? c : null; };
+  const clear = () => document.querySelectorAll('.mh-stover').forEach(c => { c.classList.remove('mh-stover'); c.style.boxShadow = ''; });
+  document.addEventListener('pointerdown', e => {
+    const h = e.target.closest && e.target.closest('.mh-stdrag'); if (!h) return;
+    drag = { id: h.getAttribute('data-stid'), el: h.closest('[id^="stcard-"]'), target: null, after: false, sc: (() => { let n = h.parentElement; while (n && n !== document.body) { if (n.scrollHeight > n.clientHeight + 50 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return n; n = n.parentElement; } return null; })() }; drag.el.style.opacity = '0.55';
+    try { h.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault();
+  });
+  document.addEventListener('pointermove', e => {
+    if (!drag) return; clear(); const c = cardAt(e.clientX, e.clientY); drag.target = c ? c.id.slice(7) : null;
+    if (c) { const r = c.getBoundingClientRect(); drag.after = e.clientY > r.top + r.height / 2; c.classList.add('mh-stover'); c.style.boxShadow = drag.after ? '0 3px 0 0 var(--accent)' : '0 -3px 0 0 var(--accent)'; }
+    const m = 70; if (e.clientY < m) window.scrollBy(0, -12); else if (e.clientY > window.innerHeight - m) window.scrollBy(0, 12);
+    const x = drag.sc; if (x) { const r = x.getBoundingClientRect(); if (e.clientY < r.top + m) x.scrollTop -= 12; else if (e.clientY > r.bottom - m) x.scrollTop += 12; }
+  });
+  const end = () => { if (!drag) return; const d = drag; drag = null; clear(); if (d.el) d.el.style.opacity = ''; if (d.target) mhStatMoveTo(d.id, d.target, d.after); };
+  document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+})();
 function mhStatDelete(id) {
   const d = mhStatLoad().find(x => x.id === id); if (!d) return;
   appConfirm('Delete "' + (d.name || mhStatTitle(d)) + '"? Your food and exercise history is not touched, only this saved question.', () => { mhStatSave(mhStatLoad().filter(x => x.id !== id)); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast('Statistic deleted'); }, null, true, { confirm: 'Delete', cancel: 'Keep' });
