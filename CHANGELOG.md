@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1078 – Statistics tab
+- New **Statistics** tab under Insights (Trends / Statistics / Reports). The Top Foods and Weekday cards moved out of Trends, with their section and filter plumbing.
+- Build your own statistics: pick what to look at (foods, days, weeks, months, weekdays, exercises, kinds of exercise, resistance lifts), what to measure, total/average/highest/lowest, top 5 to all, any period or custom dates, and how to show it (ranked list, bar, line, donut, table). Live preview as you build.
+- Sections (Food, Over time, Body, Exercise, My own) with search, section filter, reorder, hide/show, edit, delete.
+- Library of 18 ready-made statistics; Copy as text, download CSV, and Share/Import as a small file that carries the questions, never the data.
+- Pick a colour per statistic. Saved in `mh_stats_defs`, included in every backup.
+
 ## v3.10.1077
 - **Clinician view** (and its copied text) now includes an Exercise block for the chosen period: active days, minutes, share at hard effort, mix by category, resistance sets and volume, with a note that energy figures are self-logged estimates.
 - Verified and tested (no code change needed): a full backup carries dated exercise history, resistance sets and notes, the planned exercise, routines with template sets, the activity list, per-category calibration, remembered effort, activity level and steps baseline, and a restore brings all of it back.
