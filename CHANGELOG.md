@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1082 – Colour and chart type, one tap away on every statistic
+- **🎨 on each statistics card** opens a small strip: change how it is shown (ranked list, bars, line, table, donut, whatever suits that statistic) and its colour, without opening Edit. Nine ready colours plus a colour wheel for any shade; the builder gets the wheel too.
+- Colours are checked as plain `#rrggbb` everywhere (card, builder, imported files), so a shared statistic cannot carry anything else. Test p185.
+
 ## v3.10.1081 (addendum) – Demo personas now carry sleep stages
 - Demo history gets a deterministic night for every day: duration, deep/REM/light/awake, efficiency and sleeping heart rate, a little longer and deeper after harder exercise days. Reports > Sleep and "What seems to move what" now have something real to show in the demo. Tour videos re-recorded with Sleep and Statistics chapters.
 
