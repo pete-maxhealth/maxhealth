@@ -29,7 +29,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev(f"applyRoutine('{rid}')"); page.wait_for_timeout(500)
     check('applying shows TRAINING TODAY with the routine name', rname in ev("document.getElementById('routineListContainer').textContent") and 'TRAINING TODAY' in ev("document.getElementById('routineListContainer').textContent"))
     check('no EDITING TEMPLATE banner on the Train screen', 'EDITING TEMPLATE' not in ev("document.getElementById('routineListContainer').textContent"))
-    ev("window._routineApplyDrafts.forEach(d=>{d.sets=[{reps:'10',weight_kg:'40',note:''},{reps:'10',weight_kg:'40',note:''}]}); renderRoutineApplyRows()"); page.wait_for_timeout(300)
+    ev("window._routineApplyDrafts.forEach(d=>{d.sets.forEach(x=>{if(x.weight_kg!=='') x.weight_kg=String(parseFloat(x.weight_kg)+2.5)}); if(!d.sets.some(x=>x.weight_kg!=='')) d.sets[0].weight_kg='20'}); renderRoutineApplyRows()"); page.wait_for_timeout(300)
     tl = ev("document.getElementById('routineLiveTotals').textContent")
     check('live totals line shows sets and kg', 'sets' in tl and 'kg lifted' in tl, tl)
     check('effort filled in with a reason', 'filled in' in ev("document.getElementById('routineEffortNote').textContent"), ev("document.getElementById('routineEffortNote').textContent"))
@@ -40,7 +40,7 @@ with fresh_server() as root, sync_playwright() as pw:
     check('header now shows sets and kg', 'kg lifted' in ev("document.getElementById('resTotalsLine').textContent"), ev("document.getElementById('resTotalsLine').textContent"))
     # changed session -> three-way
     ev(f"applyRoutine('{rid}')"); page.wait_for_timeout(300)
-    ev("window._routineApplyDrafts.forEach(d=>{d.sets=[{reps:'8',weight_kg:'30',note:''}]}); window._routineApplyDrafts.pop(); renderRoutineApplyRows()"); page.wait_for_timeout(300)
+    ev("window._routineApplyDrafts.pop(); renderRoutineApplyRows()"); page.wait_for_timeout(300)
     ev("saveRoutineSession()"); page.wait_for_timeout(500)
     check('changed session asks Just today / Update / Save as new', ev("[...document.querySelectorAll('.app-modal-overlay button')].map(b=>b.textContent).join('|')") == 'Just for today|Update the routine|Save as a new routine')
     ex_before = ev(f"loadRoutines().find(r=>r.id==='{rid}').exercises.length")

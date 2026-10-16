@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1069
+- Demo: Alex now has four routines (Full Body, Upper Push and Pull, Legs and Glutes, Core and Mobility) with different reps and weights per set, bodyweight and loaded sets, and notes such as "seated, slow negative", so Train, Clone and the effort suggestion have something real to show. Sample data only.
+
 ## v3.10.1068
 - **Resistance, rethought.** "Strength Training" is now **Resistance**, a collapsible section under Activities that starts closed (a logged session takes a lot of room, and it is still fully editable when open). Activities keeps walking, running and the rest. The Resistance minutes-and-effort row moved into the Resistance section as the simple route.
 - **One totals line** (exercises, sets, kg lifted, minutes, effort) now heads the Resistance section, shows live while you train, and summarises each routine.
