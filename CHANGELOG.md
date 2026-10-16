@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1068
+- **Resistance, rethought.** "Strength Training" is now **Resistance**, a collapsible section under Activities that starts closed (a logged session takes a lot of room, and it is still fully editable when open). Activities keeps walking, running and the rest. The Resistance minutes-and-effort row moved into the Resistance section as the simple route.
+- **One totals line** (exercises, sets, kg lifted, minutes, effort) now heads the Resistance section, shows live while you train, and summarises each routine.
+- **Train and routines are separate.** "▶ Train" starts a session (from a routine, a free workout, or one exercise) under a green TRAINING TODAY banner. "🗂 Routines" is for templates only, under an EDITING TEMPLATE banner. Apply is no longer in the routine manager.
+- **Clone asks for a name.** Cloning a routine asks for its new name straight away, creates it, and opens it to edit. The original is never touched.
+- **Effort fills itself in.** Finishing a routine session suggests Easy, Moderate or Hard from the day's volume against your last sessions of the same routine, says why, and stops once you choose yourself.
+- **Changed a routine while training?** At the end it asks once: Just for today, Update the routine, or Save as a new routine. A free workout offers to save itself as a routine.
+- **Steps note under Activities** says in plain words how a logged walk and the day's steps fit together (the walk's steps are taken out so nothing counts twice, and only steps above your baseline add anything).
+- New test p169.
+
 ## v3.10.1067
 - Fixed: the tag lists in Reports, Compare Metrics and the before/during/after chips had one chip per exercise duration ("Exercise: 135min Cardio", "Exercise: 150min Resistance", "Exercise: 180min Walking" ...), hundreds of them on a long history. "Exercise: <minutes>min <type>" now counts as one tag per type ("Exercise: Walking", "Exercise: Resistance"), and renaming or deleting that tag changes every day that had it. Each day still keeps its own duration.
 - New test p168.

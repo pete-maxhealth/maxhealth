@@ -2783,6 +2783,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;cursor:pointer;" onclick="toggleSection('dash-activities-list','activityRowsWrap','dash-activities-list-icon')">🏃 ACTIVITIES <span id="dash-activities-list-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▾ hide</span></div>
       <div id="activityRowsWrap">
       <div id="activityRows"></div>
+      <div id="activityStepsNote" style="display:none;font-size:11px;color:var(--text3);line-height:1.5;margin-top:8px;padding:6px 8px;border-left:2px solid var(--accent-glow);"></div>
       <div style="margin-top:8px;">
         <button onclick="addCustomActivity()" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Add exercise</button>
       </div>
@@ -2792,8 +2793,10 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       </div>
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);overflow-x:hidden;max-width:100%;box-sizing:border-box;">
-        <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;cursor:pointer;" onclick="toggleSection('dash-strength-list','strengthRowsWrap','dash-strength-list-icon')">🏋️ STRENGTH TRAINING <span id="dash-strength-list-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▾ hide</span></div>
+        <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;cursor:pointer;" onclick="toggleSection('dash-strength-list','strengthRowsWrap','dash-strength-list-icon')">🏋️ RESISTANCE <span id="dash-strength-list-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▸ show</span></div>
+        <div id="resTotalsLine" onclick="toggleSection('dash-strength-list','strengthRowsWrap','dash-strength-list-icon')" style="font-size:11px;color:var(--text3);margin:-4px 0 8px;cursor:pointer;line-height:1.5;"></div>
         <div id="strengthRowsWrap">
+        <div id="resistanceSimple" style="margin-bottom:8px;"></div>
         <div id="dash-strength-wrap">
         <div id="strengthRows" style="font-size:12px;color:var(--text3);"></div>
         <div id="strengthSelectBar" style="margin-top:8px;"></div>
@@ -2824,8 +2827,9 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         </div>
         <div id="routineListContainer" style="margin-top:8px;"></div>
         <div style="display:flex;gap:6px;margin-top:8px;">
-          <button onclick="showRoutineList()" id="routineListBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">📋 Use a routine</button>
-          <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">+ Log a workout</button>
+          <button onclick="showTrainChooser()" id="routineTrainBtn" style="flex:1;font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid var(--accent-glow);border-radius:6px;padding:6px 10px;cursor:pointer;">▶ Train</button>
+          <button onclick="showRoutineList()" id="routineListBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">🗂 Routines</button>
+          <button onclick="showStrengthAddForm()" id="strengthAddBtn" style="flex:1;font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">+ One exercise</button>
         </div>
         </div>
         </div>
@@ -6355,7 +6359,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1067'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1068'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -14231,6 +14235,55 @@ function setStrengthUnit(unit) {
 let _strengthSelectMode = false;
 let _strengthSelectedIds = [];
 
+// ── Resistance section (v3.10.1068) ─────────────────────────────────────────
+// One totals line, used everywhere a resistance session is summarised (the section header, the end of an
+// applied routine, a routine's own summary), so the numbers always read the same way.
+function mhResistanceTotals(sessions, act) {
+  const t = { exercises: 0, sets: 0, reps: 0, volumeKg: 0, minutes: 0, effort: '', estimated: false };
+  const names = new Set();
+  (sessions || []).forEach(sx => {
+    if (sx.exercise) names.add(String(sx.exercise).toLowerCase());
+    (sx.sets || []).forEach(st => {
+      const reps = parseInt(st.reps) || 0;
+      t.sets++; t.reps += reps;
+      if (st.weight_kg != null && st.weight_kg !== '') t.volumeKg += (parseFloat(st.weight_kg) || 0) * reps;
+    });
+  });
+  t.exercises = names.size;
+  if (act && act.enabled && parseFloat(act.duration) > 0) { t.minutes = Math.round(parseFloat(act.duration)); t.effort = act.effort || 'Moderate'; t.estimated = !!act._estimatedDuration; }
+  return t;
+}
+function mhTotalsLine(t) {
+  const parts = [];
+  if (t.exercises) parts.push(t.exercises + ' exercise' + (t.exercises === 1 ? '' : 's'));
+  if (t.sets) parts.push(t.sets + ' set' + (t.sets === 1 ? '' : 's'));
+  if (t.volumeKg > 0) parts.push(Math.round(t.volumeKg).toLocaleString('en-GB') + ' kg lifted');
+  if (t.minutes) parts.push((t.estimated ? '~' : '') + t.minutes + ' min');
+  if (t.effort) parts.push(t.effort);
+  return parts.join(' · ');
+}
+function mhRenderResistanceHeader() {
+  const el = document.getElementById('resTotalsLine'); if (!el) return;
+  const today = todayStr();
+  const sessions = (state.strengthLog || []).filter(sx => sx.date === today);
+  const act = (typeof getActivities === 'function' ? getActivities() : []).find(a => a.type === 'resistance');
+  const line = mhTotalsLine(mhResistanceTotals(sessions, act));
+  el.innerHTML = line ? '<span style="color:var(--accent);">' + line + '</span>' : 'Nothing logged yet. Tap to open.';
+}
+function mhOpenResistance() {
+  try { localStorage.setItem('mh_collapse_dash-strength-list', 'open'); } catch (_) {}
+  applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', false);
+}
+// Plain-language note under Activities: how today's steps and a logged walk fit together.
+function mhRenderStepsNote() {
+  const el = document.getElementById('activityStepsNote'); if (!el) return;
+  let r; try { r = getNonWalkingStepsToday(); } catch (_) { r = null; }
+  if (!r || !r.hasRealTotal || !r.walkingSteps) { el.style.display = 'none'; return; }
+  const total = r.remainder + r.walkingSteps, base = getStepsBaseline();
+  el.style.display = 'block';
+  el.innerHTML = '👣 Your ' + total.toLocaleString('en-GB') + ' steps today include about ' + r.walkingSteps.toLocaleString('en-GB') + ' from the walk you logged, which is counted by its own pace and effort. So only the other ' + r.remainder.toLocaleString('en-GB') + ' count as everyday movement' + (r.remainder > base ? ', and ' + (r.remainder - base).toLocaleString('en-GB') + ' of those are above your ' + base.toLocaleString('en-GB') + '-step baseline.' : ', which is within your ' + base.toLocaleString('en-GB') + '-step baseline, so they add nothing extra.');
+}
+
 function renderStrengthCard() {
   const el = document.getElementById('strengthRows');
   const selectBar = document.getElementById('strengthSelectBar');
@@ -14238,13 +14291,14 @@ function renderStrengthCard() {
   const today = todayStr();
   const sessions = (state.strengthLog || []).filter(s => s.date === today);
   if (!sessions.length) {
-    el.innerHTML = '<span style="color:var(--text3);">No strength training logged today.</span>';
+    el.innerHTML = '<span style="color:var(--text3);">No resistance training logged today.</span>';
     if (selectBar) selectBar.innerHTML = '';
     _strengthSelectMode = false;
     _strengthSelectedIds = [];
     // Was missing here — this branch returned early, meaning the saved collapse
     // state never got restored on a day with nothing logged yet, always opening.
-    applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', true);
+    applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', false);
+    try { mhRenderResistanceHeader(); } catch (_) {}
     return;
   }
   // A session deleted or the day rolling over can drop ids that were
@@ -14279,7 +14333,8 @@ function renderStrengthCard() {
   // This call was never added when the toggle was built — it saved state
   // correctly on tap, but nothing ever restored it on the next render, so the
   // section always came back open regardless of what was left collapsed.
-  applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', true);
+  applySectionState('dash-strength-list', 'strengthRowsWrap', 'dash-strength-list-icon', false);
+  try { mhRenderResistanceHeader(); } catch (_) {}
 }
 
 function toggleStrengthSelectMode() {
@@ -14434,6 +14489,7 @@ let _routineSelectMode = false;
 let _routineSelectedIds = [];
 
 function showRoutineList() {
+  try { mhOpenResistance(); } catch (_) {}
   _routineEditingId = null; // neutral state - editRoutine()/duplicateRoutine() set this themselves when actually entering that mode
   _routineSelectMode = false;
   _routineSelectedIds = [];
@@ -14441,7 +14497,7 @@ function showRoutineList() {
   const container = document.getElementById('routineListContainer');
   if (!container) return;
   if (!routines.length) {
-    container.innerHTML = `
+    container.innerHTML = mhResBanner('template', 'Your routines') + `
       <div style="font-size:12px;color:var(--text3);padding:8px 0;">No routines saved yet.</div>
       <button onclick="showCreateRoutineForm()" class="btn-neutral" style="width:100%;padding:7px;border-radius:6px;font-size:12px;">+ Create a routine</button>
       ${(state.strengthLog||[]).length ? `<button onclick="showSaveTodayAsRoutineForm()" style="width:100%;padding:7px;margin-top:6px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">Save a logged session as a routine instead</button>` : ''}
@@ -14462,21 +14518,21 @@ function renderRoutineListBody() {
   const selMode = _routineSelectMode;
   const n = _routineSelectedIds.length;
   const allSelected = selMode && n === routines.length;
-  container.innerHTML = `
+  container.innerHTML = mhResBanner('template', 'Your routines') + `
+    <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Templates only. To do a session, close this and tap ▶ Train.</div>
     <div style="display:flex;justify-content:flex-end;gap:12px;margin-bottom:4px;">
       ${selMode ? `<span onclick="toggleAllRoutinesSelected()" style="cursor:pointer;color:var(--accent);font-size:11px;text-decoration:underline;">${allSelected ? 'Unselect all' : 'Select all'}</span>` : ''}
       <span onclick="toggleRoutineSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">${selMode ? 'Cancel' : 'Select'}</span>
     </div>` +
-    routines.map(r => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+    routines.map(r => { const nSets = r.exercises.reduce((n, e) => n + ((e.sets || []).length), 0); const kg = r.exercises.reduce((n, e) => n + (e.sets || []).reduce((m, x) => m + ((parseFloat(x.weight_kg) || 0) * (parseInt(x.reps) || 0)), 0), 0); return `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
       ${selMode ? `<input type="checkbox" onchange="toggleRoutineSelected('${r.id}')" ${_routineSelectedIds.includes(r.id) ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0;">` : ''}
-      <span style="flex:1;font-size:13px;color:var(--text2);">${r.name} <span style="color:var(--text3);font-size:11px;">(${r.exercises.length} exercises)</span></span>
+      <span style="flex:1;min-width:0;"><span style="font-size:13px;color:var(--text);font-weight:600;">${r.name}</span><br><span style="color:var(--text3);font-size:11px;">${mhTotalsLine({ exercises: r.exercises.length, sets: nSets, volumeKg: kg, minutes: 0, effort: '' }) || (r.exercises.length + ' exercises')}</span></span>
       ${selMode ? '' : `
-      <span onclick="applyRoutine('${r.id}')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Apply</span>
-      <span onclick="editRoutine('${r.id}')" title="Edit this routine's exercise list in place" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">✏️ Edit</span>
-      <span onclick="duplicateRoutine('${r.id}')" title="Duplicate as a starting point for a new routine" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">📋 Copy</span>
+      <span onclick="editRoutine('${r.id}')" title="Change this template" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">✏️ Edit</span>
+      <span onclick="duplicateRoutine('${r.id}')" title="Clone as a new routine with its own name" style="cursor:pointer;color:var(--text2);font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;">⧉ Clone</span>
       <span onclick="deleteRoutine('${r.id}')" title="Delete routine" style="cursor:pointer;font-size:14px;padding:0 4px;">🗑</span>`}
-    </div>`).join('') +
+    </div>`; }).join('') +
     (selMode
       ? `<button onclick="deleteSelectedRoutines()" ${n ? '' : 'disabled'} style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;border:1px solid var(--red);background:${n ? 'var(--red)' : 'var(--surface2)'};color:${n ? '#fff' : 'var(--text3)'};cursor:${n ? 'pointer' : 'default'};">🗑 Delete selected${n ? ` (${n})` : ''}</button>`
       : `<button onclick="showCreateRoutineForm()" class="btn-neutral" style="width:100%;padding:7px;margin-top:8px;border-radius:6px;font-size:12px;">+ Create another routine</button>
@@ -14549,11 +14605,12 @@ function editRoutine(id) {
 function duplicateRoutine(id) {
   const source = loadRoutines().find(r => r.id === id);
   if (!source) return;
-  _routineDraftExercises = JSON.parse(JSON.stringify(source.exercises)); // deep clone — see editRoutine() above
-  _routineEditingId = null; // a copy is a new routine, never edits the source
-  _routineFormUnit = 'kg'; // see editRoutine() above
-  const container = document.getElementById('routineListContainer');
-  renderCreateRoutineForm(container, `${source.name} (copy)`);
+  appPrompt('Clone "' + String(source.name).replace(/"/g, '&quot;') + '" as…', 'New routine name', (nm) => {
+    const copy = { id: 'rt' + Date.now(), name: nm, exercises: JSON.parse(JSON.stringify(source.exercises)) }; // deep clone, never touches the original
+    const rs = loadRoutines(); rs.push(copy); saveRoutines(rs);
+    showToast('"' + nm + '" created. Change what you need.');
+    editRoutine(copy.id);
+  }, String(source.name).replace(/"/g, '&quot;') + ' B');
 }
 
 function deleteRoutine(id) {
@@ -14619,6 +14676,7 @@ function pickStrengthExercise(name) {
 function _blankRoutineDraftExercise() { return { name: '', sets: [] }; }
 function _blankRoutineDraftSet() { return { reps: '', weight_kg: '', note: '' }; }
 function showCreateRoutineForm() {
+  try { mhOpenResistance(); } catch (_) {}
   _routineDraftExercises = [_blankRoutineDraftExercise()];
   _routineEditingId = null;
   _routineFormUnit = 'kg';
@@ -14653,7 +14711,7 @@ function renderCreateRoutineForm(container, prefillName = '') {
   const editing = !!_routineEditingId;
   container.innerHTML = `
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
-      <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">${editing ? 'Edit Routine' : 'Create Routine'}</div>
+      ${mhResBanner('template', editing ? 'Editing' : 'New routine')}
       <input type="text" id="newRoutineName" value="${prefillName.replace(/"/g,'&quot;')}" placeholder="Routine name (e.g. Upper Body)" class="modal-input" style="width:100%;font-size:13px;padding:8px 10px;margin-bottom:8px;box-sizing:border-box;">
       <div style="display:flex;gap:6px;margin-bottom:8px;">
         <button id="routineFormUnitBtn-kg" onclick="setRoutineFormUnit('kg')" style="flex:1;padding:6px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid ${_routineFormUnit==='kg'?'var(--accent)':'var(--border)'};background:${_routineFormUnit==='kg'?'var(--accent-dim)':'var(--surface2)'};color:${_routineFormUnit==='kg'?'var(--accent)':'var(--text2)'};">kg</button>
@@ -14843,15 +14901,99 @@ function getLastLoggedSets(exerciseName) {
   return matches[0].sets;
 }
 
+
+// ── Train vs Templates (v3.10.1068) ─────────────────────────────────────────
+// Two modes that never share a screen: TRAINING TODAY (doing a session) and EDITING TEMPLATE (managing routines).
+function mhResBanner(kind, name) {
+  const train = kind === 'train';
+  const col = train ? 'var(--accent)' : 'var(--text2)';
+  return '<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px;padding:6px 10px;border-radius:8px;border:1px solid ' + (train ? 'var(--accent-glow)' : 'var(--border)') + ';background:' + (train ? 'var(--accent-dim)' : 'var(--surface2)') + ';">' +
+    '<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;font-family:Space Mono,monospace;color:' + col + ';">' + (train ? '▶ TRAINING TODAY' : '✎ EDITING TEMPLATE') + '</span>' +
+    (name ? '<span style="font-size:12px;color:var(--text2);font-weight:600;margin-left:auto;">' + String(name).replace(/</g, '&lt;') + '</span>' : '') + '</div>';
+}
+function mhChoice3(message, labels, onPick) { // three-way modal: labels = [a, b, c]; onPick(0|1|2); dismiss = 0 (the safe choice)
+  const overlay = document.createElement('div'); overlay.className = 'app-modal-overlay';
+  overlay.innerHTML = '<div class="app-modal"><div class="app-modal-title">Keep these changes?</div><div class="app-modal-msg">' + message + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">' +
+    labels.map((l, i) => '<button class="app-modal-btn ' + (i === 0 ? 'confirm' : 'cancel') + '" data-pick="' + i + '" style="width:100%;">' + l + '</button>').join('') + '</div></div>';
+  document.body.appendChild(overlay);
+  const done = i => { overlay.remove(); try { onPick(i); } catch (e) { console.error(e); } };
+  overlay.querySelectorAll('[data-pick]').forEach(b => { b.onclick = () => done(parseInt(b.dataset.pick)); });
+  overlay.onclick = e => { if (e.target === overlay) done(0); };
+}
+function showTrainChooser() {
+  try { mhOpenResistance(); } catch (_) {}
+  const container = document.getElementById('routineListContainer'); if (!container) return;
+  const routines = loadRoutines();
+  container.innerHTML = mhResBanner('train', '') +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Start from a routine, or just begin and add exercises as you go. This is for doing a session, nothing here changes your saved routines unless you say so.</div>' +
+    routines.map(r => {
+      const sets = r.exercises.reduce((n, e) => n + ((e.sets || []).length), 0);
+      return '<div onclick="applyRoutine(\'' + r.id + '\')" style="display:flex;align-items:center;gap:8px;padding:10px;margin-bottom:6px;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--surface);">' +
+        '<span style="flex:1;font-size:13px;color:var(--text);font-weight:600;">' + String(r.name).replace(/</g, '&lt;') + '</span>' +
+        '<span style="font-size:11px;color:var(--text3);">' + r.exercises.length + ' exercise' + (r.exercises.length === 1 ? '' : 's') + (sets ? ' · ' + sets + ' sets' : '') + '</span>' +
+        '<span style="color:var(--accent);font-size:13px;">▶</span></div>';
+    }).join('') +
+    '<div onclick="applyRoutine(\'__free__\')" style="padding:10px;margin-bottom:6px;border:1px dashed var(--border);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text2);">＋ Free workout <span style="color:var(--text3);font-size:11px;">(add exercises as you go)</span></div>' +
+    '<div onclick="showStrengthAddForm()" style="padding:6px 2px;font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;">Just log a single exercise</div>' +
+    '<button onclick="document.getElementById(\'routineListContainer\').innerHTML=\'\'" style="width:100%;padding:6px;margin-top:4px;background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;">Close</button>';
+}
+// Effort from the work done: today's volume against your last sessions of the same routine.
+function mhRoutineVolume(sets) {
+  let vol = 0, reps = 0;
+  (sets || []).forEach(st => { const r = parseInt(st.reps) || 0; reps += r; if (st.weight_kg != null && st.weight_kg !== '') vol += (parseFloat(st.weight_kg) || 0) * r; });
+  return vol > 0 ? vol : reps;
+}
+function mhSuggestEffort(routineId, currentSets) {
+  if (!routineId || routineId === '__free__') return { effort: 'Moderate', basis: 'Starting point. It learns from your sessions of the same routine.' };
+  const byDate = {};
+  (state.strengthLog || []).forEach(e => { if (e.routineId === routineId && e.date !== todayStr()) (byDate[e.date] = byDate[e.date] || []).push(...(e.sets || [])); });
+  const dates = Object.keys(byDate).sort((a, b) => ddmmyySortKey(a) < ddmmyySortKey(b) ? 1 : -1).slice(0, 4);
+  if (!dates.length) return { effort: 'Moderate', basis: 'First time with this routine, so a middle starting point.' };
+  const avg = dates.reduce((n, d) => n + mhRoutineVolume(byDate[d]), 0) / dates.length;
+  const cur = mhRoutineVolume(currentSets);
+  if (!avg || !cur) return { effort: 'Moderate', basis: 'Fills in once you enter some sets.' };
+  const ratio = cur / avg, pct = Math.round(ratio * 100);
+  const effort = ratio >= 1.1 ? 'Hard' : ratio <= 0.8 ? 'Easy' : 'Moderate';
+  return { effort, basis: 'Today is ' + pct + '% of the work in your last ' + dates.length + ' session' + (dates.length === 1 ? '' : 's') + ' of this routine.' };
+}
+function renderRoutineLiveTotals() {
+  const el = document.getElementById('routineLiveTotals'); if (!el) return;
+  const drafts = window._routineApplyDrafts || [];
+  const LBS = 0.453592;
+  const sets = []; let ex = 0;
+  drafts.forEach(d => { const f = (d.sets || []).filter(x => x.reps !== '' && x.reps != null).map(x => ({ reps: parseInt(x.reps) || 0, weight_kg: (x.weight_kg !== '' && x.weight_kg != null) ? (_strengthUnit === 'lbs' ? (parseFloat(x.weight_kg) || 0) * LBS : parseFloat(x.weight_kg) || 0) : null })); if (f.length) { ex++; sets.push(...f); } });
+  const durField = parseFloat(document.getElementById('routineSessionDuration')?.value);
+  const dur = durField > 0 ? durField : (sets.length ? estimateStrengthDurationMinutes(sets.length) : 0);
+  // effort follows the work until the person picks one themselves
+  const sel = document.getElementById('routineSessionEffort');
+  const sug = mhSuggestEffort(_routineApplyId, sets);
+  if (sel && !window._routineEffortManual && sets.length) sel.value = sug.effort;
+  const note = document.getElementById('routineEffortNote');
+  if (note) note.textContent = sets.length ? (window._routineEffortManual ? 'Effort set by you.' : 'Effort filled in for you. ' + sug.basis + ' Change it if it felt different.') : '';
+  const t = { exercises: ex, sets: sets.length, reps: 0, volumeKg: sets.reduce((n, x) => n + (x.weight_kg || 0) * x.reps, 0), minutes: Math.round(dur), effort: sel ? sel.value : '', estimated: !(durField > 0) };
+  el.innerHTML = sets.length ? '<span style="color:var(--accent);">' + mhTotalsLine(t) + '</span>' : '<span style="color:var(--text3);">Totals appear as you fill in sets.</span>';
+}
+function mhRoutineStructChanged(routine, drafts) {
+  if (!routine || !routine.exercises) return false;
+  const a = routine.exercises.map(e => String(e.name || '').trim().toLowerCase());
+  const live = drafts.filter(d => (d.sets || []).some(x => x.reps !== '' && x.reps != null) || routine.exercises.some(e => String(e.name).toLowerCase() === String(d.name).toLowerCase()));
+  const b = live.map(d => String(d.name || '').trim().toLowerCase());
+  if (a.length !== b.length || a.some((n, i) => n !== b[i])) return true;
+  return routine.exercises.some((e, i) => (e.sets || []).length && (e.sets.length !== live[i].sets.filter(x => x.reps !== '' && x.reps != null).length));
+}
+
 function applyRoutine(id) {
-  const routine = loadRoutines().find(r => r.id === id);
+  try { mhOpenResistance(); } catch (_) {}
+  const routine = id === '__free__' ? { id: '__free__', name: 'Free workout', exercises: [] } : loadRoutines().find(r => r.id === id);
   if (!routine) return;
+  window._routineEffortManual = false;
   _routineApplyId = id;
   const container = document.getElementById('routineListContainer');
   if (!container) return;
   container.innerHTML = `
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
-      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">${routine.name}</div>
+      ${mhResBanner('train', routine.name)}
       <div style="display:flex;gap:6px;margin-bottom:8px;">
         <button id="routineUnitBtn-kg" onclick="setRoutineUnit('kg')" style="flex:1;padding:6px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--accent);background:var(--accent-dim);color:var(--accent);">kg</button>
         <button id="routineUnitBtn-lbs" onclick="setRoutineUnit('lbs')" class="btn-neutral" style="flex:1;padding:6px;border-radius:6px;font-size:11px;">lbs</button>
@@ -14861,18 +15003,20 @@ function applyRoutine(id) {
       </div>
       <div id="routineApplyRows"></div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Optional — credits the whole session as Resistance activity, same as a single manual workout.</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Minutes and effort for the whole session. Leave minutes blank to use an estimate from your sets.</div>
         <div style="display:flex;gap:6px;">
-          <input type="number" id="routineSessionDuration" placeholder="Total session minutes" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
-          <select id="routineSessionEffort" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" id="routineSessionDuration" oninput="renderRoutineLiveTotals()" placeholder="Total session minutes" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <select id="routineSessionEffort" onchange="window._routineEffortManual=true;renderRoutineLiveTotals()" style="flex:1;min-width:0;box-sizing:border-box;font-size:13px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
             <option value="Easy">Easy</option>
             <option value="Moderate" selected>Moderate</option>
             <option value="Hard">Hard</option>
           </select>
         </div>
       </div>
+      <div id="routineEffortNote" style="font-size:10px;color:var(--text3);margin-top:4px;min-height:12px;"></div>
+      <div id="routineLiveTotals" style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);"></div>
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <button onclick="saveRoutineSession()" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Log routine</button>
+        <button onclick="saveRoutineSession()" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Finish &amp; log</button>
         <button onclick="showRoutineList()" class="btn-neutral" style="flex:1;padding:8px;border-radius:6px;font-size:13px;">Cancel</button>
       </div>
     </div>`;
@@ -14955,15 +15099,17 @@ function renderRoutineApplyRows() {
       ${ex.sets.map((s, setIdx) => `
         <div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;">
           <span style="font-size:10px;color:var(--text3);width:14px;flex-shrink:0;">${setIdx+1}</span>
-          <input type="number" placeholder="reps" value="${s.reps}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].reps=this.value" style="width:52px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
-          <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" placeholder="reps" value="${s.reps}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].reps=this.value;renderRoutineLiveTotals()" style="width:52px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
+          <input type="number" placeholder="${_strengthUnit}" value="${s.weight_kg}" step="0.5" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].weight_kg=this.value;renderRoutineLiveTotals()" style="width:56px;flex-shrink:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
           <input type="text" placeholder="Note" value="${(s.note||'').replace(/"/g,'&quot;')}" oninput="window._routineApplyDrafts[${exIdx}].sets[${setIdx}].note=this.value" style="flex:1;min-width:0;box-sizing:border-box;font-size:12px;padding:5px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">
         </div>`).join('')}
       <span onclick="window._routineApplyDrafts[${exIdx}].sets.push({reps:'',weight_kg:'',note:''});renderRoutineApplyRows();" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline;">+ add set</span>
       ${ex.sets.length ? `<span data-applycopyprev="${exIdx}" onclick="mhApplyCopyPrevSet(${exIdx})" style="font-size:10px;color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:12px;">⧉ copy previous set</span>` : ''}
     </div>`).join('') + `
-    <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add exercise</button>`;
+    <div style="margin-top:8px;">${mhExerciseChipsHtml('addRoutineApplyExerciseByName')}</div>
+    <button onclick="addRoutineApplyExercise()" style="width:100%;padding:6px;margin-top:4px;background:none;border:1px dashed var(--border);border-radius:6px;color:var(--text3);font-size:11px;cursor:pointer;">+ Add another exercise by name</button>`;
 
+  try { renderRoutineLiveTotals(); } catch (_) {}
   const toggleLabel = document.getElementById('routineApplyDoneAllToggle');
   if (toggleLabel) toggleLabel.textContent = drafts.length && drafts.every(ex => ex.done) ? 'Unselect all' : 'Select all done';
 }
@@ -15016,7 +15162,7 @@ function moveRoutineApplyExercise(exIdx, direction) {
   renderRoutineApplyRows();
 }
 
-function saveRoutineSession() {
+function _saveRoutineSessionCore() {
   const LBS_TO_KG = 0.453592;
   const drafts = window._routineApplyDrafts || [];
   let loggedCount = 0;
@@ -15029,12 +15175,12 @@ function saveRoutineSession() {
       return { reps: parseInt(s.reps), weight_kg: kg, note: (s.note || '').trim() || null };
     });
     if (!sets.length) return; // skip exercises left entirely blank this session
-    const entry = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date: todayStr(), exercise: ex.name, sets };
+    const entry = { id: 'str' + Date.now() + Math.random().toString(36).slice(2,6), date: todayStr(), exercise: ex.name, sets, routineId: (_routineApplyId && _routineApplyId !== '__free__') ? _routineApplyId : null };
     state.strengthLog = [...(state.strengthLog || []), entry];
     loggedCount++;
     totalSetsLogged += sets.length;
   });
-  if (!loggedCount) { showToast('Enter at least one exercise with reps'); return; }
+  if (!loggedCount) { showToast('Enter at least one exercise with reps'); return false; }
   saveState();
   tagResistanceFromSetsLogged();
 
@@ -15072,9 +15218,39 @@ function saveRoutineSession() {
   document.getElementById('routineListContainer').innerHTML = '';
   renderStrengthCard();
   showToast(`${loggedCount} exercise${loggedCount===1?'':'s'} logged ✓${isEstimate ? ` (~${durationVal}min estimated from ${totalSetsLogged} sets)` : ''}`);
+  return true;
+}
+
+// Finish a session. If the exercises or set counts were changed from the saved routine, ask once what to do with
+// those changes: keep them to today only (default), update the routine, or save as a new routine.
+function saveRoutineSession() {
+  const id = _routineApplyId;
+  const snap = JSON.parse(JSON.stringify(window._routineApplyDrafts || []));
+  const routine = (id && id !== '__free__') ? loadRoutines().find(r => r.id === id) : null;
+  const changed = !!routine && mhRoutineStructChanged(routine, snap);
+  const toRoutineExercises = () => snap.map(d => ({ name: String(d.name || '').trim(), sets: _cleanRoutineDraftSets(d.sets.map(x => ({ ...x, weight_kg: (x.weight_kg !== '' && x.weight_kg != null) ? (_strengthUnit === 'lbs' ? Math.round(parseFloat(x.weight_kg) * 0.453592 * 10) / 10 : x.weight_kg) : '' }))) })).filter(e => e.name && e.sets.length);
+  if (!_saveRoutineSessionCore()) return;
+  if (changed) {
+    mhChoice3('You changed the exercises or sets from <strong>' + String(routine.name).replace(/</g, '&lt;') + '</strong>. What should happen to those changes?',
+      ['Just for today', 'Update the routine', 'Save as a new routine'], pick => {
+        if (pick === 1) { const rs = loadRoutines(); const i = rs.findIndex(r => r.id === id); if (i > -1) { rs[i] = { ...rs[i], exercises: toRoutineExercises() }; saveRoutines(rs); showToast('"' + routine.name + '" updated ✓'); } }
+        else if (pick === 2) appPrompt('Name the new routine', 'e.g. ' + routine.name + ' B', nm => { const rs = loadRoutines(); rs.push({ id: 'rt' + Date.now(), name: nm, exercises: toRoutineExercises() }); saveRoutines(rs); showToast('"' + nm + '" saved ✓'); }, String(routine.name).replace(/"/g, '&quot;') + ' B');
+      });
+  } else if (id === '__free__') {
+    appConfirm('Save this workout as a routine you can use again?', () => {
+      appPrompt('Name the routine', 'e.g. Upper Body', nm => { const rs = loadRoutines(); rs.push({ id: 'rt' + Date.now(), name: nm, exercises: toRoutineExercises() }); saveRoutines(rs); showToast('"' + nm + '" saved ✓'); });
+    }, null, false, { cancel: 'Not now', confirm: 'Save as routine' });
+  }
+}
+function addRoutineApplyExerciseByName(name) {
+  const last = (typeof getLastLoggedSets === 'function') ? getLastLoggedSets(name) : null;
+  const sets = last && last.length ? last.map(x => ({ reps: String(x.reps), weight_kg: x.weight_kg != null ? String(x.weight_kg) : '', note: x.note || '' })) : [{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''}];
+  window._routineApplyDrafts.push({ name, hasChoice: false, source: last && last.length ? 'history' : 'blank', sets });
+  renderRoutineApplyRows();
 }
 
 function showStrengthAddForm() {
+  try { mhOpenResistance(); } catch (_) {}
   _strengthDraftSets = [{ reps: '', weight_kg: '', note: '' }, { reps: '', weight_kg: '', note: '' }, { reps: '', weight_kg: '', note: '' }];
   _strengthEditingId = null;
   document.getElementById('strengthExerciseName').value = '';
@@ -15577,7 +15753,7 @@ function renderActivityCard() {
   const acts = getActivities();
   const el = document.getElementById('activityRows');
   if (!el) return;
-  el.innerHTML = acts.map((act, i) => {
+  const _rowHtml = acts.map((act, i) => {
     const suggestedEffort = act.needsDistance ? calcSuggestedEffort(act) : null;
     // Auto-apply the suggestion only if the user hasn't manually overridden it for this entry
     const effectiveEffort = (suggestedEffort && !act._manualEffort) ? suggestedEffort : (act.effort || 'Moderate');
@@ -15624,8 +15800,8 @@ function renderActivityCard() {
           </select>
         </div>
       </div>
-      ${act.type==='resistance' && act._syncedFromStrength ? `<div style="font-size:10px;color:var(--accent);padding-left:2px;width:100%;">🔗 ${act._estimatedDuration ? `Duration estimated from sets logged (~2.5min/set)` : `Synced from today's Strength Training log`} — edit here to override <span onclick="openResistanceEstimateHelp()" style="cursor:pointer;font-size:12px;border:1px solid var(--accent);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;line-height:1;vertical-align:middle;">ⓘ</span></div>` : ''}
-      ${act.type==='resistance' && act.enabled && !act._syncedFromStrength && !(state.strengthLog||[]).some(s=>s.date===todayStr()) ? `<div style="font-size:10px;color:var(--yellow);padding-left:2px;width:100%;background:rgba(245,197,66,0.08);border-radius:6px;padding:6px 8px;margin-top:4px;">💪 Want to log the actual sets/reps for this session too? <span onclick="document.getElementById('strengthAddBtn')?.scrollIntoView({behavior:'smooth',block:'center'});showStrengthAddForm();" style="cursor:pointer;color:var(--accent);text-decoration:underline;">+ Log a workout</span></div>` : ''}
+      ${act.type==='resistance' && act._syncedFromStrength ? `<div style="font-size:10px;color:var(--accent);padding-left:2px;width:100%;">🔗 ${act._estimatedDuration ? `Duration estimated from sets logged (~2.5min/set)` : `Synced from today's Resistance log`} — edit here to override <span onclick="openResistanceEstimateHelp()" style="cursor:pointer;font-size:12px;border:1px solid var(--accent);border-radius:50%;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;line-height:1;vertical-align:middle;">ⓘ</span></div>` : ''}
+      ${act.type==='resistance' && act.enabled && !act._syncedFromStrength && !(state.strengthLog||[]).some(s=>s.date===todayStr()) ? `<div style="font-size:10px;color:var(--yellow);padding-left:2px;width:100%;background:rgba(245,197,66,0.08);border-radius:6px;padding:6px 8px;margin-top:4px;">💪 Want the actual sets and reps for this session too? <span onclick="showTrainChooser();document.getElementById('routineTrainBtn')?.scrollIntoView({behavior:'smooth',block:'center'});" style="cursor:pointer;color:var(--accent);text-decoration:underline;">▶ Train</span></div>` : ''}
       ${act.needsDistance && suggestedEffort ? `<div style="font-size:10px;color:var(--text3);padding-left:2px;width:100%;">${act._manualEffort ? 'Manually set · ' : 'Auto-calculated from pace & distance · '}<span onclick="resetActivityEffort(${i})" style="cursor:pointer;color:var(--accent);text-decoration:underline;${act._manualEffort?'':'display:none;'}">use auto</span></div>` : ''}
       ${(() => {
         if (!act.needsDistance || !act.distance || !act.duration) return '';
@@ -15637,7 +15813,12 @@ function renderActivityCard() {
         return `<div style="font-size:10px;color:${pb.faster?'var(--accent)':'var(--text3)'};padding-left:2px;width:100%;">${pb.faster?'🎉':'📊'} ${timeStr} ${verb} per mile than your last similar ${act.name.replace(/^[^\w]*/,'').trim()} (${pb.lastMiles}mi on ${pb.lastDate})</div>`;
       })()}
     </div>`;
-  }).join('');
+  });
+  // Resistance lives in its own section below (v3.10.1068); this list is everything else (walking, running, cycling...).
+  el.innerHTML = acts.map((a, i) => a.type === 'resistance' ? '' : _rowHtml[i]).join('');
+  const _resSimple = document.getElementById('resistanceSimple');
+  if (_resSimple) _resSimple.innerHTML = acts.map((a, i) => a.type === 'resistance' ? _rowHtml[i] : '').join('');
+  try { mhRenderStepsNote(); mhRenderResistanceHeader(); } catch (_) {}
   updateActivityNudge(acts);
   // Update steps tag from activities
   updateActivityStepsTag(acts);
@@ -18514,7 +18695,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Dashboard Guides', key: 'dash-guides', subtab: 'dash', tab: 'today', keywords: 'help tips how to use' },
   { label: 'Macro Advice', key: 'dash-macroadvice', subtab: 'dash', tab: 'today', wrapId: 'macroAdviceWrap', keywords: 'what changing targets does explanation' },
   { label: 'Daily Steps (Today)', key: 'dash-steps', subtab: 'dash', tab: 'today', keywords: 'walking activity count' },
-  { label: 'Strength Training (Today)', key: 'dash-strength-list', subtab: 'dash', tab: 'today', wrapId: 'strengthRowsWrap', keywords: 'weights resistance exercise log' },
+  { label: 'Resistance (Today)', key: 'dash-strength-list', subtab: 'dash', tab: 'today', wrapId: 'strengthRowsWrap', keywords: 'weights resistance exercise log' },
   { label: 'How Are You Today? (Symptoms)', key: 'dash-symptoms', subtab: 'dash', tab: 'today', wrapId: 'symptomsCardBody', keywords: 'symptom score energy mood pain' },
   { label: 'Treatment Sessions Today', key: 'dash-treatment', subtab: 'dash', tab: 'today', wrapId: 'treatmentCardBody', keywords: 'pemf physio massage log session' },
   { label: 'Library A-Z', key: 'lib-az', subtab: 'library', tab: 'log', keywords: 'alphabetical browse all foods' },
