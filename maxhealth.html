@@ -4371,6 +4371,16 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       </div>
     </div>
 
+    <!-- Exercise (v3.10.1075): minutes, effort mix, categories, resistance volume and personal bests over the chosen range -->
+    <div id="exercise-report-section" class="card-unit" style="display:none;margin-bottom:20px;">
+      <div class="section-title" id="title-rpt-exercise" style="color:#f59e0b;cursor:pointer;" onclick="toggleSection('rpt-exercise','rpt-exercise-wrap','rpt-exercise-icon')">Exercise <span id="rpt-exercise-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
+      <div id="rpt-exercise-wrap">
+      <div class="settings-card" style="padding:14px 16px;">
+        <div id="exercise-report-content"></div>
+      </div>
+      </div>
+    </div>
+
     <!-- Fasting (v3.10.930): overnight fast and eating window, measured from logged meal times -->
     <div id="fasting-report-section" class="card-unit" style="display:none;margin-bottom:20px;">
       <div class="section-title" id="title-rpt-fasting" style="color:#4d9fff;cursor:pointer;" onclick="toggleSection('rpt-fasting','rpt-fasting-wrap','rpt-fasting-icon')">Fasting <span id="rpt-fasting-icon" style="font-size:12px;color:var(--text3);">▾ hide</span></div>
@@ -6384,7 +6394,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1074'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1075'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -29072,6 +29082,55 @@ function clearTodayLog() {
 // ─── HISTORY ─────────────────────────────────────────────
 let histFilter = 'week';
 
+// ── Per-day exercise summary (v3.10.1075) ───────────────────────────────────────────────────────────────────────
+// One place that turns a history day into exercise facts (minutes, sessions, kcal by category, effort mix, resistance volume),
+// derived from what is already saved, so every past day counts and nothing needs migrating. History, the metric chart,
+// Reports and the AI/sharing context all read this.
+function mhExCatOfEntry(e) {
+  let x = mhExInfo({ type: e.type }); if (x && x.cat) return x.cat;
+  const m = mhExMatch(String(e.name || '').replace(/^[^\w]*/, '')); if (m) return m.cat;
+  return (e.type && e.type !== 'exercise') ? e.type : 'other';
+}
+function mhExEmojiOfEntry(e) {
+  const x = MH_EX_BY_ID[e.type]; if (x) return x.emoji;
+  const core = { walking: '🚶', running: '🏃', cycling: '🚴', swimming: '🏊', rowing: '🚣', resistance: '💪' }[e.type]; if (core) return core;
+  const m = mhExMatch(String(e.name || '').replace(/^[^\w]*/, '')); if (m) return m.emoji;
+  const lead = String(e.name || '').match(/^\p{Extended_Pictographic}/u); return lead ? lead[0] : '🏃';
+}
+function mhStrengthForDate(date) { return (state.strengthLog || []).filter(x => x.date === date); }
+function mhExerciseDay(day) {
+  const ex = (day.exercises || []).filter(e => parseFloat(e.duration) > 0);
+  const out = { sessions: ex.length, minutes: 0, kcal: 0, hardMin: 0, byCat: {}, effort: { Easy: 0, Moderate: 0, Hard: 0 }, items: [], res: { sets: 0, reps: 0, volumeKg: 0, exercises: 0, log: [] } };
+  ex.forEach(e => {
+    const mins = parseFloat(e.duration) || 0, k = parseFloat(e.kcal) || 0, cat = mhExCatOfEntry(e), ef = e.effort || 'Moderate';
+    out.minutes += mins; out.kcal += k; if (ef === 'Hard') out.hardMin += mins; if (out.effort[ef] != null) out.effort[ef] += mins;
+    const c = out.byCat[cat] || (out.byCat[cat] = { minutes: 0, kcal: 0 }); c.minutes += mins; c.kcal += k;
+    out.items.push({ emoji: mhExEmojiOfEntry(e), name: String(e.name || '').replace(/^[^\w]*/, '').trim() || e.type, minutes: mins, effort: ef, kcal: k, cat });
+  });
+  const sl = mhStrengthForDate(day.date); out.res.log = sl;
+  sl.forEach(en => { out.res.exercises++; (en.sets || []).forEach(st => { const r = parseInt(st.reps) || 0; out.res.sets++; out.res.reps += r; out.res.volumeKg += (parseFloat(st.weight_kg) || 0) * r; }); });
+  out.res.volumeKg = Math.round(out.res.volumeKg);
+  out.minutes = Math.round(out.minutes); out.kcal = Math.round(out.kcal); out.hardMin = Math.round(out.hardMin);
+  return out;
+}
+function mhFmtSets(sets) {
+  // "3 x 12 @ 40kg, 1 x 8 @ 45kg": consecutive identical sets are grouped.
+  const g = []; (sets || []).forEach(st => { const k = (st.reps || 0) + '|' + (st.weight_kg == null || st.weight_kg === '' ? '' : st.weight_kg); const l = g[g.length - 1]; if (l && l.k === k) l.n++; else g.push({ k, n: 1, reps: st.reps, w: st.weight_kg }); });
+  return g.map(x => x.n + ' × ' + x.reps + (x.w !== '' && x.w != null && parseFloat(x.w) > 0 ? ' @ ' + x.w + 'kg' : '')).join(', ');
+}
+function mhExerciseDayHtml(day) {
+  const d = mhExerciseDay(day); if (!d.sessions && !d.res.sets) return '';
+  const row = (l, r, col) => '<div style="display:flex;gap:8px;align-items:baseline;padding:2px 0;"><span style="flex:1;font-size:12px;color:var(--text2);">' + l + '</span><span style="font-size:11px;color:' + (col || 'var(--text3)') + ';font-family:Space Mono,monospace;white-space:nowrap;">' + r + '</span></div>';
+  const efCol = { Easy: 'var(--green)', Moderate: 'var(--yellow)', Hard: 'var(--red)' };
+  let h = '<div style="margin:8px 0 4px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);"><div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:4px;">🏋️ EXERCISE' + (d.minutes ? ' · ' + d.minutes + ' MIN' : '') + (d.kcal ? ' · +' + d.kcal + ' KCAL' : '') + '</div>';
+  d.items.forEach(it => { h += row(it.emoji + ' ' + String(it.name).replace(/</g, '&lt;'), it.minutes + ' min · <span style="color:' + (efCol[it.effort] || 'var(--text3)') + '">' + it.effort + '</span> · +' + Math.round(it.kcal) + ' kcal'); });
+  if (d.res.sets) {
+    h += '<div style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--border);font-size:11px;color:var(--accent);">💪 Resistance: ' + d.res.exercises + ' exercise' + (d.res.exercises === 1 ? '' : 's') + ' · ' + d.res.sets + ' sets' + (d.res.volumeKg ? ' · ' + d.res.volumeKg.toLocaleString('en-GB') + ' kg lifted' : '') + '</div>';
+    d.res.log.forEach(en => { h += row('<span style="color:var(--text3);">' + String(en.exercise || '').replace(/</g, '&lt;') + '</span>', mhFmtSets(en.sets)); });
+  }
+  return h + '</div>';
+}
+
 function renderHistory() {
   const el = document.getElementById('histEntries');
   let data = state.history;
@@ -29191,6 +29250,7 @@ function renderHistory() {
         ${day.notes ? `<div class="hist-notes">📝 ${day.notes}</div>` : ''}
         ${day.weight ? `<div class="hist-notes">⚖️ Weight: ${mhWtText(day.weight)}</div>` : ''}
         ${day.water_ml ? `<div class="hist-notes" style="color:#38bdf8;">💧 Water: ${day.water_ml}ml</div>` : ''}
+        ${mhExerciseDayHtml(day)}
         <div style="padding-top:6px;border-top:1px solid var(--border);margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="startPastDayLog('${day.date}')">🍽 + Add food to this day</span>
           <span style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;" onclick="editHistDayTotalsByDate('${day.date}', ${i})">✏ Edit day totals</span>
@@ -37604,6 +37664,8 @@ const DRILL_CONFIG = {
   // and the wearable's own active-calorie figure. Kept separate on purpose:
   // they measure different things and are often both present on one day.
   exercise_kcal: { title: 'Logged exercise', unit: 'kcal', color: '#f59e0b', icon: '🏋️', field: '_exerciseKcal',   ref: null, refLabel: '' },
+  exercise_min:  { title: 'Exercise minutes', unit: 'min', color: '#f59e0b', icon: '⏱', field: '_exerciseMin', ref: null, refLabel: '' },
+  res_volume:    { title: 'Resistance volume', unit: 'kg', color: '#a78bfa', icon: '🏋️', field: '_resVolume', ref: null, refLabel: '' },
   active_cal:    { title: 'Active calories (wearable)', unit: 'kcal', color: '#fb923c', icon: '⚡', field: 'calories_active', ref: null, refLabel: '' },
   // Real blood glucose/ketone meter readings (glucose mmol/L ÷ ketones
   // mmol/L) — added 29/09/2026, a genuine gap where GKI was referenced as
@@ -37998,7 +38060,11 @@ function getDrillData(metric, period) {
 
   return filtered.map(d => {
     let val;
-    if (metric === 'exercise_kcal') {
+    if (metric === 'exercise_min') {
+      val = mhExerciseDay(d).minutes;
+    } else if (metric === 'res_volume') {
+      val = mhExerciseDay(d).res.volumeKg;
+    } else if (metric === 'exercise_kcal') {
       val = (d.exercises || []).reduce((s, e) => s + (parseFloat(e.kcal) || 0), 0);
     } else if (metric === 'fast_h' || metric === 'eat_window') {
       const r = (window._mhFastMapForDrill || (window._mhFastMapForDrill = mhFastingMap())).get(d.date);
@@ -38248,7 +38314,7 @@ function toggleMMMetric(key) {
 // this array are unaffected by which position a group sits in.
 const MM_METRIC_GROUPS = [
   { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
-  { label: 'Exercise', match: m => ['steps', 'distance', 'exercise_kcal', 'active_cal'].includes(m.key) },
+  { label: 'Exercise', match: m => ['steps', 'distance', 'exercise_kcal', 'exercise_min', 'res_volume', 'active_cal'].includes(m.key) },
   { label: 'Lab Results', match: m => m.isLabMarker },
   { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water', 'fast_h', 'eat_window'].includes(m.key) },
   { label: 'Symptoms', match: m => m.isSymptom },
@@ -43047,6 +43113,80 @@ function mhDownloadFastingCsv() {
 }
 // Fasting report (v3.10.930). Shows summary figures and, once there is enough data, how days that followed a
 // fast at or above your goal compared with the rest. It is an association, never a cause, and says so.
+// ── Exercise report (v3.10.1075) ────────────────────────────────────────────────────────────────────────────
+function mhExerciseRangeStats(days) {
+  const per = days.map(d => ({ d, x: mhExerciseDay(d) }));
+  const active = per.filter(p => p.x.sessions || p.x.res.sets);
+  const sum = f => per.reduce((n, p) => n + f(p.x), 0);
+  const byCat = {}; per.forEach(p => Object.keys(p.x.byCat).forEach(c => { byCat[c] = (byCat[c] || 0) + p.x.byCat[c].minutes; }));
+  return { n: days.length, activeDays: active.length, minutes: sum(x => x.minutes), kcal: sum(x => x.kcal), hardMin: sum(x => x.hardMin), sessions: sum(x => x.sessions),
+    resDays: per.filter(p => p.x.res.sets).length, sets: sum(x => x.res.sets), volumeKg: sum(x => x.res.volumeKg), byCat, per };
+}
+function mhPersonalBests(fromIso) {
+  // Heaviest set per exercise, all time, and whether that best was set inside the range (a genuinely new best, not just a repeat).
+  const best = {};
+  (state.strengthLog || []).forEach(en => {
+    const key = String(en.exercise || '').trim().toLowerCase(); if (!key) return;
+    (en.sets || []).forEach(st => {
+      const w = parseFloat(st.weight_kg) || 0, r = parseInt(st.reps) || 0; if (w <= 0 || r <= 0) return;
+      const iso = isoDate(en.date);
+      const b = best[key] || (best[key] = { name: en.exercise, w: 0, r: 0, iso: '', prior: 0 });
+      if (fromIso && iso < fromIso) b.prior = Math.max(b.prior, w);
+      if (w > b.w || (w === b.w && r > b.r)) { b.w = w; b.r = r; b.iso = iso; }
+    });
+  });
+  return Object.values(best).map(b => ({ ...b, isNew: !!fromIso && b.iso >= fromIso && b.w > b.prior && b.prior > 0 })).sort((a, b) => (b.isNew - a.isNew) || (b.w - a.w));
+}
+function renderExerciseReport() {
+  const section = document.getElementById('exercise-report-section'), el = document.getElementById('exercise-report-content');
+  if (!section || !el) return;
+  const days = getReportHistory().slice().sort((a, b) => isoDate(a.date) < isoDate(b.date) ? -1 : 1);
+  const st = mhExerciseRangeStats(days);
+  if (st.sessions + st.sets < 3) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  const fmt = n => Math.round(n).toLocaleString('en-GB'), hrs = m => m >= 90 ? (m / 60).toFixed(1) + ' h' : Math.round(m) + ' min';
+  // previous period of the same length, only for a rolling range
+  let prev = null;
+  if (_rptRange > 0) {
+    const a = new Date(); a.setDate(a.getDate() - _rptRange * 2); const b = new Date(); b.setDate(b.getDate() - _rptRange);
+    const pd = (state.history || []).filter(e => { const d = parseDateStr(e.date); return d && d >= a && d < b; });
+    if (pd.length >= Math.ceil(_rptRange * 0.6)) prev = mhExerciseRangeStats(pd); // only compare against a period that is properly covered
+  }
+  const delta = (cur, old) => (old > 0) ? (() => { const p = Math.round((cur - old) / old * 100); return '<span style="color:' + (p >= 0 ? 'var(--green)' : 'var(--yellow)') + ';font-size:10px;"> ' + (p >= 0 ? '▲ ' : '▼ ') + Math.abs(p) + '% vs previous</span>'; })() : '';
+  const tile = (lab, val, sub, col) => '<div style="background:var(--surface2);border-radius:8px;padding:10px;"><div style="font-size:9px;color:' + col + ';font-family:Space Mono,monospace;margin-bottom:4px;letter-spacing:0.05em;">' + lab + '</div><div style="font-size:19px;font-weight:800;font-family:Syne,sans-serif;color:' + col + ';">' + val + '</div><div style="font-size:10px;color:var(--text3);line-height:1.4;">' + sub + '</div></div>';
+  let h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">' +
+    tile('ACTIVE DAYS', st.activeDays + '<span style="font-size:11px;color:var(--text3);font-weight:400;"> of ' + st.n + '</span>', Math.round(st.activeDays / Math.max(1, st.n) * 100) + '% of days' + (prev ? delta(st.activeDays, prev.activeDays) : ''), '#f59e0b') +
+    tile('MINUTES', hrs(st.minutes), st.activeDays ? 'about ' + Math.round(st.minutes / Math.max(1, st.activeDays)) + ' min per active day' + (prev ? delta(st.minutes, prev.minutes) : '') : '', '#f59e0b') +
+    tile('FROM EXERCISE', '+' + fmt(st.kcal) + ' kcal', st.activeDays ? 'about ' + fmt(st.kcal / Math.max(1, st.activeDays)) + ' on an active day' : '', '#fb923c') +
+    tile('HARD EFFORT', st.minutes ? Math.round(st.hardMin / st.minutes * 100) + '%' : '—', 'of your minutes at Hard', '#fb7185') + '</div>';
+  // weekly minutes
+  const wk = {}; st.per.forEach(p => { const d = parseDateStr(p.d.date); if (!d) return; const m = new Date(d); m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); const k = m.toISOString().slice(0, 10); const w = wk[k] || (wk[k] = { min: 0, hard: 0 }); w.min += p.x.minutes; w.hard += p.x.hardMin; });
+  const keys = Object.keys(wk).sort().slice(-12), max = Math.max(1, ...keys.map(k => wk[k].min));
+  if (keys.length >= 2) {
+    h += '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin:4px 0 6px;">MINUTES PER WEEK</div><div style="display:flex;align-items:flex-end;gap:4px;height:84px;margin-bottom:14px;">' +
+      keys.map(k => { const w = wk[k], ht = Math.round(w.min / max * 72), hh = Math.round(w.hard / max * 72); const lab = k.slice(8) + '/' + k.slice(5, 7);
+        return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;" title="w/c ' + lab + ': ' + Math.round(w.min) + ' min"><div style="font-size:9px;color:var(--text3);">' + Math.round(w.min) + '</div><div style="width:100%;max-width:26px;height:' + Math.max(2, ht) + 'px;border-radius:4px 4px 0 0;background:#f59e0b;position:relative;overflow:hidden;"><div style="position:absolute;bottom:0;left:0;right:0;height:' + Math.min(ht, hh) + 'px;background:#fb7185;"></div></div><div style="font-size:8px;color:var(--text3);margin-top:2px;">' + lab + '</div></div>'; }).join('') + '</div>' +
+      '<div style="font-size:10px;color:var(--text3);margin:-8px 0 12px;"><span style="color:#fb7185;">■</span> Hard minutes <span style="color:#f59e0b;margin-left:6px;">■</span> all other</div>';
+  }
+  // categories
+  const cats = Object.keys(st.byCat).filter(c => st.byCat[c] > 0).sort((a, b) => st.byCat[b] - st.byCat[a]), tot = Math.max(1, cats.reduce((n, c) => n + st.byCat[c], 0));
+  if (cats.length) {
+    h += '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">WHAT YOU DID</div>' + cats.map(c => {
+      const meta = MH_EX_CATS[c] || { label: c === 'resistance' ? 'Resistance' : c === 'other' ? 'Other' : c, emoji: '🏃', hue: '#94a3b8' };
+      return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;"><span style="width:116px;font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + meta.emoji + ' ' + meta.label + '</span><div style="flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;"><div style="width:' + Math.round(st.byCat[c] / tot * 100) + '%;height:100%;background:' + meta.hue + ';"></div></div><span style="width:54px;text-align:right;font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">' + hrs(st.byCat[c]) + '</span></div>';
+    }).join('') + '<div style="height:10px"></div>';
+  }
+  // resistance
+  if (st.sets) {
+    const from = days.length ? isoDate(days[0].date) : '';
+    const pbs = mhPersonalBests(from).slice(0, 5);
+    h += '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">RESISTANCE</div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.7;">' + st.resDays + ' session day' + (st.resDays === 1 ? '' : 's') + ' · ' + st.sets + ' sets · <strong style="color:#a78bfa;">' + fmt(st.volumeKg) + ' kg</strong> lifted' + (prev && prev.volumeKg ? delta(st.volumeKg, prev.volumeKg) : '') + '</div>' +
+      (pbs.length ? '<div style="margin-top:6px;">' + pbs.map(b => '<div style="display:flex;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);"><span style="flex:1;color:var(--text2);">' + String(b.name).replace(/</g, '&lt;') + (b.isNew ? ' <span style="color:var(--green);font-size:10px;">★ new best</span>' : '') + '</span><span style="color:var(--text3);font-family:Space Mono,monospace;font-size:11px;">' + b.w + 'kg × ' + b.r + '</span></div>').join('') + '<div style="font-size:10px;color:var(--text3);margin-top:4px;">Heaviest set per exercise, all time. A star means it was set inside this range, above anything before it.</div></div>' : '');
+  }
+  el.innerHTML = h;
+}
+
 function renderFastingReport() {
   const section = document.getElementById('fasting-report-section'), el = document.getElementById('fasting-report-content');
   if (!section || !el) return;
@@ -43381,7 +43521,7 @@ function mhCompareMetricsHtml() {
   const GROUPS = [
     ['Body', ['weight','fat_pct','muscle_pct','bone_mass','hydration']],
     ['Nutrition', ['calories','protein','carbs','fat','ketosis','water','gki']],
-    ['Activity and sleep', ['steps','distance','sleep','hr','hrv','spo2','exercise_kcal','active_cal']],
+    ['Activity and sleep', ['steps','distance','sleep','hr','hrv','spo2','exercise_kcal','exercise_min','res_volume','active_cal']],
     ['Fasting', ['fast_h','eat_window']],
   ];
   const all = Object.keys(DRILL_CONFIG);
@@ -45429,6 +45569,7 @@ function sendToAssistant(query) {
 function renderReports() {
   renderSleepKetosisCorrelation();
   try { renderFastingReport(); } catch (e) { console.warn('[fasting report]', e); }
+  try { renderExerciseReport(); } catch (e) { console.warn('[exercise report]', e); }
   renderWeightProtocol();
   renderTreatmentAnalysis();
   renderTreatmentSessionsPicker();
@@ -45463,6 +45604,7 @@ function renderReports() {
     ['rpt-query',        'rpt-query-wrap',         'rpt-query-icon',        true],
     ['rpt-export',       'rpt-export-wrap',        'rpt-export-icon',       true],
     ['rpt-sleepketo',    'rpt-sleepketo-wrap',     'rpt-sleepketo-icon',    true],
+    ['rpt-exercise',     'rpt-exercise-wrap',      'rpt-exercise-icon',     true],
     ['rpt-fasting',      'rpt-fasting-wrap',       'rpt-fasting-icon',      true],
     ['rpt-weightproto',  'rpt-weightproto-wrap',   'rpt-weightproto-icon',  true],
     ['rpt-treatment',    'rpt-treatment-wrap',     'rpt-treatment-icon',    true],
@@ -47659,6 +47801,21 @@ function generateDemoHistoryForPersona(persona, days) {
         }
       }
     }
+
+    // Exercise the way the app saves it at rollover (type, name, minutes, effort, kcal), on a weekly rhythm that differs by persona,
+    // so History, the metric chart and the exercise reports have something real to show. Deterministic per date, not random.
+    try {
+      const wd = d.getDay(), hash = (d.getDate() * 7 + d.getMonth() * 3) % 5;
+      const effortOf = n => ['Easy', 'Moderate', 'Moderate', 'Hard', 'Moderate'][(n + hash) % 5];
+      const w = persona.weight || 80;
+      const mk = (type, label, min, ef) => ({ type, name: label, duration: String(min), effort: ef, kcal: Math.round(((MET[type] || MET.exercise)[ef] || 5) * w * min / 60) });
+      let plan = [];
+      if (persona.id === 'alex') plan = { 1: [['walking', '🚶 Walking', 40]], 2: [['badminton', '🏸 Badminton', 60]], 3: [['resistance', '💪 Resistance', 50]], 4: [['walking', '🚶 Walking', 35]], 5: [['running', '🏃 Running', 30]], 6: [['hiking', '🥾 Hiking', 90]], 0: [] }[wd] || [];
+      else if (persona.id === 'doris') plan = { 1: [['walking', '🚶 Walking', 35]], 2: [['aquafit', '🫧 Water aerobics', 45]], 3: [['walking', '🚶 Walking', 30]], 4: [['yoga', '🧘 Yoga', 40]], 5: [['walking', '🚶 Walking', 40]], 6: [['gardening', '🌱 Gardening', 60]], 0: [] }[wd] || [];
+      else if (persona.id === 'maria') plan = (entry.notes ? [] : { 1: [['walking', '🚶 Walking', 30]], 3: [['pilates', '🤍 Pilates', 45]], 5: [['walking', '🚶 Walking', 30]], 6: [['cycling', '🚴 Cycling', 40]] }[wd] || []);
+      else plan = ([1, 3, 5].includes(wd)) ? [['walking', '🚶 Walking', 30]] : [];
+      if (plan.length) entry.exercises = plan.map((x, k) => mk(x[0], x[1], x[2], x[0] === 'walking' ? (hash % 2 ? 'Moderate' : 'Easy') : effortOf(k)));
+    } catch (_) {}
 
     out.push(entry);
   }

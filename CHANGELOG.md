@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1075
+- **Exercise now has its own memory.** One per-day summary (minutes, sessions, kcal, effort mix, kcal and minutes by category, resistance sets and volume) is derived from what is already saved, so every past day counts and nothing needs migrating.
+- **History days** show an Exercise panel: each activity with minutes, effort and kcal, plus Resistance exercises with their sets ("2 × 12 @ 20kg, 1 × 8 @ 25kg") and total volume.
+- **Compare Metrics / trend chart:** two new lines, Exercise minutes and Resistance volume, alongside logged exercise kcal and the watch's active calories.
+- **Reports → Exercise:** active days, total minutes, kcal from exercise, share of minutes at Hard, minutes per week (Hard highlighted), what you did by category, resistance totals and personal bests (a star when a best was set inside the range). Rolling ranges compare against the previous period, but only when that period is properly covered.
+- Demo personas now have a weekly exercise rhythm (Alex: walks, badminton, resistance, running, hiking; Doris: walks, water aerobics, yoga, gardening; Maria: walks, pilates, cycling), so the new views have something real to show.
+
 ## v3.10.1074
 - **Calibration per kind of exercise.** Your watch gives one active-calorie figure per day, so on days when only one kind of exercise was logged (walking, racket sports, gym...) that day's comparison is now filed under that kind. After 4 such days that category gets its own correction, blended toward your overall factor so a few odd days can't swing it (clamped between 0.6 and 1.5). The Activity detail line says when a category's own figure is being used and why. Categories with too few days keep using the overall factor, exactly as before.
 - Activities remember the effort you last chose for them, so a re-added kayak starts at the effort you usually pick instead of Moderate.
