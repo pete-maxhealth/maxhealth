@@ -2500,7 +2500,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     <div style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px;">How do you like to eat?</div>
     <div style="font-size:13px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Your condition and goal set your requirements. A way of eating works inside them, shaping the split of carbs, protein and fat. You can skip this and change it any time in Settings. If you have a condition or take medication, check with a health professional first.</div>
     <div id="ob5cLifestyle" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
-    <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;margin-bottom:20px;"><input type="checkbox" id="ob5cPool" checked style="margin-top:3px;"> <span><b>Add starter foods and recipes</b><br><span style="color:var(--text3);font-size:12px;">About 150 everyday foods and a set of simple recipes to begin your library, with typical values you can check against your own labels. Remove them in one tap in Settings.</span></span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.5;margin-bottom:20px;"><input type="checkbox" id="ob5cPool" checked style="margin-top:3px;"> <span><b>Add starter foods and recipes</b><br><span style="color:var(--text3);font-size:12px;">About 150 everyday foods and a set of simple recipes to begin your library, with typical values you can check against your own labels. If you already have a library they merge into it and skip anything with the same name, so nothing is duplicated. Remove them in one tap in Settings.</span></span></label>
     <button class="run-btn" onclick="onboardNext(6)">Next →</button>
     <div style="text-align:center;margin-top:12px;"><span style="font-size:12px;color:var(--text3);cursor:pointer;" onclick="_obLifestyle='';_obPool=false;onboardNext(6)">Skip</span></div>
   </div>
@@ -6456,7 +6456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1089'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1090'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -20579,7 +20579,8 @@ const DATA_CONFIGS = {
 
 function genericExportCSV(key, silent = false) {
   const cfg = DATA_CONFIGS[key];
-  const items = cfg.load();
+  let items = cfg.load();
+  if (PACK_SETS[key] && PACK_SETS[key].list) items = mhDedupeList(key, items);
   const rows = cfg.multiRow ? items.flatMap(cfg.toRows) : items.map(cfg.toRow);
   const csv = cfg.header + '\n' + rows.join('\n');
   const blob = new Blob([csv], { type: 'text/plain' });
@@ -20683,7 +20684,7 @@ async function mhImportFiles(fileList) {
         else { csvPack.sets[key] = { label: cfg.label, count: items.length, data: items }; results.push(`👀 ${cfg.label}: ${items.length} read from ${file.name}, check the preview`); }
         continue;
       }
-      if (!confirm(`Replace your ${DATA_CONFIGS[key].label} with the contents of ${file.name}?`)) { results.push(`– ${file.name} skipped`); continue; }
+      if (!confirm(`Add what is missing from ${file.name} to your ${DATA_CONFIGS[key].label}? Anything you already have is kept and nothing is duplicated.`)) { results.push(`– ${file.name} skipped`); continue; }
       await new Promise(res => importSingleCSVFile(key, file, (count, error) => { results.push(error ? `✗ ${file.name} — ${error}` : `✓ ${DATA_CONFIGS[key].label}: ${count} (from ${file.name})`); res(); }));
     } catch (e) { results.push(`✗ ${file.name} — couldn't read it`); }
   }
@@ -20733,6 +20734,23 @@ function genericSaveToServerNow(key, silent = false) {
 // Shared foods arrive UNLOCKED and marked "from pack": a locked value is a promise the receiver
 // made themselves, so it can never be inherited.
 const _pkKey = x => String((x && (x.name || x.label || x.title || x.id)) || '').trim().toLowerCase();
+// One rule for "is this the same item?" everywhere data is merged: setup packs, starter foods, CSV files and exports.
+// Foods match on their normalised name (so "Cheddar cheese (Tesco)" and "cheddar cheese  (tesco)" are one); everything else on its name/label.
+function mhDedupeKey(k, x) { return k === 'library' ? normalizeFoodName((x && x.name) || '').toLowerCase() : _pkKey(x); }
+function mhDedupeList(k, list) {
+  const seen = new Set(), out = [];
+  (list || []).forEach(x => { const kk = mhDedupeKey(k, x); if (!kk) { out.push(x); return; } if (seen.has(kk)) return; seen.add(kk); out.push(x); });
+  return out;
+}
+// After anything has been merged into the food library, offer the existing "find possible duplicates" check for near-matches
+// that the exact rule cannot see (typos, different wording). Never runs inside a demo.
+function mhDupeNudge() {
+  try {
+    if (typeof _demoMode !== 'undefined' && _demoMode) return;
+    const n = scanForDuplicateLibraryItems().length; if (!n) return;
+    setTimeout(() => appConfirm(`Possible duplicate foods in your library: ${n} (similar names or almost identical values). Review them now?`, () => openDuplicateScanModal(), null, false, { confirm: 'Review', cancel: 'Later' }), 600);
+  } catch (_) {}
+}
 const _pkNewId = (pre) => pre + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 function _pkTw() { try { return JSON.parse(localStorage.getItem('mh_tableware') || 'null'); } catch (e) { return null; } }
 const PACK_SETS = {
@@ -20782,7 +20800,8 @@ const MH_FIRST_RUN_PACKS = {"brain":{"sets":{"symptoms":{"label":"Symptom list",
 function mhPackBuild(keys) {
   const sets = {};
   keys.filter(k => PACK_SETS[k]).forEach(k => {
-    const d = PACK_SETS[k].get();
+    let d = PACK_SETS[k].get();
+    if (PACK_SETS[k].list && Array.isArray(d)) d = mhDedupeList(k, d);   // a shared pack never carries the same item twice
     if (d == null || (Array.isArray(d) && !d.length)) return;
     sets[k] = { label: PACK_SETS[k].label, count: PACK_SETS[k].list ? d.length : 1, data: d };
   });
@@ -20816,9 +20835,9 @@ function mhPackPlan(k, incoming) {
     const np = (incoming.patterns || []).filter(x => !(mine.patterns || []).some(y => y.contains === x.contains && y.device === x.device)).length;
     return { add: nc + np, dup: 0, text: `${nc} new device${nc === 1 ? '' : 's'}, ${np} new file pattern${np === 1 ? '' : 's'}` };
   }
-  const have = new Set(mhPackLoadCurrent(k).map(x => k === 'library' ? normalizeFoodName(x.name || '').toLowerCase() : _pkKey(x)));
+  const have = new Set(mhPackLoadCurrent(k).map(x => mhDedupeKey(k, x)));
   let add = 0, dup = 0;
-  incoming.forEach(x => { const key = k === 'library' ? normalizeFoodName(x.name || '').toLowerCase() : _pkKey(x); if (!key) return; if (have.has(key)) dup++; else add++; });
+  incoming.forEach(x => { const key = mhDedupeKey(k, x); if (!key) return; if (have.has(key)) dup++; else { add++; have.add(key); } });
   return { add, dup, text: `${add} new, ${dup} already there` };
 }
 function mhPackApply(pack, picked, mode, idMaps) {
@@ -20878,7 +20897,7 @@ function mhPackApply(pack, picked, mode, idMaps) {
     const _cond = (pack._cond && (k === 'symptoms' || k === 'treatments')) ? pack._cond : null;
     if (_cond) mhCondRegister(_cond);
     const cur = mode === 'replace' ? [] : mhPackLoadCurrent(k).slice();
-    const keyOf = x => k === 'library' ? normalizeFoodName(x.name || '').toLowerCase() : _pkKey(x);
+    const keyOf = x => mhDedupeKey(k, x);
     const byKey = new Map(cur.map(x => [keyOf(x), x]));
     const ids = new Set(cur.map(x => x.id));
     let added = 0, skipped = 0;
@@ -21074,7 +21093,7 @@ function mhPackPreview(pack) {
   m.innerHTML = `<div style="background:var(--surface,#161b22);color:var(--text);width:100%;max-height:85vh;overflow:auto;border-radius:16px 16px 0 0;padding:16px;">
     <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Setup pack</div><div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Starting lists of things people commonly track. They are not medical advice, and nothing here replaces your own clinician.</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">${pack.title ? '<b>' + _pkEsc(pack.title) + '</b>. ' : ''}From ${_pkEsc(pack.app || 'MaxedHealth')} ${_pkEsc(pack.version || '')}${pack.created ? ', made ' + _pkEsc(String(pack.created).slice(0, 10)) : ''}. ${pack.fromCsv ? 'Read from a CSV file.' : 'Setup only: no entries or personal details.'}</div>${pack.fromCsv && pack.sets.library ? '<label style="display:block;font-size:12px;margin-bottom:6px;"><input type="checkbox" id="mhPackKeepLocks"> These are my own foods: keep their locks</label>' : ''}
-    ${rows}${pack.foodPool ? `<label style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;"><input type="checkbox" id="mhPackFoodPool" style="margin-top:3px;"><span><b>Starter foods and recipes</b><br><span style="color:var(--text3);font-size:12px;">About ${MH_FOOD_POOL.foods.length} everyday foods and ${MH_FOOD_POOL.recipes.length} simple recipes, matched to your way of eating. Typical values; check against your own labels. Skips anything you already have.</span></span></label>` : ''}
+    ${rows}${pack.foodPool ? `<label style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;"><input type="checkbox" id="mhPackFoodPool" style="margin-top:3px;"><span><b>Starter foods and recipes</b><br><span style="color:var(--text3);font-size:12px;">About ${MH_FOOD_POOL.foods.length} everyday foods and ${MH_FOOD_POOL.recipes.length} simple recipes, matched to your way of eating. Typical values; check against your own labels. Merges into your existing library and skips anything with the same name.</span></span></label>` : ''}
     <div style="margin:12px 0 4px;font-size:13px;"><label><input type="radio" name="mhPackMode" value="merge" checked> <b>Add what's missing</b> (keeps everything you have)</label></div>
     <div style="margin-bottom:12px;font-size:13px;"><label><input type="radio" name="mhPackMode" value="replace"> <b>Replace</b> my version of the ticked items</label></div>
     <div style="display:flex;gap:8px;"><button class="copy-btn" id="mhPackCancel" style="flex:1;">Cancel</button><button class="copy-btn" id="mhPackGo" style="flex:1;background:var(--green-dim);color:var(--green);">Import</button></div>
@@ -21089,6 +21108,7 @@ function mhPackPreview(pack) {
     if (mode === 'replace' && !confirm('Replace your own version of the ticked items with the ones in this pack?')) return;
     const kl = document.getElementById('mhPackKeepLocks'); if (kl && kl.checked) pack.keepLocks = true;
     const res = mhPackApply(pack, picked, mode);
+    if (picked.includes('library') || _wantPool) mhDupeNudge();
     if (_wantPool) { const pr = mhPoolApply(isKetogenicCondition() ? 'keto' : mhPoolStyleFor(mhLifestyleId())); res.push(`✓ Starter foods and recipes: ${pr.foods} foods, ${pr.recipes} recipes added`); }
     const el = document.getElementById('mhPackResult'); el.textContent = res.join('\n'); el.style.display = 'block';
     document.getElementById('mhPackGo').style.display = 'none'; document.getElementById('mhPackCancel').textContent = 'Done';
@@ -22762,7 +22782,7 @@ function mhLangNorm(s) { return String(s).replace(/\s+/g, ' ').trim(); }
 // ("~{1}min walk would close today's {2}kcal gap"). The parts are copied across, and translated too when
 // they are themselves a known phrase (for example an effort label).
 function mhLangPat(k, d) {
-  if (!/\d|·|:/.test(k)) return null;
+  if (k.length < 8) return null;   // v1090: sentences without digits (names, 'no carbs yet today') are patterns too
   if (MH_L.patFor !== d) {
     MH_L.patFor = d; MH_L.pats = [];
     Object.keys(d).forEach(key => {
@@ -25844,7 +25864,7 @@ function mhRenderPlanAhead() {
     const k = mhStepsKcalFor(amt), before = Math.max(0, base - cur);
     body = '<div style="display:flex;gap:6px;align-items:center;margin:8px 0 6px;"><span style="font-size:11px;color:var(--text3);">more steps today</span><input type="number" value="' + amt + '" onchange="mhXPlanSetAmt(this.value)" style="width:90px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></div>' +
       '<div style="font-size:12px;color:var(--text2);line-height:1.6;">' + fmt(amt) + ' more steps → <strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong>' + (io ? ', ' + roomTxt(k) : '') + '</div>' +
-      '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">At your <strong>' + lvlName + '</strong> level, the first ' + fmt(base) + ' steps a day are already built into your target, so they add nothing. ' + (cur >= base ? 'You are at ' + fmt(cur) + ', past that line, so every step now counts (about ' + fmt(calcNonWalkingStepsKcal(base + 1000)) + ' kcal per 1,000).' : (cur > 0 ? 'You are at ' + fmt(cur) + ', so ' + fmt(before) + ' more before steps start to add room.' : 'Type your running total in Daily Steps (or let Health Connect fill it) and this will use it.')) + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;"><span>At your ' + lvlName.toLowerCase() + ' level, the first ' + fmt(base) + ' steps a day are already built into your target, so they add nothing.</span> <span>' + (cur >= base ? 'You are at ' + fmt(cur) + ', past that line, so every step now counts (about ' + fmt(calcNonWalkingStepsKcal(base + 1000)) + ' kcal per 1,000).' : (cur > 0 ? 'You are at ' + fmt(cur) + ', so ' + fmt(before) + ' more before steps start to add room.' : 'Type your running total in Daily Steps (or let Health Connect fill it) and this will use it.')) + '</span></div>' +
       '<button onclick="mhXPlanAdd(\'steps\',\'steps\',' + amt + ')" class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;padding:7px;">＋ Plan these steps</button>';
   } else {
     const rows = ['Easy', 'Moderate', 'Hard'].map(ef => {
@@ -45499,9 +45519,9 @@ function mhPoolRender() {
   let n = 0; try { n = mhPackLoadCurrent('library').filter(x => x.source === 'starter').length; } catch (e) {}
   pr.innerHTML = n
     ? `<div style="font-size:12px;color:var(--text2);margin-bottom:4px;">You have ${n} starter foods in your library.</div><button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhPoolRemoveAsk()">Remove starter foods and recipes</button>`
-    : `<button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhPoolAddNow()">Add starter foods and recipes</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">About ${MH_FOOD_POOL.foods.length} everyday foods and ${MH_FOOD_POOL.recipes.length} simple recipes to start your library, matched to your way of eating. Typical values; check against your own labels.</div>`;
+    : `<button class="copy-btn" style="width:100%;font-size:12px;" onclick="mhPoolAddNow()">Add starter foods and recipes</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">About ${MH_FOOD_POOL.foods.length} everyday foods and ${MH_FOOD_POOL.recipes.length} simple recipes to start your library, matched to your way of eating. Typical values; check against your own labels. If you already have a library, these merge into it: anything with the same name is skipped, so nothing is duplicated or overwritten.</div>`;
 }
-function mhPoolAddNow() { const r = mhPoolApply(isKetogenicCondition() ? 'keto' : mhPoolStyleFor(mhLifestyleId())); mhPoolRender(); showToast(`Added ${r.foods} foods and ${r.recipes} recipes`); }
+function mhPoolAddNow() { const r = mhPoolApply(isKetogenicCondition() ? 'keto' : mhPoolStyleFor(mhLifestyleId())); mhPoolRender(); showToast(`Added ${r.foods} foods and ${r.recipes} recipes`); mhDupeNudge(); }
 function mhPoolRemoveAsk() { appConfirm('Remove the starter foods and recipes? Anything you added or edited yourself stays.', () => { const r = mhPoolRemove(); mhPoolRender(); showToast(`Removed ${r.foods} foods and ${r.recipes} recipes`); }); }
 function mhGoKetoRender() {
   mhPoolRender();
@@ -46910,12 +46930,12 @@ function mhPoolRecipes(style, idPrefix) {
 }
 // Adds the pool to the real library and recipes (never replaces; skips names already there). Returns counts.
 function mhPoolApply(style) {
-  const key = x => String(x.name || '').toLowerCase().trim();
+  const key = x => mhDedupeKey('library', x), rkey = x => mhDedupeKey('recipes', x);
   const lib = mhPackLoadCurrent('library').slice(), have = new Set(lib.map(key)); let nf = 0, nr = 0;
   mhPoolFoods(style).forEach(x => { if (!have.has(key(x))) { lib.push(x); have.add(key(x)); nf++; } });
   saveLibrary(lib);
-  const rec = mhPackLoadCurrent('recipes').slice(), haveR = new Set(rec.map(key)), ids = new Set(rec.map(r => r.id));
-  mhPoolRecipes(style, 'pool_r').forEach(r => { if (!haveR.has(key(r))) { if (ids.has(r.id)) r.id = 'pool_r_' + Date.now().toString(36) + nr; rec.push(r); haveR.add(key(r)); ids.add(r.id); nr++; } });
+  const rec = mhPackLoadCurrent('recipes').slice(), haveR = new Set(rec.map(rkey)), ids = new Set(rec.map(r => r.id));
+  mhPoolRecipes(style, 'pool_r').forEach(r => { if (!haveR.has(rkey(r))) { if (ids.has(r.id)) r.id = 'pool_r_' + Date.now().toString(36) + nr; rec.push(r); haveR.add(rkey(r)); ids.add(r.id); nr++; } });
   saveRecipes(rec);
   ['renderLibrary'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} });
   return { foods: nf, recipes: nr };

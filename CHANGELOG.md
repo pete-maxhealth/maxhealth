@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1090 – Today in your own language, and one merge rule everywhere
+- **Today screen in Spanish (and the other eight languages).** A Spanish demo showed English all over Today: the ketosis badge, food-in / exercise-out strip, Plan ahead, exercise and resistance headings, fasting lines and cautions, symptom names, the Premium card, supplement names and times of day. About 100 phrases added to every language file (`tools/lang_add_today.py` adds only what is missing). The translator now also matches sentences with a name or no digits in them (it only took digit sentences before).
+- **One de-duplicate rule for everything that comes in or goes out.** Starter foods used a weaker name match than setup packs; both now use `mhDedupeKey` (normalised name for foods, name/label otherwise). Shared packs and CSV exports drop repeats before they leave. After a merge into the food library the existing duplicate finder is offered for near-matches (typos, different wording). The Settings text, onboarding and the pack list now say plainly that an existing library is merged, never replaced.
+- Test p193 (Spanish Today scan, merge and export).
+
 ## v3.10.1089 – Explain it to me
 - **✨ What does this mean for me?** on What seems to move what, and **✨ Explain** on every statistic: a plain-English read of what matters most, which findings are strong or thin, and a few small things to try. Same AI route as the other reports (starter allowance or your own key); cached against the exact figures so it only costs a call when something changes.
 - A legend for the markers (▲ looks helpful, ▼ looks unhelpful, ● just notable).
