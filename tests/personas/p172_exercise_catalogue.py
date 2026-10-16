@@ -62,11 +62,11 @@ with fresh_server() as root, sync_playwright() as pw:
     # unknown stays generic
     check('unknown name has no match', ev("mhExMatch('Basket weaving')") is None)
     # plan ahead with a catalogue item, Done adds it
-    ev("localStorage.setItem('mh_plan_open','1'); mhPlanSetType('kayak'); mhPlanSetAmt(60)")
+    ev("localStorage.setItem('mh_plan_open','1'); mhXPlanSetType('kayak'); mhXPlanSetAmt(60)")
     check('plan shows kayak chip', 'Kayaking' in ev("document.getElementById('planAhead').textContent"))
-    ev("mhPlanAdd('activity','kayak',60,'Moderate')"); pid = ev("mhPlanItems()[0].id")
-    check('planned kayak earns 5.0 MET x kg', ev("mhPlanItemEffect(mhPlanItems()[0]).kcal") == round(5.0 * w))
-    ev(f"mhPlanDone('{pid}')"); page.wait_for_timeout(300)
+    ev("mhXPlanAdd('activity','kayak',60,'Moderate')"); pid = ev("mhXPlanItems()[0].id")
+    check('planned kayak earns 5.0 MET x kg', ev("mhXPlanItemEffect(mhXPlanItems()[0]).kcal") == round(5.0 * w))
+    ev(f"mhXPlanDone('{pid}')"); page.wait_for_timeout(300)
     kk = ev("getActivities().find(a=>a.type==='kayak')")
     check('Done auto-adds kayak and logs it', kk and kk['enabled'] and kk['duration'] == '60', str(kk))
     # history edit infers a catalogue type

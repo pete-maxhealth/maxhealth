@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1073
+- **Fixed (important):** v3.10.1071's exercise planner reused three function names from the planned-meals module (`mhPlanSave`, `mhPlanAdd`, `mhPlanRemove`), which broke planning meals. The exercise planner is renamed (`mhXPlan*`); planned meals work again. A new test fails the build if two `mh*` functions ever share a name.
+- **Fixed:** the page no longer jumps while you type or leave a field in Activities, Resistance or Plan ahead. Logging exercise changes sections above the card; the card is now held where it was on screen.
+- **Fixed:** live kcal updates in the Activities list could land on the wrong row after the Resistance split (rows now matched by index, not position).
+
 ## v3.10.1072
 - **Exercise catalogue**: "＋ Add exercise" now opens a picker of 55+ known activities (walk & hike, running, cycling, water, racket & court, team & ball, gym & fitness, mind & body, outdoors & home, ice & snow) with search, an Anywhere / Indoor / Outdoor filter and category chips. Each card shows an indicative kcal for a Moderate 30 minutes at your weight.
 - Each activity carries its own MET (Compendium of Physical Activities, rounded), so badminton, squash, kayaking or kettlebells are no longer all costed as a generic 5 MET. Padel, pickleball, e-bike and paddleboard are marked "est.".
