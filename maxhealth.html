@@ -6421,7 +6421,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1084'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1085'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -44983,6 +44983,7 @@ function renderSleepReport() {
   const lines = [];
   if (st.nWk >= 3 && st.nWe >= 2 && Math.abs(st.wkend - st.wkday) >= 20) lines.push('You sleep about ' + Math.round(Math.abs(st.wkend - st.wkday)) + ' min ' + (st.wkend > st.wkday ? 'longer' : 'shorter') + ' at weekends than on weekdays.');
   if (st.best) lines.push('Best night: ' + mhSleepFmt(st.best.s.min) + ' on ' + st.best.d.date + '. Shortest: ' + mhSleepFmt(st.worst.s.min) + ' on ' + st.worst.d.date + '.');
+  try { const bm = days.map(d => mhBedMin(d.bedtime)).filter(v => v != null); if (bm.length >= 7) { const mu = bm.reduce((x, y) => x + y, 0) / bm.length, sd = Math.sqrt(bm.reduce((x, y) => x + (y - mu) * (y - mu), 0) / bm.length); lines.push('Bedtime is usually around ' + mhClock(mu) + ', give or take ' + Math.round(sd) + ' minutes' + (sd <= 30 ? ': a very steady routine.' : sd <= 60 ? '.' : ': quite variable, which can itself affect how rested you feel.')); } } catch (_) {}
   if (st.deepPct && st.nStaged >= 5) lines.push(st.deepPct < 13 ? 'Deep sleep averages ' + st.deepPct + '% of the night, on the low side of the usual 13 to 23%.' : 'Deep sleep averages ' + st.deepPct + '% of the night, inside the usual 13 to 23%.');
   try { const oc = mhSleepOutcomes(state.history); oc.forEach(o => lines.push(o.text + ' <span style="color:var(--text3);">(Early Stage: an association in your own data, not proof of cause.)</span>')); } catch (_) {}
   h += lines.map(l => '<div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">' + l + '</div>').join('');
@@ -45029,8 +45030,19 @@ function mhOutcomeExposures(days) {
   let tlog = []; try { tlog = loadTreatmentLog(); } catch (_) {}
   if (tlog.length) { let defs = []; try { defs = loadTreatmentDefs(); } catch (_) {} const byDef = {}; tlog.forEach(t => { (byDef[t.treatmentId] = byDef[t.treatmentId] || new Set()).add(t.date); });
     Object.keys(byDef).forEach(id => { if (byDef[id].size < 6) return; const df = defs.find(x => x.id === id); ex.push({ id: 'trt_' + id, label: ((df && df.name) || 'treatment').toLowerCase() + ' days', test: d => byDef[id].has(d.date) ? true : false }); }); }
+  // bedtime on the night this record's sleep belongs to (a night is filed under the wake date): outcomes come from the same record
+  const bedOf = d => mhBedMin(d.bedtime);
+  const beds = days.map(bedOf).filter(v => v != null);
+  if (beds.length >= 14) { const bm = beds.slice().sort((x, y) => x - y)[Math.floor(beds.length * 0.4)];
+    ex.push({ id: 'bed', same: true, label: 'nights you went to bed later than usual (after ' + mhClock(bm + 30) + ')', test: d => { const m = bedOf(d); return m == null ? null : (m >= bm + 30 ? true : (m <= bm ? false : null)); } }); }
+  // a window of up to two days after any treatment session, against days well clear of one
+  if (tlog.length) { const dates = new Set(tlog.map(t => isoDate(t.date))), near = (d, lo, hi) => { for (let k = lo; k <= hi; k++) { const t = new Date(isoDate(d.date) + 'T12:00:00'); t.setDate(t.getDate() - k); if (dates.has(t.toISOString().slice(0, 10))) return true; } return false; };
+    if (dates.size >= 6) ex.push({ id: 'trtwin', label: 'the day of a treatment session and the two days after', test: d => near(d, 0, 2) ? true : (near(d, 0, 4) ? null : false) }); }
   return ex;
 }
+// minutes since 18:00 for a "HH:MM" bedtime (so 23:30 and 00:30 sit on one line), or null
+function mhBedMin(t) { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); if (!m) return null; let v = +m[1] * 60 + +m[2]; if (v > 1439) return null; v -= 1080; if (v < 0) v += 1440; return v; }
+function mhClock(m) { const v = (m + 1080) % 1440; return String(Math.floor(v / 60)).padStart(2, '0') + ':' + String(v % 60).padStart(2, '0'); }
 const MH_OUT_FORWARD = [
   { key: 'sleep',  label: 'next-night sleep',        sleepy: true, get: nx => nx.sleep_duration > 0 ? nx.sleep_duration : null, minDiff: 15, good: 1, fmt: v => mhSleepFmt(v) },
   { key: 'deep',   label: 'next-night deep sleep',   sleepy: true, get: nx => nx.sleep_deep > 0 ? nx.sleep_deep : null, minDiff: 10, good: 1, fmt: v => Math.round(v) + ' min' },
@@ -45038,6 +45050,7 @@ const MH_OUT_FORWARD = [
   { key: 'shr',    label: 'next-night sleeping heart rate', sleepy: true, get: nx => nx.sleep_hr_avg > 0 ? nx.sleep_hr_avg : null, minDiff: 2, good: -1, fmt: v => Math.round(v) + ' bpm' },
   { key: 'hrv',    label: 'next-day HRV',            get: nx => nx.hrv > 0 ? nx.hrv : null, minDiff: 3, good: 1, fmt: v => Math.round(v) + ' ms' },
   { key: 'sym',    label: 'next-day symptom score',  get: nx => mhSymptomLoad(nx), minDiff: 0.3, good: -1, fmt: v => (Math.round(v * 10) / 10) + '' },
+  { key: 'dwt',    label: 'next-morning weight change', pair: (d, nx) => { const a = parseFloat(d.weight), b = parseFloat(nx.weight); return a > 0 && b > 0 ? b - a : null; }, minDiff: 0.3, good: 0, fmt: v => (v > 0 ? '+' : '') + (Math.round(v * 10) / 10) + ' kg' },
 ];
 const MH_OUT_REVERSE = [
   { key: 'kcal',  label: 'calories eaten that day', get: d => d.totals && d.totals.kcal > 0 ? d.totals.kcal : null, minDiff: 150, good: 0, fmt: v => Math.round(v) + ' kcal' },
@@ -45055,13 +45068,15 @@ function mhOutcomeFindings(history, opts) {
   const nextOf = d => { const t = new Date(isoDate(d.date) + 'T12:00:00'); t.setDate(t.getDate() + 1); return byIso.get(t.toISOString().slice(0, 10)) || null; };
   const out = [], T = opts.minT || 2;
   mhOutcomeExposures(days).forEach(e => {
-    const lab = days.map(d => ({ d, nx: nextOf(d), f: e.test(d) })).filter(r => r.f !== null);
+    const lab = days.map(d => ({ d, nx: e.same ? d : nextOf(d), f: e.test(d) })).filter(r => r.f !== null);
     MH_OUT_FORWARD.forEach(o => {
       if (opts.sleepOnly && !o.sleepy) return;
-      const A = lab.filter(r => r.f && r.nx).map(r => o.get(r.nx)).filter(v => v != null), B = lab.filter(r => !r.f && r.nx).map(r => o.get(r.nx)).filter(v => v != null);
+      if (e.same && (o.pair || !o.sleepy)) return;
+      const val = r => o.pair ? o.pair(r.d, r.nx) : o.get(r.nx);
+      const A = lab.filter(r => r.f && r.nx).map(val).filter(v => v != null), B = lab.filter(r => !r.f && r.nx).map(val).filter(v => v != null);
       if (A.length < 6 || B.length < 6) return; const w = mhWelch(A, B); if (!w || Math.abs(w.diff) < o.minDiff || Math.abs(w.t) < T) return;
       out.push({ kind: 'forward', pri: e.pri, exposure: e.label, outcome: o.label, okey: o.key, a: w.a.m, b: w.b.m, nA: w.a.n, nB: w.b.n, diff: w.diff, t: w.t, good: o.good ? (w.diff * o.good > 0 ? 1 : -1) : 0,
-        text: 'After ' + e.label + ', ' + o.label + ' averaged ' + o.fmt(w.a.m) + ' against ' + o.fmt(w.b.m) + ' otherwise (' + w.a.n + ' and ' + w.b.n + ' days).' });
+        text: (e.same ? 'On ' : 'After ') + e.label + ', ' + (e.same ? o.label.replace('next-night ', 'that night\'s ') : o.label) + ' averaged ' + o.fmt(w.a.m) + ' against ' + o.fmt(w.b.m) + ' otherwise (' + w.a.n + ' and ' + w.b.n + ' days).' });
     });
   });
   // the other direction: a short night against the same day's eating and movement
@@ -45075,7 +45090,7 @@ function mhOutcomeFindings(history, opts) {
         text: 'After a night under 6 hours, ' + o.label + ' averaged ' + o.fmt(w.a.m) + ' against ' + o.fmt(w.b.m) + ' after 7 hours or more (' + w.a.n + ' and ' + w.b.n + ' days).' });
     });
   }
-  const pri = o => /^After (?!a night)/.test(o.text) && o.pri != null ? o.pri : 1, seen = new Set();
+  const pri = o => /^(After|On) (?!a night)/.test(o.text) && o.pri != null ? o.pri : 1, seen = new Set();
   return out.sort((x, y) => (Math.abs(y.t) - Math.abs(x.t)) || ((x.pri || 1) - (y.pri || 1))).filter(o => { const k = [o.kind, o.okey, Math.round(o.a * 100), Math.round(o.b * 100), o.nA, o.nB].join('|'); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, opts.limit || 8);
 }
 function mhSleepOutcomes(history) { return mhOutcomeFindings(history, { sleepOnly: true, limit: 3 }); }
@@ -48190,6 +48205,7 @@ function generateDemoHistoryForPersona(persona, days) {
       entry.sleep_duration = total; entry.sleep_deep = deep; entry.sleep_rem = rem; entry.sleep_light = light; entry.sleep_wake = wake;
       entry.sleep_efficiency = Math.round(100 * total / (total + wake));
       entry.sleep_hr_avg = 54 + ((j + 4) % 5);
+      { const bed = (1350 - j * 10 + 1440) % 1440; entry.bedtime = String(Math.floor(bed / 60)).padStart(2, '0') + ':' + String(bed % 60).padStart(2, '0'); }
     } catch (_) {}
 
     out.push(entry);
