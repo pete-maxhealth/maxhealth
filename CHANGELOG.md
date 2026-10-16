@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1086 – Micronutrients in Statistics
+- Fibre, iron, potassium, magnesium, vitamin D and omega-3 are now statistics you can build: by food, by day, by week. Foods carry them from Open Food Facts or your own entry (Library edit gained vitamin D and omega-3 boxes). A day with no figure is left out, never counted as zero. Four ready-made ones in the library. Test p189.
+
 ## v3.10.1083 – 1085 – Drag reorder, chart colours, more "what moves what"
 - **v1083:** drag a statistic card by its ⠿ handle to reorder (arrows still work).
 - **v1084:** a colour swatch on each Trends chart's style row recolours its main line (double-tap to reset).
