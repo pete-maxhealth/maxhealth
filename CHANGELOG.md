@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1071
+- **Plan ahead** (Activity card): pick Steps, Walk, Run, Cycle or Resistance, an amount and an effort, and see what it would earn before you do it: kcal from the same MET and steps-above-baseline formulas the day uses (at your activity level), plus the +15g protein on a resistance day, and the room left it would give. Planned items show on Today's In/Out strip and only count when marked Done ✓.
+- Planned steps are a target: your real count, typed or live from Health Connect, takes over, the plan shrinks as you walk and clears itself once you pass it.
+
 ## v3.10.1070
 - **Food in, exercise out.** Calories & macros on Today now has a strip under the four tiles: 🍽 IN (eaten), 🔥 OUT (exercise, plus steps above your baseline) and ⚖ ROOM LEFT (target + exercise − eaten, or OVER). Exercise now sits beside the food as the other half of the day, and tapping OUT jumps to the activity card.
 - New test p170.

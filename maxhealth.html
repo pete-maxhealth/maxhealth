@@ -2784,6 +2784,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="font-size:11px;font-weight:700;color:var(--text3);font-family:'Space Mono',monospace;letter-spacing:0.05em;margin-bottom:8px;cursor:pointer;" onclick="toggleSection('dash-activities-list','activityRowsWrap','dash-activities-list-icon')">🏃 ACTIVITIES <span id="dash-activities-list-icon" style="font-size:10px;color:var(--text3);margin-left:6px;float:right;">▾ hide</span></div>
       <div id="activityRowsWrap">
       <div id="activityRows"></div>
+      <div id="planAhead" style="margin-top:8px;"></div>
       <div id="activityStepsNote" style="display:none;font-size:11px;color:var(--text3);line-height:1.5;margin-top:8px;padding:6px 8px;border-left:2px solid var(--accent-glow);"></div>
       <div style="margin-top:8px;">
         <button onclick="addCustomActivity()" style="font-size:11px;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;width:100%;">+ Add exercise</button>
@@ -6360,7 +6361,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1070'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1071'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -15819,7 +15820,7 @@ function renderActivityCard() {
   el.innerHTML = acts.map((a, i) => a.type === 'resistance' ? '' : _rowHtml[i]).join('');
   const _resSimple = document.getElementById('resistanceSimple');
   if (_resSimple) _resSimple.innerHTML = acts.map((a, i) => a.type === 'resistance' ? _rowHtml[i] : '').join('');
-  try { mhRenderStepsNote(); mhRenderResistanceHeader(); } catch (_) {}
+  try { mhRenderStepsNote(); mhRenderResistanceHeader(); mhRenderPlanAhead(); } catch (_) {}
   updateActivityNudge(acts);
   // Update steps tag from activities
   updateActivityStepsTag(acts);
@@ -25405,7 +25406,123 @@ function checkActivityLevelAutoSwitch() {
   }
 }
 
+// ── Plan ahead (v3.10.1071) ─────────────────────────────────────────────────────────────────────────────────
+// "If I walk 3,000 more steps / do 45 minutes of hard resistance, what does that do to today's numbers?" The same
+// formulas the day already uses (MET x weight x time, steps above your baseline, +15g protein on a resistance day).
+// A plan only counts once marked Done, the same way a planned meal only counts when eaten.
+const MH_PLAN_TYPES = [['steps', '👣 Steps'], ['walking', '🚶 Walk'], ['running', '🏃 Run'], ['cycling', '🚴 Cycle'], ['resistance', '🏋️ Resistance']];
+let _planType = 'steps', _planAmt = { steps: 3000, walking: 30, running: 20, cycling: 30, resistance: 45 };
+function mhPlanItems() {
+  const pe = state.plannedExercise;
+  if (!pe || pe.date !== todayStr()) return [];
+  return Array.isArray(pe.items) ? pe.items : [];
+}
+function mhPlanSave(items) { state.plannedExercise = { date: todayStr(), items }; saveState(); }
+function mhStepsKcalFor(extraSteps) {
+  const cur = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+  const walking = getEstimatedStepsToday();
+  const f = t => calcNonWalkingStepsKcal(Math.max(0, t - walking));
+  return Math.max(0, f(cur + extraSteps) - f(cur));
+}
+function mhActivityKcalFor(type, minutes, effort) {
+  return calcActivityKcal({ type, enabled: true, duration: String(minutes), effort, needsDistance: false });
+}
+function mhPlanStepsLeft(it) {
+  // A planned step item is a target (your count when planned + the amount). Real steps, typed or live from
+  // Health Connect, take over: only what is still to walk counts, and once reality passes it the plan is done.
+  const cur = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+  const target = (it.base || 0) + it.amount;
+  return Math.max(0, target - cur);
+}
+function mhPlanPrune() {
+  const items = mhPlanItems(); const keep = items.filter(it => it.kind !== 'steps' || mhPlanStepsLeft(it) > 0);
+  if (keep.length !== items.length) { mhPlanSave(keep); return true; }
+  return false;
+}
+function mhPlanItemEffect(it) {
+  if (it.kind === 'steps') return { kcal: mhStepsKcalFor(mhPlanStepsLeft(it)), protein: 0 };
+  const kcal = mhActivityKcalFor(it.type, it.amount, it.effort);
+  return { kcal, protein: it.type === 'resistance' ? 15 : 0 };
+}
+function mhPlanTotals() {
+  mhPlanPrune();
+  const items = mhPlanItems(); let kcal = 0, protein = 0, resDone = getActivities().some(a => a.enabled && a.duration && a.type === 'resistance'), resCounted = resDone;
+  items.forEach(it => { const e = mhPlanItemEffect(it); kcal += e.kcal; if (e.protein && !resCounted) { protein += e.protein; resCounted = true; } });
+  return { items, kcal, protein };
+}
+function mhPlanSetType(t) { _planType = t; mhRenderPlanAhead(); }
+function mhPlanSetAmt(v) { _planAmt[_planType] = Math.max(0, parseInt(v) || 0); mhRenderPlanAhead(); }
+function mhPlanAdd(kind, type, amount, effort) {
+  const items = mhPlanItems().slice(); items.push({ base: kind === 'steps' ? (parseInt(localStorage.getItem('mh_steps_today')) || 0) : 0, id: 'pl' + Date.now() + Math.random().toString(36).slice(2, 5), kind, type, amount, effort: effort || 'Moderate' });
+  mhPlanSave(items); mhRenderPlanAhead(); try { updateDashboard(true); } catch (_) {}
+  showToast('Planned. It counts when you mark it done.');
+}
+function mhPlanRemove(id) { mhPlanSave(mhPlanItems().filter(x => x.id !== id)); mhRenderPlanAhead(); try { updateDashboard(true); } catch (_) {} }
+function mhPlanDone(id) {
+  const it = mhPlanItems().find(x => x.id === id); if (!it) return;
+  if (it.kind === 'steps') {
+    const cur = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+    saveDailySteps(String(Math.max(cur, (it.base || 0) + it.amount)));
+  } else {
+    const acts = getActivities(); const i = acts.findIndex(a => a.type === it.type);
+    if (i < 0) { showToast('Add "' + it.type + '" to your activities first, then mark this done.'); return; }
+    acts[i].enabled = true; acts[i].duration = String((parseFloat(acts[i].duration) || 0) + it.amount); acts[i].effort = it.effort;
+    if (it.type === 'resistance') acts[i]._syncedFromStrength = false;
+    saveActivities(acts); saveActivityToNotes(acts);
+  }
+  mhPlanSave(mhPlanItems().filter(x => x.id !== id));
+  try { renderActivityCard(); } catch (_) {}
+  try { updateDashboard(); } catch (_) {}
+  showToast('Done ✓ It now counts towards today.');
+}
+function mhRenderPlanAhead() {
+  const el = document.getElementById('planAhead'); if (!el) return;
+  const open = localStorage.getItem('mh_plan_open') === '1';
+  const tot = mhPlanTotals(), fmt = n => Math.round(n).toLocaleString('en-GB');
+  const head = '<div onclick="localStorage.setItem(\'mh_plan_open\', \'' + (open ? '0' : '1') + '\');mhRenderPlanAhead()" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid var(--accent-glow);background:var(--accent-dim);">' +
+    '<span style="font-size:11px;font-weight:700;letter-spacing:0.06em;font-family:Space Mono,monospace;color:var(--accent);">🎯 PLAN AHEAD</span>' +
+    '<span style="font-size:11px;color:var(--text2);flex:1;">' + (tot.items.length ? 'If you do your plan: +' + fmt(tot.kcal) + ' kcal' + (tot.protein ? ', +' + tot.protein + 'g protein' : '') : 'What would a walk or a session earn?') + '</span>' +
+    '<span style="font-size:10px;color:var(--text3);">' + (open ? '▾ hide' : '▸ show') + '</span></div>';
+  if (!open) { el.innerHTML = head; return; }
+  const lvl = localStorage.getItem('mh_activity_level') || 'moderate', lvlName = (typeof MH_ACT_LABEL !== 'undefined' && MH_ACT_LABEL[lvl]) || lvl;
+  const base = getStepsBaseline(), cur = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+  const io = (typeof mhInOutNow === 'function') ? mhInOutNow() : null;
+  const roomNow = io ? io.room : 0;
+  const chips = MH_PLAN_TYPES.map(t => '<span onclick="mhPlanSetType(\'' + t[0] + '\')" style="cursor:pointer;padding:5px 10px;border-radius:14px;font-size:12px;border:1px solid ' + (_planType === t[0] ? 'var(--accent)' : 'var(--border)') + ';background:' + (_planType === t[0] ? 'var(--accent-dim)' : 'var(--surface2)') + ';color:' + (_planType === t[0] ? 'var(--accent)' : 'var(--text2)') + ';white-space:nowrap;">' + t[1] + '</span>').join('');
+  const amt = _planAmt[_planType];
+  let body = '';
+  const roomTxt = k => 'room ' + fmt(roomNow) + ' → <strong style="color:var(--accent);">' + fmt(roomNow + k) + '</strong>';
+  if (_planType === 'steps') {
+    const k = mhStepsKcalFor(amt), before = Math.max(0, base - cur);
+    body = '<div style="display:flex;gap:6px;align-items:center;margin:8px 0 6px;"><span style="font-size:11px;color:var(--text3);">more steps today</span><input type="number" value="' + amt + '" onchange="mhPlanSetAmt(this.value)" style="width:90px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></div>' +
+      '<div style="font-size:12px;color:var(--text2);line-height:1.6;">' + fmt(amt) + ' more steps → <strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong>' + (io ? ', ' + roomTxt(k) : '') + '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">At your <strong>' + lvlName + '</strong> level, the first ' + fmt(base) + ' steps a day are already built into your target, so they add nothing. ' + (cur >= base ? 'You are at ' + fmt(cur) + ', past that line, so every step now counts (about ' + fmt(calcNonWalkingStepsKcal(base + 1000)) + ' kcal per 1,000).' : (cur > 0 ? 'You are at ' + fmt(cur) + ', so ' + fmt(before) + ' more before steps start to add room.' : 'Type your running total in Daily Steps (or let Health Connect fill it) and this will use it.')) + '</div>' +
+      '<button onclick="mhPlanAdd(\'steps\',\'steps\',' + amt + ')" class="copy-btn" style="width:100%;margin-top:8px;font-size:12px;padding:7px;">＋ Plan these steps</button>';
+  } else {
+    const rows = ['Easy', 'Moderate', 'Hard'].map(ef => {
+      const k = mhActivityKcalFor(_planType, amt, ef), pr = _planType === 'resistance' ? 15 : 0;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);"><span style="width:70px;font-size:12px;color:var(--text2);font-weight:600;">' + ef + '</span>' +
+        '<span style="flex:1;font-size:12px;color:var(--text2);line-height:1.5;"><strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong>' + (pr ? ' · <strong style="color:var(--green);">+' + pr + 'g protein</strong>' : '') + '<br><span style="font-size:10px;color:var(--text3);">' + (io ? roomTxt(k) : '') + '</span></span>' +
+        '<span onclick="mhPlanAdd(\'activity\',\'' + _planType + '\',' + amt + ',\'' + ef + '\')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Plan</span></div>';
+    }).join('');
+    body = '<div style="display:flex;gap:6px;align-items:center;margin:8px 0 4px;"><span style="font-size:11px;color:var(--text3);">minutes</span><input type="number" value="' + amt + '" onchange="mhPlanSetAmt(this.value)" style="width:70px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);"></div>' + rows +
+      (_planType === 'resistance' ? '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.5;">Protein: a resistance day adds 15g to your protein target. Calories use the MET formula for your weight and effort, adjusted to your own watch readings once there are enough days to compare.</div>' : '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.5;">Same formula the day uses once you log it: MET for the effort, your weight, and the minutes.</div>');
+  }
+  const list = tot.items.length ? '<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);font-size:10px;letter-spacing:0.06em;color:var(--text3);font-family:Space Mono,monospace;">PLANNED FOR TODAY</div>' + tot.items.map(it => {
+    const e = mhPlanItemEffect(it), label = it.kind === 'steps' ? fmt(mhPlanStepsLeft(it)) + ' steps still to go (target ' + fmt((it.base || 0) + it.amount) + ')' : it.amount + ' min ' + it.type + ' (' + it.effort + ')';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);"><span style="flex:1;font-size:12px;color:var(--text2);">' + label + ' <span style="color:var(--yellow);">+' + fmt(e.kcal) + ' kcal</span>' + (e.protein ? ' <span style="color:var(--green);">+' + e.protein + 'g P</span>' : '') + '</span>' +
+      '<span onclick="mhPlanDone(\'' + it.id + '\')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Done ✓</span>' +
+      '<span onclick="mhPlanRemove(\'' + it.id + '\')" style="cursor:pointer;color:var(--red);font-size:15px;padding:0 4px;">×</span></div>';
+  }).join('') + '<div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5;">Planned steps are a target. Your real count, typed or live from Health Connect, takes over and the plan clears itself once you pass it.</div><div style="font-size:11px;color:var(--accent);margin-top:6px;">If you do it all: +' + fmt(tot.kcal) + ' kcal' + (tot.protein ? ', +' + tot.protein + 'g protein' : '') + (io ? ', ' + roomTxt(tot.kcal) : '') + '</div>' : '';
+  el.innerHTML = head + '<div style="padding:8px 2px 2px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">' + chips + '</div>' + body + list + '</div>';
+}
+
 // "Food in, exercise out" (v3.10.1070): the two halves of the day side by side, so exercise is not a footnote to the food.
+function mhInOutNow() {
+  const eaten = calcTotals(state.todayLog).kcal, base = TARGETS[state.dayMode].kcal;
+  const out = getActivities().reduce((sum, a) => sum + calcActivityKcal(a), 0) + calcNonWalkingStepsKcal(getNonWalkingStepsToday().remainder);
+  return { eaten, base, out, room: base + out - eaten };
+}
 function mhRenderInOut(eaten, baseTarget, exKcal, stepsKcal) {
   const el = document.getElementById('inOutStrip'); if (!el) return;
   const fmt = n => Math.round(n).toLocaleString('en-GB');
@@ -25422,7 +25539,7 @@ function mhRenderInOut(eaten, baseTarget, exKcal, stepsKcal) {
     box('var(--accent)', '🍽', 'IN', fmt(eaten), 'kcal eaten') +
     box('var(--yellow)', '🔥', 'OUT', out > 0 ? '+' + fmt(out) : '0', outSmall, "var c=document.getElementById('activityCard');if(c){c.scrollIntoView({behavior:'smooth',block:'start'})}") +
     box(roomCol, '⚖', room >= 0 ? 'ROOM LEFT' : 'OVER', fmt(Math.abs(room)), 'target ' + fmt(baseTarget) + (out > 0 ? ' + ' + fmt(out) : '')) +
-    '</div>';
+    '</div>' + (() => { const pt = (typeof mhPlanTotals === 'function') ? mhPlanTotals() : null; return pt && pt.items.length ? '<div onclick="localStorage.setItem(\'mh_plan_open\',\'1\');mhRenderPlanAhead();document.getElementById(\'planAhead\')?.scrollIntoView({behavior:\'smooth\',block:\'center\'})" style="margin-top:6px;font-size:11px;color:var(--accent);cursor:pointer;">🎯 Plan: +' + fmt(pt.kcal) + ' kcal' + (pt.protein ? ', +' + pt.protein + 'g protein' : '') + ' if you do it, room would be ' + fmt(room + pt.kcal) + '</div>' : ''; })();
 }
 
 function updateDashboard(skipActivityRender) {
