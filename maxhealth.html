@@ -6456,7 +6456,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1088'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1089'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -45143,7 +45143,7 @@ function mhOutcomeFindings(history, opts) {
       if (e.same && (o.pair || !o.sleepy)) return;
       const val = r => o.pair ? o.pair(r.d, r.nx) : o.get(r.nx);
       const A = lab.filter(r => r.f && r.nx).map(val).filter(v => v != null), B = lab.filter(r => !r.f && r.nx).map(val).filter(v => v != null);
-      if (A.length < 6 || B.length < 6) return; const w = mhWelch(A, B); if (!w || Math.abs(w.diff) < o.minDiff || Math.abs(w.t) < T) return;
+      if (A.length < 10 || B.length < 10) return; const w = mhWelch(A, B); if (!w || Math.abs(w.diff) < o.minDiff || Math.abs(w.t) < T) return;
       out.push({ kind: 'forward', pri: e.pri, exposure: e.label, outcome: o.label, okey: o.key, a: w.a.m, b: w.b.m, nA: w.a.n, nB: w.b.n, diff: w.diff, t: w.t, good: o.good ? (w.diff * o.good > 0 ? 1 : -1) : 0,
         text: (e.same ? 'On ' : 'After ') + e.label + ', ' + (e.same ? o.label.replace('next-night ', 'that night\'s ') : o.label) + ' averaged ' + o.fmt(w.a.m) + ' against ' + o.fmt(w.b.m) + ' otherwise (' + w.a.n + ' and ' + w.b.n + ' days).' });
     });
@@ -45169,9 +45169,42 @@ function renderOutcomesReport() {
   if (!f.length) { section.style.display = 'none'; return; }
   section.style.display = 'block';
   const col = g => g > 0 ? 'var(--green)' : g < 0 ? 'var(--yellow)' : 'var(--text3)', ic = g => g > 0 ? '▲' : g < 0 ? '▼' : '●';
-  el.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5;">Your own days, compared. Each line is a habit that went with a clear difference in what came next.</div>' +
+  el.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;line-height:1.5;">Your own days, compared. Each line is a habit that went with a clear difference in what came next.</div><div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.5;"><span style="color:var(--green);">▲</span> looks helpful &nbsp; <span style="color:var(--yellow);">▼</span> looks unhelpful &nbsp; <span style="color:var(--text3);">●</span> just notable (neither good nor bad)</div>' +
     f.map(o => '<div style="display:flex;gap:8px;padding:8px 0;border-top:1px solid var(--border);"><span style="color:' + col(o.good) + ';font-size:12px;">' + ic(o.good) + '</span><div style="flex:1;font-size:12px;color:var(--text);line-height:1.5;">' + mhStatEsc(o.text) + '</div></div>').join('') +
+    '<button class="run-btn" style="width:100%;margin-top:12px;padding:10px;font-size:13px;" onclick="mhExplainOutcomes()">✨ What does this mean for me?</button><div id="outcomesExplain" style="display:none;margin-top:10px;padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;"></div>' +
     '<div style="font-size:10px;color:var(--text3);margin-top:10px;line-height:1.5;"><b>Early Stage.</b> These are associations in your own data, not proof that one thing causes the other. Several things change at once on any given day, and more days sharpen the picture. Treat them as ideas to test, not conclusions.</div>';
+}
+// ✨ Plain-English explanation of what a screen shows (v3.10.1089). Uses the same AI route as the other reports, so it runs on the
+// free starter allowance or the person's own key, and Premium simply includes the AI. Cached against the exact figures so it only
+// costs a call when something changed.
+async function mhAiExplain(kind, dataText, outId, btn) {
+  const out = document.getElementById(outId); if (!out) return;
+  let sig = ''; try { sig = kind + ':' + dataText.length + ':' + Array.from(dataText).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7); } catch (_) {}
+  let cache = {}; try { cache = JSON.parse(localStorage.getItem('mh_ai_explain') || '{}') || {}; } catch (_) {}
+  out.style.display = 'block';
+  if (cache[sig]) { out.textContent = cache[sig]; return; }
+  const old = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+  out.textContent = 'Reading your numbers…';
+  try {
+    const ctx = buildPatientContext(state.history || []);
+    const prompt = `${patientContextBlock(ctx)}A person is looking at this screen in their health app and does not know what is good, what is bad, or what to do about it.\n\nWHAT THE SCREEN SHOWS:\n${dataText}\n\nExplain it in plain English, in a warm and honest voice, 150 to 220 words, no headings. Cover: (1) the one or two things that matter most and whether they look good or bad, (2) which findings are strong and which rest on few days or are small differences (say so plainly), (3) two or three small, practical things to try or watch, in this person's own situation. These are associations in their own data, not proof of cause: say that once, briefly. Give no medication, dose or treatment advice, and do not repeat a medical disclaimer; if something deserves a clinician's eye, say that in one short sentence.`;
+    const r = await callHealthAI(prompt + mhLangAINote(), { maxTokens: 700, system: 'You are a careful, kind health data coach. Be concrete and honest about uncertainty.' });
+    if (!r.ok) { out.textContent = "Couldn't generate an explanation: " + r.error; return; }
+    out.textContent = r.text;
+    cache[sig] = r.text; const ks = Object.keys(cache); if (ks.length > 30) delete cache[ks[0]];
+    try { localStorage.setItem('mh_ai_explain', JSON.stringify(cache)); } catch (_) {}
+  } catch (e) { out.textContent = 'Error. Check your connection and try again.'; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+}
+function mhExplainOutcomes() {
+  const f = mhOutcomeFindings(state.history, { limit: 8 }), btn = document.querySelector('#outcomes-report-content button.run-btn');
+  const lines = f.map(o => '- ' + o.text + ' [' + (o.good > 0 ? 'looks helpful' : o.good < 0 ? 'looks unhelpful' : 'neutral') + ']');
+  let extra = ''; try { const sc = mhSleepContext(getReportHistory()); if (sc) extra = '\nSleep summary: ' + sc; } catch (_) {}
+  mhAiExplain('outcomes', 'What seems to move what (Early Stage, associations in their own days):\n' + lines.join('\n') + extra, 'outcomesExplain', btn);
+}
+function mhExplainStat(id) {
+  const d = mhStatLoad().find(x => x.id === id); if (!d) return;
+  mhAiExplain('stat' + id, mhStatText(d), 'stExplain-' + id, document.getElementById('stExplainBtn-' + id));
 }
 function mhOutcomesContext(history) {
   try { const f = mhOutcomeFindings(history, { limit: 6 }); return f.length ? f.map(o => o.text).join(' ') : null; } catch (_) { return null; }
@@ -50952,7 +50985,7 @@ function mhStatCardHtml(d, all) {
     '<div style="display:flex;gap:4px;">' + btn('mhStatMove(\'' + d.id + '\',-1)', '▲', i === 0 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatMove(\'' + d.id + '\',1)', '▼', i === all.length - 1 ? 'disabled style="opacity:0.35;"' : '') + btn('mhStatTogglePin(\'' + d.id + '\')', d.pinned ? '📌' : '📍', 'title="' + (d.pinned ? 'Pinned to Today. Tap to unpin' : 'Pin to the Today screen') + '"' + (d.pinned ? ' style="border-color:var(--accent);"' : '')) + btn('mhStatLook(\'' + d.id + '\')', '🎨', 'title="Change the colour or chart type"' + (_stUI.look === d.id ? ' style="border-color:var(--accent);"' : '')) + btn('mhStatHide(\'' + d.id + '\')', d.hidden ? '👁 Show' : '🙈') + '</div></div>' +
     (_stUI.look === d.id ? mhStatLookHtml(d) : '') +
     '<div style="margin-top:10px;">' + (err ? '<div style="color:var(--red);font-size:12px;">' + mhStatEsc(err) + '</div>' : body) + '</div>' +
-    '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">' + btn('mhStatEdit(\'' + d.id + '\')', '✎ Edit') + btn('mhStatCopy(\'' + d.id + '\')', '📋 Copy') + btn('mhStatDownload(\'' + d.id + '\')', '⤓ CSV') + btn('mhStatExport([\'' + d.id + '\'])', '📤 Share') + '<span style="flex:1"></span>' + btn('mhStatDelete(\'' + d.id + '\')', '🗑 Delete', 'style="color:var(--red);"') + '</div></div>';
+    '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">' + btn('mhStatEdit(\'' + d.id + '\')', '✎ Edit') + btn('mhStatExplain(\'' + d.id + '\')', '✨ Explain', 'id="stExplainBtn-' + d.id + '"') + btn('mhStatCopy(\'' + d.id + '\')', '📋 Copy') + btn('mhStatDownload(\'' + d.id + '\')', '⤓ CSV') + btn('mhStatExport([\'' + d.id + '\'])', '📤 Share') + '<span style="flex:1"></span>' + btn('mhStatDelete(\'' + d.id + '\')', '🗑 Delete', 'style="color:var(--red);"') + '</div></div>';
 }
 function mhStatSwatches(cur, fn) {
   const sw = MH_ST_COLORS.map(c => '<span onclick="' + fn + '\'' + c + '\')" style="width:26px;height:26px;border-radius:50%;cursor:pointer;box-sizing:border-box;border:2px solid ' + ((cur || '') === c ? 'var(--text)' : 'var(--border)') + ';background:' + (c || 'var(--accent)') + ';display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;">' + (c ? '' : 'auto') + '</span>').join('');
@@ -51006,6 +51039,7 @@ function mhStatMoveTo(id, targetId, after) {
   const end = () => { if (!drag) return; const d = drag; drag = null; clear(); if (d.el) d.el.style.opacity = ''; if (d.target) mhStatMoveTo(d.id, d.target, d.after); };
   document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
 })();
+function mhStatExplain(id) { const el = document.getElementById('stExplain-' + id); if (!el) { const c = document.getElementById('stcard-' + id); if (c) { const dv = document.createElement('div'); dv.id = 'stExplain-' + id; dv.style.cssText = 'display:none;margin-top:10px;padding:12px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;'; c.appendChild(dv); } } mhExplainStat(id); }
 function mhStatDelete(id) {
   const d = mhStatLoad().find(x => x.id === id); if (!d) return;
   appConfirm('Delete "' + (d.name || mhStatTitle(d)) + '"? Your food and exercise history is not touched, only this saved question.', () => { mhStatSave(mhStatLoad().filter(x => x.id !== id)); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast('Statistic deleted'); }, null, true, { confirm: 'Delete', cancel: 'Keep' });

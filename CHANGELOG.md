@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1089 – Explain it to me
+- **✨ What does this mean for me?** on What seems to move what, and **✨ Explain** on every statistic: a plain-English read of what matters most, which findings are strong or thin, and a few small things to try. Same AI route as the other reports (starter allowance or your own key); cached against the exact figures so it only costs a call when something changes.
+- A legend for the markers (▲ looks helpful, ▼ looks unhelpful, ● just notable).
+- Findings now need at least 10 days on each side (was 6): a real phone screenshot showed two resting on 9 days.
+- Tests p192 (new), p36 and p111 updated for the stats card and the app's own language copy.
+
 ## v3.10.1088 – Readable in every theme
 - New test p191 measures text contrast on the Statistics tab and the Sleep and outcomes reports in all four colour themes crossed with the three visual themes. Small secondary text was 2.4 to 2.9:1 in every theme, and the bright label colours on the sleep tiles fell to 1.7:1 in the light theme. Secondary text on those surfaces is now one step stronger, and the light theme uses deeper shades of the same hues. All 16 combinations now pass 3:1. (The app-wide secondary text colour elsewhere was not changed.)
 

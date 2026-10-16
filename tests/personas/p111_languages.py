@@ -73,6 +73,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # offline / missing file: stays English, no crash
     ctx2 = b.new_context(viewport={'width': 390, 'height': 800}, service_workers='block'); p2 = ctx2.new_page()
     p2.route('**/raw.githubusercontent.com/**', lambda r: r.abort())
+    p2.route('**/lang/fr.json', lambda r: r.abort())   # since v1063 the app's own copy is tried first, so block it too for the 'no file anywhere' case
     p2.goto('http://localhost:5757/?lang=fr'); p2.wait_for_timeout(2500)
     if 'today' not in p2.evaluate("document.getElementById('maintab-today').textContent").lower(): f.add('BUG', 'missing file should stay English')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
