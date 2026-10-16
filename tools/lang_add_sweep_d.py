@@ -1,0 +1,10 @@
+# v1091 whole-app sweep, part D: last fragments. Column order: es, de, fr, tr, pt, it, pl, nl.
+T = {
+ '🩸 {1} markers ▾': ['🩸 {1} marcadores ▾', '🩸 {1} Marker ▾', '🩸 {1} marqueurs ▾', '🩸 {1} belirteç ▾', '🩸 {1} marcadores ▾', '🩸 {1} marcatori ▾', '🩸 {1} markerów ▾', '🩸 {1} markers ▾'],
+ '🩸 1 marker ▾': ['🩸 1 marcador ▾', '🩸 1 Marker ▾', '🩸 1 marqueur ▾', '🩸 1 belirteç ▾', '🩸 1 marcador ▾', '🩸 1 marcatore ▾', '🩸 1 marker ▾', '🩸 1 marker ▾'],
+ 'Comparing nutrition, carb adherence, and weight on': ['Comparación de nutrición, adherencia a carbohidratos y peso en', 'Vergleich von Ernährung, Kohlenhydrat-Einhaltung und Gewicht an', 'Comparaison de la nutrition, du respect des glucides et du poids les', 'Beslenme, karbonhidrat uyumu ve kilonun karşılaştırılması:', 'Comparação de nutrição, adesão aos carboidratos e peso em', 'Confronto di nutrizione, aderenza ai carboidrati e peso nei', 'Porównanie żywienia, przestrzegania węglowodanów i wagi w', 'Vergelijking van voeding, koolhydraatnaleving en gewicht op'],
+ '· {1}g protein': ['· {1} g de proteína', '· {1} g Protein', '· {1} g de protéines', '· {1} g protein', '· {1} g de proteína', '· {1} g di proteine', '· {1} g białka', '· {1} g eiwit'],
+ '· {1}g carbs': ['· {1} g de carbohidratos', '· {1} g Kohlenhydrate', '· {1} g de glucides', '· {1} g karbonhidrat', '· {1} g de carboidratos', '· {1} g di carboidrati', '· {1} g węglowodanów', '· {1} g koolhydraten'],
+ 'ketosis & weight correlation': ['correlación entre cetosis y peso', 'Korrelation zwischen Ketose und Gewicht', 'corrélation entre cétose et poids', 'ketoz ve kilo korelasyonu', 'correlação entre cetose e peso', 'correlazione tra chetosi e peso', 'korelacja ketozy i wagi', 'correlatie tussen ketose en gewicht'],
+ 'carb target & weight correlation': ['correlación entre objetivo de carbohidratos y peso', 'Korrelation zwischen Kohlenhydratziel und Gewicht', 'corrélation entre objectif de glucides et poids', 'karbonhidrat hedefi ve kilo korelasyonu', 'correlação entre meta de carboidratos e peso', 'correlazione tra obiettivo di carboidrati e peso', 'korelacja celu węglowodanów i wagi', 'correlatie tussen koolhydraatdoel en gewicht'],
+}
