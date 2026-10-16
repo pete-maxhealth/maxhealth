@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1081 (addendum) – Demo personas now carry sleep stages
+- Demo history gets a deterministic night for every day: duration, deep/REM/light/awake, efficiency and sleeping heart rate, a little longer and deeper after harder exercise days. Reports > Sleep and "What seems to move what" now have something real to show in the demo. Tour videos re-recorded with Sleep and Statistics chapters.
+
 ## v3.10.1081 – Statistics on Today and in reports, speed-based energy, net of resting
 - **My statistics on Today.** Pin up to four statistics (📌 on a card, or a switch in the builder) and they appear as a compact card on the Today screen after Weather, with the usual ▲▼ and 👁 controls. It stays out of the way until something is pinned.
 - **Statistics in summaries and the AI.** A switch per statistic includes it in the weekly summary (screen, print and copy), the clinician view and the AI context, each stating its own period. Hidden statistics are never shared; shared files never carry pin or share flags.
