@@ -30,7 +30,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhPremiumPreview()"); page.wait_for_timeout(400)
     t = ev("(document.getElementById('mhPremiumPrev')||{}).textContent||''")
     if 'wearable' not in t.lower() or 'Register interest' not in t: f.add('BUG', 'premium preview missing content')
-    if ev("document.querySelector('#mhPremiumPrev a').href") != 'https://pspence.co.uk/maxedhealth/': f.add('BUG', 'premium link wrong')
+    if ev("document.querySelector('#mhPremiumPrev a').href") != 'https://tally.so/r/Dq2AQ5': f.add('BUG', 'premium link wrong')
     ev("document.getElementById('mhPremiumPrev').remove(); exitDemoMode()"); page.wait_for_timeout(1500)
     hits.clear()
     r = ev("fetch('https://api.openai.com/v1/chat/completions',{method:'POST',body:'{}'}).then(()=>'ok').catch(()=>'blocked')")

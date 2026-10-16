@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1093 – Premium register-interest moved to a Tally form
+- Every "register your interest" link (app, landing page, guides, public README) now points at the Tally form, because the GoDaddy website-builder plan cannot run PHP or take sign-ups. The licence service address is unchanged and still needs PHP hosting later.
+
 ## v3.10.1092 – Fibre target, and a check on missing nutrient figures
 - **🌾 Fibre card on Today** (show/hide and reorder like every card): today's fibre against a target (30g by default, the UK adult guideline, editable in Settings > Fibre Target) and a 14-day average. A day counts only when at least one food carries a fibre figure; unknown is never read as zero, and under 5 such days the average says "not enough days" instead of showing a number. Existing saved layouts keep their order; the card slots in after Macro ratio.
 - **Nutrient audit** (Settings, and a link on the card): how many library foods carry fibre, saturated fat, sugars, salt, iron, potassium, magnesium, vitamin D and omega-3, plus a most-used-first list of foods with no fibre figure, each with Save or No fibre. Nothing is estimated or filled in; marking "No fibre" sets a confirmed zero that later edits keep.

@@ -8,7 +8,7 @@ Your data stays in your browser. Nothing is sent anywhere unless you choose to u
 
 ## MaxedHealth Premium
 
-Premium runs on your own Android phone and adds automatic wearable sync through Health Connect, device ranking, daily self-checks, automatic backups and updates, with your data kept on your phone, and personal setup help. [Register your interest](https://pspence.co.uk/maxedhealth/).
+Premium runs on your own Android phone and adds automatic wearable sync through Health Connect, device ranking, daily self-checks, automatic backups and updates, with your data kept on your phone, and personal setup help. [Register your interest](https://tally.so/r/Dq2AQ5).
 
 ## Not medical advice
 

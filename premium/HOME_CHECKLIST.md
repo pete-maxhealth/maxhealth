@@ -8,7 +8,8 @@ Last updated 13 Oct 2026, app v3.10.1011. Order matters where marked.
 3. **Rotate the provider keys** (Worker secrets) once the new Worker is live, because the old Worker has been open to anyone.
 4. **Check GitHub Pages** shows v3.10.1011 in Settings.
 
-## B. Licence service (GoDaddy, pspence.co.uk/maxedhealth/)
+## B. Licence service (needs GoDaddy Linux/cPanel hosting; the current GoDaddy plan is the website builder and cannot run PHP)
+0. Register-interest is now a Tally form (https://tally.so/r/Dq2AQ5), set by `MH_PREMIUM_URL`; check its Submissions tab. Move it to a pspence.co.uk page when hosting is added.
 1. Upload `premium-site/` (index.html, register.php, setup.html, icons) and `licence.php`.
 2. Create `maxedhealth_licence/config.php` one level ABOVE public_html: `signing_secret` (long random) and `admin_secret` (another). Steps in `premium-site/README.md`.
 3. In Cloudflare add the Worker secret `LICENCE_SECRET` with exactly the same value as `signing_secret`.
