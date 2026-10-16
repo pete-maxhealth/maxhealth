@@ -26,7 +26,8 @@ with fresh_server() as root, sync_playwright() as pw:
     exp = list(custom); exp.insert(exp.index('water'), 'weather'); exp.insert(exp.index('water'), 'fasting')  # fasting (v3.10.930) also slots in just above water
     exp.insert(exp.index('macros') + 1, 'mealplan')  # meal plan (v3.10.1040) slots in just after Calories & macros
     if 'stats' not in order: f.add('BUG', 'My statistics card missing from a migrated order')   # added v3.10.1081
-    order = [k for k in order if k != 'stats']
+    if 'fibre' not in order: f.add('BUG', 'Fibre card missing from a migrated order')   # added v3.10.1092
+    order = [k for k in order if k not in ('stats', 'fibre')]
     if order != exp: f.add('BUG', f'custom order not preserved with weather slotted before water: {order}')
     idx = lambda: page.evaluate("(()=>{const p=document.getElementById('mhWxCard').parentNode;const k=[...p.children];return [k.indexOf(document.getElementById('mhWxCard')),k.indexOf(document.getElementById('dashSection-water'))]})()")
     a, w = idx()

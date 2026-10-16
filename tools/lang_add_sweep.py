@@ -4,7 +4,7 @@ import json, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.path.join(HERE, '..'))
 LANGS = ['es', 'de', 'fr', 'tr', 'pt', 'it', 'pl', 'nl']
 T = {}
-for part in ('lang_add_sweep_a.py', 'lang_add_sweep_b.py', 'lang_add_sweep_c.py', 'lang_add_sweep_d.py'):
+for part in ('lang_add_sweep_a.py', 'lang_add_sweep_b.py', 'lang_add_sweep_c.py', 'lang_add_sweep_d.py', 'lang_add_sweep_e.py'):
     ns = {}; exec(open(os.path.join(HERE, part), encoding='utf-8').read(), ns); T.update(ns['T'])
 ph = lambda s: sorted(re.findall(r'\{\d+\}', s))
 total = 0
