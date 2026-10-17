@@ -30,7 +30,7 @@ with sync_playwright() as pw:
         c = card(page)
         if c['cloud'] != want_cloud or c['local'] == want_cloud: f.add('BUG', f'{host}: wrong Premium variant {c}')
         if want_cloud:
-            if not c['href'].startswith('https://pspence.co.uk/'): f.add('BUG', f'Register interest link wrong: {c["href"]}')
+            if not c['href'].startswith('https://tally.so/'): f.add('BUG', f'Register interest link wrong: {c["href"]}')
             if 'noopener' not in c['rel'] or c['target'] != '_blank': f.add('BUG', 'link must open in a new tab with noopener')
             if any('pspence.co.uk' in u for u in seen): f.add('BUG', 'the app itself contacted the Premium page')
             # show/hide
