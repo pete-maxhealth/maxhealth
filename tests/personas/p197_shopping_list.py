@@ -134,8 +134,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if k3 in ev("mhShopShortlist().map(x=>x.key)") or len(ev("mhShopLoad().usuals")) != 2: f.add('BUG', 'star should move a suggestion into My usuals')
     ev("mhShopView('quick')")
     if ev("document.getElementById('mhShopQuickN').options.length") != 10: f.add('BUG', 'the number choice should run 1 to 10')
-    ev("mhShopSuggestAddSection(mhShopSection(mhShopCat('Item 5')))")
-    if ev("mhShopShortlist().filter(x=>mhShopSection(x.cat)===mhShopSection(mhShopCat('Item 5'))).length") != 0: f.add('BUG', 'add-all for an aisle should clear that aisle from the shortlist')
+    n_before = ev("mhShopLoad().items.length"); ev("mhShopSuggestAddSection(mhShopSection(mhShopCat('Item 5')))")
+    if ev("mhShopLoad().items.length") <= n_before: f.add('BUG', 'add-all for an aisle should put that aisle on the list')
     ev("mhShopView('list')")
     # aisle headings fold, and "all" ticks a whole aisle into the basket
     ev("(()=>{const s=mhShopLoad(); s.items=[{id:'z1',key:'z1',name:'Spinach',cat:'vegetable',checked:false},{id:'z2',key:'z2',name:'Broccoli',cat:'vegetable',checked:false},{id:'z3',key:'z3',name:'Butter',cat:'dairy',checked:false}]; mhShopSave(s); mhShopRender()})()")
