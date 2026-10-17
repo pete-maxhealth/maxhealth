@@ -22,5 +22,9 @@ with fresh_server() as root, sync_playwright() as pw:
     for r in res:
         if r['kinds'] != 'up,down,hide': f.add('BUG', f"{r['id']} control order {r['kinds']}")
         if r['sizes'] != '14px': f.add('BUG', f"{r['id']} control size {r['sizes']}")
+    # the round scroll up/down buttons must follow the Shopping and Library screens too
+    for t, sc in (('shop', 'shopScroll'), ('library', 'libraryScroll')):
+        ev(f"switchTabById('{t}')"); page.wait_for_timeout(400)
+        if ev("window._activeScrollContainerId") != sc: f.add('BUG', f'scroll buttons not attached to {sc}')
     if errs: f.add('BUG', f'page errors {errs[:3]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

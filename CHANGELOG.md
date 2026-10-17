@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1099 – Quieter cards, scroll buttons on Shopping and Library
+- **Meal plan and Fasting:** the explanatory text (what to type, Trust my plan, the fasting status line and guidance) now sits behind each card's ? so the cards stay clean.
+- **Shopping search:** the filter box has a 🔍 and a Search key on the phone keyboard; it still filters as you type.
+- **Scroll buttons:** the round ↑ ↓ buttons now work on the Shopping and Library screens, the same as everywhere else.
+
 ## v3.10.1098 – Same controls on every Today and Move card
 - **One control layout everywhere:** every card now shows ▲ ▼ 👁 (move up, move down, hide) in the same order, size and right-hand position, with the fold label (▾ hide) last where a card folds. Log, Guides, Treatment, How are you today, Daily steps and Today's activity were rebuilt to match; the Fasting, Fibre, Water, Shopping and Move cards line up with the rest. Saved layouts and fold states are untouched.
 
