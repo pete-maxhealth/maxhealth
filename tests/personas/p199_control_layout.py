@@ -26,5 +26,17 @@ with fresh_server() as root, sync_playwright() as pw:
     for t, sc in (('shop', 'shopScroll'), ('library', 'libraryScroll')):
         ev(f"switchTabById('{t}')"); page.wait_for_timeout(400)
         if ev("window._activeScrollContainerId") != sc: f.add('BUG', f'scroll buttons not attached to {sc}')
+    # tapping a progress bar opens the history behind it
+    ev("switchTabById('dash')"); page.wait_for_timeout(300)
+    for bar, fn in (('waterBar', 'openChartLightbox'), ('fastBar', 'mhGoFastHistory'), ('fibreBar', 'mhFibreHistory')):
+        if ev(f"(document.getElementById('{bar}').parentElement.getAttribute('onclick')||'').includes('{fn}')") is not True: f.add('BUG', f'{bar} tap should call {fn}')
+    ev("mhFibreHistory()")
+    if 'last 14 days' not in ev("(document.getElementById('mhFibreHistModal')||{innerText:''}).innerText").lower(): f.add('BUG', 'fibre tap should open the 14-day view')
+    ev("document.getElementById('mhFibreHistModal').remove()")
+    ev("openChartLightbox('water')"); page.wait_for_timeout(300)
+    if ev("getComputedStyle(document.getElementById('metricDrillOverlay')).display") == 'none': f.add('BUG', 'water tap should open the water chart')
+    ev("closeMetricDrill()")
+    ev("mhGoFastHistory()"); page.wait_for_timeout(200)
+    if 'Fasting history' not in ev("document.body.innerText") and ev("document.getElementById('view-reports') ? document.getElementById('view-reports').classList.contains('active') : document.getElementById('insightstab-reports').classList.contains('active')") is not True: f.add('BUG', 'fasting tap should open the history, or say why not')
     if errs: f.add('BUG', f'page errors {errs[:3]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
