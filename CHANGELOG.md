@@ -2,10 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
-## v3.10.1104 – Shopping: a quick list of what you eat most
-- **⚡ Quick list** (under ＋ Add items): choose a number from 1 to 10 and press Add; it fills with the ingredients you eat most (up to 10 per press, press again for the next ones). Nothing goes on your shopping list until you tap it; ⭐ keeps one in My usuals, ✕ drops it. It is grouped by aisle, each aisle folds, and ＋ all adds a whole aisle.
-- **On the shopping list too:** each aisle heading folds (▾/▸) and has ☑ all to tick the whole aisle into the basket.
-- **Usuals stay out of it:** anything already in My usuals (or already on your list) is never suggested again, and adding something to My usuals later removes it from the quick list.
+## v3.10.1104 – Shopping: a live quick list, one-tap recipes, aisle folds
+- **⚡ Quick list** (under ＋ Add items): a live shortlist of the ingredients you eat most, up to the number you choose (1 to 10). It leaves out anything in My usuals or already on your list. Tap one to put it on your list; ⭐ keeps it in My usuals; ✕ means not this time (it comes back after Shopping complete); 🚫 means never show it again (undo under Hidden suggestions). Another item takes its place each time. It is grouped by aisle, each aisle folds, and ＋ all adds a whole aisle.
+- **Recipes in one tap:** tap a recipe and all its ingredients go on your list. Take any you do not need off with ✎ Edit.
+- **Aisle headings on the list fold** (▾/▸) and have ☑ all to tick the whole aisle into the basket.
 
 ## v3.10.1103 – Tap a progress bar to see the history behind it
 - **Water:** tapping the bar opens the water chart.

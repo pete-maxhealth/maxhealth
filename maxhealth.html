@@ -26916,7 +26916,7 @@ let _shopUi = { view: 'list', cat: '', showHidden: false, q: '', recipe: null, m
 function mhShopLoad() {
   let s = null; try { s = JSON.parse(localStorage.getItem(MH_SHOP_KEY) || 'null'); } catch (_) {}
   if (!s || typeof s !== 'object') s = {};
-  if (!Array.isArray(s.items)) s.items = []; if (!Array.isArray(s.pantry)) s.pantry = []; if (!Array.isArray(s.usuals)) s.usuals = []; if (!Array.isArray(s.quick)) s.quick = []; if (!s.recipeEx || typeof s.recipeEx !== 'object') s.recipeEx = {};
+  if (!Array.isArray(s.items)) s.items = []; if (!Array.isArray(s.pantry)) s.pantry = []; if (!Array.isArray(s.usuals)) s.usuals = []; if (!Array.isArray(s.never)) s.never = []; if (!Array.isArray(s.skip)) s.skip = []; if (!s.recipeEx || typeof s.recipeEx !== 'object') s.recipeEx = {};
   s.topN = parseInt(s.topN) > 0 ? Math.min(100, parseInt(s.topN)) : MH_SHOP_TOPN_DEFAULT;
   return s;
 }
@@ -27011,7 +27011,7 @@ function mhShopComplete() {
   const s = mhShopLoad(), n = s.items.filter(i => i.checked).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
   if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked stays.')) return;
-  s.items = s.items.filter(i => !i.checked); mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
+  s.items = s.items.filter(i => !i.checked); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
 }
 function mhShopCopy() {
   const s = mhShopLoad(), txt = mhShopVisible(s).filter(i => !i.hidden && !i.checked).map(i => '- ' + i.name).join('\n');
@@ -27049,27 +27049,29 @@ function mhShopUsualToggle(key) {
 }
 function mhShopUsualAddNew() {
   const inp = document.getElementById('mhShopUsualNew'), v = inp ? inp.value.trim() : ''; if (!v) return;
-  const s = mhShopLoad(); if (!mhShopUsualFind(s, mhShopKey(v))) s.usuals.push(v); s.quick = s.quick.filter(x => mhShopKey(x) !== mhShopKey(v)); mhShopSave(s); mhShopRender();
+  const s = mhShopLoad(); if (!mhShopUsualFind(s, mhShopKey(v))) s.usuals.push(v); mhShopSave(s); mhShopRender();
 }
 function mhShopUsualDelete(key) { const s = mhShopLoad(); s.usuals = s.usuals.filter(u => mhShopKey(u) !== key); mhShopSave(s); mhShopRender(); }
-// Quick list: "Top 10 / 20 / 30" fills it with the ingredients you eat most. Nothing goes on the shopping list until you tap it.
-// Anything already in My usuals, on the shopping list or in the quick list is left out, so a usual never comes back as a suggestion.
-function mhShopQuickN(v) { const s = mhShopLoad(), n = Math.max(1, Math.min(10, parseInt(v) || 10)); s.topN = n; mhShopSave(s); }
-function mhShopTopFill(n) {
-  n = Math.max(1, Math.min(10, parseInt(n) || 10));
-  const s = mhShopLoad(), skip = new Set([...s.usuals.map(mhShopKey), ...s.items.map(i => i.key), ...s.quick.map(mhShopKey)]);
-  let added = 0;
-  for (const x of mhShopRanked()) { if (added >= n) break; if (!x || skip.has(x.key)) continue; s.quick.push(x.name); skip.add(x.key); added++; }
-  _shopUi.msg = added ? added + ' added to your quick list' : 'Nothing new to suggest'; mhShopSave(s); mhShopRender();
+// Quick list (v3.10.1104): a live shortlist of the ingredients you eat most, up to the number you choose (1 to 10). It never includes
+// anything in My usuals or already on the list. Tap = onto the list. "Not this time" hides it until you finish shopping; "Never" hides
+// it for good (and can be undone under Hidden suggestions). Either way the next most-eaten item takes its place.
+function mhShopQuickN(v) { const s = mhShopLoad(); s.topN = Math.max(1, Math.min(10, parseInt(v) || 10)); mhShopSave(s); mhShopRender(); }
+function mhShopShortlist(s) {
+  s = s || mhShopLoad(); const n = Math.max(1, Math.min(10, s.topN || 10));
+  const skip = new Set([...s.usuals.map(mhShopKey), ...s.items.map(i => i.key), ...s.never, ...s.skip]), out = [];
+  for (const x of mhShopRanked()) { if (out.length >= n) break; if (x && !skip.has(x.key)) out.push(x); }
+  return out;
 }
+function mhShopSuggestAdd(key) { const s = mhShopLoad(), x = mhShopShortlist(s).find(y => y.key === key); if (!x) return; mhShopSetAdd(s, x.name, 'quick', '', x.cat); mhShopSave(s); mhShopRender(); }
+function mhShopSuggestAddSection(sec) { const s = mhShopLoad(); let n = 0; mhShopShortlist(s).forEach(x => { if (mhShopSection(x.cat) === sec && mhShopSetAdd(s, x.name, 'quick', '', x.cat)) n++; }); _shopUi.msg = n + ' added to your list'; mhShopSave(s); mhShopRender(); }
+function mhShopSuggestSkip(key) { const s = mhShopLoad(); if (!s.skip.includes(key)) s.skip.push(key); mhShopSave(s); mhShopRender(); }
+function mhShopSuggestNever(key) { const s = mhShopLoad(); if (!s.never.includes(key)) s.never.push(key); mhShopSave(s); mhShopRender(); }
+function mhShopSuggestRestore(key) { const s = mhShopLoad(); s.never = s.never.filter(k => k !== key); s.skip = s.skip.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
+function mhShopSuggestStar(key) { const s = mhShopLoad(), x = mhShopShortlist(s).find(y => y.key === key); if (!x) return; if (!mhShopUsualFind(s, key)) s.usuals.push(x.name); _shopUi.msg = x.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; _shopUi.fold[k] = !_shopUi.fold[k]; mhShopRender(); }
 // Tick everything still to get in one aisle (the visible items only, so a search filter is respected).
 function mhShopTickSection(sec) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.checked && mhShopSection(i.cat) === sec).map(i => i.id)); let n = 0; s.items.forEach(i => { if (ids.has(i.id)) { i.checked = true; n++; } }); _shopUi.msg = n ? n + ' ticked into the basket' : ''; mhShopSave(s); mhShopRender(); }
-function mhShopQuickAddSection(sec) { const s = mhShopLoad(); let n = 0; s.quick.slice().forEach(q => { if (mhShopSection(mhShopCat(q)) === sec) { mhShopSetAdd(s, q, 'quick'); s.quick = s.quick.filter(x => mhShopKey(x) !== mhShopKey(q)); n++; } }); _shopUi.msg = n + ' added to your list'; mhShopSave(s); mhShopRender(); }
-function mhShopQuickTap(key) { const s = mhShopLoad(), q = s.quick.find(x => mhShopKey(x) === key); if (!q) return; mhShopSetAdd(s, q, 'quick'); s.quick = s.quick.filter(x => mhShopKey(x) !== key); mhShopSave(s); mhShopRender(); }
-function mhShopQuickDrop(key) { const s = mhShopLoad(); s.quick = s.quick.filter(x => mhShopKey(x) !== key); mhShopSave(s); mhShopRender(); }
-function mhShopQuickStar(key) { const s = mhShopLoad(), q = s.quick.find(x => mhShopKey(x) === key); if (!q) return; if (!mhShopUsualFind(s, key)) s.usuals.push(q); s.quick = s.quick.filter(x => mhShopKey(x) !== key); _shopUi.msg = q + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
-function mhShopUsualFromItem(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; if (!mhShopUsualFind(s, i.key)) s.usuals.push(i.name); s.quick = s.quick.filter(x => mhShopKey(x) !== i.key); _shopUi.msg = i.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
+function mhShopUsualFromItem(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; if (!mhShopUsualFind(s, i.key)) s.usuals.push(i.name); _shopUi.msg = i.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 function mhShopUnpantry(key) { const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
 function mhShopRender(keepFocus) {
   const esc = mhPlanEsc, s = mhShopLoad(); const m = document.getElementById('mhShopPane'); if (!m) return;
@@ -27086,8 +27088,8 @@ function mhShopRender(keepFocus) {
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'recipes') {
     const meals = mhShopMealsAll();
-    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Pick a meal, then untick any ingredient you do not need to buy.</div>'
-      + (meals.map(f => '<div onclick="mhShopView(\'recipe\',this.dataset.k)" data-k="' + esc(mhShopKey(f.name)) + '" style="padding:10px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;">' + esc(f.name) + ' <span style="font-size:11px;color:var(--text3);">' + mhShopMealIngs(f).length + ' ingredients</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">No saved meals with ingredients yet.</div>')
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Tap a recipe to put all its ingredients on your list. Take any you do not need off with ✎ Edit.</div>'
+      + (meals.map(f => '<div onclick="mhShopRecipeAdd(this.dataset.k)" data-k="' + esc(mhShopKey(f.name)) + '" style="padding:10px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;">' + esc(f.name) + ' <span style="font-size:11px;color:var(--text3);">' + mhShopMealIngs(f).length + ' ingredients</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">No saved meals with ingredients yet.</div>')
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'recipe') {
     const meal = mhShopFindMeal(_shopUi.recipe), ings = meal ? mhShopRecipeIngs(meal.name, s) : [], mk = meal ? mhShopKey(meal.name) : '';
@@ -27095,13 +27097,16 @@ function mhShopRender(keepFocus) {
       + ings.map(g => '<label data-ing="' + esc(g.name) + '" style="display:flex;gap:10px;align-items:center;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><input type="checkbox" ' + (g.off ? '' : 'checked') + ' data-m="' + esc(mk) + '" data-k="' + esc(g.key) + '" onchange="mhShopRecipeToggle(this.dataset.m,this.dataset.k)"><span style="flex:1;">' + esc(g.name) + '</span>' + (g.have ? '<span style="font-size:10px;color:var(--text3);">you always have it</span>' : '') + '</label>').join('')
       + '<div style="display:flex;gap:8px;margin-top:12px;">' + '<button class="copy-btn" style="font-size:12px;padding:7px 10px;background:var(--accent);color:#fff;" data-m="' + esc(mk) + '" onclick="mhShopRecipeAdd(this.dataset.m)">Add to list</button>' + btn('Back', "mhShopView('recipes')") + '</div>';
   } else if (_shopUi.view === 'quick') {
-    const onList = new Set(s.items.map(i => i.key)), fold = _shopUi.fold || {}, nSel = Math.max(1, Math.min(10, s.topN || 10));
-    const groups = {}; s.quick.forEach(x => { const sec = mhShopSection(mhShopCat(x)); (groups[sec] = groups[sec] || []).push(x); });
+    const fold = _shopUi.fold || {}, nSel = Math.max(1, Math.min(10, s.topN || 10)), list = mhShopShortlist(s);
+    const groups = {}; list.forEach(x => { const sec = mhShopSection(x.cat); (groups[sec] = groups[sec] || []).push(x); });
     const secs = Object.keys(groups).map(Number).sort((a, b) => a - b);
-    const qrow = q => { const k = mhShopKey(q); return '<div style="display:flex;align-items:center;gap:6px;padding:14px 4px;border-top:1px solid var(--border);"><div data-k="' + esc(k) + '" onclick="mhShopQuickTap(this.dataset.k)" style="flex:1;min-width:0;font-size:17px;color:' + (onList.has(k) ? 'var(--green)' : 'var(--text)') + ';cursor:pointer;">' + esc(q) + '</div><span data-k="' + esc(k) + '" onclick="mhShopQuickStar(this.dataset.k)" title="Keep in My usuals" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span><span data-k="' + esc(k) + '" onclick="mhShopQuickDrop(this.dataset.k)" title="Drop" style="cursor:pointer;color:var(--text3);padding:6px;font-size:16px;">✕</span></div>'; };
-    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ Quick list</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">The things you eat most. Tap one to put it on your shopping list, or "＋ all" for a whole aisle. ⭐ keeps it in My usuals, ✕ drops it. Anything already in My usuals is left out. Each press adds up to 10; press again for the next ones.</div>'
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;"><span style="font-size:13px;color:var(--text2);">Add the next</span><select id="mhShopQuickN" onchange="mhShopQuickN(this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => '<option value="' + n + '"' + (n === nSel ? ' selected' : '') + '>' + n + '</option>').join('') + '</select><span style="font-size:13px;color:var(--text2);">I eat most</span>' + btn('Add', 'mhShopTopFill(document.getElementById(\'mhShopQuickN\').value)', 'font-size:14px;padding:9px 16px;') + '</div>'
-      + (secs.map(sec => { const items = groups[sec], shut = !!fold['q' + sec]; return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'q' + sec + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + items.length + '</span></span><span onclick="mhShopQuickAddSection(' + sec + ')" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">＋ all</span></div>' + (shut ? '' : items.map(qrow).join('')); }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing here yet. Choose how many above and press Add.</div>')
+    const sm = 'cursor:pointer;padding:8px;font-size:16px;';
+    const qrow = x => '<div style="display:flex;align-items:center;gap:2px;padding:12px 4px;border-top:1px solid var(--border);"><div data-k="' + esc(x.key) + '" onclick="mhShopSuggestAdd(this.dataset.k)" style="flex:1;min-width:0;font-size:17px;color:var(--text);cursor:pointer;">' + esc(x.name) + '</div><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestStar(this.dataset.k)" title="Keep in My usuals" style="' + sm + '">⭐</span><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestSkip(this.dataset.k)" title="Not this time" style="' + sm + 'color:var(--text3);">✕</span><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestNever(this.dataset.k)" title="Never show this again" style="' + sm + '">🚫</span></div>';
+    const hid = s.never.map(k => { const kn = mhShopKnown().find(y => y.key === k); return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-top:1px solid var(--border);font-size:14px;color:var(--text2);"><span>' + esc(kn ? kn.name : k) + '</span><span data-k="' + esc(k) + '" onclick="mhShopSuggestRestore(this.dataset.k)" style="cursor:pointer;color:var(--accent);">show again</span></div>'; }).join('');
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ Quick list</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">The things you eat most that are not already on your list or in My usuals. Tap one to put it on your list. ⭐ keeps it in My usuals, ✕ means not this time, 🚫 means never show it again. Another takes its place.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;"><span style="font-size:13px;color:var(--text2);">Show my top</span><select id="mhShopQuickN" onchange="mhShopQuickN(this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => '<option value="' + n + '"' + (n === nSel ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>'
+      + (secs.map(sec => { const items = groups[sec], shut = !!fold['q' + sec]; return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'q' + sec + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + items.length + '</span></span><span onclick="mhShopSuggestAddSection(' + sec + ')" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">＋ all</span></div>' + (shut ? '' : items.map(qrow).join('')); }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to suggest right now. Log a few meals and it fills in.</div>')
+      + (s.never.length ? '<div style="margin-top:18px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);">Hidden suggestions (' + s.never.length + ')</div>' + hid : '')
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'usuals') {
     const onList = new Set(s.items.map(i => i.key));
@@ -27131,7 +27136,7 @@ function mhShopRender(keepFocus) {
     const addBar = '<div onclick="mhShopAddToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px;margin:6px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);cursor:pointer;font-size:15px;font-weight:600;color:var(--accent);"><span>＋ Add items</span><span style="color:var(--text3);font-size:13px;font-weight:400;">' + (addOpen ? '▾ hide' : '▸ show') + '</span></div>';
     const addPanel = addOpen ? '<div id="mhShopAddPanel" style="padding:8px 0 4px;">'
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="Type an item" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div>'
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + s.quick.length + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
     body = filt + count + rows + addBar + addPanel
       + '<button onclick="mhShopComplete()" style="width:100%;margin-top:16px;padding:16px;background:var(--green);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>';
   }
