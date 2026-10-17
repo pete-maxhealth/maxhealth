@@ -5,6 +5,8 @@
 ## v3.10.1096 – Shopping list: filter by name or brand
 - A **filter box** above the list (shows once the list has more than a few items). Type any part of a name or brand, such as "Asda" or "cream", and only matching items show, with a "Showing 3 of 12" line. All and None apply to what you can see, so you can untick or tick every double cream in one go. The ✕ clears it. It combines with the category chips.
 
+- **Shopping list is now its own tab under Log** (Log, History, Library, **Shopping**), laid out like Library: search box at the top (always there, not just once the list is long), then the list, with Add your own, All, None, By aisle, Copy and Shopping complete underneath. It is no longer a pop-up, so a long list scrolls naturally. The Today card button jumps straight to it, and the app search finds it.
+- **Shopping list layout fix:** the buttons (Refresh, My foods, Recipe, All, None, By aisle, Copy) each stretched the full width of the screen and squashed the "Add your own item" box to a sliver, pushing the list itself down the page. They now sit in a tidy wrapped row and the add box is full size.
 - **Card controls made identical (Fasting, Fibre, Water, Shopping list):** the same round **?** help button as the rest of the app (Fibre and Shopping had a different ⓘ, Fasting had a "details" word), the arrows / eye / hide on their own row, and the big number underneath instead of squeezed beside the controls. Fasting's long guidance now sits behind the one ? button.
 
 ## v3.10.1095 – One Language button on the first screen; the fibre audit never assumes a portion

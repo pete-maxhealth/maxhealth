@@ -37,9 +37,10 @@ with fresh_server() as root, sync_playwright() as pw:
       localStorage.removeItem('mh_shopping_v1');})()""")
     ev("mhShopSetTopN(1)"); ev("mhShopRefresh()")
     if ev("mhShopLoad().items.map(i=>i.name)") != ['Blueberries']: f.add('BUG', 'most recent/most eaten should rank first')
-    # open the modal and drive it
+    # open the Shopping tab and drive it
     ev("localStorage.removeItem('mh_shopping_v1'); mhShopSetTopN(10); mhShopRefresh(); mhShopOpen()")
-    if not ev("!!document.getElementById('mhShopModal')"): f.add('BUG', 'modal did not open')
+    if ev("document.getElementById('view-shop').classList.contains('active')") is not True or ev("document.getElementById('logtab-shop').classList.contains('active')") is not True: f.add('BUG', 'Shopping did not open as its own tab under Log')
+    if ev("document.getElementById('logtab-shop').textContent.trim()") != 'Shopping': f.add('BUG', 'Shopping sub-tab label wrong')
     # tick, select all/none
     id0 = ev("mhShopLoad().items[0].id"); ev("i=>mhShopToggle(i)", id0)
     if not ev("mhShopLoad().items[0].checked"): f.add('BUG', 'tick failed')
@@ -69,7 +70,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if cats.index('meat') != 0: f.add('BUG', f'aisle sort: meat not first {cats}')
     # picker: add something outside the top group, including a meal ingredient not in the library as an item
     ev("mhShopView('picker')")
-    txt = ev("document.getElementById('mhShopModal').innerText")
+    txt = ev("document.getElementById('mhShopPane').innerText")
     if 'Olive oil' not in txt or 'Rare Spice' not in txt: f.add('BUG', 'picker should list every known ingredient including meal ingredients')
     ev("mhShopPick('rare spice')"); ev("mhShopPick('olive oil')")
     names = ev("mhShopLoad().items.map(i=>i.name)")
@@ -110,6 +111,10 @@ with fresh_server() as root, sync_playwright() as pw:
     if '2 of' not in ev("document.getElementById('shopCount').textContent"): f.add('BUG', 'card count wrong')
     ev("mhShopComplete()")
     if len(ev("mhShopLoad().items")) != all_n - 2: f.add('BUG', 'shop complete should remove only the ticked items')
+    # layout (v1096): the action buttons sit in a row, and the add-your-own box stays usable
+    ev("mhShopOpen()")
+    if ev("document.querySelector('#mhShopPane .copy-btn').getBoundingClientRect().width") > 250: f.add('BUG', 'shopping list buttons stretch full width')
+    if ev("document.getElementById('mhShopOwn').getBoundingClientRect().width") < 120: f.add('BUG', 'add-your-own box squashed')
     # name filter (v1096)
     ev("(()=>{const s=mhShopLoad(); s.items=[{id:'a1',key:'a1',name:'Double Cream (Asda)',cat:'Dairy',checked:false},{id:'a2',key:'a2',name:'Double Cream (Tesco)',cat:'Dairy',checked:false},{id:'a3',key:'a3',name:'Butter (Asda)',cat:'Dairy',checked:false},{id:'a4',key:'a4',name:'Eggs',cat:'Dairy',checked:false},{id:'a5',key:'a5',name:'Spinach',cat:'Veg',checked:false}]; mhShopSave(s); mhShopOpen();})()")
     ev("mhShopLQ('asda')")
