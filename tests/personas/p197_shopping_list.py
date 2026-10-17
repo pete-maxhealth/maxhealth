@@ -7,10 +7,11 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500); ev = page.evaluate
-    old = ev("DEFAULT_DASHBOARD_ORDER.filter(k=>k!=='shopping').reverse()")
+    old = ev("[...DEFAULT_DASHBOARD_ORDER, 'shopping'].reverse()")
     ev("o=>localStorage.setItem('mh_dashboard_order', JSON.stringify(o))", old)
     ev("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
-    if 'shopping' not in ev("getDashboardOrder()"): f.add('BUG', 'shopping card not migrated into saved order')
+    if 'shopping' in ev("getDashboardOrder()"): f.add('BUG', 'shopping is a tab now: the old card key should be dropped from a saved order')
+    if ev("!!document.getElementById('dashSection-shopping')"): f.add('BUG', 'shopping card should not be on the Dashboard')
     ev("localStorage.removeItem('mh_dashboard_order')")
     # library: ingredients with different use, one meal with three ingredients
     ev("""saveLibrary([
@@ -22,7 +23,6 @@ with fresh_server() as root, sync_playwright() as pw:
       {id:'f',name:'Rare spice',kcal:5,protein:0,carbs:1,fat:0,useCount:0,isMeal:false},
       {id:'m',name:'Cheesy omelette',kcal:500,protein:35,carbs:3,fat:40,portion:'1 serving',isMeal:true,items:[{name:'Eggs',kcal:150},{name:'Cheddar',kcal:400},{name:'Olive oil',kcal:120}]}])""")
     ev("state.todayLog=[]; state.history=[]; updateDashboard()")
-    if ev("document.getElementById('shopCount').textContent") != 'Empty': f.add('BUG', 'card not empty at start')
     ev("mhShopSetTopN(2)"); ev("mhShopRefresh()")
     names = ev("mhShopLoad().items.map(i=>i.name)")
     if len(names) != 2 or names[0] != 'Chicken Thighs': f.add('BUG', f'top-2 by use wrong: {names}')
@@ -108,7 +108,6 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("i=>mhShopToggle(i)", ids[0]); ev("i=>mhShopToggle(i)", ids[1])
     page.reload(); page.wait_for_timeout(1500)
     if len(ev("mhShopLoad().items")) != all_n or ev("mhShopLoad().items.filter(i=>i.checked).length") != 2: f.add('BUG', 'list or ticks lost across reload')
-    if '2 of' not in ev("document.getElementById('shopCount').textContent"): f.add('BUG', 'card count wrong')
     ev("mhShopComplete()")
     if len(ev("mhShopLoad().items")) != all_n - 2: f.add('BUG', 'shop complete should remove only the ticked items')
     # layout (v1096): the action buttons sit in a row, and the add-your-own box stays usable
@@ -139,19 +138,14 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev(ROWS)[:3] != ['Butter (Asda)', 'Double Cream (Asda)', 'Eggs']: f.add('BUG', f"move up should swap with the item shown above it, not a hidden one {ev(ROWS)}")
     ev("mhShopToggle('a2')")
     # card controls
-    ev("toggleDashboardSectionHidden('shopping')")
-    if ev("getComputedStyle(document.getElementById('dashSection-shopping')).display") != 'none': f.add('BUG', 'hide did not hide the card')
-    ev("toggleDashboardSectionHidden('shopping')")
-    before = ev("getDashboardOrder().indexOf('shopping')"); ev("moveDashboardSection('shopping','down')")
-    if ev("getDashboardOrder().indexOf('shopping')") != before + 1: f.add('BUG', 'card reorder failed')
     # per-card fold and details (also Fibre, Water, Fasting): visible '▾ hide', body folds, details closed by default and open on the i
-    for k in ['fibre', 'water', 'fasting', 'shopping']:
+    for k in ['fibre', 'water', 'fasting']:
         if '▾ hide' not in ev("k=>document.getElementById(k+'BodyIcon').textContent", k): f.add('BUG', f'{k}: no visible hide control')
         ev("k=>mhCardBody(k)", k)
         if ev("k=>getComputedStyle(document.getElementById(k+'Body')).display", k) != 'none' or '▸ show' not in ev("k=>document.getElementById(k+'BodyIcon').textContent", k): f.add('BUG', f'{k}: fold failed')
         ev("k=>mhCardBody(k)", k)
         if ev("k=>getComputedStyle(document.getElementById(k+'Body')).display", k) == 'none': f.add('BUG', f'{k}: unfold failed')
-    for k in ['fibre', 'fasting', 'shopping']:
+    for k in ['fibre', 'fasting']:
         if ev("k=>getComputedStyle(document.getElementById(k+'Detail')).display", k) != 'none': f.add('BUG', f'{k}: details should start closed')
         ev("k=>mhCardInfo(k)", k)
         if ev("k=>getComputedStyle(document.getElementById(k+'Detail')).display", k) == 'none': f.add('BUG', f'{k}: details did not open')
