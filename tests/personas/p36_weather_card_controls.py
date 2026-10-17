@@ -23,7 +23,11 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("d=>{localStorage.setItem('mh_wx_loc',JSON.stringify({lat:38.42,lon:27.14,name:'Izmir'}));localStorage.setItem('mh_wx_cache',JSON.stringify({lat:38.42,lon:27.14,at:Date.now(),date:todayStr(),temp:30,feelsNow:32,code:0,feelsMax:33,hi:31,lo:22,uv:8,rainPct:5}))}")
     page.reload(wait_until='domcontentloaded'); page.wait_for_timeout(2500)
     order = page.evaluate("getDashboardOrder()")
-    exp = list(custom); exp.insert(exp.index('water'), 'weather'); exp.insert(exp.index('water'), 'fasting')  # fasting (v3.10.930) also slots in just above water
+    custom_m = []
+    for k in custom:   # v3.10.1097: 'steps' becomes the Move summary card in the same place, 'activity' moves to the Move tab
+        if k == 'steps': custom_m.append('movesum')
+        elif k != 'activity': custom_m.append(k)
+    exp = list(custom_m); exp.insert(exp.index('water'), 'weather'); exp.insert(exp.index('water'), 'fasting')  # fasting (v3.10.930) also slots in just above water
     exp.insert(exp.index('macros') + 1, 'mealplan')  # meal plan (v3.10.1040) slots in just after Calories & macros
     if 'stats' not in order: f.add('BUG', 'My statistics card missing from a migrated order')   # added v3.10.1081
     if 'fibre' not in order: f.add('BUG', 'Fibre card missing from a migrated order')   # added v3.10.1092

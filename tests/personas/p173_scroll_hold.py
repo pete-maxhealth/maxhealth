@@ -18,7 +18,10 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); page.evaluate("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
     ev = page.evaluate; ev("startDemoMode('alex')"); page.wait_for_timeout(2200)
     ev("document.getElementById('maintab-today').click()"); page.wait_for_timeout(300)
+    ev("switchSubTab('today','move')"); page.wait_for_timeout(300)   # v3.10.1097: the activity card lives on the Move tab
     ev("mhOpenResistance(); (()=>{const a=getActivities(); a.forEach(x=>{if(x.type==='resistance'){x.enabled=true}}); saveActivities(a); renderActivityCard();})()"); page.wait_for_timeout(400)
+    ev("document.querySelector('#resistanceSimple .activity-row').scrollIntoView({block:'center'})"); page.wait_for_timeout(300)
+    ev("typeof mhCheckOnline==='function' && mhCheckOnline()"); page.wait_for_timeout(2500)   # let the offline bar settle first (the test blocks the network); it is fixed-position chrome, not the card jumping
     ev("document.querySelector('#resistanceSimple .activity-row').scrollIntoView({block:'center'})"); page.wait_for_timeout(300)
     t0 = ev(POS)
     page.locator('#resistanceSimple .activity-dur').click(); page.keyboard.type('45'); page.wait_for_timeout(500)

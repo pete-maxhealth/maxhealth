@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1097 – A Move tab: exercise gets its own place under Today
+- **New Move tab** on Today (Dashboard | **Move** | Supplements). Daily steps and Today's activity (activities, plan ahead, add exercise, resistance, routines, treatments of effort) now live there, so the exercise third of nutrition / exercise / sleep is no longer scattered down a long Dashboard.
+- **Dashboard keeps a slim Move card:** today's steps and what you have logged, with an Open Move button. It has the same ? help, show/hide, reorder and fold controls as the other cards. Nothing is estimated; with no steps it says so.
+- **Move cards have their own show/hide and reorder,** with a Hidden strip to bring one back. Default on the Move screen resets only Move, never the Dashboard.
+- **Nothing is lost:** a saved Dashboard order keeps its shape (the old steps slot becomes the Move card, activity moves to the Move tab) and a card you had hidden stays hidden. Typed commands ("hide the steps card", "hide the move card") and app search still find everything; links that used to scroll to the activity card now open the Move tab.
+
 ## v3.10.1096 – Shopping list: filter by name or brand
 - A **filter box** above the list (shows once the list has more than a few items). Type any part of a name or brand, such as "Asda" or "cream", and only matching items show, with a "Showing 3 of 12" line. All and None apply to what you can see, so you can untick or tick every double cream in one go. The ✕ clears it. It combines with the category chips.
 
