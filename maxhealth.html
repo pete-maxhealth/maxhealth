@@ -2918,6 +2918,20 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="margin-top:6px;"><a href="#" onclick="event.preventDefault();mhNutrientAudit()" style="font-size:11px;color:var(--accent);">Check which foods are missing fibre and other figures</a></div>
     </div>
 
+    <div class="water-card" id="dashSection-shopping">
+      <div class="water-header">
+        <div class="water-title">🛒 Shopping list</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
+          <span onclick="moveDashboardSection('shopping','up')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▲</span>
+          <span onclick="moveDashboardSection('shopping','down')" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">▼</span>
+          <span onclick="toggleDashboardSectionHidden('shopping')" title="Hide" style="cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;">👁</span>
+          <div class="water-amount" id="shopCount" style="min-width:0;">Empty</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px;line-height:1.5;">Built from what you eat most, your meal plan and your recipes. Tick things into the basket as you shop.</div>
+      <div style="margin-top:8px;"><button class="copy-btn" style="font-size:13px;padding:9px 14px;" onclick="mhShopOpen()">Open shopping list</button></div>
+    </div>
+
     <div class="water-card mh-nostats" id="dashSection-stats">
       <div class="water-header">
         <div class="water-title">📊 My statistics</div>
@@ -6486,7 +6500,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1093'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1094'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -19716,7 +19730,7 @@ function handleRemainingQuery(lower, totals, targets) {
 // Only fires on short phrases that end in card/cards/section, so ordinary food and weight questions are never hijacked.
 const MH_CARD_WORDS = { weight: 'weight', 'day mode': 'daymode', ketosis: 'ketosis', calories: 'macros', macros: 'macros', 'calories and macros': 'macros', 'calories & macros': 'macros',
   'macro ratio': 'macroratio', 'goal check': 'goalcheck', steps: 'steps', symptoms: 'symptoms', treatment: 'treatment', activity: 'activity', weather: 'weather',
-  fasting: 'fasting', water: 'water', fibre: 'fibre', guides: 'guides' };
+  fasting: 'fasting', water: 'water', fibre: 'fibre', shopping: 'shopping', 'shopping list': 'shopping', guides: 'guides' };
 function handleLayoutQuery(lower) {
   const t = lower.replace(/[?!.,]/g, '').trim(); if (t.split(' ').length > 8) return false;
   let m;
@@ -25014,7 +25028,7 @@ function renderActivityCreditBalance() {
 // This gets the same real value — cards in whatever order you actually want —
 // at a fraction of the risk.
 const DASHBOARD_SECTIONS_KEY = 'mh_dashboard_order';
-const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'mealplan', 'macroratio', 'fibre', 'goalcheck', 'steps', 'symptoms', 'treatment', 'activity', 'weather', 'stats', 'fasting', 'water', 'log', 'guides'];
+const DEFAULT_DASHBOARD_ORDER = ['weight', 'daymode', 'ketosis', 'macros', 'mealplan', 'macroratio', 'fibre', 'shopping', 'goalcheck', 'steps', 'symptoms', 'treatment', 'activity', 'weather', 'stats', 'fasting', 'water', 'log', 'guides'];
 // Some sections are more than one DOM element (a card plus its own paired verdict
 // or tooltip) — these must move together as a unit, or you'd end up with a card
 // separated from its own conclusion. Each key can list multiple ids in order.
@@ -25028,6 +25042,7 @@ const DASHBOARD_SECTION_IDS = {
   macroratio: ['macroRatioCard', 'ketoSmartAlert'],
   goalcheck:  ['dashSection-goalcheck'],
   fibre:      ['dashSection-fibre'],
+  shopping:   ['dashSection-shopping'],
   steps:      ['dailyStepsCard'],
   symptoms:   ['dashSection-symptoms'],
   treatment:  ['dashSection-treatment'],
@@ -25042,6 +25057,11 @@ const DASHBOARD_SECTION_IDS = {
 function getDashboardOrder() {
   try {
     let stored = JSON.parse(localStorage.getItem(DASHBOARD_SECTIONS_KEY) || 'null');
+    // Migration (v3.10.1094): the Shopping list card slots in just after Fibre (or Meal plan) for anyone with a saved order.
+    if (Array.isArray(stored) && !stored.includes('shopping')) {
+      let si = stored.indexOf('fibre'); if (si < 0) si = stored.indexOf('mealplan'); si = si > -1 ? si + 1 : stored.length;
+      stored = [...stored]; stored.splice(si, 0, 'shopping'); localStorage.setItem(DASHBOARD_SECTIONS_KEY, JSON.stringify(stored));
+    }
     // Migration (v3.10.1092): the Fibre card slots in just after Macro ratio (or Calories & macros) for anyone with a saved order.
     if (Array.isArray(stored) && !stored.includes('fibre')) {
       let fi = stored.indexOf('macroratio'); if (fi < 0) fi = stored.indexOf('macros'); fi = fi > -1 ? fi + 1 : stored.length;
@@ -26504,6 +26524,7 @@ function updateDashboard(skipActivityRender) {
   applyDashboardOrder();
   try { mhStatTodayRender(); } catch (_) {}
   try { mhFibreRender(); } catch (_) {}
+  try { mhShopCardRender(); } catch (_) {}
 }
 
 // Ketosis streak milestones — the counter previously just ticked up silently
@@ -26765,6 +26786,181 @@ function mhAuditSave(id, none) {
   f.fibreChecked = true; saveLibrary(lib);
   try { renderLibrary(); } catch (_) {} try { mhFibreRender(); } catch (_) {}
   mhNutrientAudit();
+}
+
+// ── Shopping list (v3.10.1094) ─────────────────────────────────────────────────────────────────────────────────────────────────
+// A basket that builds itself from what you actually eat. Refresh adds the top N most-used, most-recent ingredients (N is
+// MH_SHOP_TOPN_DEFAULT until you change it), plus the ingredients of anything on your meal plan. It only ever ADDS: it never
+// removes, unticks or un-hides anything, so the list stays exactly as you left it until you press Shop complete and empty the
+// basket. Recipes can be added with any ingredient left out, and "I have it" remembers staples so they are never suggested.
+// Stored in one key (mh_shopping_v1), so it is in every backup.
+const MH_SHOP_KEY = 'mh_shopping_v1';
+const MH_SHOP_TOPN_DEFAULT = 10;
+const MH_SHOP_AISLES = ['meat', 'fish', 'dairy', 'vegetable', 'salad', 'fruit', 'bread', 'grain', 'beansandpulses', 'breakfastcereal', 'fat', 'herbsandspices', 'savoury', 'sweet', 'alcohol', 'protein'];
+const MH_SHOP_AISLE_NAMES = { meat: 'Meat', fish: 'Fish', dairy: 'Dairy', vegetable: 'Vegetables', salad: 'Salad', fruit: 'Fruit', bread: 'Bread', grain: 'Grains', beansandpulses: 'Beans & pulses', breakfastcereal: 'Cereal', fat: 'Oils & fats', herbsandspices: 'Herbs & spices', savoury: 'Savoury', sweet: 'Sweet', alcohol: 'Drinks', protein: 'Protein', other: 'Other' };
+let _shopUi = { view: 'list', cat: '', showHidden: false, q: '', recipe: null, msg: '' };
+function mhShopLoad() {
+  let s = null; try { s = JSON.parse(localStorage.getItem(MH_SHOP_KEY) || 'null'); } catch (_) {}
+  if (!s || typeof s !== 'object') s = {};
+  if (!Array.isArray(s.items)) s.items = []; if (!Array.isArray(s.pantry)) s.pantry = []; if (!s.recipeEx || typeof s.recipeEx !== 'object') s.recipeEx = {};
+  s.topN = parseInt(s.topN) > 0 ? Math.min(100, parseInt(s.topN)) : MH_SHOP_TOPN_DEFAULT;
+  return s;
+}
+function mhShopSave(s) { try { localStorage.setItem(MH_SHOP_KEY, JSON.stringify(s)); } catch (_) {} try { mhShopCardRender(); } catch (_) {} }
+function mhShopKey(n) { try { return normalizeFoodName(String(n || '')).toLowerCase().trim(); } catch (_) { return String(n || '').toLowerCase().trim(); } }
+function mhShopCat(f) {
+  let cats = []; try { cats = getItemCategories(typeof f === 'string' ? { name: f } : f) || []; } catch (_) {}
+  const hit = MH_SHOP_AISLES.find(a => cats.includes(a)); return hit || cats[0] || 'other';
+}
+function mhShopAisleName(c) { return MH_SHOP_AISLE_NAMES[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : 'Other'); }
+function mhShopMealIngs(m) { return ((m && m.items) || []).map(i => i && i.name).filter(Boolean); }
+function mhShopFindMeal(name) { const k = mhShopKey(name); try { return loadLibrary().find(f => f && f.name && isMealEntry(f) && mhShopKey(f.name) === k) || null; } catch (_) { return null; } }
+// All ingredient names the app knows: library ingredients plus the ingredients inside library meals.
+function mhShopKnown() {
+  const out = new Map(); let lib = []; try { lib = loadLibrary(); } catch (_) {}
+  lib.forEach(f => { if (!f || !f.name) return; if (!isMealEntry(f)) { const k = mhShopKey(f.name); if (k && !out.has(k)) out.set(k, { key: k, name: f.name, cat: mhShopCat(f) }); } else mhShopMealIngs(f).forEach(n => { const k = mhShopKey(n); if (k && !out.has(k)) out.set(k, { key: k, name: n, cat: mhShopCat(n) }); }); });
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+function mhShopSetAdd(s, name, src, from, cat) {
+  const k = mhShopKey(name); if (!k || s.items.some(i => i.key === k)) return false;
+  s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: k, name: String(name).trim(), cat: cat || mhShopCat(name), checked: false, hidden: false, src: src || 'own', from: from || '' });
+  return true;
+}
+// Most used, most recent: foods eaten in the last 30 days (a library meal counts for each of its ingredients), then library use count.
+function mhShopRanked() {
+  const cut = new Date(); cut.setDate(cut.getDate() - 30); const cnt = {}, last = {};
+  const bump = (name, ts) => { const k = mhShopKey(name); if (!k) return; cnt[k] = (cnt[k] || 0) + 1; last[k] = Math.max(last[k] || 0, ts); };
+  const eat = (e, ts) => {
+    if (!e || mhIsDeviceStub(e)) return;
+    const subs = (e.items && e.items.length) ? e.items : null;
+    if (subs) subs.forEach(i => i && i.name && eatOne(i.name, ts)); else eatOne(e.name || e.description, ts);
+  };
+  const eatOne = (name, ts) => { const m = name ? mhShopFindMeal(name) : null; if (m && mhShopMealIngs(m).length) mhShopMealIngs(m).forEach(n => bump(n, ts)); else if (name) bump(name, ts); };
+  (state.history || []).forEach(d => { let t = 0; try { t = new Date(isoDate(d.date) + 'T12:00:00').getTime(); } catch (_) {} if (!(t >= cut.getTime())) return; (d.log || []).forEach(e => eat(e, t)); });
+  (state.todayLog || []).forEach(e => eat(e, Date.now()));
+  const use = {}; try { loadLibrary().forEach(f => { if (f && f.name && !isMealEntry(f)) use[mhShopKey(f.name)] = f.useCount || f.uses || 0; else if (f && f.name) mhShopMealIngs(f).forEach(n => { const k = mhShopKey(n); use[k] = Math.max(use[k] || 0, f.useCount || 0); }); }); } catch (_) {}
+  const known = new Map(mhShopKnown().map(x => [x.key, x]));
+  return [...new Set([...Object.keys(cnt), ...Object.keys(use).filter(k => use[k] > 0)])].filter(k => known.has(k))
+    .sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0) || (last[b] || 0) - (last[a] || 0) || (use[b] || 0) - (use[a] || 0) || a.localeCompare(b))
+    .map(k => known.get(k));
+}
+// Ingredients of a meal, minus anything left out of that recipe and minus staples you always have.
+function mhShopRecipeIngs(mealName, s) {
+  const m = mhShopFindMeal(mealName); if (!m) return null;
+  const ex = new Set(s.recipeEx[mhShopKey(m.name)] || []);
+  return mhShopMealIngs(m).filter((n, i, a) => a.findIndex(x => mhShopKey(x) === mhShopKey(n)) === i).map(n => ({ name: n, key: mhShopKey(n), off: ex.has(mhShopKey(n)), have: s.pantry.includes(mhShopKey(n)) }));
+}
+function mhShopRefresh() {
+  const s = mhShopLoad(); let added = 0, fromPlan = 0;
+  // 1) meal plan: every planned food; a planned library meal brings its included ingredients, anything else is added as it is
+  let plan = []; try { plan = mhPlanLoad(); } catch (_) {}
+  plan.forEach(p => (p.foods || []).forEach(f => {
+    const ings = f && f.name ? mhShopRecipeIngs(f.name, s) : null;
+    if (ings && ings.length) ings.forEach(g => { if (!g.off && !g.have && mhShopSetAdd(s, g.name, 'plan', f.name)) { added++; fromPlan++; } });
+    else if (f && f.name && !s.pantry.includes(mhShopKey(f.name)) && mhShopSetAdd(s, f.name, 'plan', 'plan')) { added++; fromPlan++; }
+  }));
+  // 2) top N of what you eat most, counting only those not already on the list and not staples
+  const room = s.topN; let top = 0;
+  for (const c of mhShopRanked()) { if (top >= room) break; if (s.pantry.includes(c.key)) continue; if (s.items.some(i => i.key === c.key)) { continue; } if (mhShopSetAdd(s, c.name, 'top', '', c.cat)) { added++; top++; } }
+  mhShopSave(s); _shopUi.msg = added ? (added + ' added' + (fromPlan ? ' (' + fromPlan + ' from your meal plan)' : '')) : 'Already up to date'; mhShopRender();
+  return added;
+}
+function mhShopVisible(s) {
+  return s.items.filter(i => (_shopUi.showHidden || !i.hidden) && (!_shopUi.cat || i.cat === _shopUi.cat));
+}
+function mhShopCardRender() {
+  const el = document.getElementById('shopCount'); if (!el) return;
+  const s = mhShopLoad(), live = s.items.filter(i => !i.hidden), got = live.filter(i => i.checked).length;
+  el.textContent = live.length ? got + ' of ' + live.length + ' in basket' : 'Empty';
+}
+function mhShopOpen() { _shopUi = Object.assign(_shopUi, { view: 'list', recipe: null, q: '' }); mhShopRender(); }
+function mhShopClose() { const m = document.getElementById('mhShopModal'); if (m) m.remove(); mhShopCardRender(); }
+function mhShopToggle(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { i.checked = !i.checked; mhShopSave(s); } mhShopRender(); }
+function mhShopHide(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { i.hidden = !i.hidden; mhShopSave(s); } mhShopRender(); }
+function mhShopHave(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { if (!s.pantry.includes(i.key)) s.pantry.push(i.key); s.items = s.items.filter(x => x.id !== id); mhShopSave(s); _shopUi.msg = i.name + ' will not be suggested again'; } mhShopRender(); }
+function mhShopMove(id, dir) {
+  const s = mhShopLoad(), vis = mhShopVisible(s), vi = vis.findIndex(x => x.id === id), ni = vi + (dir === 'up' ? -1 : 1);
+  if (vi < 0 || ni < 0 || ni >= vis.length) return;
+  const a = s.items.findIndex(x => x.id === id), b = s.items.findIndex(x => x.id === vis[ni].id);
+  const t = s.items[a]; s.items[a] = s.items[b]; s.items[b] = t; mhShopSave(s); mhShopRender();
+}
+function mhShopAll(on) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.hidden).map(i => i.id)); s.items.forEach(i => { if (ids.has(i.id)) i.checked = !!on; }); mhShopSave(s); mhShopRender(); }
+function mhShopSortAisle() { const s = mhShopLoad(), ix = c => { const n = MH_SHOP_AISLES.indexOf(c); return n < 0 ? 99 : n; }; s.items = s.items.map((x, n) => [x, n]).sort((a, b) => ix(a[0].cat) - ix(b[0].cat) || a[1] - b[1]).map(p => p[0]); mhShopSave(s); mhShopRender(); }
+function mhShopSetCat(c) { _shopUi.cat = _shopUi.cat === c ? '' : c; mhShopRender(); }
+function mhShopShowHidden() { _shopUi.showHidden = !_shopUi.showHidden; mhShopRender(); }
+function mhShopSetTopN(v) { const s = mhShopLoad(), n = parseInt(v); if (n > 0 && n <= 100) { s.topN = n; mhShopSave(s); } mhShopRender(); }
+function mhShopComplete() {
+  const s = mhShopLoad(), n = s.items.filter(i => i.checked).length;
+  if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
+  if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked stays.')) return;
+  s.items = s.items.filter(i => !i.checked); mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
+}
+function mhShopCopy() {
+  const s = mhShopLoad(), txt = mhShopVisible(s).filter(i => !i.hidden && !i.checked).map(i => '- ' + i.name).join('\n');
+  try { navigator.clipboard.writeText(txt).then(() => showToast('List copied'), () => showToast('Could not copy')); } catch (_) { showToast('Could not copy'); }
+}
+function mhShopAddOwn() {
+  const inp = document.getElementById('mhShopOwn'), v = inp ? inp.value.trim() : ''; if (!v) return;
+  const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== mhShopKey(v)); _shopUi.msg = mhShopSetAdd(s, v, 'own') ? 'Added' : 'Already on the list'; mhShopSave(s); mhShopRender();
+}
+function mhShopPick(key) { const known = mhShopKnown().find(x => x.key === key); if (!known) return; const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); const ex = s.items.find(i => i.key === key); if (ex) ex.hidden = false; else mhShopSetAdd(s, known.name, 'pick', '', known.cat); mhShopSave(s); mhShopRender(); }
+function mhShopQ(v) { _shopUi.q = v; mhShopRender(true); }
+function mhShopView(v, r) { _shopUi.view = v; _shopUi.recipe = r || null; _shopUi.q = ''; mhShopRender(); }
+function mhShopRecipeToggle(mealKey, ingKey) { const s = mhShopLoad(), ex = new Set(s.recipeEx[mealKey] || []); if (ex.has(ingKey)) ex.delete(ingKey); else ex.add(ingKey); s.recipeEx[mealKey] = [...ex]; mhShopSave(s); mhShopRender(); }
+function mhShopRecipeAdd(mealKey) {
+  const s = mhShopLoad(), m = mhShopFindMeal(mealKey); if (!m) return; let n = 0;
+  (mhShopRecipeIngs(m.name, s) || []).forEach(g => { if (!g.off) { s.pantry = s.pantry.filter(k => k !== g.key); if (mhShopSetAdd(s, g.name, 'recipe', m.name)) n++; else { const ex = s.items.find(i => i.key === g.key); if (ex) ex.hidden = false; } } });
+  mhShopSave(s); _shopUi.msg = n + ' ingredient' + (n === 1 ? '' : 's') + ' added from ' + m.name; _shopUi.view = 'list'; mhShopRender();
+}
+function mhShopUnpantry(key) { const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
+function mhShopRender(keepFocus) {
+  const esc = mhPlanEsc, s = mhShopLoad(); let m = document.getElementById('mhShopModal');
+  if (!m) { m = document.createElement('div'); m.id = 'mhShopModal'; m.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;'; document.body.appendChild(m); }
+  const btn = (label, fn, extra) => '<button class="copy-btn" style="font-size:12px;padding:7px 10px;' + (extra || '') + '" onclick="' + fn + '">' + label + '</button>';
+  const head = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">🛒 Shopping list</div><span onclick="mhShopClose()" style="cursor:pointer;color:var(--text3);font-size:20px;padding:0 6px;">✕</span></div>';
+  const msg = _shopUi.msg ? '<div id="mhShopMsg" style="font-size:12px;color:var(--green);margin-bottom:6px;">' + esc(_shopUi.msg) + '</div>' : ''; _shopUi.msg = '';
+  let body = '';
+  if (_shopUi.view === 'picker') {
+    const q = (_shopUi.q || '').toLowerCase(), on = new Set(s.items.filter(i => !i.hidden).map(i => i.key)), all = mhShopKnown().filter(x => !q || x.name.toLowerCase().includes(q));
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add from my foods</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Every ingredient you have saved, including those inside your meals. Tap to add.</div>'
+      + '<input id="mhShopQ" value="' + esc(_shopUi.q) + '" oninput="mhShopQ(this.value)" placeholder="Search ingredients" style="width:100%;box-sizing:border-box;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;margin-bottom:8px;">'
+      + (all.slice(0, 80).map(x => '<div onclick="mhShopPick(this.dataset.k)" data-k="' + esc(x.key) + '" data-pick="' + esc(x.name) + '" style="display:flex;justify-content:space-between;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(x.cat)) + '</span></span><span style="color:' + (on.has(x.key) ? 'var(--green)' : 'var(--accent)') + ';">' + (on.has(x.key) ? 'on list ✓' : '+ add') + '</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing matches.</div>')
+      + (all.length > 80 ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + (all.length - 80) + ' more: keep typing to narrow it down.</div>' : '')
+      + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
+  } else if (_shopUi.view === 'recipes') {
+    let meals = []; try { meals = loadLibrary().filter(f => f && f.name && isMealEntry(f) && mhShopMealIngs(f).length); } catch (_) {}
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Pick a meal, then untick any ingredient you do not need to buy.</div>'
+      + (meals.map(f => '<div onclick="mhShopView(\'recipe\',this.dataset.k)" data-k="' + esc(mhShopKey(f.name)) + '" style="padding:10px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;">' + esc(f.name) + ' <span style="font-size:11px;color:var(--text3);">' + mhShopMealIngs(f).length + ' ingredients</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">No saved meals with ingredients yet.</div>')
+      + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
+  } else if (_shopUi.view === 'recipe') {
+    const meal = mhShopFindMeal(_shopUi.recipe), ings = meal ? mhShopRecipeIngs(meal.name, s) : [], mk = meal ? mhShopKey(meal.name) : '';
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">' + esc(meal ? meal.name : 'Recipe') + '</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Tick what to buy. Unticked ingredients are remembered for this recipe.</div>'
+      + ings.map(g => '<label data-ing="' + esc(g.name) + '" style="display:flex;gap:10px;align-items:center;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><input type="checkbox" ' + (g.off ? '' : 'checked') + ' data-m="' + esc(mk) + '" data-k="' + esc(g.key) + '" onchange="mhShopRecipeToggle(this.dataset.m,this.dataset.k)"><span style="flex:1;">' + esc(g.name) + '</span>' + (g.have ? '<span style="font-size:10px;color:var(--text3);">you always have it</span>' : '') + '</label>').join('')
+      + '<div style="display:flex;gap:8px;margin-top:12px;">' + '<button class="copy-btn" style="font-size:12px;padding:7px 10px;background:var(--accent);color:#fff;" data-m="' + esc(mk) + '" onclick="mhShopRecipeAdd(this.dataset.m)">Add to list</button>' + btn('Back', "mhShopView('recipes')") + '</div>';
+  } else if (_shopUi.view === 'pantry') {
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Things I always have</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Never suggested by Refresh or added from a recipe.</div>'
+      + (s.pantry.map(k => '<div style="display:flex;justify-content:space-between;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><span>' + esc(k) + '</span><span data-k="' + esc(k) + '" onclick="mhShopUnpantry(this.dataset.k)" style="color:var(--accent);cursor:pointer;">remove</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing yet. Tap 🏠 on a list item to add it here.</div>')
+      + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
+  } else {
+    const vis = mhShopVisible(s), cats = [...new Set(s.items.filter(i => _shopUi.showHidden || !i.hidden).map(i => i.cat))].sort((a, b) => { const x = MH_SHOP_AISLES.indexOf(a), y = MH_SHOP_AISLES.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
+    const chips = cats.length > 1 ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' + cats.map(c => '<span data-cat="' + esc(c) + '" onclick="mhShopSetCat(this.dataset.cat)" style="padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid var(--border);' + (_shopUi.cat === c ? 'background:var(--accent);color:#fff;' : 'color:var(--text2);') + '">' + esc(mhShopAisleName(c)) + '</span>').join('') + '</div>' : '';
+    const srcIcon = { plan: '🗓', recipe: '🍲', pick: '➕', own: '✏️', top: '' };
+    const rows = vis.map((i, n) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-top:1px solid var(--border);' + (i.hidden ? 'opacity:0.45;' : '') + '">'
+      + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' onchange="mhShopToggle(\'' + i.id + '\')" style="width:20px;height:20px;">'
+      + '<div style="flex:1;min-width:0;font-size:14px;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(i.cat)) + (srcIcon[i.src] ? ' ' + srcIcon[i.src] : '') + (i.from && i.src === 'recipe' ? ' ' + esc(i.from) : '') + '</span></div>'
+      + '<span title="Move up" onclick="mhShopMove(\'' + i.id + '\',\'up\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">▲</span><span title="Move down" onclick="mhShopMove(\'' + i.id + '\',\'down\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">▼</span>'
+      + '<span title="' + (i.hidden ? 'Show' : 'Hide') + '" onclick="mhShopHide(\'' + i.id + '\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">👁</span><span title="I always have this" onclick="mhShopHave(\'' + i.id + '\')" style="cursor:pointer;padding:2px 5px;">🏠</span></div>').join('');
+    const hiddenN = s.items.filter(i => i.hidden).length, live = s.items.filter(i => !i.hidden), got = live.filter(i => i.checked).length;
+    body = '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;">' + (live.length ? got + ' of ' + live.length + ' in the basket' : 'Your list is empty. Press Refresh to build it from what you eat.') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' + btn('🔄 Refresh', 'mhShopRefresh()', 'background:var(--accent);color:#fff;') + btn('➕ My foods', "mhShopView('picker')") + btn('🍲 Recipe', "mhShopView('recipes')") + btn('☑ All', 'mhShopAll(true)') + btn('☐ None', 'mhShopAll(false)') + btn('↕ By aisle', 'mhShopSortAisle()') + btn('📋 Copy', 'mhShopCopy()') + '</div>'
+      + '<div style="display:flex;gap:6px;margin-bottom:8px;"><input id="mhShopOwn" placeholder="Add your own item" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:9px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;">' + btn('Add', 'mhShopAddOwn()') + '</div>'
+      + chips + rows
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;align-items:center;">' + (hiddenN ? btn((_shopUi.showHidden ? 'Hide' : 'Show') + ' ' + hiddenN + ' hidden', 'mhShopShowHidden()') : '') + btn('🏠 Always have (' + s.pantry.length + ')', "mhShopView('pantry')")
+      + '<span style="font-size:11px;color:var(--text3);">Refresh adds top</span><select id="mhShopTopN" onchange="mhShopSetTopN(this.value)" style="padding:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;">' + [...new Set([5, 10, 15, 20, 30, 50, s.topN])].sort((a, b) => a - b).map(n => '<option value="' + n + '"' + (n === s.topN ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>'
+      + '<button onclick="mhShopComplete()" style="width:100%;margin-top:14px;padding:12px;background:var(--green);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>';
+  }
+  m.innerHTML = '<div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:18px 16px 28px;max-height:90vh;overflow-y:auto;">' + head + msg + body + '</div>';
+  if (keepFocus) { const q = document.getElementById('mhShopQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
 function mhIsDeviceStub(e) { return !!e && e.time === '23:59' && !(e.kcal > 0) && Number(e.id) < 1e10; }
 // Meal time in the edit forms (v3.10.931). Editing a portion never moves the time a meal was eaten; this lets the time be
@@ -43152,7 +43348,7 @@ const MH_DASH_CARDS = [
   ['weight', 'dashSection-weight', '\u2696\uFE0F Weight'], ['daymode', 'dashSection-daymode', 'Day mode'], ['ketosis', 'dashSection-ketosis', 'Ketosis'],
   ['macros', 'dashSection-macros', 'Calories & macros'], ['mealplan', 'dashSection-mealplan', '\uD83D\uDDD3 Meal plan'], ['macroratio', 'macroRatioCard', 'Macro ratio today'], ['goalcheck', 'dashSection-goalcheck', 'Goal check'],
   ['symptoms', 'dashSection-symptoms', 'Symptoms'], ['treatment', 'dashSection-treatment', 'Treatment'], ['wx', 'mhWxCard', '\uD83C\uDF24 Local weather'],
-  ['fasting', 'dashSection-fasting', '\u23F1 Fasting'], ['water', 'dashSection-water', '\uD83D\uDCA7 Water'], ['fibre', 'dashSection-fibre', '\uD83C\uDF3E Fibre']];
+  ['fasting', 'dashSection-fasting', '\u23F1 Fasting'], ['water', 'dashSection-water', '\uD83D\uDCA7 Water'], ['fibre', 'dashSection-fibre', '\uD83C\uDF3E Fibre'], ['shopping', 'dashSection-shopping', '\uD83D\uDED2 Shopping list']];
 // What each collapsed bar says on its right, read live from the card itself, so a folded screen still works as a dashboard.
 function mhDcSummary(k) {
   const t = id => { const e = document.getElementById(id); return e ? (e.textContent || '').replace(/\s+/g, ' ').trim() : ''; };
@@ -43166,6 +43362,7 @@ function mhDcSummary(k) {
     if (k === 'fasting') { const v = t('fastNowVal'); return v && v[0] !== '\u2014' ? v : ''; }
     if (k === 'water') return `${t('waterAmount')} ${t('waterTarget')}`;
     if (k === 'fibre') return `${t('fibreAmount')} ${t('fibreTarget')}`;
+    if (k === 'shopping') return t('shopCount');
   } catch (_) {}
   return '';
 }

@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1094 – Shopping list
+- **🛒 Shopping list** (new Today card with show/hide and reorder, and a full list behind it). **Refresh** builds it from what you actually eat: the top N most-used, most-recent ingredients (10 by default; pick 5 to 50 on the list; a saved meal counts for each of its ingredients), plus the ingredients of anything on your meal plan. Refresh only ever adds: it never removes, unticks or un-hides anything, so the list stays exactly as you left it until you press **Shopping complete**, which empties the ticked items from the basket and keeps the rest.
+- Tick or untick items, **All** / **None** (applies to what you are looking at, so "all the meat" works), hide and show hidden, reorder with the arrows, filter by category (just the butcher, say), and **By aisle** to sort the whole list in shopping order. **Copy** puts the unticked items on the clipboard as a plain list.
+- **My foods picker:** every ingredient you have saved, including those inside your meals, with search, so you can add things Refresh would not pick up. Your own free-text items too.
+- **Recipes:** pick a saved meal and untick any ingredient you do not need to buy; the choice is remembered per recipe, and the meal plan feed honours it.
+- **I always have this** (🏠): staples such as salt or olive oil come off the list and are never suggested or added from a recipe again; manage them under "Always have".
+- Stored in one key (`mh_shopping_v1`), so it is in every backup. Test p197; p36 now expects the new card in a migrated order.
+
 ## v3.10.1093 – Premium register-interest moved to a Tally form
 - Every "register your interest" link (app, landing page, guides, public README) now points at the Tally form, because the GoDaddy website-builder plan cannot run PHP or take sign-ups. The licence service address is unchanged and still needs PHP hosting later.
 
