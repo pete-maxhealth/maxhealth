@@ -8,6 +8,7 @@
 - **My foods picker:** every ingredient you have saved, including those inside your meals, with search, so you can add things Refresh would not pick up. Your own free-text items too.
 - **Recipes:** pick a saved meal and untick any ingredient you do not need to buy; the choice is remembered per recipe, and the meal plan feed honours it.
 - **I always have this** (🏠): staples such as salt or olive oil come off the list and are never suggested or added from a recipe again; manage them under "Always have".
+- **Quieter cards:** Fibre, Water, Fasting and Shopping now have a visible **▾ hide / ▸ show** on the card (folds it to its title; remembered), and the explanatory text under the progress bar (Fibre's 14-day note and audit link, Fasting's last-meal and window lines, the shopping blurb) sits behind a small **ⓘ / details** toggle, closed by default. The fasting caution is never hidden.
 - Stored in one key (`mh_shopping_v1`), so it is in every backup. Test p197; p36 now expects the new card in a migrated order.
 
 ## v3.10.1093 – Premium register-interest moved to a Tally form

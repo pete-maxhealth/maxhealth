@@ -116,5 +116,20 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("toggleDashboardSectionHidden('shopping')")
     before = ev("getDashboardOrder().indexOf('shopping')"); ev("moveDashboardSection('shopping','down')")
     if ev("getDashboardOrder().indexOf('shopping')") != before + 1: f.add('BUG', 'card reorder failed')
+    # per-card fold and details (also Fibre, Water, Fasting): visible '▾ hide', body folds, details closed by default and open on the i
+    for k in ['fibre', 'water', 'fasting', 'shopping']:
+        if '▾ hide' not in ev("k=>document.getElementById(k+'BodyIcon').textContent", k): f.add('BUG', f'{k}: no visible hide control')
+        ev("k=>mhCardBody(k)", k)
+        if ev("k=>getComputedStyle(document.getElementById(k+'Body')).display", k) != 'none' or '▸ show' not in ev("k=>document.getElementById(k+'BodyIcon').textContent", k): f.add('BUG', f'{k}: fold failed')
+        ev("k=>mhCardBody(k)", k)
+        if ev("k=>getComputedStyle(document.getElementById(k+'Body')).display", k) == 'none': f.add('BUG', f'{k}: unfold failed')
+    for k in ['fibre', 'fasting', 'shopping']:
+        if ev("k=>getComputedStyle(document.getElementById(k+'Detail')).display", k) != 'none': f.add('BUG', f'{k}: details should start closed')
+        ev("k=>mhCardInfo(k)", k)
+        if ev("k=>getComputedStyle(document.getElementById(k+'Detail')).display", k) == 'none': f.add('BUG', f'{k}: details did not open')
+        ev("k=>mhCardInfo(k)", k)
+    page.reload(); page.wait_for_timeout(1200); ev("mhCardBody('water')"); page.reload(); page.wait_for_timeout(1200)
+    if ev("getComputedStyle(document.getElementById('waterBody')).display") != 'none': f.add('BUG', 'fold not remembered across reload')
+    ev("mhCardBody('water')")
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
