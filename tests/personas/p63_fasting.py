@@ -136,7 +136,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if k not in src: f.add('BUG', f'fasting help tip missing: {k}')
     page.evaluate("switchTab('today')"); page.wait_for_timeout(300)
     page.evaluate("initHelpSlots()")
-    if not page.evaluate("!!document.getElementById('help-fastinghelp')"): f.add('BUG', 'Today fasting help tip not created')
+    if 'Longer is not better' not in page.evaluate("document.getElementById('fastingDetail').textContent"): f.add('BUG', 'fasting guidance missing from the card details (v1096: one ? button)')
     # ---- 9. conditions ----
     for cond, want in (('general', ''), ('t1_diabetes', 'insulin'), ('t2_diabetes', 'insulin'), ('epilepsy', 'anti-seizure'), ('migraine', 'migraine'), ('gbm', 'ketones'), ('strict_keto', 'ketones')):
         page.evaluate("c => { localStorage.setItem('mh_condition', c); mhRenderFastingCard(); }", cond)

@@ -5,6 +5,8 @@
 ## v3.10.1096 – Shopping list: filter by name or brand
 - A **filter box** above the list (shows once the list has more than a few items). Type any part of a name or brand, such as "Asda" or "cream", and only matching items show, with a "Showing 3 of 12" line. All and None apply to what you can see, so you can untick or tick every double cream in one go. The ✕ clears it. It combines with the category chips.
 
+- **Card controls made identical (Fasting, Fibre, Water, Shopping list):** the same round **?** help button as the rest of the app (Fibre and Shopping had a different ⓘ, Fasting had a "details" word), the arrows / eye / hide on their own row, and the big number underneath instead of squeezed beside the controls. Fasting's long guidance now sits behind the one ? button.
+
 ## v3.10.1095 – One Language button on the first screen; the fibre audit never assumes a portion
 - **First screen:** the nine language flags across the top are now one **🌐 Language** button (showing the flag of the language in use). Tap it and the list opens; tap again to close. Nothing else about choosing a language changed, and Settings still shows all nine.
 - **Fibre audit, no assumed portion:** a food with no saved portion now says "Portion not set" instead of quietly showing 100g, and asks what portion its figures are for. Neither a fibre amount nor "No fibre" is saved until the portion is confirmed, and the confirmed portion is stored on the food. Foods that already have a portion show it as before ("One portion = 80g").
