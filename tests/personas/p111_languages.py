@@ -26,6 +26,12 @@ with fresh_server() as root, sync_playwright() as pw:
     ev = page.evaluate
     ob_lang = ev("!!document.getElementById('mhLangObSel')")
     if not ob_lang: f.add('BUG', 'onboarding language picker missing')
+    # v3.10.1095: collapsed into one Language button; the nine flags open on tap
+    if not ev("!!document.getElementById('mhLangObBtn')"): f.add('BUG', 'onboarding Language button missing')
+    if ev("getComputedStyle(document.getElementById('mhLangObSel')).display") != 'none': f.add('BUG', 'language list should start closed')
+    ev("document.getElementById('mhLangObBtn').click()")
+    if ev("getComputedStyle(document.getElementById('mhLangObSel')).display") == 'none': f.add('BUG', 'Language button did not open the list')
+    if ev("document.querySelectorAll('#mhLangObSel img').length") != 9: f.add('BUG', 'onboarding list should hold 9 languages')
     if ev("mhLangCode()") != 'en': f.add('BUG', 'default not English')
     if 'today' not in ev("document.getElementById('maintab-today').textContent").lower(): f.add('BUG', 'English tab changed')
     if ev("!!document.getElementById('mhLangFab')"): f.add('BUG', 'language button in English mode')
