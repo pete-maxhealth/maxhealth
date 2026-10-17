@@ -6,6 +6,7 @@
 - **New Move tab** on Today (Dashboard | **Move** | Supplements). Daily steps and Today's activity (activities, plan ahead, add exercise, resistance, routines, treatments of effort) now live there, so the exercise third of nutrition / exercise / sleep is no longer scattered down a long Dashboard.
 - **Dashboard keeps a slim Move card:** today's steps and what you have logged, with an Open Move button. It has the same ? help, show/hide, reorder and fold controls as the other cards. Nothing is estimated; with no steps it says so.
 - **Move cards have their own show/hide and reorder,** with a Hidden strip to bring one back. Default on the Move screen resets only Move, never the Dashboard.
+- **Shopping list: ticked items fold away.** Tick something and it drops out of the to-buy list into a collapsed **✓ In basket (n)** group at the bottom (tap to show or hide it), so what is left to buy stays on top. Untick to bring it back; the arrows move items among what is shown; All, None and the search work across both.
 - **Nothing is lost:** a saved Dashboard order keeps its shape (the old steps slot becomes the Move card, activity moves to the Move tab) and a card you had hidden stays hidden. Typed commands ("hide the steps card", "hide the move card") and app search still find everything; links that used to scroll to the activity card now open the Move tab.
 
 ## v3.10.1096 – Shopping list: filter by name or brand

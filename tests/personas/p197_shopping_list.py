@@ -124,6 +124,20 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("mhShopVisible(mhShopLoad()).length") != 2: f.add('BUG', 'filter by word failed')
     ev("mhShopLQ('')")
     if ev("mhShopVisible(mhShopLoad()).length") != 5: f.add('BUG', 'clearing the filter should show all')
+    # ticked items fold into an In basket group (v1097)
+    ROWS = "[...document.querySelectorAll('#mhShopPane [data-item]')].map(e=>e.dataset.item)"
+    ev("mhShopToggle('a1')")
+    if 'Double Cream (Asda)' in ev(ROWS): f.add('BUG', 'a ticked item should fold away out of the to-buy list')
+    if 'In basket (1)' not in ev("document.getElementById('mhShopBasketBar') ? document.getElementById('mhShopBasketBar').innerText : ''"): f.add('BUG', 'no In basket group after ticking')
+    ev("mhShopBasketToggle()")
+    if 'Double Cream (Asda)' not in ev(ROWS): f.add('BUG', 'opening In basket should list the ticked item')
+    ev("mhShopBasketToggle()")
+    ev("mhShopToggle('a1')")
+    if 'Double Cream (Asda)' not in ev(ROWS) or ev("!!document.getElementById('mhShopBasketBar')"): f.add('BUG', 'unticking should bring the item back and drop the empty group')
+    ev("mhShopToggle('a2')")   # Tesco cream in the basket; arrows move among what is shown
+    ev("mhShopMove('a3','up')")
+    if ev(ROWS)[:3] != ['Butter (Asda)', 'Double Cream (Asda)', 'Eggs']: f.add('BUG', f"move up should swap with the item shown above it, not a hidden one {ev(ROWS)}")
+    ev("mhShopToggle('a2')")
     # card controls
     ev("toggleDashboardSectionHidden('shopping')")
     if ev("getComputedStyle(document.getElementById('dashSection-shopping')).display") != 'none': f.add('BUG', 'hide did not hide the card')

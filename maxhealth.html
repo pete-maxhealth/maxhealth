@@ -27040,7 +27040,7 @@ function mhShopToggle(id) { const s = mhShopLoad(), i = s.items.find(x => x.id =
 function mhShopHide(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { i.hidden = !i.hidden; mhShopSave(s); } mhShopRender(); }
 function mhShopHave(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { if (!s.pantry.includes(i.key)) s.pantry.push(i.key); s.items = s.items.filter(x => x.id !== id); mhShopSave(s); _shopUi.msg = i.name + ' will not be suggested again'; } mhShopRender(); }
 function mhShopMove(id, dir) {
-  const s = mhShopLoad(), vis = mhShopVisible(s), vi = vis.findIndex(x => x.id === id), ni = vi + (dir === 'up' ? -1 : 1);
+  const s = mhShopLoad(), me = s.items.find(x => x.id === id), vis = mhShopVisible(s).filter(x => !!x.checked === !!(me && me.checked)), vi = vis.findIndex(x => x.id === id), ni = vi + (dir === 'up' ? -1 : 1);
   if (vi < 0 || ni < 0 || ni >= vis.length) return;
   const a = s.items.findIndex(x => x.id === id), b = s.items.findIndex(x => x.id === vis[ni].id);
   const t = s.items[a]; s.items[a] = s.items[b]; s.items[b] = t; mhShopSave(s); mhShopRender();
@@ -27066,6 +27066,7 @@ function mhShopAddOwn() {
 }
 function mhShopPick(key) { const known = mhShopKnown().find(x => x.key === key); if (!known) return; const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); const ex = s.items.find(i => i.key === key); if (ex) ex.hidden = false; else mhShopSetAdd(s, known.name, 'pick', '', known.cat); mhShopSave(s); mhShopRender(); }
 function mhShopQ(v) { _shopUi.q = v; mhShopRender(true); }
+function mhShopBasketToggle() { _shopUi.basketOpen = !_shopUi.basketOpen; mhShopRender(); }
 function mhShopLQ(v) { _shopUi.lq = v; mhShopRender('lq'); }
 function mhShopView(v, r) { _shopUi.view = v; _shopUi.recipe = r || null; _shopUi.q = ''; mhShopRender(); }
 function mhShopRecipeToggle(mealKey, ingKey) { const s = mhShopLoad(), ex = new Set(s.recipeEx[mealKey] || []); if (ex.has(ingKey)) ex.delete(ingKey); else ex.add(ingKey); s.recipeEx[mealKey] = [...ex]; mhShopSave(s); mhShopRender(); }
@@ -27106,11 +27107,15 @@ function mhShopRender(keepFocus) {
     const vis = mhShopVisible(s), cats = [...new Set(s.items.filter(i => _shopUi.showHidden || !i.hidden).map(i => i.cat))].sort((a, b) => { const x = MH_SHOP_AISLES.indexOf(a), y = MH_SHOP_AISLES.indexOf(b); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
     const chips = cats.length > 1 ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' + cats.map(c => '<span data-cat="' + esc(c) + '" onclick="mhShopSetCat(this.dataset.cat)" style="padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid var(--border);' + (_shopUi.cat === c ? 'background:var(--accent);color:#fff;' : 'color:var(--text2);') + '">' + esc(mhShopAisleName(c)) + '</span>').join('') + '</div>' : '';
     const srcIcon = { plan: '🗓', recipe: '🍲', pick: '➕', own: '✏️', top: '' };
-    const rows = vis.map((i, n) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-top:1px solid var(--border);' + (i.hidden ? 'opacity:0.45;' : '') + '">'
+    const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:8px;padding:9px 2px;border-top:1px solid var(--border);' + (i.hidden ? 'opacity:0.45;' : '') + '">'
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' onchange="mhShopToggle(\'' + i.id + '\')" style="width:20px;height:20px;">'
       + '<div style="flex:1;min-width:0;font-size:14px;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(i.cat)) + (srcIcon[i.src] ? ' ' + srcIcon[i.src] : '') + (i.from && i.src === 'recipe' ? ' ' + esc(i.from) : '') + '</span></div>'
       + '<span title="Move up" onclick="mhShopMove(\'' + i.id + '\',\'up\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">▲</span><span title="Move down" onclick="mhShopMove(\'' + i.id + '\',\'down\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">▼</span>'
-      + '<span title="' + (i.hidden ? 'Show' : 'Hide') + '" onclick="mhShopHide(\'' + i.id + '\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">👁</span><span title="I always have this" onclick="mhShopHave(\'' + i.id + '\')" style="cursor:pointer;padding:2px 5px;">🏠</span></div>').join('');
+      + '<span title="' + (i.hidden ? 'Show' : 'Hide') + '" onclick="mhShopHide(\'' + i.id + '\')" style="cursor:pointer;color:var(--text3);padding:2px 5px;">👁</span><span title="I always have this" onclick="mhShopHave(\'' + i.id + '\')" style="cursor:pointer;padding:2px 5px;">🏠</span></div>';
+    // v3.10.1097: ticked items fold away into an "In basket" group at the bottom, so what is left to buy stays on top.
+    const pendingVis = vis.filter(i => !i.checked), basketVis = vis.filter(i => i.checked), basketOpen = !!_shopUi.basketOpen;
+    const rows = pendingVis.map(rowHtml).join('') + (basketVis.length ? '<div id="mhShopBasketBar" onclick="mhShopBasketToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;margin-top:6px;border-top:1px solid var(--border);cursor:pointer;font-size:13px;color:var(--text2);"><span>✓ In basket (' + basketVis.length + ')</span><span style="color:var(--text3);font-size:12px;">' + (basketOpen ? '▾ hide' : '▸ show') + '</span></div>' + (basketOpen ? basketVis.map(rowHtml).join('') : '') : '') + (!pendingVis.length && basketVis.length ? '<div style="font-size:12px;color:var(--green);padding:6px 4px;">Everything is in the basket.</div>' : '');
+
     const hiddenN = s.items.filter(i => i.hidden).length, live = s.items.filter(i => !i.hidden), got = live.filter(i => i.checked).length;
     const filt = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;"><input id="mhShopLQ" value="' + esc(_shopUi.lq || '') + '" oninput="mhShopLQ(this.value)" placeholder="Search your list (e.g. Asda, cream)" style="flex:1;min-width:0;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;box-sizing:border-box;">' + (_shopUi.lq ? '<span onclick="mhShopLQ(\'\')" title="Clear" style="cursor:pointer;color:var(--text3);padding:6px;font-size:16px;">✕</span>' : '') + '</div>';
     const count = '<div style="font-size:12px;color:var(--text3);margin-bottom:8px;">' + (live.length ? (_shopUi.lq ? 'Showing ' + vis.length + ' of ' + s.items.filter(i => _shopUi.showHidden || !i.hidden).length + '. All and None apply to what you can see. ' : '') + got + ' of ' + live.length + ' in the basket' : 'Your list is empty. Press Refresh to build it from what you eat.') + '</div>';
