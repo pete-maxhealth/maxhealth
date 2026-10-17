@@ -51,7 +51,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ROWS = "[...document.querySelectorAll('#mhShopPane [data-item]')].map(e=>e.dataset.item)"
     order = ev(ROWS)
     if order != ['Spinach', 'Chicken thighs (Asda)', 'Double Cream (Asda)', 'Eggs', 'Olive oil', 'Mystery item']: f.add('BUG', f'items should follow the walking order: {order}')
-    heads = ev("[...document.querySelectorAll('#mhShopPane .mh-aisle span:first-child')].map(e=>e.textContent)")
+    heads = ev("[...document.querySelectorAll('#mhShopPane .mh-aisle > span:first-child')].map(e=>e.childNodes[0].textContent.replace(/[▾▸]/g,'').trim())")
     if heads != ['Fruit & veg', 'Meat & fish', 'Dairy & eggs', 'Cupboard', 'Other']: f.add('BUG', f'aisle headings wrong {heads}')
     if ev("document.querySelector('#mhShopPane [data-item] input').getBoundingClientRect().height") < 24: f.add('BUG', 'tick boxes too small for a trolley')
     if ev("!!document.querySelector('#mhShopPane [data-item] [onclick*=mhShopMove], #mhShopPane [data-item] [onclick*=mhShopHide]')"): f.add('BUG', 'rows should have no arrows or eye while shopping')
@@ -128,6 +128,26 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Eggs' not in ev("mhShopLoad().usuals") or 'Eggs' in ev("mhShopLoad().quick"): f.add('BUG', 'star should move a quick item into My usuals')
     ev("mhShopUsualAddNew && (mhShopView('usuals'), document.getElementById('mhShopUsualNew').value='Cheddar', mhShopUsualAddNew())")
     if 'Cheddar' in ev("mhShopLoad().quick"): f.add('BUG', 'adding to My usuals should drop it from the quick list')
+    ev("mhShopView('list')")
+    # aisle headings fold, and "all" ticks a whole aisle into the basket
+    ev("(()=>{const s=mhShopLoad(); s.items=[{id:'z1',key:'z1',name:'Spinach',cat:'vegetable',checked:false},{id:'z2',key:'z2',name:'Broccoli',cat:'vegetable',checked:false},{id:'z3',key:'z3',name:'Butter',cat:'dairy',checked:false}]; mhShopSave(s); mhShopRender()})()")
+    ROWS2 = "[...document.querySelectorAll('#mhShopPane [data-item]')].map(e=>e.dataset.item)"
+    ev("mhShopFold('m0')")
+    if ev(ROWS2) != ['Butter']: f.add('BUG', f'folding Fruit & veg should hide its rows: {ev(ROWS2)}')
+    ev("mhShopFold('m0')")
+    ev("mhShopTickSection(0)")
+    if ev("mhShopLoad().items.filter(i=>i.checked).map(i=>i.name).sort()") != ['Broccoli', 'Spinach']: f.add('BUG', 'tick all in an aisle should tick only that aisle')
+    ev("mhShopLoad().items.forEach(()=>0); localStorage.setItem('mh_shopping_v1', JSON.stringify({items:[], usuals:[], quick:[]}))")
+    # the quick list: a number you choose, capped at 10 per press; grouped by aisle, foldable, add a whole aisle
+    ev("""saveLibrary(Array.from({length:14},(_,n)=>({id:'q'+n,name:'Item '+n,kcal:100,protein:5,carbs:1,fat:5,useCount:20-n,isMeal:false})))""")
+    ev("mhShopTopFill(30)")
+    if len(ev("mhShopLoad().quick")) != 10: f.add('BUG', f"a press should add at most 10: {len(ev('mhShopLoad().quick'))}")
+    ev("mhShopTopFill(3)")
+    if len(ev("mhShopLoad().quick")) != 13: f.add('BUG', 'a chosen number of 3 should add 3 more')
+    ev("mhShopView('quick')")
+    if ev("document.getElementById('mhShopQuickN').options.length") != 10: f.add('BUG', 'the number choice should run 1 to 10')
+    ev("mhShopQuickAddSection(mhShopSection(mhShopCat('Item 0')))")
+    if ev("mhShopLoad().quick.length") != 0 or ev("mhShopLoad().items.length") != 13: f.add('BUG', 'add-all for an aisle should move that aisle onto the list')
     ev("mhShopView('list')")
     # recipes saved on the Recipes screen (mh_recipes) are offered too, not just meals saved in the food library
     ev("localStorage.setItem('mh_recipes', JSON.stringify([{id:'r1',name:'Sunday roast chicken',servings:4,total:{kcal:2000,protein:200,carbs:10,fat:100},ingredients:[{name:'Whole chicken',amount:1,unit:'x'},{name:'Rosemary',amount:2,unit:'tsp'}]}]))")
