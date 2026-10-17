@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1104 – Shopping: a quick list of what you eat most
+- **⚡ Quick list** (under ＋ Add items): pick **Top 10, 20 or 30** and it fills with the ingredients you eat most. Nothing goes on your shopping list until you tap it; ⭐ keeps one in My usuals, ✕ drops it.
+- **Usuals stay out of it:** anything already in My usuals (or already on your list) is never suggested again, and adding something to My usuals later removes it from the quick list.
+
 ## v3.10.1103 – Tap a progress bar to see the history behind it
 - **Water:** tapping the bar opens the water chart.
 - **Fasting:** tapping the bar opens your fasting history (Insights > Reports). Until you have 7 measured fasts it tells you how many you have instead.

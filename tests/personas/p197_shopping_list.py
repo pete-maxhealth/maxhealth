@@ -110,6 +110,25 @@ with fresh_server() as root, sync_playwright() as pw:
     page.reload(); page.wait_for_timeout(1200); ev("mhCardBody('water')"); page.reload(); page.wait_for_timeout(1200)
     if ev("getComputedStyle(document.getElementById('waterBody')).display") != 'none': f.add('BUG', 'fold not remembered across reload')
     ev("mhCardBody('water')")
+    # quick list: top N of what you eat, never usuals, nothing on the list until tapped
+    ev("""saveLibrary([
+      {id:'a',name:'Chicken thighs',kcal:200,protein:30,carbs:0,fat:8,useCount:9,isMeal:false},
+      {id:'b',name:'Broccoli',kcal:30,protein:3,carbs:4,fat:0,useCount:7,isMeal:false},
+      {id:'c',name:'Eggs',kcal:150,protein:12,carbs:1,fat:10,useCount:5,isMeal:false},
+      {id:'d',name:'Cheddar',kcal:400,protein:25,carbs:1,fat:33,useCount:3,isMeal:false}])""")
+    ev("localStorage.setItem('mh_shopping_v1', JSON.stringify({items:[], usuals:['Chicken thighs']}))")
+    ev("mhShopTopFill(10)")
+    q = ev("mhShopLoad().quick")
+    if 'Chicken thighs' in q or 'Broccoli' not in q or ev("mhShopLoad().items.length") != 0: f.add('BUG', f'quick list wrong (usual excluded, nothing on the list yet): {q}')
+    ev("mhShopTopFill(10)")
+    if ev("mhShopLoad().quick").__len__() != len(q): f.add('BUG', 'running it again should not duplicate suggestions')
+    ev("mhShopQuickTap(mhShopKey('Broccoli'))")
+    if 'Broccoli' not in ev("mhShopLoad().items.map(i=>i.name)") or 'Broccoli' in ev("mhShopLoad().quick"): f.add('BUG', 'tapping a quick item should move it to the list')
+    ev("mhShopQuickStar(mhShopKey('Eggs'))")
+    if 'Eggs' not in ev("mhShopLoad().usuals") or 'Eggs' in ev("mhShopLoad().quick"): f.add('BUG', 'star should move a quick item into My usuals')
+    ev("mhShopUsualAddNew && (mhShopView('usuals'), document.getElementById('mhShopUsualNew').value='Cheddar', mhShopUsualAddNew())")
+    if 'Cheddar' in ev("mhShopLoad().quick"): f.add('BUG', 'adding to My usuals should drop it from the quick list')
+    ev("mhShopView('list')")
     # recipes saved on the Recipes screen (mh_recipes) are offered too, not just meals saved in the food library
     ev("localStorage.setItem('mh_recipes', JSON.stringify([{id:'r1',name:'Sunday roast chicken',servings:4,total:{kcal:2000,protein:200,carbs:10,fat:100},ingredients:[{name:'Whole chicken',amount:1,unit:'x'},{name:'Rosemary',amount:2,unit:'tsp'}]}]))")
     ev("mhShopOpen(); mhShopView('recipes')"); page.wait_for_timeout(300)
