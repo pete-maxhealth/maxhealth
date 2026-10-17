@@ -47,6 +47,8 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = ev("document.getElementById('mhAuditModal').innerText")
     if 'Spinach' not in txt or 'Chicken' not in txt or 'Oats' in txt.split('Foods with no fibre')[1]: f.add('BUG', 'audit list wrong')
     if '1 of 3' not in txt: f.add('BUG', 'coverage count wrong')
+    if 'One portion = 100g' not in txt: f.add('BUG', 'audit row does not say which portion the figure is for')
+    if ev("document.getElementById('mhAud-t1').getBoundingClientRect().width") < 90: f.add('BUG', 'fibre input too narrow to use')
     ev("document.getElementById('mhAud-t1').value='2.2'; mhAuditSave('t1',false)")
     ev("mhAuditSave('t2',true)")
     lib = ev("loadLibrary()")
