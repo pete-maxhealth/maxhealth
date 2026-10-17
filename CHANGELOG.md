@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1102 – Shopping list rethought for the shop floor
+- **Built to use in the aisles:** big rows, tap anywhere on a row to tick it, and the list is grouped the way you walk a supermarket: Fruit & veg, Bread, Meat & fish, Dairy & eggs, Cupboard, Drinks, Other. Ticked items drop into a collapsed ✓ In basket group so what is left stays on top.
+- **Nothing fills itself any more.** Refresh, the top-N setting, Always have, the hide eye, the reorder arrows and the aisle chips are gone. You add things three ways, under ＋ Add items: type it, ⭐ My usuals (a short list you build once and tap each week), or 🍲 Recipe. 🗓 From my plan appears when you have planned meals.
+- **Recipes you saved on the Recipes screen now appear** in Add a recipe, alongside meals saved in your food library.
+- ✎ Edit shows ⭐ (add to My usuals) and ✕ (remove) on each row; the search box and Copy list stay.
+
 ## v3.10.1101 – My statistics tile removed from the Dashboard
 - **The My statistics tile is gone from the Dashboard.** Your statistics still live under Insights; the pin-to-Today switch went with it. Saved layouts keep their order.
 
