@@ -153,5 +153,12 @@ with fresh_server() as root, sync_playwright() as pw:
     page.reload(); page.wait_for_timeout(1200); ev("mhCardBody('water')"); page.reload(); page.wait_for_timeout(1200)
     if ev("getComputedStyle(document.getElementById('waterBody')).display") != 'none': f.add('BUG', 'fold not remembered across reload')
     ev("mhCardBody('water')")
+    # recipes saved on the Recipes screen (mh_recipes) are offered too, not just meals saved in the food library
+    ev("localStorage.setItem('mh_recipes', JSON.stringify([{id:'r1',name:'Sunday roast chicken',servings:4,total:{kcal:2000,protein:200,carbs:10,fat:100},ingredients:[{name:'Whole chicken',amount:1,unit:'x'},{name:'Rosemary',amount:2,unit:'tsp'}]}]))")
+    ev("mhShopOpen(); mhShopView('recipes')"); page.wait_for_timeout(300)
+    if 'Sunday roast chicken' not in ev("document.getElementById('mhShopPane').innerText"): f.add('BUG', 'a recipe saved on the Recipes screen is not offered in Add a recipe')
+    ev("mhShopView('recipe', mhShopKey('Sunday roast chicken'))"); page.wait_for_timeout(300)
+    if 'Rosemary' not in ev("document.getElementById('mhShopPane').innerText"): f.add('BUG', 'recipe ingredients not shown')
+    ev("localStorage.removeItem('mh_recipes'); mhShopView('list')")
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

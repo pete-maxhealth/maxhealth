@@ -26900,10 +26900,13 @@ function mhShopCat(f) {
 }
 function mhShopAisleName(c) { return MH_SHOP_AISLE_NAMES[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : 'Other'); }
 function mhShopMealIngs(m) { return ((m && m.items) || []).map(i => i && i.name).filter(Boolean); }
-function mhShopFindMeal(name) { const k = mhShopKey(name); try { return loadLibrary().find(f => f && f.name && isMealEntry(f) && mhShopKey(f.name) === k) || null; } catch (_) { return null; } }
+// Recipes saved in the Recipes screen (mh_recipes) count as meals here too, alongside meals saved in the food library.
+function mhShopRecipeStore() { try { return (loadRecipes() || []).filter(r => r && r.name && (r.ingredients || []).length).map(r => ({ name: r.name, isMeal: true, items: r.ingredients.map(i => ({ name: i && i.name })) })); } catch (_) { return []; } }
+function mhShopMealsAll() { let lib = []; try { lib = loadLibrary().filter(f => f && f.name && isMealEntry(f) && mhShopMealIngs(f).length); } catch (_) {} const seen = new Set(lib.map(f => mhShopKey(f.name))); return lib.concat(mhShopRecipeStore().filter(r => !seen.has(mhShopKey(r.name)))); }
+function mhShopFindMeal(name) { const k = mhShopKey(name); return mhShopMealsAll().find(f => mhShopKey(f.name) === k) || null; }
 // All ingredient names the app knows: library ingredients plus the ingredients inside library meals.
 function mhShopKnown() {
-  const out = new Map(); let lib = []; try { lib = loadLibrary(); } catch (_) {}
+  const out = new Map(); let lib = []; try { lib = loadLibrary().concat(mhShopRecipeStore()); } catch (_) {}
   lib.forEach(f => { if (!f || !f.name) return; if (!isMealEntry(f)) { const k = mhShopKey(f.name); if (k && !out.has(k)) out.set(k, { key: k, name: f.name, cat: mhShopCat(f) }); } else mhShopMealIngs(f).forEach(n => { const k = mhShopKey(n); if (k && !out.has(k)) out.set(k, { key: k, name: n, cat: mhShopCat(n) }); }); });
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -26924,7 +26927,7 @@ function mhShopRanked() {
   const eatOne = (name, ts) => { const m = name ? mhShopFindMeal(name) : null; if (m && mhShopMealIngs(m).length) mhShopMealIngs(m).forEach(n => bump(n, ts)); else if (name) bump(name, ts); };
   (state.history || []).forEach(d => { let t = 0; try { t = new Date(isoDate(d.date) + 'T12:00:00').getTime(); } catch (_) {} if (!(t >= cut.getTime())) return; (d.log || []).forEach(e => eat(e, t)); });
   (state.todayLog || []).forEach(e => eat(e, Date.now()));
-  const use = {}; try { loadLibrary().forEach(f => { if (f && f.name && !isMealEntry(f)) use[mhShopKey(f.name)] = f.useCount || f.uses || 0; else if (f && f.name) mhShopMealIngs(f).forEach(n => { const k = mhShopKey(n); use[k] = Math.max(use[k] || 0, f.useCount || 0); }); }); } catch (_) {}
+  const use = {}; try { loadLibrary().concat(mhShopRecipeStore()).forEach(f => { if (f && f.name && !isMealEntry(f)) use[mhShopKey(f.name)] = f.useCount || f.uses || 0; else if (f && f.name) mhShopMealIngs(f).forEach(n => { const k = mhShopKey(n); use[k] = Math.max(use[k] || 0, f.useCount || 0); }); }); } catch (_) {}
   const known = new Map(mhShopKnown().map(x => [x.key, x]));
   return [...new Set([...Object.keys(cnt), ...Object.keys(use).filter(k => use[k] > 0)])].filter(k => known.has(k))
     .sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0) || (last[b] || 0) - (last[a] || 0) || (use[b] || 0) - (use[a] || 0) || a.localeCompare(b))
@@ -27016,7 +27019,7 @@ function mhShopRender(keepFocus) {
       + (all.length > 80 ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + (all.length - 80) + ' more: keep typing to narrow it down.</div>' : '')
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'recipes') {
-    let meals = []; try { meals = loadLibrary().filter(f => f && f.name && isMealEntry(f) && mhShopMealIngs(f).length); } catch (_) {}
+    const meals = mhShopMealsAll();
     body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Pick a meal, then untick any ingredient you do not need to buy.</div>'
       + (meals.map(f => '<div onclick="mhShopView(\'recipe\',this.dataset.k)" data-k="' + esc(mhShopKey(f.name)) + '" style="padding:10px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;">' + esc(f.name) + ' <span style="font-size:11px;color:var(--text3);">' + mhShopMealIngs(f).length + ' ingredients</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">No saved meals with ingredients yet.</div>')
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
