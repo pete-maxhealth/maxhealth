@@ -28,7 +28,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if k not in ('steps', 'activity', 'movesum', 'shopping'): custom_m.append(k)
     exp = list(custom_m); exp.insert(exp.index('water'), 'weather'); exp.insert(exp.index('water'), 'fasting')  # fasting (v3.10.930) also slots in just above water
     exp.insert(exp.index('macros') + 1, 'mealplan')  # meal plan (v3.10.1040) slots in just after Calories & macros
-    if 'stats' not in order: f.add('BUG', 'My statistics card missing from a migrated order')   # added v3.10.1081
+    if 'stats' in order: f.add('BUG', 'My statistics is not a Dashboard card any more')
     if 'fibre' not in order: f.add('BUG', 'Fibre card missing from a migrated order')   # added v3.10.1092
     if 'shopping' in order or 'movesum' in order: f.add('BUG', 'Shopping/Move are tabs now, not Dashboard cards')
     order = [k for k in order if k not in ('stats', 'fibre')]

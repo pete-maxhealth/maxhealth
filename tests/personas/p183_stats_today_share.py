@@ -13,17 +13,13 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200)
     page.evaluate("state.onboarded=true; localStorage.setItem('mh_dashboard_order', JSON.stringify(['weight','daymode','ketosis','macros','mealplan','macroratio','goalcheck','steps','symptoms','treatment','activity','weather','fasting','water','log','guides'])); saveState()"); page.reload(); page.wait_for_timeout(1500)
     ev=page.evaluate
-    check('older saved Today order gains My statistics after Weather', ev("(()=>{const o=getDashboardOrder();return o.indexOf('stats')===o.indexOf('weather')+1})()"))
+    check('older saved Today order drops the old My statistics card', ev("getDashboardOrder().indexOf('stats')")==-1 and ev("!document.getElementById('dashSection-stats')"))
     ev("""(()=>{const d=n=>{const x=new Date();x.setDate(x.getDate()-n);return String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'/'+String(x.getFullYear()).slice(2)};
       state.history=[1,2,3,4].map(i=>({date:d(i),totals:{kcal:1900+i*50,protein:100,carbs:25,fat:100},log:[{id:i,time:'08:00',description:'Eggs',kcal:300,protein:20,carbs:1,fat:20,items:[{name:'Eggs',kcal:300,protein:20,carbs:1,fat:20}]}],exercises:[]}));saveState();})()""")
     ev("(()=>{const x=state.history[0];['Steak','Salmon','Cheese','Bacon','Pork'].forEach((n,i)=>x.log.push({id:50+i,time:'12:00',description:n,kcal:500,protein:30,carbs:1,fat:30,items:[{name:n,kcal:500,protein:30,carbs:1,fat:30}]}))})()")
     ev("switchTabById('dash'); updateDashboard()"); page.wait_for_timeout(300)
-    check('no pinned statistics: the Today card stays out of the way', ev("getComputedStyle(document.getElementById('dashSection-stats')).display")=='none')
-    ev("mhStatSeedDefaults()"); ev("mhStatTogglePin(mhStatLoad()[0].id)"); page.wait_for_timeout(200)
+    ev("mhStatSeedDefaults()")
     ev("switchTabById('dash'); updateDashboard()"); page.wait_for_timeout(300)
-    check('pinning shows the card with the statistic', ev("getComputedStyle(document.getElementById('dashSection-stats')).display")!='none' and 'Top 10 foods' in ev("document.getElementById('dashStatsBody').innerText"))
-    check('Today tile shows at most 3 rows for a list', ev("document.getElementById('dashStatsBody').innerText.match(/\\d\\. /g)||[]").__len__()<=3)
-    ev("mhStatTogglePin(mhStatLoad()[0].id)"); check('unpinning hides it again', ev("getComputedStyle(document.getElementById('dashSection-stats')).display")=='none')
     # share
     ev("(()=>{const a=mhStatLoad();a[0].share=true;mhStatSave(a);})()")
     ctxt=ev("patientContextBlock(buildPatientContext(state.history))")
