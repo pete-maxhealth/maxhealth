@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1105 – Shopping: shops, and a quick list with sources
+- **Shops:** tap a shop chip (Asda to start with) to choose where new items go; ＋ Shop adds another, such as Butchers. With more than one shop in use the list is grouped by shop, then by aisle.
+- **Shopping complete** clears only the ticked items of the shop you are in. Other shops stay as they are.
+- **My usuals are per shop** (butchers usuals are separate from Asda).
+- **Quick list sources:** Most eaten, or Recently added (the last things you put on any list), still 1 to 10 and still leaving out usuals and anything already on the list.
+- Existing lists carry on as Asda.
+
 ## v3.10.1104 – Shopping: a live quick list, one-tap recipes, aisle folds
 - **⚡ Quick list** (under ＋ Add items): a live shortlist of the ingredients you eat most, up to the number you choose (1 to 10). It leaves out anything in My usuals or already on your list. Tap one to put it on your list; ⭐ keeps it in My usuals; ✕ means not this time (it comes back after Shopping complete); 🚫 means never show it again (undo under Hidden suggestions). Another item takes its place each time. It is grouped by aisle, each aisle folds, and ＋ all adds a whole aisle.
 - **Recipes in one tap:** tap a recipe and all its ingredients go on your list. Take any you do not need off with ✎ Edit.

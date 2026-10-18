@@ -6494,7 +6494,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1104'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1105'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -26918,9 +26918,19 @@ function mhShopLoad() {
   if (!s || typeof s !== 'object') s = {};
   if (!Array.isArray(s.items)) s.items = []; if (!Array.isArray(s.pantry)) s.pantry = []; if (!Array.isArray(s.usuals)) s.usuals = []; if (!Array.isArray(s.never)) s.never = []; if (!Array.isArray(s.skip)) s.skip = []; if (!s.recipeEx || typeof s.recipeEx !== 'object') s.recipeEx = {};
   s.topN = parseInt(s.topN) > 0 ? Math.min(100, parseInt(s.topN)) : MH_SHOP_TOPN_DEFAULT;
+  // v3.10.1105: shops. Each item belongs to a shop (default Asda); My usuals are kept per shop; s.usuals is always the active shop's list.
+  if (!Array.isArray(s.shops) || !s.shops.length) s.shops = ['Asda'];
+  if (!s.shop || !s.shops.includes(s.shop)) s.shop = s.shops[0];
+  if (!s.usualsBy || typeof s.usualsBy !== 'object') s.usualsBy = {};
+  if (!Array.isArray(s.usualsBy[s.shops[0]])) s.usualsBy[s.shops[0]] = s.usuals;
+  s.shops.forEach(n => { if (!Array.isArray(s.usualsBy[n])) s.usualsBy[n] = []; });
+  s.usuals = s.usualsBy[s.shop];
+  if (!Array.isArray(s.recent)) s.recent = [];
+  if (s.qsrc !== 'recent') s.qsrc = 'top';
+  s.items.forEach(i => { if (!i.shop || !s.shops.includes(i.shop)) i.shop = s.shops[0]; });
   return s;
 }
-function mhShopSave(s) { try { localStorage.setItem(MH_SHOP_KEY, JSON.stringify(s)); } catch (_) {} try { mhShopCardRender(); } catch (_) {} }
+function mhShopSave(s) { try { if (s.usualsBy && s.shop && Array.isArray(s.usuals)) s.usualsBy[s.shop] = s.usuals; } catch (_) {} try { localStorage.setItem(MH_SHOP_KEY, JSON.stringify(s)); } catch (_) {} try { mhShopCardRender(); } catch (_) {} }
 function mhShopKey(n) { try { return normalizeFoodName(String(n || '')).toLowerCase().trim(); } catch (_) { return String(n || '').toLowerCase().trim(); } }
 function mhShopCat(f) {
   let cats = []; try { cats = getItemCategories(typeof f === 'string' ? { name: f } : f) || []; } catch (_) {}
@@ -26940,7 +26950,8 @@ function mhShopKnown() {
 }
 function mhShopSetAdd(s, name, src, from, cat) {
   const k = mhShopKey(name); if (!k || s.items.some(i => i.key === k)) return false;
-  s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: k, name: String(name).trim(), cat: cat || mhShopCat(name), checked: false, hidden: false, src: src || 'own', from: from || '' });
+  s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: k, name: String(name).trim(), cat: cat || mhShopCat(name), checked: false, hidden: false, src: src || 'own', from: from || '', shop: s.shop || (s.shops && s.shops[0]) || 'Asda' });
+  if (src !== 'usual') { s.recent = [String(name).trim()].concat((s.recent || []).filter(n => mhShopKey(n) !== k)).slice(0, 50); }
   return true;
 }
 // Most used, most recent: foods eaten in the last 30 days (a library meal counts for each of its ingredients), then library use count.
@@ -27008,10 +27019,10 @@ function mhShopSetCat(c) { _shopUi.cat = _shopUi.cat === c ? '' : c; mhShopRende
 function mhShopShowHidden() { _shopUi.showHidden = !_shopUi.showHidden; mhShopRender(); }
 function mhShopSetTopN(v) { const s = mhShopLoad(), n = parseInt(v); if (n > 0 && n <= 100) { s.topN = n; mhShopSave(s); } mhShopRender(); }
 function mhShopComplete() {
-  const s = mhShopLoad(), n = s.items.filter(i => i.checked).length;
+  const s = mhShopLoad(), n = s.items.filter(i => i.checked && i.shop === s.shop).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
-  if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked stays.')) return;
-  s.items = s.items.filter(i => !i.checked); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
+  if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked ' + s.shop + ' item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked, and your other shops, stay.')) return;
+  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
 }
 function mhShopCopy() {
   const s = mhShopLoad(), txt = mhShopVisible(s).filter(i => !i.hidden && !i.checked).map(i => '- ' + i.name).join('\n');
@@ -27056,10 +27067,17 @@ function mhShopUsualDelete(key) { const s = mhShopLoad(); s.usuals = s.usuals.fi
 // anything in My usuals or already on the list. Tap = onto the list. "Not this time" hides it until you finish shopping; "Never" hides
 // it for good (and can be undone under Hidden suggestions). Either way the next most-eaten item takes its place.
 function mhShopQuickN(v) { const s = mhShopLoad(); s.topN = Math.max(1, Math.min(10, parseInt(v) || 10)); mhShopSave(s); mhShopRender(); }
+function mhShopSwitch(s, n) { s.usualsBy[s.shop] = s.usuals; s.shop = n; if (!Array.isArray(s.usualsBy[n])) s.usualsBy[n] = []; s.usuals = s.usualsBy[n]; }
+function mhShopSetShop(n) { const s = mhShopLoad(); if (s.shops.includes(n)) { mhShopSwitch(s, n); mhShopSave(s); } mhShopRender(); }
+function mhShopAddShop() { const v = (prompt('Name of the shop (e.g. Butchers)') || '').trim().slice(0, 24); if (!v) return; const s = mhShopLoad(); if (!s.shops.some(x => x.toLowerCase() === v.toLowerCase())) s.shops.push(v); mhShopSwitch(s, s.shops.find(x => x.toLowerCase() === v.toLowerCase())); mhShopSave(s); mhShopRender(); }
+function mhShopDelShop(n) { const s = mhShopLoad(); if (s.shops.length < 2 || n === s.shops[0] || !s.shops.includes(n)) return; s.items.forEach(i => { if (i.shop === n) i.shop = s.shops[0]; }); s.shops = s.shops.filter(x => x !== n); if (s.shop === n) mhShopSwitch(s, s.shops[0]); delete s.usualsBy[n]; mhShopSave(s); mhShopRender(); }
+function mhShopQuickSrc(v) { const s = mhShopLoad(); s.qsrc = v === 'recent' ? 'recent' : 'top'; mhShopSave(s); mhShopRender(); }
 function mhShopShortlist(s) {
   s = s || mhShopLoad(); const n = Math.max(1, Math.min(10, s.topN || 10));
   const skip = new Set([...s.usuals.map(mhShopKey), ...s.items.map(i => i.key), ...s.never, ...s.skip]), out = [];
-  for (const x of mhShopRanked()) { if (out.length >= n) break; if (x && !skip.has(x.key)) out.push(x); }
+  let pool = mhShopRanked();
+  if (s.qsrc === 'recent') { const known = new Map(pool.map(x => [x.key, x])); pool = s.recent.map(nm => { const k = mhShopKey(nm); return known.get(k) || { key: k, name: nm, cat: mhShopCat(nm) }; }); }
+  for (const x of pool) { if (out.length >= n) break; if (x && !skip.has(x.key)) out.push(x); }
   return out;
 }
 function mhShopSuggestAdd(key) { const s = mhShopLoad(), x = mhShopShortlist(s).find(y => y.key === key); if (!x) return; mhShopSetAdd(s, x.name, 'quick', '', x.cat); mhShopSave(s); mhShopRender(); }
@@ -27104,7 +27122,7 @@ function mhShopRender(keepFocus) {
     const qrow = x => '<div style="display:flex;align-items:center;gap:2px;padding:12px 4px;border-top:1px solid var(--border);"><div data-k="' + esc(x.key) + '" onclick="mhShopSuggestAdd(this.dataset.k)" style="flex:1;min-width:0;font-size:17px;color:var(--text);cursor:pointer;">' + esc(x.name) + '</div><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestStar(this.dataset.k)" title="Keep in My usuals" style="' + sm + '">⭐</span><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestSkip(this.dataset.k)" title="Not this time" style="' + sm + 'color:var(--text3);">✕</span><span data-k="' + esc(x.key) + '" onclick="mhShopSuggestNever(this.dataset.k)" title="Never show this again" style="' + sm + '">🚫</span></div>';
     const hid = s.never.map(k => { const kn = mhShopKnown().find(y => y.key === k); return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-top:1px solid var(--border);font-size:14px;color:var(--text2);"><span>' + esc(kn ? kn.name : k) + '</span><span data-k="' + esc(k) + '" onclick="mhShopSuggestRestore(this.dataset.k)" style="cursor:pointer;color:var(--accent);">show again</span></div>'; }).join('');
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ Quick list</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">The things you eat most that are not already on your list or in My usuals. Tap one to put it on your list. ⭐ keeps it in My usuals, ✕ means not this time, 🚫 means never show it again. Another takes its place.</div>'
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;"><span style="font-size:13px;color:var(--text2);">Show my top</span><select id="mhShopQuickN" onchange="mhShopQuickN(this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => '<option value="' + n + '"' + (n === nSel ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;align-items:center;">' + [['top', 'Most eaten'], ['recent', 'Recently added']].map(a => '<button class="copy-btn" onclick="mhShopQuickSrc(\'' + a[0] + '\')" style="font-size:12px;padding:7px 10px;' + (s.qsrc === a[0] ? 'background:var(--accent);color:#fff;' : '') + '">' + a[1] + '</button>').join('') + '<span style="font-size:13px;color:var(--text2);">Show</span><select id="mhShopQuickN" onchange="mhShopQuickN(this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;">' + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => '<option value="' + n + '"' + (n === nSel ? ' selected' : '') + '>' + n + '</option>').join('') + '</select></div>'
       + (secs.map(sec => { const items = groups[sec], shut = !!fold['q' + sec]; return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'q' + sec + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + items.length + '</span></span><span onclick="mhShopSuggestAddSection(' + sec + ')" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">＋ all</span></div>' + (shut ? '' : items.map(qrow).join('')); }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to suggest right now. Log a few meals and it fills in.</div>')
       + (s.never.length ? '<div style="margin-top:18px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);">Hidden suggestions (' + s.never.length + ')</div>' + hid : '')
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
@@ -27122,11 +27140,12 @@ function mhShopRender(keepFocus) {
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
       + '<div style="flex:1;min-width:0;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
       + (edit ? '<span title="Add to My usuals" onclick="mhShopUsualFromItem(\'' + i.id + '\')" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span><span title="Remove from the list" onclick="mhShopRemove(\'' + i.id + '\')" style="cursor:pointer;color:var(--red);padding:6px;font-size:18px;">✕</span>' : '') + '</div>';
-    const pendingVis = vis.filter(i => !i.checked).sort((a, b) => mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
+    const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
+    const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
     const basketVis = vis.filter(i => i.checked), basketOpen = !!_shopUi.basketOpen;
-    let rows = '', lastSec = -1;
+    let rows = '', lastSec = -1, lastShop = null;
     const fold = _shopUi.fold || {};
-    pendingVis.forEach(i => { const sec = mhShopSection(i.cat); if (sec !== lastSec) { lastSec = sec; const n = pendingVis.filter(x => mhShopSection(x.cat) === sec).length, shut = !!fold['m' + sec]; rows += '<div class="mh-aisle" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'m' + sec + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + n + '</span></span><span onclick="mhShopTickSection(' + sec + ')" title="Tick every item in this aisle into the basket" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">☑ all</span></div>'; } if (!fold['m' + sec]) rows += rowHtml(i); });
+    pendingVis.forEach(i => { const sec = mhShopSection(i.cat), fk = (multi ? shopIx(i.shop) + '_' : '') + sec; if (multi && i.shop !== lastShop) { lastShop = i.shop; lastSec = -1; rows += '<div class="mh-shophead" style="margin-top:18px;padding:6px 4px;font-size:14px;font-weight:700;color:var(--text);border-bottom:2px solid var(--accent);">🛒 ' + esc(i.shop) + '</div>'; } if (sec !== lastSec) { lastSec = sec; const n = pendingVis.filter(x => mhShopSection(x.cat) === sec && (!multi || x.shop === i.shop)).length, shut = !!fold['m' + fk]; rows += '<div class="mh-aisle" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'m' + fk + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + n + '</span></span><span onclick="mhShopTickSection(' + sec + ')" title="Tick every item in this aisle into the basket" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">☑ all</span></div>'; } if (!fold['m' + fk]) rows += rowHtml(i); });
     rows += (basketVis.length ? '<div id="mhShopBasketBar" onclick="mhShopBasketToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px;margin-top:16px;border-top:1px solid var(--border);cursor:pointer;font-size:15px;color:var(--text2);"><span>✓ In basket (' + basketVis.length + ')</span><span style="color:var(--text3);font-size:13px;">' + (basketOpen ? '▾ hide' : '▸ show') + '</span></div>' + (basketOpen ? basketVis.map(rowHtml).join('') : '') : '') + (!pendingVis.length && basketVis.length ? '<div style="font-size:14px;color:var(--green);padding:8px 4px;">Everything is in the basket.</div>' : '');
     const total = s.items.length, got = s.items.filter(i => i.checked).length, lq = (_shopUi.lq || '').trim();
     const filt = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;"><input id="mhShopLQ" value="' + esc(_shopUi.lq || '') + '" oninput="mhShopLQ(this.value)" type="search" enterkeyhint="search" onkeydown="if(event.key===\'Enter\')this.blur()" placeholder="🔍 Search your list (e.g. Asda, cream)" style="flex:1;min-width:0;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;">' + (lq ? '<span onclick="mhShopLQ(\'\')" title="Clear" style="cursor:pointer;color:var(--text3);padding:6px;font-size:18px;">✕</span>' : '') + '</div>';
@@ -27137,7 +27156,8 @@ function mhShopRender(keepFocus) {
     const addPanel = addOpen ? '<div id="mhShopAddPanel" style="padding:8px 0 4px;">'
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="Type an item" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div>'
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
-    body = filt + count + rows + addBar + addPanel
+    const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.map((n, x) => '<button class="copy-btn" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)" style="font-size:13px;padding:8px 12px;' + (n === s.shop ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(n) + (s.items.filter(i => i.shop === n).length ? ' (' + s.items.filter(i => i.shop === n).length + ')' : '') + '</button>' + (edit && x > 0 ? '<span title="Remove this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" onclick="mhShopAddShop()" style="font-size:13px;padding:8px 12px;">＋ Shop</button></div>';
+    body = chips + filt + count + rows + addBar + addPanel
       + '<button onclick="mhShopComplete()" style="width:100%;margin-top:16px;padding:16px;background:var(--green);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>';
   }
   m.innerHTML = head + msg + body;
