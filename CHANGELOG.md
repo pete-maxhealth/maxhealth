@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1107 – My usuals: search your ingredients
+- On My usuals, typing now searches your saved ingredients. Tap one and it becomes a usual and goes on your list. Already bought it? Tap it again in the usuals list to take it off. You can still type something new and tap Add.
+
 ## v3.10.1106 – Shopping: pick straight into My usuals
 - On Add from my foods, choose **Add to: This list / My usuals (shop)**. In My usuals mode a tap makes it a usual for the shop you are in (tap again to remove) and does not touch your list.
 
