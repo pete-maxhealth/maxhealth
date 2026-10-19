@@ -2881,6 +2881,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="font-size:12px;color:var(--text2);margin-top:8px;" id="fastNowSub">Log a meal and your fast starts timing by itself.</div>
       <div style="font-size:12px;color:var(--text3);line-height:1.6;margin-top:8px;">&lt;strong&gt;Longer is not better.&lt;/strong&gt; A normal overnight gap of about 10 to 14 hours is ordinary physiology (proven). Extra benefits from fasting longer than that are small and still being studied (early stage), and routine fasts beyond about a day are speculative. The costs of going too long are real: lost muscle, low energy, poor sleep, low blood sugar if you take certain medicines, and under-eating, which matters most if you are trying to hold or gain weight. Aim for a gap you can keep up, not a record. Fasting is not for you if you are underweight, losing weight without meaning to, pregnant, under 18, or have had an eating disorder.&lt;br&gt;&lt;br&gt;&lt;strong&gt;On a ketogenic diet?&lt;/strong&gt; You are already close to a fasting state: low insulin, lower and steadier glucose and raised ketones (proven). So a longer fast adds less for you than for someone eating plenty of carbohydrate, and your GKI readings show where you are. Whether adding fasting on top improves outcomes is early stage.&lt;br&gt;&lt;br&gt;&lt;strong&gt;Taking medicine with fat or protein?&lt;/strong&gt; If a medicine must be taken with food, take it with food. A small amount of fat barely moves insulin or glucose, and protein moves them a little more (proven), so for ketones and blood sugar it does not undo your fast in any meaningful way. The setting &lsquo;A meal breaks the fast at&rsquo; lets you decide what counts. Never skip or delay a dose to protect a fast.</div>
       <div style="font-size:12px;color:var(--text2);margin-top:8px;" id="fastLastLine"></div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;display:none;" id="fastPlanLine"></div>
       <div style="font-size:12px;color:var(--text3);margin-top:2px;" id="fastWindowLine"></div>
       </div>
       <div style="font-size:11px;margin-top:8px;display:none;line-height:1.5;" id="fastCaution"></div>
@@ -6512,7 +6513,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1121'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1122'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -23258,8 +23259,10 @@ function mhPlanEat(id) {
   mhPlanSave(a.filter(x => x.id !== id));
   const foods = JSON.parse(JSON.stringify(p.foods || []));
   window._planPending = null;
-  window._pendingMealTimeOverride = p.time || null;
-  if (p.date && p.date !== localISODate()) window._logTargetDate = mhPlanISOtoDMY(p.date);
+  // Ticked before its planned time (or day) it was eaten NOW; the planned time is only kept for plans already due.
+  const _isFuture = (p.date || localISODate()) > localISODate() || ((p.date || localISODate()) === localISODate() && String(p.time || '') > nowTime());
+  window._pendingMealTimeOverride = _isFuture ? null : (p.time || null);
+  if (!_isFuture && p.date && p.date !== localISODate()) window._logTargetDate = mhPlanISOtoDMY(p.date);
   try { logFoods(foods, p.text); } finally { window._pendingMealTimeOverride = null; window._logTargetDate = null; }
   try { updateDashboard(); } catch (_) {}
   mhPlanRender();
@@ -23369,6 +23372,7 @@ function mhPlanRender() {
     <label style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--text3);margin-top:6px;"><input type="checkbox" id="mhPlanAuto" ${auto ? 'checked' : ''} onchange="mhPlanSetAuto(this.checked)"> Trust my plan: log it automatically at the time</label>
     </div>
   </div>`;
+  try { mhRenderFastingCard(); } catch (_) {}
   try { mhCardBodyApply(); } catch (_) {}
 }
 setInterval(() => { try { if (document.getElementById('mhPlanBlock')) mhPlanRender(); } catch (_) {} }, 30000);
@@ -37137,6 +37141,9 @@ function mhFastDayEvents(dateStr, log, notes) {
   // its real clock time. Without this a 02:00 snack logged in "Today" blanked the live timer (v3.10.948).
   const now = Date.now();
   for (let i = 0; i < mins.length; i++) { if (mins[i] < 240 && at(mins[i] + 1440) <= now + 60000) mins[i] += 1440; }
+  // A meal stamped with a time that has not arrived yet (a planned meal ticked "Ate it" early, say) has not happened, so it can
+  // neither end nor restart a fast: the timer keeps counting from the last meal that really was eaten (v3.10.1122).
+  for (let i = mins.length - 1; i >= 0; i--) { if (at(mins[i]) > now + 60000) mins.splice(i, 1); }
   return mins.length
     ? { date: dateStr, base, first: at(Math.min(...mins)), last: at(Math.max(...mins)), n: mins.length, tag: mhFastHasTag(notes) }
     : (mhFastHasTag(notes) ? { date: dateStr, base, first: null, last: null, n: 0, tag: true } : null);
@@ -37205,6 +37212,24 @@ function mhFastingConditionNote(cond) {
   if (cond === 'gbm' || cond === 'strict_keto') return { tone: 'info', text: 'Proven: fasting raises blood ketones and lowers glucose, so your GKI readings should show it. Early stage: whether time-restricted eating improves outcomes in glioma is still being researched.' };
   return null;
 }
+// What a planned meal does to the fast: the next one that is big enough to count, and how long the fast would be by then.
+function mhRenderFastPlanLine(now) {
+  const el = document.getElementById('fastPlanLine'); if (!el) return;
+  let txt = '';
+  try {
+    const thr = mhFastThresholdKcal(), nowMs = Date.now(), goal = mhFastGoalH();
+    const next = mhPlanLoad().map(p => ({ p, at: new Date((p.date || localISODate()) + 'T' + (p.time || '00:00') + ':00').getTime(), k: (p.foods || []).reduce((a, f) => a + (f.kcal || 0), 0) }))
+      .filter(x => !isNaN(x.at) && x.at > nowMs && x.k >= thr).sort((a, b) => a.at - b.at)[0];
+    if (next) {
+      const when = mhFastClock(next.at) + (new Date(next.at).toDateString() === new Date().toDateString() ? '' : ' tomorrow'), name = String(next.p.text || 'planned meal').slice(0, 40);
+      if (now && !now.stale) {
+        const h = (next.at - now.lastMs) / 3600000, ok = new Date(now.lastMs + goal * 3600000);
+        txt = '🗓 Planned ' + when + ' (' + name + '): ' + (h >= goal ? 'your fast would end at ' + mhFastFmt(h) + ', goal ' + mhFastFmt(goal) + ' reached ✓' : 'your fast would end at ' + mhFastFmt(h) + ', short of your ' + mhFastFmt(goal) + ' goal (' + mhFastFmt(goal) + ' is ' + mhFastClock(ok.getTime()) + (ok.toDateString() === new Date().toDateString() ? '' : ' tomorrow') + ')') + '. Nothing changed; it only counts when you eat it.';
+      } else txt = '🗓 Planned ' + when + ' (' + name + '). It starts your next fast when you eat it.';
+    }
+  } catch (_) { txt = ''; }
+  el.textContent = txt; el.style.display = txt ? 'block' : 'none';
+}
 function mhRenderFastingCard() {
   const el = document.getElementById('fastNowVal'); if (!el) return;
   const now = mhFastingNow(), goal = mhFastGoalH(), sub = document.getElementById('fastNowSub'), bar = document.getElementById('fastBar'), lastEl = document.getElementById('fastLastLine'), winEl = document.getElementById('fastWindowLine'), cEl = document.getElementById('fastCaution');
@@ -37222,6 +37247,7 @@ function mhRenderFastingCard() {
   lastEl.textContent = doneFast ? `Last fast: ${mhFastFmt(doneFast.fastH)}${doneFast.fastH >= goal ? ' ✓' : ''} (ended ${doneFast.date === todayStr() ? 'today' : doneFast.date} ${mhFastClock(doneFast.firstMs)})` : '';
   const doneWin = [...recs].reverse().find(r => r.date !== todayStr() && r.windowH != null);
   winEl.textContent = doneWin ? `Eating window ${doneWin.date}: ${mhFastFmt(doneWin.windowH)} (${mhFastClock(doneWin.firstMs)}–${mhFastClock(doneWin.lastMs)})` : '';
+  mhRenderFastPlanLine(now);
   const cn = mhFastingConditionNote();
   cEl.style.display = cn ? 'block' : 'none';
   if (cn) { cEl.textContent = cn.text; cEl.style.color = cn.tone === 'caution' ? 'var(--yellow,#f5c542)' : 'var(--text3)'; }

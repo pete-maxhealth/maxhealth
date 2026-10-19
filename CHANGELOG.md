@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1122 – Fasting now handles planned meals (the timer no longer vanishes)
+- Pete Spence: "if you enter a planned meal, the fasting timer disappears and you only get a line."
+- **Found and fixed the cause:** a planned meal ticked "Ate it" *before* its planned time was logged at the planned (future) time, and a meal stamped later than now made the live timer give up ("—"). Now ticking a plan before its time logs it at the real time, so the timer restarts from it; a plan already due keeps its planned time. Separately, any meal stamped later than now is ignored by the fast (it has not happened), so a typo like 22:00 at 14:00 can no longer blank the timer.
+- **The Fasting card now shows what your plan does to the fast:** "🗓 Planned 18:00 (Steak): your fast would end at 7h, short of your 12h goal (12h is 23:00)", or "goal reached ✓", with tomorrow's plans labelled, plans under your fasting threshold ignored, and "It starts your next fast when you eat it" when nothing has been eaten. It updates whenever the plan changes. Nothing is ever changed for you.
+- Test `p215` (fixed clock, mutation-checked).
+
 ## v3.10.1121 – Stock control: 📋 Check the cupboards (set up by walking the list)
 - Pete Spence: tracking one ingredient at a time is too slow; "someone just goes down the list and checks in the cupboards", a couple a minute, filterable, no submit or save.
 - **Stock card → 📋 Check the cupboards** lists every ingredient the app knows. Each row has boxes: **Have now**, **Reorder at**, **One serving** (pre-filled from your library portion where it has one) and **Bought at**. Every box saves the moment you leave it ("✓ saved", or "low" in red); the list is never rebuilt under you, so you keep your place.
