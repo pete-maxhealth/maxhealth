@@ -21415,6 +21415,7 @@ function mhApplyBackupObject(backup, label) {
   if (backup.settings && typeof backup.settings === 'object') {
     Object.entries(backup.settings).forEach(([k, v]) => { if (k.startsWith('mh_') && !_BACKUP_SETTINGS_SKIP.test(k) && typeof v === 'string') localStorage.setItem(k, v); });
   }
+  try { if (backup.settings && backup.settings.mh_shopping_stock_v1) sessionStorage.setItem('mh_stock_restored', String(label || 'a backup')); } catch (_) {}
   saveState();
   showToast(`Restored from ${label} ✓ Reloading…`);
   setTimeout(() => window.location.reload(), 1200);
@@ -27389,7 +27390,7 @@ function mhStockLoad() {
 function mhStockSave(o) {
   const now = Date.now(), DAY = 86400000;
   o.ledger = o.ledger.filter(l => l && o.items[l.k] && (now - l.t) < 60 * DAY && l.t >= (o.items[l.k].since || 0)).slice(-4000);
-  o.rev = (parseInt(o.rev) || 0) + 1;
+  o.rev = (parseInt(o.rev) || 0) + 1; o.at = Date.now();
   try { localStorage.setItem(MH_STOCK_KEY, JSON.stringify(o)); } catch (_) {}
 }
 function mhStockIsLow(it) { return !!it && it.level != null && it.reorder != null && it.level <= it.reorder; }
@@ -27492,6 +27493,53 @@ function mhStockCooked(id, servings) {
   try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
   return took;
 }
+// ── Moving stock between devices (master → servant) ─────────────────────────────────────────────────────────────────────────────
+// One device holds the real counts (the master); another can be made to match it. It always REPLACES, in one stated direction, and
+// only once a backup of the receiving device is known to exist, so a wrong-way import can always be undone from that backup.
+function mhStockDeviceLabel() { try { return localStorage.getItem('mh_stock_device_label') || ''; } catch (_) { return ''; } }
+function mhStockExportAsk() { appPrompt('Name this device (shown on the device that receives the file)', 'e.g. Pete\'s phone', v => mhStockExport(v), mhStockDeviceLabel()); }
+function mhStockExport(label) {
+  label = String(label || '').trim() || 'This device'; try { localStorage.setItem('mh_stock_device_label', label); } catch (_) {}
+  const o = mhStockLoad(), n = Object.keys(o.items).length;
+  if (!n) { showToast('Nothing is tracked yet, so there is no stock to send'); return null; }
+  const pack = { type: 'mh-stock-transfer', v: 1, exportedAt: Date.now(), device: label, tracked: n, low: Object.values(o.items).filter(mhStockIsLow).length, items: o.items, cooked: o.cooked || {} };
+  try {
+    const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(pack)], { type: 'application/json' }));
+    a.href = url; a.download = 'maxhealth_stock_' + todayStr().replace(/\//g, '-') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch (_) {}
+  showToast('Stock file ready: ' + n + ' tracked');
+  return pack;
+}
+function mhStockImportPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,application/json'; i.id = 'mhStockImportInput'; i.onchange = () => mhStockImportFile(i); i.click(); }
+async function mhStockImportFile(input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  let pack; try { pack = JSON.parse(await f.text()); } catch (_) { showToast("Couldn't read that file"); return; }
+  return mhStockImportStart(pack);
+}
+// 1) is it a stock file  2) does a backup of THIS device exist  3) say which way it goes and ask  4) replace
+async function mhStockImportStart(pack) {
+  if (!pack || pack.type !== 'mh-stock-transfer' || !pack.items || typeof pack.items !== 'object' || Array.isArray(pack.items)) { showToast("That isn't a MaxedHealth stock file"); return false; }
+  let last = null; try { last = localStorage.getItem('mh_last_full_backup_date'); } catch (_) {}
+  if (!last) { try { await _saveFullBackupToServer_impl(false); last = localStorage.getItem('mh_last_full_backup_date'); } catch (_) {} }
+  if (!last) { showToast('No backup of this device exists yet, and one could not be made. Make a backup first (Settings), then try again.', null, null, 6000); return false; }
+  const mine = mhStockLoad(), esc = mhPlanEsc, nMine = Object.keys(mine.items).length, nFile = Object.keys(pack.items).length;
+  const fmt = t => t ? new Date(t).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown time';
+  const older = mine.at && pack.exportedAt && pack.exportedAt < mine.at;
+  const msg = '<b>' + esc(pack.device || 'The other device') + '</b> (' + nFile + ' tracked, made ' + esc(fmt(pack.exportedAt)) + ') <b>→ this device</b> (' + nMine + ' tracked, last changed ' + esc(fmt(mine.at)) + ').<br><br>'
+    + 'This <b>replaces</b> the stock on this device with the file. Nothing is sent back.' + (older ? '<br><br><b style="color:var(--red);">⚠ The file is OLDER than the stock on this device.</b>' : '')
+    + '<br><br>Your last backup of this device: ' + esc(last) + '.';
+  window._stockXfer = pack;
+  appConfirm(msg, () => mhStockImportApply(pack), () => { window._stockXfer = null; }, true, { confirm: 'Replace this device\'s stock', cancel: 'Keep this device\'s stock' });
+  return true;
+}
+function mhStockImportApply(pack) {
+  const o = mhStockLoad(), now = Date.now(), items = {};
+  Object.entries(pack.items).forEach(([k, it]) => { if (it && it.name && MH_STOCK_BASES.includes(it.base)) items[k] = Object.assign({}, it, { key: k, since: now, lowFlag: false }); });
+  o.items = items; o.ledger = []; o.cooked = pack.cooked && typeof pack.cooked === 'object' ? pack.cooked : {}; delete o.review; delete o.cookedUse; mhStockSave(o);
+  const added = mhStockSweep(); window._stockXfer = null; _shopUi.msg = 'Stock replaced from ' + (pack.device || 'the other device') + ': ' + Object.keys(items).length + ' tracked' + (added ? ', ' + added + ' put on your list' : '');
+  mhShopView('list'); return Object.keys(items).length;
+}
+function mhStockRestoreNoticeClear() { try { sessionStorage.removeItem('mh_stock_restored'); } catch (_) {} mhShopRender(); }
 // Anything at or under its reorder level goes on the shopping list under its shop, once per time it runs low (taking it off the list
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
 // is left waiting rather than guessed at: its items come back when that shop does.
@@ -27521,6 +27569,7 @@ function mhStockCtlHide() { const l = mhStockLayout(); l.hidden = !l.hidden; mhS
 // ── Stock control: the screens ──
 function mhStockLibraryPortion(name) { try { const k = mhShopKey(name), f = loadLibrary().find(x => x && x.name && mhShopKey(x.name) === k); return f && f.portion ? String(f.portion) : ''; } catch (_) { return ''; } }
 function mhStockCardHtml(s) {
+  let restoredFrom = ''; try { restoredFrom = sessionStorage.getItem('mh_stock_restored') || ''; } catch (_) {}
   const esc = mhPlanEsc, o = mhStockLoad(), items = Object.values(o.items).sort((a, b) => (mhStockIsLow(b) ? 1 : 0) - (mhStockIsLow(a) ? 1 : 0) || a.name.localeCompare(b.name)), low = items.filter(mhStockIsLow).length;
   const sp = 'cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;';
   const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
@@ -27529,9 +27578,11 @@ function mhStockCardHtml(s) {
     return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + '</div></div><span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
   return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl
     + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">' + (items.length ? items.length + ' tracked' + (low ? ' · <b style="color:var(--red);">' + low + ' low</b>' : '') : 'Nothing tracked yet') + '</div></div>'
-    + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins.</div>'
+    + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes.</div>'
+    + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div></div></div>';
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div></div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
 function mhStockEditView(key, nameIn) {
