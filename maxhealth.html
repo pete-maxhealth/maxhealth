@@ -27168,7 +27168,28 @@ function mhShopComplete() {
   const s = mhShopLoad(), n = s.items.filter(i => i.checked && i.shop === s.shop).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
   if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked ' + s.shop + ' item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked, and your other shops, stay.')) return;
-  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied'; mhShopRender();
+  const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = bought.filter((k, n) => so.items[k] && bought.indexOf(k) === n);
+  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied';
+  // Tracked things you just bought go to a review step: stock is only added from what you confirm (nothing is assumed about quantity).
+  if (track.length) { so.review = Array.from(new Set((so.review || []).concat(track))); mhStockSave(so); _shopUi.bgt = {}; _shopUi.view = 'stockbought'; }
+  mhShopRender();
+}
+function mhBoughtDefault(it) { return it && it.level != null && it.pack > 0 ? it.pack + (it.base === 'each' ? '' : ' ' + it.base) : ''; }
+function mhBoughtSet(k, v) { _shopUi.bgt = _shopUi.bgt || {}; _shopUi.bgt[k] = v; }
+function mhStockBoughtSkipAll() { const o = mhStockLoad(); delete o.review; mhStockSave(o); _shopUi.bgt = null; _shopUi.msg = 'Stock left as it was'; mhShopView('list'); }
+function mhStockBoughtDone() {
+  const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), todo = [], bad = {};
+  rows.forEach(k => {
+    const it = o.items[k], typed = (_shopUi.bgt && k in _shopUi.bgt) ? _shopUi.bgt[k] : mhBoughtDefault(it);
+    if (!String(typed).trim()) return;
+    const r = mhStockParse(typed, it); if (!r.ok) { bad[k] = r.err; return; } if (!(r.base > 0) && it.level != null) { bad[k] = 'Type an amount above zero, or leave it empty to skip'; return; }
+    todo.push([k, r.base, it.level == null]);
+  });
+  if (Object.keys(bad).length) { _shopUi.bgtErr = bad; mhShopRender(); return; }
+  _shopUi.bgtErr = null;
+  todo.forEach(([k, b, unknown]) => { if (unknown) mhStockSetLevel(k, b); else mhStockAdjust(k, b, 'bought', 'shop'); });
+  const o2 = mhStockLoad(); delete o2.review; mhStockSave(o2); mhStockSweep(); _shopUi.bgt = null;
+  _shopUi.msg = todo.length ? 'Stock updated for ' + todo.length + ' item' + (todo.length === 1 ? '' : 's') : 'Stock left as it was'; mhShopView('list');
 }
 function mhShopCopy() {
   const s = mhShopLoad(), txt = mhShopVisible(s).filter(i => !i.hidden && !i.checked).map(i => '- ' + i.name + (i.amount ? ' (' + i.amount + ')' : '')).join('\n');
@@ -27510,7 +27531,7 @@ function mhStockCardHtml(s) {
     + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">' + (items.length ? items.length + ' tracked' + (low ? ' · <b style="color:var(--red);">' + low + ' low</b>' : '') : 'Nothing tracked yet') + '</div></div>'
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins.</div>'
     + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div></div></div>';
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div></div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
 function mhStockEditView(key, nameIn) {
@@ -27628,6 +27649,14 @@ function mhShopRender(keepFocus) {
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;"><button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Save</button>' + btn('Cancel', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Stop tracking</button>') + '</div>';
+  } else if (_shopUi.view === 'stockbought') {
+    const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), er = _shopUi.bgtErr || {}, inp2 = 'width:100%;box-sizing:border-box;padding:11px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things you track and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
+      + (rows.map(k => { const it = o.items[k], unknown = it.level == null, val = (_shopUi.bgt && k in _shopUi.bgt) ? _shopUi.bgt[k] : mhBoughtDefault(it);
+        return '<div data-bought="' + esc(it.name) + '" style="padding:10px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(it.name) + ' <span style="font-size:12px;color:var(--text3);">' + (unknown ? 'how much do you have now?' : 'bought (now ' + esc(mhStockFmt(it, it.level)) + ')') + '</span></div>'
+          + '<input data-k="' + esc(k) + '" value="' + esc(val) + '" oninput="mhBoughtSet(this.dataset.k,this.value)" placeholder="' + (unknown ? 'count it, e.g. 750 g' : 'e.g. 1 pack or 500 g') + '" style="' + inp2 + '">'
+          + (er[k] ? '<div style="font-size:12px;color:var(--red);margin-top:4px;">' + esc(er[k]) + '</div>' : '') + '</div>'; }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to review.</div>')
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhBoughtDone" class="copy-btn" onclick="mhStockBoughtDone()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Update stock</button>' + btn('Leave stock as it was', 'mhStockBoughtSkipAll()') + '</div>';
   } else if (_shopUi.view === 'stocksuggest') {
     const tr = mhStockLoad().items, list = mhShopRanked().filter(x => !tr[x.key]).slice(0, 15);
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ The ones I use most</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">What you eat most that is not tracked yet. Choose how each is counted to start tracking it; you can add pack size and amounts later with ✎.</div>'
