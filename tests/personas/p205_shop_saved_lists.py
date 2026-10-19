@@ -140,5 +140,27 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("p=>mhApplyBackupObject(p,'test')", payload)
     if ev("localStorage.getItem('mh_shopping_lists_v1')") != raw: f.add('BUG', 'a restore must bring the saved lists back exactly')
 
+    # K. a heavy user: 260 items and ten saved lists of that size (about 293,000 characters) must still be in the backup
+    #    and survive a restore; an oversized unrelated key must be REPORTED as skipped, never lost quietly
+    ev("""()=>{
+        const s = mhShopLoad(); s.shops = ['Asda','Butchers','Aldi','Tesco']; s.items = []; const cats = ['meat','dairy','vegetable','fruit','bread','grain','fat','savoury'];
+        for (let i = 0; i < 260; i++) { mhShopSetAdd(s, 'Realistic Ingredient Name Number ' + i + ' (Asda)', 'own', '', cats[i % 8], {}); s.items[s.items.length - 1].shop = s.shops[i % 4]; }
+        mhShopSave(s); localStorage.removeItem('mh_shopping_lists_v1');
+        for (let n = 0; n < 10; n++) mhShopListSaveNamed('all', 'Big list ' + n);
+        localStorage.setItem('mh_zz_big_unrelated', 'x'.repeat(250000));
+    }""")
+    big_raw = ev("localStorage.getItem('mh_shopping_lists_v1')"); main_raw = ev("localStorage.getItem('mh_shopping_v1')")
+    if len(big_raw) <= 200000: f.add('BUG', f'test setup: saved lists should be over the old 200,000 limit, got {len(big_raw)}')
+    payload = ev("buildFullBackupPayload()")
+    st = payload.get('settings') or {}
+    if st.get('mh_shopping_lists_v1') != big_raw: f.add('BUG', 'ten big saved lists must be in the backup')
+    if st.get('mh_shopping_v1') != main_raw: f.add('BUG', 'a 260-item shopping list must be in the backup')
+    if 'mh_zz_big_unrelated' in st or 'mh_zz_big_unrelated' not in (payload.get('skippedKeys') or []):
+        f.add('BUG', f'an oversized unrelated key should be left out AND reported in skippedKeys: {payload.get("skippedKeys")}')
+    ev("localStorage.removeItem('mh_shopping_lists_v1'); localStorage.removeItem('mh_shopping_v1')")
+    ev("p=>mhApplyBackupObject(p,'test')", payload)
+    if ev("localStorage.getItem('mh_shopping_lists_v1')") != big_raw or ev("localStorage.getItem('mh_shopping_v1')") != main_raw:
+        f.add('BUG', 'a restore must bring back the 260-item list and all ten big saved lists exactly')
+
     if errs: f.add('BUG', f'page errors {errs[:3]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

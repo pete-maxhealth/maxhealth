@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1117 – Fixed: big shopping lists and saved lists could silently drop out of the backup
+- Pete Spence: his shopping lists are often over 200 items, so nothing here may be limited by size. I measured instead of assuming: 260 items is about 64,000 characters (fine, and it renders in 7 ms), but ten saved lists of that size came to about 293,000, and the backup leaves out any single stored key over 200,000 characters. So heavy use of saved lists would have dropped them from every backup with no sign. **My v3.10.1116 note that saved lists needed no backup changes was only true for small lists; that was wrong.**
+- Shopping keys (`mh_shopping*`) now have a 3,000,000-character ceiling in the backup. Restore already took everything it was given.
+- Anything still left out for size is now recorded in the backup (`skippedKeys`) instead of vanishing silently.
+- `p205` extended: 260 items and ten saved lists must be in the backup and come back through a real restore; an oversized unrelated key must be reported, not lost quietly.
+
 ## v3.10.1116 – Shopping: saved lists, with a merge-or-replace choice
 - Pete Spence asked for saved, named shopping lists so a shop's list can be brought back after a gap ("a merge-vs-replace prompt when pulling a shop's list back in"). **Add items > 📁 Saved lists.**
 - **Save** this shop's items, or the whole list across every shop, under a name you choose. What you wanted is saved, not how far through the trip you were: ticks are not saved, hidden items are left out, and a non-food item keeps its amount ("24 pack"). Saving under a name that already exists (any capitalisation) asks before replacing it.

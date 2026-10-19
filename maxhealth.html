@@ -6512,7 +6512,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1116'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1117'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -13816,21 +13816,28 @@ function buildFullBackupPayload() {
     // AI provider, report profiles, reminders...). These were never in the backup, so a restore
     // brought back the food history but left the app with no profile, targets or condition.
     settings: _collectBackupSettings(),
+    skippedKeys: window._mhBackupSkippedKeys || [],
     exportedAt: new Date().toISOString(),
   };
 }
 
 const _BACKUP_SETTINGS_SKIP = /(^mh_(combined_csv|error_log|rollover_debug|last_full_backup|debug|firstlog_nudge|notif_(eod|carb|sent)|last_export_nudge|server_|cache|temp))|key|token|secret|password/i;
+// Shopping data is real, hand-built user data (lists of 200+ items, saved lists, later stock levels), not a cache, so it gets a much
+// higher ceiling than the 200,000-character limit that keeps stray large keys out of the backup. Anything that IS still left out for
+// size is recorded in the backup itself (skippedKeys) instead of vanishing silently.
+const _BACKUP_BIG_OK = /^mh_shopping/;
 function _collectBackupSettings() {
-  const out = {};
+  const out = {}, skipped = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k || !k.startsWith('mh_') || _BACKUP_SETTINGS_SKIP.test(k)) continue;
       const v = localStorage.getItem(k);
-      if (v != null && v.length <= 200000) out[k] = v;
+      if (v == null) continue;
+      if (v.length <= (_BACKUP_BIG_OK.test(k) ? 3000000 : 200000)) out[k] = v; else skipped.push(k);
     }
   } catch (e) {}
+  window._mhBackupSkippedKeys = skipped;
   return out;
 }
 
