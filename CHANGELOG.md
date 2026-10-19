@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1119 – Stock control, stage 2: logging and cooking take stock off by themselves
+- Pete Spence: "cooking writes the shopping list". Food you log now comes off stock automatically for tracked ingredients, through every doorway that records an amount: chat, library, recipes (Log 1 serving, Other, suggested recipe), paste-a-meal, and past days from History. Planned meals never take stock. The manual calorie form has no amount, so it takes nothing (nothing is guessed).
+- Reads the amount you logged: g, kg, ml, l, a count, or servings/portions when the ingredient has a serving size. An amount it cannot read (for example "a scoop") leaves stock alone and a note says so.
+- Putting it back: deleting an entry, clearing today, or deleting from History returns exactly what was taken; editing an entry returns the old amount and takes the new. Food eaten before your last stock-take is already in that count and is not taken again.
+- **🍲 Cooked a batch** on recipe cards takes the whole recipe off stock once (grams only; ml and counts are left alone and named). Servings you log from that batch afterwards take nothing more; logging more than you cooked takes only the extra share; deleting the entry gives the cooked serving back. Recipe cards also say "stock covers a batch" or "short of X".
+- Stock card help text updated. Tests `p208` (includes a source scan that fails if a new place creates log entries without taking stock) and `p209`, both mutation-checked.
+
 ## v3.10.1118 – Stock control, stage 1: track what you run out of, in whatever units you think in
 - Pete Spence: "cooking writes the shopping list". This is the first of four stages. **It is manual for now: nothing comes off stock by itself yet** (cooking and logging come next, then Shopping complete adding what you bought, then the master-to-servant transfer between phones).
 - **📦 Stock control** sits under the shopping list, with the same ? help and ▲ ▼ 👁 ▾ hide controls as every other card (fold remembers, hide leaves a "Show stock control" link, ▲ ▼ swap it with the list and remember).
