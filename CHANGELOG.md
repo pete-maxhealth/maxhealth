@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1113 – Fixed: 7 Today cards were missing their fold control, and "hide" was shouting on one card
+- Pete Spence (three screenshots): "A show/hide missing… Uppercase HIDE and lowercase hide? What happened to consistency?" No revert happened (checked `git log`/`git status` — clean, matches this version) — these were pre-existing gaps, not a regression from recent work.
+- Audited every card with move (▲▼) and hide (👁) controls and found 7 that had never gotten the 4th "▾ hide" fold-to-bar control that Water, Fibre and Fasting have: **Day mode, Ketosis, Macros (the 4 progress tiles), Macro Ratio, Goal check banner, Meal plan and Weather**. Meal plan looked done (it was already half-wired into the fold list) but had no matching body element, so toggling it silently did nothing — an earlier "meal plan's show/hide is fixed" from me was wrong; I'd only checked move/hide, not fold. All 7 now fold and remember it the same way as every other card.
+- Fixed **Today's Log** showing "▾ HIDE" in capitals while every other card says "▾ hide" — `.log-title`'s `text-transform: uppercase` was cascading onto the label inside it. Now stays lowercase everywhere.
+- New test `p202_card_fold_consistency.py` checks all 7 cards' fold control exists, works, survives a reload, and that Today's Log's label is lowercase.
+
 ## v3.10.1112 – Shopping: non-food items (first part of the shopping list overhaul)
 - **Food / Not food** toggle on ＋ Add items > type an item. Not food shows an amount box (free text — "24 pack", "2 bottles") since there's no nutrition to size a portion against. Tested: the toggle resets to Food each time the add panel opens, and picking Food back never carries over an amount or a non-food category.
 - Non-food items sit in their own **Not food** section, always last, with the same fold and ☑ all as every real aisle — never mixed in with "Other" (unmatched but real) food.
