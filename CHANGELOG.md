@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1108 – Fixed: "No fibre" silently rejected on foods with no saved portion
+- Pete Spence (screenshot): tapping **No fibre** on Black Pepper in Nutrient Figures in Your Library did nothing — it stayed on the outstanding list. Root cause: `mhAuditSave` checked for a saved portion before doing anything at all, even for "No fibre", so a food with no portion saved bounced with a toast and nothing was recorded. A portion matters for a fibre *amount* (it's per-portion), but "No fibre" is zero at any size and never needed one. "No fibre" now saves immediately regardless of portion; typing a fibre amount still asks for the portion first, as before.
+
 ## v3.10.1107 – My usuals: search your ingredients
 - On My usuals, typing now searches your saved ingredients. Tap one and it becomes a usual and goes on your list. Already bought it? Tap it again in the usuals list to take it off. You can still type something new and tap Add.
 

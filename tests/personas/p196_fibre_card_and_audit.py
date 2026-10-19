@@ -52,13 +52,12 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'One portion = 100g' in txt: f.add('BUG', 'portion was assumed to be 100g')
     if ev("document.getElementById('mhAud-t1').getBoundingClientRect().width") < 90: f.add('BUG', 'fibre input too narrow to use')
     ev("document.getElementById('mhAud-t1').value='2.2'; mhAuditSave('t1',false)")
-    ev("mhAuditSave('t2',true)")   # Chicken has no portion: must be refused
-    if [q for q in ev("loadLibrary()") if q['id']=='t2'][0].get('fibreChecked'): f.add('BUG', 'No fibre accepted with no portion confirmed')
-    ev("document.getElementById('mhAudP-t2').value='100g'; mhAuditSave('t2',true)")
+    ev("mhAuditSave('t2',true)")   # Chicken has no portion: "No fibre" must still succeed (v3.10.1108) — portion is irrelevant to zero
     lib = ev("loadLibrary()")
     sp = [x for x in lib if x['id'] == 't1'][0]; ch = [x for x in lib if x['id'] == 't2'][0]
     if sp.get('fibre') != 2.2 or not sp.get('fibreChecked'): f.add('BUG', f'save failed {sp}')
-    if ch.get('fibre') != 0 or not ch.get('fibreChecked') or ch.get('portion') != '100g': f.add('BUG', f'no-fibre failed {ch}')
+    if ch.get('fibre') != 0 or not ch.get('fibreChecked'): f.add('BUG', f'no-fibre failed {ch}')
+    if ch.get('portion'): f.add('BUG', f'no-fibre should not invent a portion: {ch}')
     if 'Every food has a fibre figure' not in ev("document.getElementById('mhAuditModal').innerText"): f.add('BUG', 'audit did not finish')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
