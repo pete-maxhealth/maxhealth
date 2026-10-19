@@ -6494,7 +6494,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1108'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1109'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -15108,8 +15108,35 @@ function mhSuggestEffort(routineId, currentSets) {
   const effort = ratio >= 1.1 ? 'Hard' : ratio <= 0.8 ? 'Easy' : 'Moderate';
   return { effort, basis: 'Today is ' + pct + '% of the work in your last ' + dates.length + ' session' + (dates.length === 1 ? '' : 's') + ' of this routine.' };
 }
+// A routine session can run for 30-60+ minutes at the gym, with reps/weights typed in
+// between sets - exactly the gap where a phone screen times out, and Android can reclaim
+// the backgrounded WebView, wiping the whole in-memory _routineApplyDrafts with nothing
+// logged yet (Pete Spence: "strength training routine doesn't survive a screen timeout").
+// Persisted to localStorage on every live edit (renderRoutineLiveTotals runs on each one)
+// and offered back on next open of the same routine; cleared once the session actually
+// saves or is explicitly cancelled, so a stale draft never lingers past its own session.
+const MH_ROUTINE_DRAFT_KEY = 'mh_routine_draft';
+function _persistRoutineDraft() {
+  if (!window._routineApplyDrafts || !_routineApplyId) return;
+  try {
+    localStorage.setItem(MH_ROUTINE_DRAFT_KEY, JSON.stringify({
+      routineId: _routineApplyId,
+      drafts: window._routineApplyDrafts,
+      duration: document.getElementById('routineSessionDuration')?.value || '',
+      effort: document.getElementById('routineSessionEffort')?.value || 'Moderate',
+      effortManual: !!window._routineEffortManual,
+      unit: _strengthUnit,
+      savedAt: Date.now()
+    }));
+  } catch (_) {}
+}
+function _clearRoutineDraft() { try { localStorage.removeItem(MH_ROUTINE_DRAFT_KEY); } catch (_) {} }
+function _loadRoutineDraft() {
+  try { return JSON.parse(localStorage.getItem(MH_ROUTINE_DRAFT_KEY) || 'null'); } catch (_) { return null; }
+}
 function renderRoutineLiveTotals() {
   const el = document.getElementById('routineLiveTotals'); if (!el) return;
+  _persistRoutineDraft();
   const drafts = window._routineApplyDrafts || [];
   const LBS = 0.453592;
   const sets = []; let ex = 0;
@@ -15140,6 +15167,7 @@ function applyRoutine(id) {
   if (!routine) return;
   window._routineEffortManual = false;
   _routineApplyId = id;
+  _routineRequestWakeLock();
   const container = document.getElementById('routineListContainer');
   if (!container) return;
   container.innerHTML = `
@@ -15168,7 +15196,7 @@ function applyRoutine(id) {
       <div id="routineLiveTotals" style="font-size:12px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);"></div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button onclick="saveRoutineSession()" style="flex:1;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">Finish &amp; log</button>
-        <button onclick="showRoutineList()" class="btn-neutral" style="flex:1;padding:8px;border-radius:6px;font-size:13px;">Cancel</button>
+        <button onclick="cancelRoutineApply()" class="btn-neutral" style="flex:1;padding:8px;border-radius:6px;font-size:13px;">Cancel</button>
       </div>
     </div>`;
   // Pre-fill each exercise from whichever source(s) it actually has:
@@ -15179,7 +15207,7 @@ function applyRoutine(id) {
   //    template but switchable at any time — so it's always the user's
   //    call, never a silent guess about which one they meant this time
   //  - neither → blank 3-row default, as before
-  window._routineApplyDrafts = routine.exercises.map(ex => {
+  const buildFreshDrafts = () => routine.exercises.map(ex => {
     const lastSets = getLastLoggedSets(ex.name);
     const hasHistory = !!(lastSets && lastSets.length);
     const hasTemplate = !!(ex.sets && ex.sets.length);
@@ -15192,9 +15220,38 @@ function applyRoutine(id) {
     if (hasHistory)  return { name: ex.name, hasChoice: false, source: 'history',  sets: fromHistory() };
     return { name: ex.name, hasChoice: false, source: 'blank', sets: [{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''},{reps:'',weight_kg:'',note:''}] };
   });
-  // Stored weights are always in kg — force the toggle to match so a pre-filled
-  // number never sits under a mismatched "lbs" label.
-  setRoutineUnit('kg');
+  // A same-routine draft still on disk (screen timed out or the app got backgrounded
+  // mid-session) is offered back rather than silently discarded or silently resumed -
+  // it may be from an hour ago and genuinely not wanted. Anything for a DIFFERENT
+  // routine, or more than 12 hours old, is treated as stale and just cleared.
+  const draft = _loadRoutineDraft();
+  const draftIsFresh = draft && draft.routineId === id && (Date.now() - (draft.savedAt || 0)) < 12 * 60 * 60 * 1000;
+  const applyFreshDrafts = () => { window._routineApplyDrafts = buildFreshDrafts(); setRoutineUnit('kg'); };
+  if (draftIsFresh) {
+    appConfirm('You have an unfinished "' + routine.name + '" session from earlier - resume where you left off?', () => {
+      window._routineApplyDrafts = draft.drafts;
+      _strengthUnit = draft.unit || 'kg';
+      renderRoutineApplyRows();
+      setRoutineUnit(_strengthUnit);
+      const durEl = document.getElementById('routineSessionDuration'); if (durEl) durEl.value = draft.duration || '';
+      const effEl = document.getElementById('routineSessionEffort'); if (effEl) effEl.value = draft.effort || 'Moderate';
+      window._routineEffortManual = !!draft.effortManual;
+      renderRoutineLiveTotals();
+    }, () => { _clearRoutineDraft(); applyFreshDrafts(); }, false, { cancel: 'Start fresh', confirm: 'Resume' });
+  } else {
+    if (draft) _clearRoutineDraft(); // stale (different routine or too old) - never silently reused
+    applyFreshDrafts();
+  }
+}
+// Cancelling means abandoning this session on purpose, so the draft is cleared along
+// with the in-memory state - otherwise the next open of this routine would offer to
+// "resume" a session the person deliberately walked away from.
+function cancelRoutineApply() {
+  window._routineApplyDrafts = null;
+  _routineApplyId = null;
+  _clearRoutineDraft();
+  _routineReleaseWakeLock();
+  showRoutineList();
 }
 function setRoutineUnit(unit) {
   _strengthUnit = unit; // reuse the same unit state as manual logging
@@ -15366,6 +15423,8 @@ function _saveRoutineSessionCore() {
   }
   window._routineApplyDrafts = null;
   _routineApplyId = null;
+  _clearRoutineDraft();
+  _routineReleaseWakeLock();
   document.getElementById('routineListContainer').innerHTML = '';
   renderStrengthCard();
   showToast(`${loggedCount} exercise${loggedCount===1?'':'s'} logged ✓${isEstimate ? ` (~${durationVal}min estimated from ${totalSetsLogged} sets)` : ''}`);
@@ -25434,10 +25493,15 @@ function renderKetosisSmartAlert(totals, fatTotal, fatPct) {
     } else if (carbs < ceiling && fatPct < 50 && totals.kcal > 500) {
       alertMsg = `💡 Carbs in range (${carbs}g) but fat is only ${fatPct}% of calories. For therapeutic ketosis, aim for 65%+ from fat.`;
       alertStyle = 'background:rgba(77,159,255,0.06);border:1px solid rgba(77,159,255,0.2);color:var(--blue);';
-    } else if (carbs < 30 && fatPct >= 65) {
-      alertMsg = `✓ Deep ketosis ratio — ${carbs}g carbs, ${fatPct}% fat calories.${isGBMorEpilepsy ? ' Optimal for your therapeutic protocol.' : ' Optimal ketogenic ratio.'}`;
-      alertStyle = 'background:var(--accent-dim);border:1px solid var(--accent-glow);color:var(--accent);';
     }
+    // A third branch here used to repeat "Deep ketosis ratio... Optimal for your
+    // protocol" whenever carbs<30 && fatPct>=65 - but the main ketosisBadge above
+    // already says exactly this ("DEEP KETOSIS - Xg used - Yg remaining") the moment
+    // that same condition is true, so the two were firing together on every deep-
+    // ketosis day (Pete Spence, screenshot: "ketosis badge on twice"). Removed: this
+    // alert box now only ever shows the two states that carry genuinely different
+    // information the badge doesn't - a low-energy warning, or a fat% still short of
+    // the therapeutic floor - and stays empty once things are actually on track.
     window._dismissedWarnings = window._dismissedWarnings || new Set();
     if (alertMsg && window._dismissedWarnings.has(alertMsg)) {
       alertEl.style.display = 'none';
@@ -32886,7 +32950,27 @@ document.addEventListener('visibilitychange', async () => {
   if (_cookModeOpen && document.visibilityState === 'visible' && !_cookWakeLock) {
     await _cookRequestWakeLock();
   }
+  if (_routineApplyId && document.visibilityState === 'visible' && !_routineWakeLock) {
+    await _routineRequestWakeLock();
+  }
 });
+
+// Same mechanism as Cook Mode's, separate instance: a routine session is typed into
+// between sets over 30-60+ minutes at the gym, which is exactly when a phone's own
+// idle timeout kicks in (Pete Spence: "strength training routine doesn't survive a
+// screen timeout"). This keeps the screen on for as long as a routine is actually open;
+// _persistRoutineDraft (above) is the separate safety net for when the OS reclaims the
+// tab anyway (an explicit phone lock overrides any wake lock - that can't be prevented
+// from a web page), so progress survives either way.
+let _routineWakeLock = null;
+async function _routineRequestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { _routineWakeLock = await navigator.wakeLock.request('screen'); } catch (e) { console.log('[routine session] wake lock request failed:', e); }
+}
+function _routineReleaseWakeLock() {
+  try { _routineWakeLock?.release(); } catch (e) {}
+  _routineWakeLock = null;
+}
 
 // ── Voice command recognizer ────────────────────────────────────────────────
 // Extracted to its own function (rather than inline in onresult) since with
