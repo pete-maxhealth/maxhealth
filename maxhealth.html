@@ -6512,7 +6512,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1119'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1120'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27540,6 +27540,97 @@ function mhStockImportApply(pack) {
   mhShopView('list'); return Object.keys(items).length;
 }
 function mhStockRestoreNoticeClear() { try { sessionStorage.removeItem('mh_stock_restored'); } catch (_) {} mhShopRender(); }
+// ── Matching a name to what the app already knows (v3.10.1120) ─────────────────────────────────────────────────────────────────
+// "Double Cream (Asda)" is ingredient "double cream" + shop "asda". Each shop's product is its own library entry with its own nutrition,
+// so a name is matched in up to three passes and then handed back to the person; nothing is ever picked between two equals, and a match
+// only borrows the NAME (and so the nutrition already stored under it): it never invents figures.
+const MH_MATCH_KEY = 'mh_shopping_match_v1';
+function mhMatchLoad() { let o = null; try { o = JSON.parse(localStorage.getItem(MH_MATCH_KEY) || 'null'); } catch (_) {} if (!o || typeof o !== 'object') o = {}; if (!o.kind || typeof o.kind !== 'object') o.kind = {}; if (!o.link || typeof o.link !== 'object') o.link = {}; return o; }
+function mhMatchSave(o) { try { localStorage.setItem(MH_MATCH_KEY, JSON.stringify(o)); } catch (_) {} }
+function mhNameTidy(n) { return String(n || '').toLowerCase().replace(/[^a-z0-9()&%\s]/g, ' ').replace(/\s+/g, ' ').trim(); }
+// ingredient / shop / pack size are separate things; the pack size is not part of the identity ("Double Cream 300ml" = "Double Cream").
+function mhNameParts(n) {
+  let t = mhNameTidy(n), shop = '';
+  const m = t.match(/\(([^)]*)\)\s*$/); if (m) { shop = m[1].trim(); t = t.replace(/\(([^)]*)\)\s*$/, ' ').trim(); }
+  t = t.replace(/\b\d+(?:\.\d+)?\s?(?:g|kg|ml|l|cl|pk|pack|x)\b/g, ' ').replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { ing: t, shop };
+}
+function mhNameWords(t) { return t.split(' ').filter(Boolean).map(w => w.replace(/(ies)$/, 'y').replace(/(es|s)$/, '')).sort().join(' '); }
+function mhVariantMatch(name, shopHint) {
+  const mem = mhMatchLoad(), k = mhShopKey(name);
+  if (k in mem.link) return mem.link[k] ? { pass: 0, name: mem.link[k], sure: true } : { pass: 0, sure: true, none: true, options: [] };
+  const known = mhShopKnown().map(x => Object.assign({ parts: mhNameParts(x.name) }, x)), me = mhNameParts(name), tidy = mhNameTidy(name); if (!me.shop && shopHint) me.shop = mhNameTidy(shopHint);
+  const exact = known.filter(x => x.key === k || mhNameTidy(x.name) === tidy);
+  if (exact.length === 1) return { pass: 1, name: exact[0].name, sure: true };
+  const same = known.filter(x => x.parts.ing === me.ing);
+  if (me.shop) { const both = same.filter(x => x.parts.shop === me.shop); if (both.length === 1) return { pass: 2, name: both[0].name, sure: true }; if (both.length > 1) return { pass: 2, sure: false, options: both.slice(0, 3).map(x => x.name) }; }
+  else if (same.length === 1 && !same[0].parts.shop) return { pass: 2, name: same[0].name, sure: true };
+  const w = mhNameWords(me.ing), near = known.filter(x => { const xw = mhNameWords(x.parts.ing); return (xw === w || (me.ing.length > 4 && _levenshtein(x.parts.ing, me.ing) <= 1)) && (!me.shop || !x.parts.shop || x.parts.shop === me.shop); });
+  if (near.length === 1) return { pass: 3, name: near[0].name, sure: false, options: [near[0].name] };
+  if (near.length > 1) return { pass: 3, sure: false, options: near.slice(0, 3).map(x => x.name) };
+  if (same.length) return { pass: 2, sure: false, options: same.slice(0, 3).map(x => x.name), otherShop: true };
+  return { pass: -1, sure: false, options: [] };
+}
+const MH_NONFOOD_WORDS = /\b(toilet|loo roll|bin bags?|bin liners?|washing|detergent|bleach|shampoo|conditioner|soap|shower gel|toothpaste|toothbrush|dishwasher|nappies|wipes|cat food|dog food|cat litter|pet|batteries|light bulbs?|foil|cling film|kitchen roll|sponges?|deodorant|razors?|tissues?|cleaner|fabric|dettol|fairy liquid|tampons?|plasters?|paracetamol)\b/i;
+// food or not food: remembered answer, then a known food, then obvious cleaning/pet/toiletry words, otherwise it has to ask.
+function mhClassify(name, matched) {
+  const mem = mhMatchLoad(), k = mhShopKey(name);
+  if (mem.kind[k]) return { kind: mem.kind[k], sure: true };
+  if (matched && matched.sure) return { kind: 'food', sure: true };
+  if (MH_NONFOOD_WORDS.test(name)) return { kind: 'nonfood', sure: false };
+  if (mhShopCat(name) !== 'other') return { kind: 'food', sure: true };
+  return { kind: 'food', sure: false };
+}
+function mhCsvParse(text) {
+  const rows = []; let row = [], cur = '', q = false; text = String(text || '').replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) { const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); cur = ''; if (row.some(x => x.trim())) rows.push(row); row = []; }
+    else cur += c; }
+  row.push(cur); if (row.some(x => x.trim())) rows.push(row); return rows;
+}
+// Columns by heading when there is one (item/name/product, qty/amount/quantity, shop/store, type/category); otherwise name, amount, shop.
+function mhCsvPlan(text) {
+  const rows = mhCsvParse(text); if (!rows.length) return { rows: [], err: 'That file is empty' };
+  const head = rows[0].map(h => h.trim().toLowerCase()), find = re => head.findIndex(h => re.test(h));
+  const hasHead = find(/^(item|items|name|product|ingredient|description)$/) >= 0;
+  const ix = hasHead ? { n: find(/^(item|items|name|product|ingredient|description)$/), a: find(/^(qty|quantity|amount|size|pack)$/), s: find(/^(shop|store|supermarket)$/), t: find(/^(type|kind|category|food)$/) } : { n: 0, a: 1, s: 2, t: -1 };
+  const out = [], seen = new Set();
+  rows.slice(hasHead ? 1 : 0).forEach(r => {
+    const name = String(r[ix.n] || '').trim().slice(0, 80); if (!name) return;
+    const key = mhShopKey(name) + '|' + String(ix.s >= 0 ? r[ix.s] || '' : '').trim().toLowerCase(); if (seen.has(key)) return; seen.add(key);
+    const m = mhVariantMatch(name, ix.s >= 0 ? r[ix.s] : ''), c = mhClassify(name, m), hint = ix.t >= 0 ? String(r[ix.t] || '').toLowerCase() : '';
+    const given = /non[\s-]?food|household|toiletr|cleaning|pet/.test(hint) ? 'nonfood' : /^(food|grocery|groceries)$/.test(hint.trim()) ? 'food' : '';
+    out.push({ name, amount: ix.a >= 0 ? String(r[ix.a] || '').trim().slice(0, 40) : '', shop: ix.s >= 0 ? String(r[ix.s] || '').trim().slice(0, 24) : '', kind: given || c.kind, kindSure: !!given || c.sure,
+      match: m, link: m.sure ? m.name : (m.options && m.options.length === 1 && !m.otherShop ? m.options[0] : ''), linkOn: m.sure ? !!m.name : !!(m.options && m.options.length === 1 && !m.otherShop) });
+  });
+  return { rows: out, err: out.length ? '' : 'No items found in that file' };
+}
+function mhShopCsvPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,text/csv,text/plain'; i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return; mhShopCsvLoad(await f.text(), f.name); }; i.click(); }
+function mhShopCsvLoad(text, fileName) {
+  const p = mhCsvPlan(text); if (p.err) { _shopUi.msg = p.err; mhShopRender(); return false; }
+  _shopUi.csv = { rows: p.rows, file: fileName || 'file' }; mhShopView('csvimport'); return true;
+}
+function mhCsvKind(i, v) { const r = _shopUi.csv && _shopUi.csv.rows[i]; if (r) { r.kind = v; r.kindSure = true; } mhShopRender(); }
+function mhCsvLink(i, on) { const r = _shopUi.csv && _shopUi.csv.rows[i]; if (r) { r.linkOn = !!on; r.sugOk = true; } mhShopRender(); }
+function mhCsvPick(i, v) { const r = _shopUi.csv && _shopUi.csv.rows[i]; if (r) { r.link = v; r.linkOn = !!v; r.sugOk = true; } mhShopRender(); }
+function mhCsvAcceptAll() { (_shopUi.csv ? _shopUi.csv.rows : []).forEach(r => { if (!r.match.sure && r.link) r.linkOn = true; r.sugOk = true; if (!r.kindSure) r.kindSure = true; }); mhShopRender(); }
+function mhCsvNeedsYou(r) { return !r.kindSure || (!r.match.sure && r.kind === 'food' && (r.match.options || []).length > 0 && !r.sugOk); }
+function mhShopCsvApply() {
+  const c = _shopUi.csv; if (!c) return; const s = mhShopLoad(), mem = mhMatchLoad(); let added = 0, dup = 0; const shopsNew = [];
+  c.rows.forEach(r => {
+    const useName = r.kind === 'food' && r.linkOn && r.link ? r.link : r.name, shop = r.shop || s.shop;
+    if (r.shop && !s.shops.some(x => x.toLowerCase() === r.shop.toLowerCase())) { s.shops.push(r.shop); shopsNew.push(r.shop); }
+    const shopName = s.shops.find(x => x.toLowerCase() === shop.toLowerCase()) || s.shop;
+    s.pantry = s.pantry.filter(k => k !== mhShopKey(useName));
+    if (mhShopSetAdd(s, useName, 'csv', '', null, { nonFood: r.kind === 'nonfood', amount: r.kind === 'nonfood' ? r.amount : '' })) { s.items[s.items.length - 1].shop = shopName; added++; } else dup++;
+    mem.kind[mhShopKey(r.name)] = r.kind; if (r.kind === 'food' && !r.match.sure && (r.match.options || []).length) mem.link[mhShopKey(r.name)] = r.linkOn && r.link && mhShopKey(r.link) !== mhShopKey(r.name) ? r.link : '';
+  });
+  mhMatchSave(mem); mhShopSave(s); _shopUi.csv = null;
+  _shopUi.msg = added + ' item' + (added === 1 ? '' : 's') + ' imported' + (dup ? ', ' + dup + ' already on the list' : '') + (shopsNew.length ? ', new shop' + (shopsNew.length > 1 ? 's' : '') + ' ' + shopsNew.join(', ') : '');
+  mhStockSweep(); mhShopView('list');
+}
 // Anything at or under its reorder level goes on the shopping list under its shop, once per time it runs low (taking it off the list
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
 // is left waiting rather than guessed at: its items come back when that shop does.
@@ -27700,6 +27791,14 @@ function mhShopRender(keepFocus) {
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;"><button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Save</button>' + btn('Cancel', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Stop tracking</button>') + '</div>';
+  } else if (_shopUi.view === 'csvimport') {
+    const c = _shopUi.csv || { rows: [] }, need = c.rows.map((r, n) => [r, n]).filter(([r]) => mhCsvNeedsYou(r)), sure = c.rows.length - need.length, sel = 'padding:9px;font-size:15px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);max-width:100%;';
+    const rowH = ([r, n]) => '<div data-csv="' + esc(r.name) + '" style="padding:12px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(r.name) + (r.amount ? ' <span style="font-size:12px;color:var(--text3);">' + esc(r.amount) + '</span>' : '') + (r.shop ? ' <span style="font-size:12px;color:var(--text3);">· ' + esc(r.shop) + '</span>' : '') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><button class="copy-btn" data-i="' + n + '" data-v="food" onclick="mhCsvKind(+this.dataset.i,this.dataset.v)" style="font-size:13px;padding:8px 12px;' + (r.kind === 'food' ? 'background:var(--accent);color:#fff;' : '') + '">Food</button><button class="copy-btn" data-i="' + n + '" data-v="nonfood" onclick="mhCsvKind(+this.dataset.i,this.dataset.v)" style="font-size:13px;padding:8px 12px;' + (r.kind === 'nonfood' ? 'background:var(--accent);color:#fff;' : '') + '">Not food</button>' + (r.kindSure ? '' : '<span style="font-size:12px;color:var(--text3);">tap to confirm</span>') + '</div>'
+      + (r.kind === 'food' && !r.match.sure && (r.match.options || []).length ? '<div style="margin-top:8px;font-size:13px;color:var(--text2);">' + (r.match.options.length === 1 ? '<label style="display:flex;gap:8px;align-items:center;"><input type="checkbox" data-i="' + n + '" ' + (r.linkOn ? 'checked' : '') + ' onchange="mhCsvLink(+this.dataset.i,this.checked)" style="width:20px;height:20px;">Same as <b>' + esc(r.match.options[0]) + '</b>' + (r.match.otherShop ? ' (another shop)' : '') + '</label>'
+        : 'Which one? <select data-i="' + n + '" onchange="mhCsvPick(+this.dataset.i,this.value)" style="' + sel + '"><option value="">None of these (new)</option>' + r.match.options.map(o => '<option value="' + esc(o) + '"' + (r.link === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>') + '</div>' : '') + '</div>';
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">📄 Import ' + esc(c.file || 'a CSV') + '</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">' + c.rows.length + ' items. ' + sure + ' need nothing from you. ' + (need.length ? need.length + ' need a quick look: say whether each is food, and whether it is the same product you already have (that keeps its nutrition). Nothing is matched to a product unless you leave the tick on.' : 'Ready to import.') + '</div>'
+      + (need.map(rowH).join('')) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhCsvGo" class="copy-btn" onclick="mhShopCsvApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Import ' + c.rows.length + ' items</button>' + (need.some(([r]) => r.link) ? btn('Accept all suggestions', 'mhCsvAcceptAll()') : '') + btn('Cancel', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockbought') {
     const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), er = _shopUi.bgtErr || {}, inp2 = 'width:100%;box-sizing:border-box;padding:11px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things you track and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
@@ -27754,7 +27853,7 @@ function mhShopRender(keepFocus) {
       + '<div style="display:flex;gap:6px;margin-bottom:6px;">' + [['food', '🍎 Food'], ['nonfood', '🧻 Not food']].map(a => '<button class="copy-btn" onclick="mhShopAddKind(\'' + a[0] + '\')" style="font-size:12px;padding:7px 10px;' + (addKind === a[0] ? 'background:var(--accent);color:#fff;' : '') + '">' + a[1] + '</button>').join('') + '</div>'
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="' + (addKind === 'nonfood' ? 'What do you need? e.g. Toilet roll' : 'Type an item') + '" onkeydown="if(event.key===\'Enter\')' + (addKind === 'nonfood' ? 'document.getElementById(\'mhShopOwnAmount\').focus()' : 'mhShopAddOwn()') + '" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + (addKind === 'food' ? btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') : '') + '</div>'
       + (addKind === 'nonfood' ? '<div style="display:flex;gap:6px;margin-top:6px;"><input id="mhShopOwnAmount" placeholder="Amount, e.g. 24 pack, 2 bottles" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px;">Not food: kept off your list of ingredients, My foods and every nutrition search or stat — just here so a real shopping trip has everything on one list.</div>' : '')
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📁 Saved lists (' + mhShopListsLoad().lists.length + ')', "mhShopView('lists')", 'font-size:14px;padding:10px 12px;') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('📄 Import a CSV', 'mhShopCsvPick()', 'font-size:14px;padding:10px 12px;') + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📁 Saved lists (' + mhShopListsLoad().lists.length + ')', "mhShopView('lists')", 'font-size:14px;padding:10px 12px;') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
     const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.map((n, x) => '<button class="copy-btn" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)" style="font-size:13px;padding:8px 12px;' + (n === s.shop ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(n) + (s.items.filter(i => i.shop === n).length ? ' (' + s.items.filter(i => i.shop === n).length + ')' : '') + '</button>' + (edit && x > 0 ? '<span title="Remove this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" onclick="mhShopAddShop()" style="font-size:13px;padding:8px 12px;">＋ Shop</button></div>';
     const listPart = chips + filt + count + rows + addBar + addPanel
       + '<button onclick="mhShopComplete()" style="width:100%;margin-top:16px;padding:16px;background:var(--green);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>';
