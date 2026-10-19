@@ -6512,7 +6512,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1113'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1114'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -26944,10 +26944,32 @@ function mhFibreHistory() {
   document.body.appendChild(m);
 }
 const MH_AUDIT_NUTS = [['fibre', 'Fibre', 'g'], ['satFat', 'Saturated fat', 'g'], ['sugars', 'Sugars', 'g'], ['salt', 'Salt', 'g'], ['iron', 'Iron', 'mg'], ['potassium', 'Potassium', 'mg'], ['magnesium', 'Magnesium', 'mg'], ['vitd', 'Vitamin D', 'µg'], ['omega3', 'Omega-3', 'g']];
+// Categories where fibre is either structurally zero (meat, fish, dairy — eggs are tagged
+// dairy — and fat/oils) or, for herbs and spices, rounds away to nothing at any normal serving:
+// even the highest-fibre dried spices (oregano, basil) are only ~0.3-0.4g per teaspoon, per
+// USDA-sourced figures (myfooddata.com), below the 0.5g Pete Spence judged not worth tracking.
+// Deliberately NOT a table of invented per-100g numbers for each herb/spice - that's more
+// precision than the real-world serving size ever needs, and risks locking in a wrong figure.
+// A meal entry (isMealEntry) is excluded even if tagged this way - a composite dish can still
+// carry real fibre from components the category tag doesn't capture.
+const MH_FIBRE_NEGLIGIBLE_CATS = ['meat', 'fish', 'dairy', 'fat', 'herbs and spices'];
+function mhAuditBulkNoFibre() {
+  const lib = loadLibrary();
+  let n = 0;
+  lib.forEach(f => {
+    if (isMealEntry(f) || parseFloat(f.fibre) > 0 || f.fibreChecked) return;
+    const cats = getItemCategories(f);
+    if (cats.some(c => MH_FIBRE_NEGLIGIBLE_CATS.includes(c))) { f.fibre = 0; f.fibreChecked = true; n++; }
+  });
+  if (n) { saveLibrary(lib); try { renderLibrary(); } catch (_) {} try { mhFibreRender(); } catch (_) {} showToast(n + ' marked as no fibre (meat, fish, dairy, fat, herbs & spices)'); }
+  else showToast('None of those categories have anything outstanding right now');
+  mhNutrientAudit();
+}
 function mhNutrientAudit() {
   const lib = loadLibrary(), esc = x => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const cov = MH_AUDIT_NUTS.map(([k, label, u]) => { const n = lib.filter(f => parseFloat(f[k]) > 0).length; return '<tr><td style="padding:3px 8px 3px 0;color:var(--text2);">' + label + '</td><td style="padding:3px 0;color:var(--text);">' + n + ' of ' + lib.length + '</td></tr>'; }).join('');
   const todo = lib.filter(f => !(parseFloat(f.fibre) > 0) && !f.fibreChecked).sort((a, b) => (b.useCount || b.uses || 0) - (a.useCount || a.uses || 0));
+  const bulkN = todo.filter(f => !isMealEntry(f) && getItemCategories(f).some(c => MH_FIBRE_NEGLIGIBLE_CATS.includes(c))).length;
   const shown = todo.slice(0, 15);
   const rows = shown.map(f => '<div style="border-top:1px solid var(--border);padding:8px 0;"><div style="font-size:13px;color:var(--text);">' + esc(f.name) + '</div>' + (f.portion
       ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">One portion = <strong style="color:var(--text2);">' + esc(f.portion) + '</strong> · ' + (f.kcal || 0) + ' kcal · ' + (f.carbs || 0) + 'g carbs</div>'
@@ -26962,6 +26984,7 @@ function mhNutrientAudit() {
     + '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Nutrient figures in your library</div>'
     + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">How many of your ' + lib.length + ' foods carry each figure. Nothing is filled in for you; a missing figure stays missing until you add it.</div>'
     + '<table style="font-size:12px;border-collapse:collapse;margin-bottom:12px;">' + cov + '</table>'
+    + (bulkN ? '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text2);line-height:1.5;">' + bulkN + ' of these are meat, fish, dairy, fat or herbs &amp; spices — fibre there is either zero or rounds away to nothing at a normal serving (even the highest dried spices are ~0.3-0.4g per teaspoon). <button onclick="mhAuditBulkNoFibre()" class="copy-btn" style="margin-top:6px;padding:7px 10px;font-size:12px;">Mark these ' + bulkN + ' as no fibre</button></div>' : '')
     + '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">Foods with no fibre figure' + (todo.length ? ' (' + todo.length + ')' : '') + '</div>'
     + '<div style="font-size:11px;color:var(--text3);line-height:1.5;">Each food shows its portion; if none is saved, say what portion the figures are for first (nothing is assumed). Type the fibre for that one portion (the label per-100g figure × portion ÷ 100), or tap No fibre for foods that genuinely have none (meat, eggs, oils). Most-used foods first.</div>'
     + (rows || '<div style="font-size:12px;color:var(--green);padding:10px 0;">Every food has a fibre figure or has been marked as having none ✓</div>')
