@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1121 – Stock control: 📋 Check the cupboards (set up by walking the list)
+- Pete Spence: tracking one ingredient at a time is too slow; "someone just goes down the list and checks in the cupboards", a couple a minute, filterable, no submit or save.
+- **Stock card → 📋 Check the cupboards** lists every ingredient the app knows. Each row has boxes: **Have now**, **Reorder at**, **One serving** (pre-filled from your library portion where it has one) and **Bought at**. Every box saves the moment you leave it ("✓ saved", or "low" in red); the list is never rebuilt under you, so you keep your place.
+- An ingredient starts being tracked when you give it an amount. It needs to know how it is counted (g, ml or each): from the unit box, or the unit you type ("500 g", "4 servings"). A bare number with no unit is refused with the reason, never guessed. Anything wrong shows under that row and saves nothing.
+- **Filter:** a text box plus All / Not tracked / Tracked / No amount yet / Low. Long lists show 60 at a time with Show more.
+- Test `p214` (mutation-checked).
+
 ## v3.10.1120 – Shopping: CSV import with the food / not-food sort, and shop-variant matching
 - Pete Spence: four shops' worth of double cream, each with its own nutrition. **Add items → 📄 Import a CSV** reads a file (quotes, commas inside quotes, Windows line endings, headed or not: item, qty, shop, type) and sorts each line.
 - **Food or not food:** remembered answers first, then anything already in your library counts as food, obvious cleaning / pet / toiletry words are spotted as not-food, and anything it cannot tell asks. Spotted ones still need your tap.

@@ -6512,7 +6512,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1120'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1121'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27631,6 +27631,71 @@ function mhShopCsvApply() {
   _shopUi.msg = added + ' item' + (added === 1 ? '' : 's') + ' imported' + (dup ? ', ' + dup + ' already on the list' : '') + (shopsNew.length ? ', new shop' + (shopsNew.length > 1 ? 's' : '') + ' ' + shopsNew.join(', ') : '');
   mhStockSweep(); mhShopView('list');
 }
+// ── Cupboard check: one long list, boxes on every row, each change saves as you go (v3.10.1121) ────────────────────────────────────
+// Walk the cupboards with the list open. Type what you have (and, if you like, where it is bought, what one serving is, and when to
+// reorder). Nothing to submit. An ingredient becomes tracked the moment you give it an amount; it needs to know how it is counted
+// (g, ml or each) from the unit box or from the unit you type ("500 g"), and it never guesses that.
+function mhSlState() { _shopUi.sl = _shopUi.sl || { q: '', f: 'all', n: 60 }; return _shopUi.sl; }
+function mhSlRows() {
+  const o = mhStockLoad(), seen = new Set(), out = [];
+  mhShopKnown().forEach(x => { seen.add(x.key); out.push({ key: x.key, name: x.name, cat: x.cat, it: o.items[x.key] || null }); });
+  Object.values(o.items).forEach(it => { if (!seen.has(it.key)) out.push({ key: it.key, name: it.name, cat: mhShopCat(it.name), it }); });
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+function mhSlFilter(rows) {
+  const st = mhSlState(), q = st.q.trim().toLowerCase();
+  return rows.filter(r => (!q || r.name.toLowerCase().includes(q)) && (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null))));
+}
+function mhSlQ(v) { mhSlState().q = v; mhSlState().n = 60; mhShopRender('sl'); }
+function mhSlF(f) { mhSlState().f = f; mhSlState().n = 60; mhShopRender(); }
+function mhSlMore() { mhSlState().n += 60; mhShopRender(); }
+function mhSlNumText(it, v) { return v == null ? '' : (it.base === 'each' ? String(v) : v + ' ' + it.base); }
+function mhSlLibUnit(name) { const m = String(mhStockLibraryPortion(name)).toLowerCase().match(/^(\d+(?:\.\d+)?)\s*(g|ml)\b/); return m ? { n: parseFloat(m[1]), base: m[2] } : null; }
+function mhSlRowHtml(r, s) {
+  const esc = mhPlanEsc, it = r.it, lib = it ? null : mhSlLibUnit(r.name), base = it ? it.base : (lib ? lib.base : ''), low = mhStockIsLow(it);
+  const inp = 'width:100%;box-sizing:border-box;padding:10px 8px;font-size:15px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);', lab = t => '<div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">' + t + '</div>';
+  const unit = it ? '<span style="font-size:12px;color:var(--text3);">counted in ' + esc(it.base) + '</span>'
+    : '<select data-f="unit" onchange="mhSlSet(this)" style="padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"><option value="">how counted?</option>' + MH_STOCK_BASES.map(b => '<option value="' + b + '"' + (b === base ? ' selected' : '') + '>' + b + '</option>').join('') + '</select>';
+  const shopSel = '<select data-f="shop" onchange="mhSlSet(this)" style="' + inp + '">' + s.shops.map(n => '<option value="' + esc(n) + '"' + (n === (it ? it.shop : s.shop) ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>';
+  const f = (field, label, val, ph, mode) => '<div>' + lab(label) + '<input data-f="' + field + '" value="' + esc(val) + '" placeholder="' + esc(ph) + '" inputmode="' + (mode || 'text') + '" onchange="mhSlSet(this)" style="' + inp + '"></div>';
+  return '<div data-sl="' + esc(r.key) + '" data-n="' + esc(r.name) + '" style="padding:12px 4px;border-top:1px solid var(--border);' + (low ? 'border-left:3px solid var(--red);padding-left:8px;' : '') + '">'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="flex:1;min-width:0;font-size:15px;color:var(--text);">' + esc(r.name) + ' <span style="font-size:11px;color:var(--text3);">' + esc(mhShopAisleName(r.cat)) + '</span></div>' + unit + '<span data-st style="font-size:12px;color:' + (low ? 'var(--red)' : 'var(--green)') + ';min-width:44px;text-align:right;">' + (low ? 'low' : '') + '</span></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + f('amt', 'Have now', it ? mhSlNumText(it, it.level) : '', 'e.g. 500 g', 'text') + f('thr', 'Reorder at', it ? mhSlNumText(it, it.reorder) : '', 'e.g. 125 g', 'text')
+    + f('serv', 'One serving', it ? (it.serving || '') : (lib ? lib.n : ''), 'if known', 'decimal') + '<div>' + lab('Bought at') + shopSel + '</div></div>'
+    + '<div data-err style="font-size:12px;color:var(--red);margin-top:4px;display:none;"></div></div>';
+}
+function mhSlSet(el) {
+  const row = el.closest('[data-sl]'); if (!row) return;
+  const key = row.dataset.sl, name = row.dataset.n, g = f => { const e = row.querySelector('[data-f="' + f + '"]'); return e ? e.value.trim() : ''; };
+  const errEl = row.querySelector('[data-err]'), stEl = row.querySelector('[data-st]');
+  const fail = (m, field) => { errEl.textContent = m; errEl.style.display = 'block'; const e = row.querySelector('[data-f="' + field + '"]'); if (e) e.style.borderColor = 'var(--red)'; return false; };
+  const clear = () => { errEl.style.display = 'none'; row.querySelectorAll('input').forEach(e => { e.style.borderColor = 'var(--border)'; }); };
+  clear();
+  let o = mhStockLoad(), it = o.items[key];
+  const fld = el.dataset.f === 'unit' && g('amt') !== '' ? 'amt' : el.dataset.f, servTxt = g('serv'), serv = servTxt === '' ? null : parseFloat(servTxt);
+  if (servTxt !== '' && !(serv > 0)) return fail('One serving must be a number above zero', 'serv');
+  if (!it) {
+    // not tracked yet: the first amount you give is what starts it, and it needs a unit to count in.
+    if (fld !== 'amt' || g('amt') === '') return true;   // choosing a unit, shop or serving alone does not start tracking
+    let base = g('unit'); const typed = g('amt').toLowerCase().match(/^[\d.]+\s*([a-z]+)/);
+    if (!base && typed) { const u = mhStockUnitOf(typed[1]); if (u === 'g' || u === 'ml' || u === 'each') base = u; }
+    if (!base) return fail('Say how it is counted: pick g, ml or each, or type the unit, e.g. 500 g', 'amt');
+    mhStockTrack(name, { base, serving: serv, shop: g('shop') });
+    o = mhStockLoad(); it = o.items[key];
+    const unitEl = row.querySelector('[data-f="unit"]'); if (unitEl) unitEl.outerHTML = '<span style="font-size:12px;color:var(--text3);">counted in ' + base + '</span>';
+  }
+  const word = t => /^[\d.]+$/.test(t) ? (it.base === 'each' ? t : t + ' ' + it.base) : t;
+  if (fld === 'serv' || fld === 'shop') mhStockTrack(name, { base: it.base, pack: it.pack, serving: serv, shop: g('shop') });
+  it = mhStockLoad().items[key];
+  if (fld === 'amt' && g('amt') !== '') { const r = mhStockParse(word(g('amt')), it); if (!r.ok) return fail('Have now: ' + r.err, 'amt'); mhStockSetLevel(key, r.base); }
+  if (fld === 'thr') { if (g('thr') === '') mhStockSetReorder(key, null); else { const r = mhStockParse(word(g('thr')), it); if (!r.ok) return fail('Reorder at: ' + r.err, 'thr'); mhStockSetReorder(key, r.base); } }
+  mhStockSweep(); it = mhStockLoad().items[key];
+  const low = mhStockIsLow(it); stEl.style.color = low ? 'var(--red)' : 'var(--green)'; stEl.textContent = low ? 'low ✓' : '✓ saved';
+  row.style.borderLeft = low ? '3px solid var(--red)' : ''; setTimeout(() => { if (stEl.textContent === '✓ saved') stEl.textContent = ''; }, 1800);
+  // show what was understood, in both units where there are servings
+  const a = row.querySelector('[data-f="amt"]'), t = row.querySelector('[data-f="thr"]'); if (a && it.level != null) a.value = mhSlNumText(it, it.level); if (t && it.reorder != null) t.value = mhSlNumText(it, it.reorder);
+  return true;
+}
 // Anything at or under its reorder level goes on the shopping list under its shop, once per time it runs low (taking it off the list
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
 // is left waiting rather than guessed at: its items come back when that shop does.
@@ -27672,7 +27737,7 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div></div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
@@ -27791,6 +27856,15 @@ function mhShopRender(keepFocus) {
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;"><button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Save</button>' + btn('Cancel', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Stop tracking</button>') + '</div>';
+  } else if (_shopUi.view === 'stocklist') {
+    const st = mhSlState(), all = mhSlRows(), rows = mhSlFilter(all), shown = rows.slice(0, st.n), nT = all.filter(r => r.it).length;
+    const chip = (k, t) => '<button class="copy-btn" data-f="' + k + '" onclick="mhSlF(this.dataset.f)" style="font-size:12px;padding:7px 10px;' + (st.f === k ? 'background:var(--accent);color:#fff;' : '') + '">' + t + '</button>';
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;">📋 Check the cupboards</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Go down the list and type what you have. It saves as you go; there is nothing to submit. ' + nT + ' of ' + all.length + ' tracked.</div>'
+      + '<input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Filter: type part of a name" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:8px;">'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + chip('all', 'All') + chip('not', 'Not tracked') + chip('tracked', 'Tracked') + chip('noamt', 'No amount yet') + chip('low', 'Low') + '</div>'
+      + '<div id="mhSlRows">' + (shown.map(r => mhSlRowHtml(r, s)).join('') || '<div style="font-size:13px;color:var(--text3);padding:14px 0;">Nothing matches.</div>') + '</div>'
+      + (rows.length > shown.length ? '<div style="margin-top:10px;">' + btn('Show more (' + (rows.length - shown.length) + ' left)', 'mhSlMore()') + '</div>' : '')
+      + '<div style="margin-top:14px;">' + btn('Done', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'csvimport') {
     const c = _shopUi.csv || { rows: [] }, need = c.rows.map((r, n) => [r, n]).filter(([r]) => mhCsvNeedsYou(r)), sure = c.rows.length - need.length, sel = 'padding:9px;font-size:15px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);max-width:100%;';
     const rowH = ([r, n]) => '<div data-csv="' + esc(r.name) + '" style="padding:12px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(r.name) + (r.amount ? ' <span style="font-size:12px;color:var(--text3);">' + esc(r.amount) + '</span>' : '') + (r.shop ? ' <span style="font-size:12px;color:var(--text3);">· ' + esc(r.shop) + '</span>' : '') + '</div>'
@@ -27864,6 +27938,7 @@ function mhShopRender(keepFocus) {
   try { mhCardBodyApply(); } catch (_) {}
   if (keepFocus === 'uq') { const q = document.getElementById('mhShopUsualNew'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (keepFocus === 'lq') { const q = document.getElementById('mhShopLQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+  else if (keepFocus === 'sl') { const q = document.getElementById('mhSlQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (keepFocus === 'sq') { const q = document.getElementById('mhStockQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (keepFocus) { const q = document.getElementById('mhShopQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
