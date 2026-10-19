@@ -6512,7 +6512,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1117'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1118'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27025,7 +27025,7 @@ function mhAuditSave(id, none) {
 // Stored in one key (mh_shopping_v1), so it is in every backup.
 // Per-card show/hide of the body and a tap-to-open details line (v3.10.1094). The eye hides the whole card; "▾ hide" folds the card to its
 // title; the small ⓘ opens or closes the explanatory text under the bar (closed by default, so the cards stay quiet).
-const MH_CARD_FOLDS = ['fibre', 'water', 'fasting', 'mealplan', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'weather'];
+const MH_CARD_FOLDS = ['fibre', 'water', 'fasting', 'mealplan', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'weather', 'stockctl'];
 function mhCardBodyApply() {
   MH_CARD_FOLDS.forEach(k => {
     const b = document.getElementById(k + 'Body'), i = document.getElementById(k + 'BodyIcon');
@@ -27143,7 +27143,7 @@ function mhShopCardRender() {
   const s = mhShopLoad(), live = s.items.filter(i => !i.hidden), got = live.filter(i => i.checked).length;
   el.textContent = live.length ? got + ' of ' + live.length + ' in basket' : 'Empty';
 }
-function mhShopOpen() { _shopUi = Object.assign(_shopUi, { view: 'list', recipe: null, q: '', lq: '' }); try { switchTabById('shop'); } catch (_) {} mhShopRender(); }
+function mhShopOpen() { _shopUi = Object.assign(_shopUi, { view: 'list', recipe: null, q: '', lq: '' }); try { switchTabById('shop'); } catch (_) {} try { mhStockSweep(); } catch (_) {} mhShopRender(); }
 function mhShopClose() { mhShopCardRender(); try { switchTabById('dash'); } catch (_) {} }
 function mhShopToggle(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { i.checked = !i.checked; mhShopSave(s); } mhShopRender(); }
 function mhShopHide(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (i) { i.hidden = !i.hidden; mhShopSave(s); } mhShopRender(); }
@@ -27221,7 +27221,7 @@ function mhShopUsualDelete(key) { const s = mhShopLoad(); s.usuals = s.usuals.fi
 function mhShopQuickN(v) { const s = mhShopLoad(); s.topN = [5, 10, 15, 20].includes(parseInt(v)) ? parseInt(v) : 10; mhShopSave(s); mhShopRender(); }
 function mhShopSwitch(s, n) { s.usualsBy[s.shop] = s.usuals; s.shop = n; if (!Array.isArray(s.usualsBy[n])) s.usualsBy[n] = []; s.usuals = s.usualsBy[n]; }
 function mhShopSetShop(n) { const s = mhShopLoad(); if (s.shops.includes(n)) { mhShopSwitch(s, n); mhShopSave(s); } mhShopRender(); }
-function mhShopAddShop() { const v = (prompt('Name of the shop (e.g. Butchers)') || '').trim().slice(0, 24); if (!v) return; const s = mhShopLoad(); if (!s.shops.some(x => x.toLowerCase() === v.toLowerCase())) s.shops.push(v); mhShopSwitch(s, s.shops.find(x => x.toLowerCase() === v.toLowerCase())); mhShopSave(s); mhShopRender(); }
+function mhShopAddShop() { const v = (prompt('Name of the shop (e.g. Butchers)') || '').trim().slice(0, 24); if (!v) return; const s = mhShopLoad(); if (!s.shops.some(x => x.toLowerCase() === v.toLowerCase())) s.shops.push(v); mhShopSwitch(s, s.shops.find(x => x.toLowerCase() === v.toLowerCase())); mhShopSave(s); try { mhStockSweep(); } catch (_) {} mhShopRender(); }
 // Removing a shop from THIS list doesn't mean it stopped selling anything - it means you don't
 // need it this trip. Pete Spence (17/10/2026): its items should come off the list, not get
 // silently reassigned to another shop (the old behaviour) - the shop itself, its usuals and its
@@ -27317,6 +27317,152 @@ function mhShopListDelete(id) {
   const l = mhShopListsLoad().lists.find(x => x.id === id); if (!l) return;
   appConfirm('Delete the saved list "' + mhPlanEsc(l.name) + '"? Your shopping list is not touched.', () => { const o = mhShopListsLoad(); o.lists = o.lists.filter(x => x.id !== id); mhShopListsSave(o); if (_shopUi.useList === id) _shopUi.useList = null; mhShopRender(); }, null, true, { confirm: 'Delete' });
 }
+// ── Stock control (v3.10.1118) ──────────────────────────────────────────────────────────────────────────────────────────────────
+// Opt-in, per ingredient. Pete Spence's design: "cooking writes the shopping list". An ingredient you choose to track has a unit it
+// is counted in (g, ml or each), an optional pack size and serving size, how much you have, and a reorder level. Every quantity box
+// accepts either form, so with whey at 30 servings of 25 g, "2 servings" and "50 g" mean exactly the same, and "reorder at 5
+// servings" is 125 g. Nothing is guessed: a bare number needs a unit (except for counted "each" items), servings need a serving
+// size you gave, and grams and ml are never converted into each other.
+// Stored in its own key. It starts mh_shopping so backups give it the big-key ceiling, and it must never contain key/token/secret/password.
+// level is the truth; the ledger only remembers recent changes so deleting or editing a logged entry can put its amount back. A manual
+// stock correction freezes everything before it: older entries can no longer move the number (so tidying old history is safe).
+const MH_STOCK_KEY = 'mh_shopping_stock_v1';
+const MH_STOCK_LAYOUT_KEY = 'mh_shopping_layout_v1';
+const MH_STOCK_BASES = ['g', 'ml', 'each'];
+const MH_STOCK_UNITWORDS = { g: ['g', 'gram', 'grams', 'gm'], kg: ['kg', 'kilo', 'kilos', 'kilogram', 'kilograms'], ml: ['ml', 'millilitre', 'millilitres', 'milliliter', 'milliliters'], l: ['l', 'litre', 'litres', 'liter', 'liters'], each: ['each', 'x', 'pc', 'pcs', 'piece', 'pieces', 'unit', 'units', 'item', 'items'], serving: ['serving', 'servings', 'serv', 'portion', 'portions'], pack: ['pack', 'packs', 'packet', 'packets'] };
+function mhStockUnitOf(w) { for (const k in MH_STOCK_UNITWORDS) if (MH_STOCK_UNITWORDS[k].includes(w)) return k; return null; }
+function mhStockRound(n) { return Math.round(n * 1000) / 1000; }
+// Turns "125 g", "5 servings", "2 packs", "0.5 l" into the item's own base unit. Returns { ok, base } or { ok:false, code, err }.
+function mhStockParse(str, item) {
+  const m = String(str == null ? '' : str).trim().toLowerCase().match(/^(\d+(?:\.\d+)?|\.\d+)\s*([a-z]*)\.?$/);
+  if (!m) return { ok: false, code: 'format', err: 'Type a number and a unit, for example 125 g or 5 servings' };
+  const n = parseFloat(m[1]), w = m[2], b = item && item.base;
+  if (!w) return b === 'each' ? { ok: true, base: mhStockRound(n) } : { ok: false, code: 'needs-unit', err: 'Add a unit: g, ml, servings or packs' };
+  const u = mhStockUnitOf(w); if (!u) return { ok: false, code: 'unit', err: '"' + w + '" is not a unit I know. Try g, ml, servings or packs' };
+  const counted = b === 'ml' ? 'ml' : b === 'each' ? 'each' : 'grams';
+  if (u === 'g' || u === 'kg') return b === 'g' ? { ok: true, base: mhStockRound(n * (u === 'kg' ? 1000 : 1)) } : { ok: false, code: 'mismatch', err: 'This is counted in ' + counted + ', not grams' };
+  if (u === 'ml' || u === 'l') return b === 'ml' ? { ok: true, base: mhStockRound(n * (u === 'l' ? 1000 : 1)) } : { ok: false, code: 'mismatch', err: 'This is counted in ' + counted + ', not ml' };
+  if (u === 'each') return b === 'each' ? { ok: true, base: mhStockRound(n) } : { ok: false, code: 'mismatch', err: 'This is counted in ' + counted + ', not each' };
+  if (u === 'serving') return item && item.serving > 0 ? { ok: true, base: mhStockRound(n * item.serving) } : { ok: false, code: 'needs-serving', err: 'Set the size of one serving first (for example 25 g)' };
+  return item && item.pack > 0 ? { ok: true, base: mhStockRound(n * item.pack) } : { ok: false, code: 'needs-pack', err: 'Set the pack size first (for example 750 g)' };
+}
+function mhStockNum(n) { return String(Math.round(n * 10) / 10); }
+function mhStockFmt(it, b) {
+  if (b == null) return 'not set';
+  let t = it.base === 'each' ? mhStockNum(b) : mhStockNum(b) + ' ' + it.base;
+  if (it.base !== 'each' && it.serving > 0) { const sv = Math.round(b / it.serving * 10) / 10; t += ' (' + mhStockNum(sv) + ' serving' + (sv === 1 ? '' : 's') + ')'; }
+  return t;
+}
+function mhStockLoad() {
+  let o = null; try { o = JSON.parse(localStorage.getItem(MH_STOCK_KEY) || 'null'); } catch (_) {}
+  if (!o || typeof o !== 'object') o = {};
+  if (!o.items || typeof o.items !== 'object' || Array.isArray(o.items)) o.items = {};
+  if (!Array.isArray(o.ledger)) o.ledger = [];
+  o.rev = parseInt(o.rev) || 0; return o;
+}
+function mhStockSave(o) {
+  const now = Date.now(), DAY = 86400000;
+  o.ledger = o.ledger.filter(l => l && o.items[l.k] && (now - l.t) < 60 * DAY && l.t >= (o.items[l.k].since || 0)).slice(-4000);
+  o.rev = (parseInt(o.rev) || 0) + 1;
+  try { localStorage.setItem(MH_STOCK_KEY, JSON.stringify(o)); } catch (_) {}
+}
+function mhStockIsLow(it) { return !!it && it.level != null && it.reorder != null && it.level <= it.reorder; }
+// Start (or update) tracking an ingredient. Changing what it is counted in clears its amounts, since they would mean something else.
+function mhStockTrack(name, opts) {
+  const key = mhShopKey(name); opts = opts || {}; if (!key || !MH_STOCK_BASES.includes(opts.base)) return null;
+  const o = mhStockLoad(), prev = o.items[key], num = v => (v == null || v === '' || !(+v > 0)) ? null : mhStockRound(+v);
+  const it = Object.assign({ name: String(name).trim(), key, level: null, reorder: null, since: 0, lowFlag: false }, prev || {});
+  if (prev && prev.base !== opts.base) { it.level = null; it.reorder = null; it.lowFlag = false; }
+  it.base = opts.base; it.pack = num(opts.pack); it.serving = num(opts.serving); it.shop = opts.shop != null ? String(opts.shop) : (it.shop || '');
+  o.items[key] = it; mhStockSave(o); return it;
+}
+function mhStockUntrack(key) { const o = mhStockLoad(); if (!o.items[key]) return false; delete o.items[key]; mhStockSave(o); return true; }
+// A stock-take: you counted it, so this is the number. Everything logged before this moment can no longer change it.
+function mhStockSetLevel(key, base) { const o = mhStockLoad(), it = o.items[key]; if (!it || !(base >= 0)) return false; it.level = mhStockRound(base); it.since = Date.now(); o.ledger = o.ledger.filter(l => l.k !== key); mhStockSave(o); return true; }
+function mhStockSetReorder(key, base) { const o = mhStockLoad(), it = o.items[key]; if (!it) return false; it.reorder = base == null ? null : mhStockRound(base); mhStockSave(o); return true; }
+// Use or add stock. delta is in base units (negative = used). Never goes below zero; the amount really applied is what is remembered.
+function mhStockAdjust(key, delta, src, entryId) {
+  const o = mhStockLoad(), it = o.items[key]; if (!it || it.level == null || !isFinite(delta) || !delta) return false;
+  const after = Math.max(0, mhStockRound(it.level + delta)), applied = mhStockRound(after - it.level); it.level = after;
+  if (applied) o.ledger.push({ k: key, d: applied, t: Date.now(), s: src || 'manual', e: entryId == null ? null : String(entryId) });
+  mhStockSave(o); mhStockSweep(); return true;
+}
+// A logged entry was deleted or changed: put back what it took (only if it happened after the last stock-take).
+function mhStockReverse(entryId) {
+  const o = mhStockLoad(), id = String(entryId); let n = 0;
+  o.ledger = o.ledger.filter(l => { if (l.e !== id) return true; const it = o.items[l.k]; if (it && it.level != null && l.t >= (it.since || 0)) { it.level = Math.max(0, mhStockRound(it.level - l.d)); n++; } return false; });
+  mhStockSave(o); if (n) mhStockSweep(); return n;
+}
+// Anything at or under its reorder level goes on the shopping list under its shop, once per time it runs low (taking it off the list
+// yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
+// is left waiting rather than guessed at: its items come back when that shop does.
+function mhStockSweep() {
+  const o = mhStockLoad(), s = mhShopLoad(); let added = 0, oChanged = false, sChanged = false;
+  Object.values(o.items).forEach(it => {
+    if (!mhStockIsLow(it)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
+    if (it.lowFlag) return;
+    const shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : s.shops[0];
+    if (!shop) return;
+    const ex = s.items.find(i => i.key === it.key);
+    if (ex) { if (ex.hidden) { ex.hidden = false; sChanged = true; } }
+    else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: false, amount: '' }); added++; sChanged = true; }
+    it.lowFlag = true; oChanged = true;
+  });
+  if (sChanged) mhShopSave(s); if (oChanged) mhStockSave(o); return added;
+}
+// Layout of the Shopping tab's two areas: the list and the stock control centre (same ▲ ▼ 👁 controls as every other card).
+function mhStockLayout() {
+  let o = null; try { o = JSON.parse(localStorage.getItem(MH_STOCK_LAYOUT_KEY) || 'null'); } catch (_) {}
+  const ok = o && Array.isArray(o.order) && o.order.length === 2 && o.order.includes('list') && o.order.includes('stock');
+  return { order: ok ? o.order : ['list', 'stock'], hidden: !!(o && o.hidden) };
+}
+function mhStockLayoutSave(l) { try { localStorage.setItem(MH_STOCK_LAYOUT_KEY, JSON.stringify(l)); } catch (_) {} }
+function mhStockCtlMove(dir) { const l = mhStockLayout(), i = l.order.indexOf('stock'), j = dir === 'up' ? i - 1 : i + 1; if (j < 0 || j > 1) { showToast('Already at the ' + (dir === 'up' ? 'top' : 'bottom')); return; } [l.order[i], l.order[j]] = [l.order[j], l.order[i]]; mhStockLayoutSave(l); mhShopRender(); }
+function mhStockCtlHide() { const l = mhStockLayout(); l.hidden = !l.hidden; mhStockLayoutSave(l); mhShopRender(); }
+// ── Stock control: the screens ──
+function mhStockLibraryPortion(name) { try { const k = mhShopKey(name), f = loadLibrary().find(x => x && x.name && mhShopKey(x.name) === k); return f && f.portion ? String(f.portion) : ''; } catch (_) { return ''; } }
+function mhStockCardHtml(s) {
+  const esc = mhPlanEsc, o = mhStockLoad(), items = Object.values(o.items).sort((a, b) => (mhStockIsLow(b) ? 1 : 0) - (mhStockIsLow(a) ? 1 : 0) || a.name.localeCompare(b.name)), low = items.filter(mhStockIsLow).length;
+  const sp = 'cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;';
+  const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
+  const btn = (label, fn) => '<button class="copy-btn" style="font-size:13px;padding:9px 12px;" onclick="' + fn + '">' + label + '</button>';
+  const row = it => { const waiting = mhStockIsLow(it) && it.shop && !s.shops.some(x => x.toLowerCase() === it.shop.toLowerCase());
+    return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + '</div></div><span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
+  return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl
+    + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">' + (items.length ? items.length + ' tracked' + (low ? ' · <b style="color:var(--red);">' + low + ' low</b>' : '') : 'Nothing tracked yet') + '</div></div>'
+    + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Cooking and logging will take stock off automatically (coming next); until then, set the amount whenever you check the cupboard.</div>'
+    + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div></div></div>';
+}
+function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
+function mhStockEditView(key, nameIn) {
+  const o = mhStockLoad(), it = o.items[key], s = mhShopLoad(), name = it ? it.name : String(nameIn || key);
+  _shopUi.stk = { key: mhShopKey(name), name, isNew: !it, base: it ? it.base : '', pack: it && it.pack ? String(it.pack) : '', serv: it && it.serving ? String(it.serving) : '', shop: it && it.shop ? it.shop : s.shop, level: it && it.level != null ? String(it.level) : '', levelU: it ? it.base : '', reorder: it && it.reorder != null ? String(it.reorder) : '', reorderU: it ? it.base : '', err: '' };
+  mhShopView('stockedit');
+}
+function mhStkSet(f, v) { if (_shopUi.stk) _shopUi.stk[f] = v; }
+function mhStkBase(v) { const f = _shopUi.stk; if (!f) return; f.base = v; if (![v, 'serving', 'pack'].includes(f.levelU)) f.levelU = v; if (![v, 'serving', 'pack'].includes(f.reorderU)) f.reorderU = v; f.err = ''; mhShopRender(); }
+function mhStockFormSave() {
+  const f = _shopUi.stk; if (!f) return;
+  const fail = m => { f.err = m; mhShopRender(); return false; };
+  if (!MH_STOCK_BASES.includes(f.base)) return fail('Choose how this is counted: g, ml or each');
+  const numOrNull = v => { v = String(v || '').trim(); if (!v) return null; const n = parseFloat(v); return n > 0 ? n : NaN; };
+  const pack = numOrNull(f.pack), serv = numOrNull(f.serv);
+  if (Number.isNaN(pack) || Number.isNaN(serv)) return fail('Pack and serving sizes must be numbers above zero');
+  const draft = { base: f.base, pack, serving: serv }, word = u => u === 'serving' ? 'servings' : u === 'pack' ? 'packs' : u;
+  let level, reorder;
+  if (String(f.level).trim() !== '') { const r = mhStockParse(f.level + ' ' + word(f.levelU), draft); if (!r.ok) return fail('Stock now: ' + r.err); level = r.base; }
+  if (String(f.reorder).trim() !== '') { const r = mhStockParse(f.reorder + ' ' + word(f.reorderU), draft); if (!r.ok) return fail('Reorder at: ' + r.err); reorder = r.base; }
+  mhStockTrack(f.name, { base: f.base, pack, serving: serv, shop: f.shop });
+  if (level !== undefined) mhStockSetLevel(f.key, level);
+  if (reorder !== undefined) mhStockSetReorder(f.key, reorder);
+  const added = mhStockSweep(); _shopUi.stk = null; _shopUi.msg = f.name + ' saved' + (added ? ' and put on your list (running low)' : ''); mhShopView('list'); return true;
+}
+function mhStockUntrackAsk(key) {
+  const it = mhStockLoad().items[key]; if (!it) return;
+  appConfirm('Stop tracking ' + mhPlanEsc(it.name) + '? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrack(key); _shopUi.stk = null; mhShopView('list'); }, null, true, { confirm: 'Stop tracking' });
+}
+function mhStockSuggestTrack(key, base) { if (!MH_STOCK_BASES.includes(base)) return; const x = mhShopKnown().find(y => y.key === key); if (!x) return; mhStockTrack(x.name, { base, shop: mhShopLoad().shop }); mhShopRender(); }
 function mhShopQuickSrc(v) { const s = mhShopLoad(); s.qsrc = v === 'recent' ? 'recent' : 'top'; mhShopSave(s); mhShopRender(); }
 function mhShopShortlist(s) {
   s = s || mhShopLoad(); const n = [5, 10, 15, 20].includes(parseInt(s.topN)) ? parseInt(s.topN) : 10;
@@ -27380,6 +27526,35 @@ function mhShopRender(keepFocus) {
       + '<div style="display:flex;gap:6px;margin-top:12px;"><input id="mhShopUsualNew" value="' + esc(_shopUi.uq || '') + '" oninput="mhShopUQ(this.value)" placeholder="Search your ingredients, or type a new one" onkeydown="if(event.key===\'Enter\')mhShopUsualAddNew()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">' + btn('Add', 'mhShopUsualAddNew()', 'font-size:14px;padding:10px 14px;') + '</div>'
       + (() => { const uq = (_shopUi.uq || '').trim().toLowerCase(); if (!uq) return ''; const have = new Set(s.usuals.map(mhShopKey)); const hits = mhShopKnown().filter(x => !have.has(x.key) && x.name.toLowerCase().includes(uq)).slice(0, 8); return '<div id="mhShopUsualHits" style="margin-top:6px;">' + (hits.length ? hits.map(x => '<div data-k="' + esc(x.key) + '" onclick="mhShopUsualPick(this.dataset.k)" style="display:flex;justify-content:space-between;align-items:center;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(x.cat)) + '</span></span><span style="color:var(--accent);font-size:12px;">⭐ + list</span></div>').join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 4px;">No saved ingredient matches. Tap Add to keep it as typed.</div>') + '<div style="font-size:11px;color:var(--text3);padding:6px 4px;">Tapping one makes it a usual and puts it on your list. Tap it again in the list above if you have already bought it.</div></div>'; })()
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
+  } else if (_shopUi.view === 'stockadd') {
+    const q = (_shopUi.sq || '').trim(), ql = q.toLowerCase(), tr = mhStockLoad().items, all = mhShopKnown().filter(x => !tr[x.key] && (!ql || x.name.toLowerCase().includes(ql))).slice(0, 40);
+    const typedNew = q && !tr[mhShopKey(q)] && !all.some(x => x.name.toLowerCase() === ql);
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">📦 Track an ingredient</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Choose one you keep running out of. Next you say how it is counted and how much you have.</div>'
+      + '<input id="mhStockQ" value="' + esc(_shopUi.sq || '') + '" oninput="mhStockQ(this.value)" placeholder="Search your ingredients, or type a new one" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:6px;">'
+      + all.map(x => '<div data-k="' + esc(x.key) + '" data-n="' + esc(x.name) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="display:flex;justify-content:space-between;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(x.cat)) + '</span></span><span style="color:var(--accent);">track</span></div>').join('')
+      + (typedNew ? '<div id="mhStockTypedNew" data-k="' + esc(mhShopKey(q)) + '" data-n="' + esc(q) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">＋ Track "' + esc(q) + '" as typed</div>' : '')
+      + (!all.length && !typedNew ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing else to track. Everything matching is already tracked.</div>' : '')
+      + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
+  } else if (_shopUi.view === 'stockedit' && _shopUi.stk) {
+    const f = _shopUi.stk, inp = 'width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;';
+    const lab = t => '<div style="font-size:12px;color:var(--text2);margin:14px 0 4px;">' + t + '</div>', hint = t => t ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">' + t + '</div>' : '';
+    const uopts = sel => [[f.base || '', f.base || 'unit'], ['serving', 'servings'], ['pack', 'packs']].map(a => '<option value="' + a[0] + '"' + (sel === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('');
+    const lp = mhStockLibraryPortion(f.name), shopOpts = s.shops.map(n => '<option value="' + esc(n) + '"' + (n === f.shop ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);">📦 ' + esc(f.name) + '</div>'
+      + (f.err ? '<div id="mhStkErr" style="font-size:13px;color:var(--red);margin-top:8px;">⚠ ' + esc(f.err) + '</div>' : '')
+      + lab('Counted in') + '<select id="mhStkBase" onchange="mhStkBase(this.value)" style="' + inp + '">' + [['', 'Choose…'], ['g', 'Grams (g)'], ['ml', 'Millilitres (ml)'], ['each', 'Each (whole items)']].map(a => '<option value="' + a[0] + '"' + (f.base === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select>'
+      + lab('One pack holds (' + esc(f.base || 'in that unit') + ')') + '<input id="mhStkPack" inputmode="decimal" value="' + esc(f.pack) + '" oninput="mhStkSet(\'pack\',this.value)" placeholder="optional, e.g. 750" style="' + inp + '">'
+      + lab('One serving is (' + esc(f.base || 'in that unit') + ')') + '<input id="mhStkServ" inputmode="decimal" value="' + esc(f.serv) + '" oninput="mhStkSet(\'serv\',this.value)" placeholder="optional, e.g. 25" style="' + inp + '">'
+      + hint('For example whey: a 750 tub, 30 servings of 25. Once a serving is set you can type either "2 servings" or "50 g" anywhere.' + (lp ? ' Your library says one portion is ' + esc(lp) + '; type the amount if that is right.' : ''))
+      + lab('Bought at') + '<select id="mhStkShop" onchange="mhStkSet(\'shop\',this.value)" style="' + inp + '">' + shopOpts + '</select>'
+      + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
+      + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;"><button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Save</button>' + btn('Cancel', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Stop tracking</button>') + '</div>';
+  } else if (_shopUi.view === 'stocksuggest') {
+    const tr = mhStockLoad().items, list = mhShopRanked().filter(x => !tr[x.key]).slice(0, 15);
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ The ones I use most</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">What you eat most that is not tracked yet. Choose how each is counted to start tracking it; you can add pack size and amounts later with ✎.</div>'
+      + (list.map(x => '<div data-n="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;font-size:15px;color:var(--text);">' + esc(x.name) + '</div><select data-k="' + esc(x.key) + '" onchange="mhStockSuggestTrack(this.dataset.k,this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Track as…</option><option value="g">g</option><option value="ml">ml</option><option value="each">each</option></select></div>').join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to suggest yet. Log a few meals and it fills in.</div>')
+      + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'lists') {
     const lo = mhShopListsLoad().lists, nShop = s.items.filter(i => !i.hidden && i.shop === s.shop).length, nAll = s.items.filter(i => !i.hidden).length, multiShop = s.shops.length > 1;
     const lrow = l => {
@@ -27401,7 +27576,7 @@ function mhShopRender(keepFocus) {
     const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-top:1px solid var(--border);">'
       + '<div onclick="mhShopToggle(\'' + i.id + '\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:14px;cursor:pointer;">'
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
-      + '<div style="flex:1;min-width:0;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
+      + '<div style="flex:1;min-width:0;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
       + (edit ? '<span title="Add to My usuals" onclick="mhShopUsualFromItem(\'' + i.id + '\')" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span><span title="Remove from the list" onclick="mhShopRemove(\'' + i.id + '\')" style="cursor:pointer;color:var(--red);padding:6px;font-size:18px;">✕</span>' : '') + '</div>';
     const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
     const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
@@ -27423,12 +27598,16 @@ function mhShopRender(keepFocus) {
       + (addKind === 'nonfood' ? '<div style="display:flex;gap:6px;margin-top:6px;"><input id="mhShopOwnAmount" placeholder="Amount, e.g. 24 pack, 2 bottles" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px;">Not food: kept off your list of ingredients, My foods and every nutrition search or stat — just here so a real shopping trip has everything on one list.</div>' : '')
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + btn('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')", 'font-size:14px;padding:10px 12px;') + btn('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')", 'font-size:14px;padding:10px 12px;') + btn('🍲 Recipe', "mhShopView('recipes')", 'font-size:14px;padding:10px 12px;') + btn('➕ My foods', "mhShopView('picker')", 'font-size:14px;padding:10px 12px;') + (planN ? btn('🗓 From my plan', 'mhShopRefresh(true)', 'font-size:14px;padding:10px 12px;') : '') + btn('📁 Saved lists (' + mhShopListsLoad().lists.length + ')', "mhShopView('lists')", 'font-size:14px;padding:10px 12px;') + btn('📋 Copy list', 'mhShopCopy()', 'font-size:14px;padding:10px 12px;') + '</div></div>' : '';
     const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.map((n, x) => '<button class="copy-btn" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)" style="font-size:13px;padding:8px 12px;' + (n === s.shop ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(n) + (s.items.filter(i => i.shop === n).length ? ' (' + s.items.filter(i => i.shop === n).length + ')' : '') + '</button>' + (edit && x > 0 ? '<span title="Remove this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" onclick="mhShopAddShop()" style="font-size:13px;padding:8px 12px;">＋ Shop</button></div>';
-    body = chips + filt + count + rows + addBar + addPanel
+    const listPart = chips + filt + count + rows + addBar + addPanel
       + '<button onclick="mhShopComplete()" style="width:100%;margin-top:16px;padding:16px;background:var(--green);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>';
+    const lay = mhStockLayout(), stockPart = lay.hidden ? '<div id="mhStockShow" onclick="mhStockCtlHide()" style="margin-top:18px;padding:12px 4px;border-top:1px solid var(--border);cursor:pointer;font-size:14px;color:var(--accent);">📦 Show stock control</div>' : mhStockCardHtml(s);
+    body = lay.order[0] === 'stock' ? stockPart + listPart : listPart + stockPart;
   }
   m.innerHTML = head + msg + body;
+  try { mhCardBodyApply(); } catch (_) {}
   if (keepFocus === 'uq') { const q = document.getElementById('mhShopUsualNew'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (keepFocus === 'lq') { const q = document.getElementById('mhShopLQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+  else if (keepFocus === 'sq') { const q = document.getElementById('mhStockQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
   else if (keepFocus) { const q = document.getElementById('mhShopQ'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
 function mhIsDeviceStub(e) { return !!e && e.time === '23:59' && !(e.kcal > 0) && Number(e.id) < 1e10; }
