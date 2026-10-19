@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1111 – Fixed: a strength session could silently stop crediting calories/protein at all
+- Pete Spence (screenshot): a strength session logged its sets fine, but showed no calories burned and no change to any target. Root cause: both crediting paths (a routine session and the manual "Log a workout") look up the Resistance row on the Activities card by `acts.findIndex(a => a.type === 'resistance')` and only act `if (resIdx > -1)` — with no else. That row is an ordinary activity, removable like any other from the Activities card's edit mode, and nothing ever re-created it once gone. Once removed, every future strength session or routine would credit nothing at all, silently, forever — no toast, no error, nothing to notice beyond the numbers just never moving. Fixed: both paths now re-create the Resistance row on the fly if it's missing, the same shape a fresh profile would have, rather than ever dropping the credit. Covered by two new checks in p169.
+
 ## v3.10.1110 – Quick list: Show is 5/10/15/20, not a free 1-10
 - Pete Spence: the Quick list's "Show" count was a 1-10 picker. Changed to the four sizes people actually want — 5, 10, 15 or 20 — same behaviour otherwise (never includes usuals or what's already on your list).
 

@@ -6494,7 +6494,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1110'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1111'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -15405,21 +15405,19 @@ function _saveRoutineSessionCore() {
   {
     const effortVal = document.getElementById('routineSessionEffort')?.value || 'Moderate';
     const acts = getActivities();
-    const resIdx = acts.findIndex(a => a.type === 'resistance');
-    if (resIdx > -1) {
-      acts[resIdx].enabled = true;
-      acts[resIdx].duration = durationVal;
-      acts[resIdx].effort = effortVal;
-      acts[resIdx]._syncedFromStrength = true;
-      acts[resIdx]._estimatedDuration = isEstimate;
-      saveActivities(acts);
-      // Every manual activity path (toggleActivity, updateActivity) calls this
-      // to write the "Xmin Resistance" tag into state.notes — this path set the
-      // activity's enabled/duration/effort but never called it, so a routine
-      // session credited calories/protein silently without ever tagging the day.
-      saveActivityToNotes(acts);
-      updateDashboard();
-    }
+    const resIdx = mhEnsureResistanceActivity(acts);
+    acts[resIdx].enabled = true;
+    acts[resIdx].duration = durationVal;
+    acts[resIdx].effort = effortVal;
+    acts[resIdx]._syncedFromStrength = true;
+    acts[resIdx]._estimatedDuration = isEstimate;
+    saveActivities(acts);
+    // Every manual activity path (toggleActivity, updateActivity) calls this
+    // to write the "Xmin Resistance" tag into state.notes — this path set the
+    // activity's enabled/duration/effort but never called it, so a routine
+    // session credited calories/protein silently without ever tagging the day.
+    saveActivityToNotes(acts);
+    updateDashboard();
   }
   window._routineApplyDrafts = null;
   _routineApplyId = null;
@@ -15567,20 +15565,18 @@ function saveStrengthWorkout() {
   {
     const effortVal = document.getElementById('strengthSessionEffort')?.value || 'Moderate';
     const acts = getActivities();
-    const resIdx = acts.findIndex(a => a.type === 'resistance');
-    if (resIdx > -1) {
-      acts[resIdx].enabled = true;
-      acts[resIdx].duration = durationVal;
-      acts[resIdx].effort = effortVal;
-      acts[resIdx]._syncedFromStrength = true;
-      acts[resIdx]._estimatedDuration = isEstimate;
-      saveActivities(acts);
-      // Same missing call as the routine path — set the activity but never wrote
-      // the tag into state.notes, so calories/protein credited silently with no
-      // visible "Xmin Resistance" tag on the day.
-      saveActivityToNotes(acts);
-      updateDashboard();
-    }
+    const resIdx = mhEnsureResistanceActivity(acts);
+    acts[resIdx].enabled = true;
+    acts[resIdx].duration = durationVal;
+    acts[resIdx].effort = effortVal;
+    acts[resIdx]._syncedFromStrength = true;
+    acts[resIdx]._estimatedDuration = isEstimate;
+    saveActivities(acts);
+    // Same missing call as the routine path — set the activity but never wrote
+    // the tag into state.notes, so calories/protein credited silently with no
+    // visible "Xmin Resistance" tag on the day.
+    saveActivityToNotes(acts);
+    updateDashboard();
   }
   cancelStrengthAdd();
   renderStrengthCard();
@@ -15829,6 +15825,24 @@ const DEFAULT_ACTIVITIES = [
   { id:'walking',    name:'🚶 Walking',          type:'walking',    needsDistance: true },
   { id:'resistance', name:'💪 Resistance',        type:'resistance', needsDistance: false },
 ];
+// A strength session or routine credits calories/protein through the Resistance activity row -
+// but that row is an ordinary activity, removable from the Activities card like any other (✕ in
+// edit mode), and nothing previously re-created it once gone. Both crediting paths then did
+// `if (resIdx > -1) {...}` and silently did NOTHING otherwise - no toast, no error, just a
+// strength session that logs its sets fine but never shows as calories burned or moves any
+// target (Pete Spence, screenshot: "strength session not appearing... on the calories burned").
+// Logging strength training is a deliberate, explicit action on its own screen (Move > Log a
+// workout / Routines) - it shouldn't silently depend on whether a generic Activities-card row
+// happens to still exist. This re-creates it on the fly if missing, exactly like a fresh profile
+// would have it, rather than ever dropping the credit.
+function mhEnsureResistanceActivity(acts) {
+  let idx = acts.findIndex(a => a.type === 'resistance');
+  if (idx === -1) {
+    acts.push({ id: 'resistance', name: '💪 Resistance', type: 'resistance', needsDistance: false, duration: '', distance: '', distanceUnit: localStorage.getItem('mh_distance_unit') || 'km', effort: 'Moderate', enabled: false });
+    idx = acts.length - 1;
+  }
+  return idx;
+}
 // state.activities = [{ id, name, type, duration, effort, enabled, needsDistance, distance, distanceUnit }]
 
 function getActivities() {

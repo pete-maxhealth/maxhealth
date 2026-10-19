@@ -62,5 +62,26 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("window._routineApplyDrafts[0].sets=[{reps:'45',weight_kg:'',note:''}]; renderRoutineApplyRows()")
     ev("saveRoutineSession()"); page.wait_for_timeout(500)
     check('free workout offers to save as a routine', 'Save this workout as a routine' in ev("document.querySelector('.app-modal-overlay')?.textContent||''"))
+    # Pete Spence (screenshot): a strength session logged its sets fine but never showed as calories
+    # burned or moved any target. Root cause: the Resistance activity row is removable from the
+    # Activities card like any other, and both crediting paths did `if (resIdx > -1) {...}` with no
+    # else - if that row was ever deleted, every future strength session silently credited nothing,
+    # forever, with zero error. v3.10.1111 re-creates the row on the fly instead of dropping the credit.
+    ev("saveActivities(getActivities().filter(a=>a.type!=='resistance'))")
+    check('Resistance row genuinely removed first', not ev("getActivities().some(a=>a.type==='resistance')"))
+    ev("showStrengthAddForm()")
+    ev("document.getElementById('strengthExerciseName').value='Deadlift'")
+    ev("_strengthDraftSets=[{reps:'5',weight_kg:'100',note:''}]")
+    ev("saveStrengthWorkout()"); page.wait_for_timeout(300)
+    res1 = ev("getActivities().find(a=>a.type==='resistance')")
+    check('manual log recreates a missing Resistance row and credits it', bool(res1) and res1.get('enabled') and ev("calcActivityKcal(getActivities().find(a=>a.type==='resistance'))") > 0, res1)
+    ev("saveActivities(getActivities().filter(a=>a.type!=='resistance'))")
+    ev("showTrainChooser(); applyRoutine('__free__')"); page.wait_for_timeout(300)
+    ev("addRoutineApplyExerciseByName('Row')"); page.wait_for_timeout(200)
+    ev("window._routineApplyDrafts[0].sets=[{reps:'10',weight_kg:'40',note:''}]; renderRoutineApplyRows()")
+    ev("saveRoutineSession()"); page.wait_for_timeout(400)
+    ev("document.querySelector('.app-modal-overlay')?.querySelector('[data-pick=\"0\"],button')?.click()"); page.wait_for_timeout(300)  # dismiss "save as routine?" if it appears
+    res2 = ev("getActivities().find(a=>a.type==='resistance')")
+    check('routine session recreates a missing Resistance row and credits it', bool(res2) and res2.get('enabled') and ev("calcActivityKcal(getActivities().find(a=>a.type==='resistance'))") > 0, res2)
     check('no JS errors', not errs, str(errs[:2]))
 print('p169:', 'ALL PASS' if not bad else f'{len(bad)} FAIL: {bad}'); sys.exit(1 if bad else 0)
