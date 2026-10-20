@@ -10,7 +10,9 @@
 
 ## What it does
 
-**Newest (v3.10.1118 – 1123): know what you have.**
+**Newest (v3.10.1118 – 1124): know what you have.**
+
+- **A Shopping page that flows (v3.10.1124).** Three sections (My list, Add to the list, My cupboards) with the same ▲ ▼ 👁 ▾ controls, a compact cupboards view (tabs for fridge, freezer, cupboard, non-nutritional, low and use soon; aisles that fold; search that adds), and one 📥 Import button with three purposes (just bought, starting my cupboards, a list to shop for), a what-can-I-import hint, and a warning if the same receipt is pasted twice. "Not food" now reads Non-nutritional.
 
 - **Stock control (Shopping tab).** Count what is in your cupboards, fridge and freezer; logging a meal counts it down, low items join the shopping list (food and non-food, such as toilet roll), and Next meal idea / Balance my macros only suggest what you can make or swap.
 - **Start from what you already bought:** paste a supermarket order, or add a receipt (paste, file, table with "which column is which", or a photo of a paper one). Pack sizes are read, nothing is guessed, new names get the shop on the end, and an unmatched line can be matched by hand or created in your library and you come straight back.
