@@ -9595,6 +9595,7 @@ function confirmSaveToLibrary() {
 
 // Add food manually
 let _addFoodRecipeContext = null; // index into _recipeIngredients, when Add Food was opened from a flagged recipe ingredient rather than standalone
+let _addFoodOrdContext = null; // line of the receipt/order import that opened Add Food: saving returns there (library only, never a log)
 let _addFoodCategoryContext = null; // category name, when Add Food was opened from within a category's browse view
 
 function openAddFoodModal() {
@@ -9615,6 +9616,7 @@ function openAddFoodModal() {
 function closeAddFoodModal() {
   document.getElementById('addFoodModal').classList.remove('open');
   _addFoodRecipeContext = null; // cancelling clears it; a successful save reads it first, before this runs
+  _addFoodOrdContext = null;
   _addFoodCategoryContext = null;
   if (_addFoodVoiceActive) _stopAddFoodVoiceInput(null);
 }
@@ -9756,6 +9758,7 @@ function openAddFoodModalForRecipeIngredient(index) {
 // scaled to whatever amount the ingredient row already had (already
 // gram-converted from the recipe's original tsp/tbsp/etc unit).
 function _applyPendingLibraryEntryToRecipe(entry) {
+  try { mhOrdAfterCreate(entry); } catch (_) {}
   if (_addFoodRecipeContext == null) return;
   const ing = _recipeIngredients[_addFoodRecipeContext];
   if (!ing) return;
@@ -28036,8 +28039,8 @@ function mhShopCsvApply() {
 // only ever quantity x the pack size printed in the name ("4 x 410g" is 1640 g); anything it cannot read is left blank for you, or
 // shown as "check" when it is a count read from the name (6 Bananas). Nothing is saved until you press the button. A line you link to
 // a library name is remembered, so the next order from the same shop links itself.
-function mhOrdUnit(u) { u = String(u).toLowerCase(); if (u === 'kg') return { b: 'g', m: 1000 }; if (u === 'g') return { b: 'g', m: 1 }; if (u === 'ml') return { b: 'ml', m: 1 }; if (u === 'cl') return { b: 'ml', m: 10 }; return { b: 'ml', m: 1000 }; }
-const MH_ORD_U = '(kg|g|ml|cl|l|lt|ltr|litres?|liters?)';
+function mhOrdUnit(u) { u = String(u).toLowerCase(); if (u === 'kg') return { b: 'g', m: 1000 }; if (u === 'g') return { b: 'g', m: 1 }; if (u === 'ml') return { b: 'ml', m: 1 }; if (u === 'cl') return { b: 'ml', m: 10 }; if (u === 'lb' || u === 'lbs') return { b: 'g', m: 453.59 }; if (u === 'oz') return { b: 'g', m: 28.35 }; return { b: 'ml', m: 1000 }; }
+const MH_ORD_U = '(kg|g|ml|cl|l|lt|ltr|litres?|liters?|lbs?|oz)';
 function mhOrdSize(name) {
   const t = String(name || ''), r = n => Math.round(n * 100) / 100;
   let m = t.match(new RegExp('(\\d+)\\s*[x×]\\s*(\\d+(?:\\.\\d+)?)\\s*' + MH_ORD_U + '\\b', 'i'));
@@ -28049,20 +28052,92 @@ function mhOrdSize(name) {
 function mhOrdFmt(n, base) { return base === 'each' ? String(Math.round(n * 100) / 100) : (Math.round(n * 100) / 100) + ' ' + base; }
 function mhOrdClean(name) {
   let t = String(name || '').replace(/\d+\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l|lt|ltr|litres?|liters?)\b/gi, ' ').replace(new RegExp('\\d+(?:\\.\\d+)?\\s*' + MH_ORD_U + '\\b', 'gi'), ' ').replace(/\((?:[^)]*\d[^)]*)\)/g, ' ');
-  t = t.replace(/\(\s*\)/g, ' ').replace(/(^|\s)\d+(?=\s+[a-z])/gi, ' ').replace(/^\s*(exceptional by asda|just essentials by asda|cook by asda|asda)\s+/i, '').replace(/^\s*cook by\s+/i, '').replace(/\s+/g, ' ').trim();
+  t = t.replace(/\(\s*\)/g, ' ').replace(/\b\d+\s*(?:ct|count|pk|pack|pcs?|pieces?|rl|rolls?)\b/gi, ' ').replace(/(^|\s)\d+(?=\s+[a-z])/gi, ' ').replace(/^\s*(exceptional by asda|just essentials by asda|cook by asda|asda|kirkland signature|kirkland|ks|tesco finest|tesco|sainsbury'?s|morrisons|waitrose|lidl|aldi|iceland|co-op|costco)\s+/i, '').replace(/^\s*cook by\s+/i, '').replace(/\s+/g, ' ').trim();
   return t.replace(/\b([a-z])([a-z']*)/gi, (w, a, b) => a.toUpperCase() + b.toLowerCase()).slice(0, 60);
 }
 const MH_ORD_NOISE = /^(write a review|you saved|any \d+ for|rest of order|substitutes( & unavailable)?|your order|order:|total|shopping total|delivery cost|multibuy|payment method|hide|show|print order|back to|order again|problem with|search for|learn more|terms)|^[£$€]|^\d+(\.\d+)?\s?(kg|g|lt|l|ml|ea|m)$|\(\d+ items?\)\s*$/i;
-// Text of an order into [{qty, name, qtyGuess}]. "You ordered" lines are skipped (they were substituted: "We sent" is what arrived).
-function mhOrdLines(text) {
-  const out = []; text = String(text || '').replace(/^﻿/, ''); const first = text.split(/\r?\n/).find(l => l.trim()) || '';
-  if (first.includes(',') && /^\s*"?(item|items|name|product|description)"?\s*,/i.test(first)) {
-    const rows = mhCsvParse(text), head = rows[0].map(h => h.trim().toLowerCase()), fi = re => head.findIndex(h => re.test(h));
-    const ni = fi(/^(item|items|name|product|description)$/), qi = fi(/^(qty|quantity|count)$/), zi = fi(/^(size|pack|weight|amount)$/);
-    rows.slice(1).forEach(r => { const nm = String(r[ni] || '').trim(); if (!nm) return; const q = qi >= 0 ? parseFloat(r[qi]) : NaN;
-      out.push({ qty: q > 0 ? q : 1, name: (nm + ' ' + (zi >= 0 ? String(r[zi] || '').trim() : '')).trim(), qtyGuess: !(q > 0) }); });
-    return out;
+// ── Receipts and tables (v3.10.1123) ─────────────────────────────────────────────────────────────────────────────────────────
+// A receipt is read three ways, whichever fits: (1) a TABLE (CSV, tab, | or ; separated) with the columns found from the headings or the
+// values, or chosen by you when it cannot tell; (2) a TILL RECEIPT, where an item line is a name with a price on the end (item codes, tax
+// flags, "2 @ 3.99", weights, "x2" and "QTY 2" lines are understood and totals, tax, card and loyalty lines are dropped); (3) an ORDER or a
+// plain list, one item per line. Name and pack size (or a count) are what stock needs; what is missing stays blank for you, never guessed.
+const MH_RCP_ABBR = { org: 'Organic', orgnc: 'Organic', chkn: 'Chicken', chk: 'Chicken', brst: 'Breast', bnls: 'Boneless', sknls: 'Skinless', btr: 'Butter', chs: 'Cheese', chse: 'Cheese', mlk: 'Milk', yog: 'Yoghurt', yogt: 'Yoghurt', ygt: 'Yoghurt', frz: 'Frozen', frzn: 'Frozen', slcd: 'Sliced', shrd: 'Shredded', grnd: 'Ground', whl: 'Whole', crm: 'Cream', chdr: 'Cheddar', mozz: 'Mozzarella', parm: 'Parmesan', bf: 'Beef', tmto: 'Tomato', tmtos: 'Tomatoes', mshrm: 'Mushroom', mshrms: 'Mushrooms' };
+function mhRcpExpand(s) { return String(s).replace(/\b[A-Z]{2,6}\b/g, w => MH_RCP_ABBR[w.toLowerCase()] || w); }
+const MH_RCP_PRICE_END = /\s+[£$€]?\s?(-?\d{1,4}[.,]\d{2})(-?)\s*((?!KG$|ML$|CL$|LT$|LB$|OZ$)[A-Z*]{0,2})$/;
+const MH_RCP_PRICE_ONLY = /^[£$€]?\s?-?\d{1,4}[.,]\d{2}-?\s*[A-Z*]?$/;
+const MH_RCP_NOISE = /^(?:(?:sub\s?total|total)\s*(?:[:£$€\d-]|$|due|paid|tax|savings)|(?:balance|amount|cash|change|card|visa|mastercard|debit|credit|contactless|chip|pin|auth\w*|approval|terminal|merchant|vat|tax|gst|member\w*|clubcard|nectar|points|you saved|savings?|thank\w*|receipt|invoice|tel|phone|www|http\S*|warehouse|branch|cashier|till|operator|trans\w*|ref\w*|date|time|number of items|no\.? of items|barcode|opening|returns?|please|survey|feedback|customer|visit|signature|paid|payment|tendered|rounding|carrier|deposit|delivery|service|tip|promo\w*|coupon|discount|offer|multibuy|saving|tpd|instant|price reduction|qty|quantity|price|description|item|store|order|eft)\b|items?\s.*(?:sold|purchased))/i;
+const MH_RCP_DISC = /\b(discount|saving|coupon|voucher|offer|reduction|multibuy)\b|^tpd\b/i;
+function mhRcpLines(text) {
+  const L = String(text || '').split(/\r?\n/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean), letters = l => (l.match(/[a-z]/gi) || []).length;
+  let evid = 0; L.forEach((l, i) => { if (letters(l) >= 3 && !MH_RCP_NOISE.test(l) && (MH_RCP_PRICE_END.test(l) || (L[i + 1] && MH_RCP_PRICE_ONLY.test(L[i + 1])))) evid++; });
+  if (evid < 2) return null;
+  if (L.some(l => /^\d+\s*[x×]\s+[a-z]/i.test(l) && !MH_RCP_PRICE_END.test(l))) return null;   // an order page ("2 x Cheddar 400g", price on its own line)
+  const out = [];
+  L.forEach((l, i) => {
+    let m;
+    if ((m = l.match(/^(?:qty|quantity)\s*:?\s*(\d+)\s*$/i))) { if (out.length) out[out.length - 1].qty = +m[1]; return; }
+    if ((m = l.match(/^(?:(?:qty|quantity)\s*:?\s*)?(\d+)\s*[@x×*]\s*[£$€]?\s?\d{1,4}[.,]\d{2}(?:\s+[£$€]?\s?-?\d{1,4}[.,]\d{2})?\s*[A-Z*]?$/i))) { if (out.length) out[out.length - 1].qty = +m[1]; return; }
+    if ((m = l.match(/^(\d+(?:[.,]\d+)?)\s?(kg|g|lbs?|oz)\b/i)) && !/[a-z]{3,}/i.test(l.slice(m[0].length).replace(/\b(net|nett|per|each|gross)\b/ig, ''))) { if (out.length) { out[out.length - 1].wt = m[1].replace(',', '.') + m[2]; out[out.length - 1].qty = 1; } return; }
+    if (MH_RCP_PRICE_ONLY.test(l) || MH_RCP_NOISE.test(l)) return;
+    let s = l, neg = false; const pm = s.match(MH_RCP_PRICE_END);
+    if (pm) { if (pm[1][0] === '-' || pm[2] === '-') neg = true; s = s.slice(0, pm.index).trim(); }
+    else if (L[i + 1] && MH_RCP_PRICE_ONLY.test(L[i + 1])) { if (/^-|-$/.test(L[i + 1])) neg = true; } else return;
+    if (neg || MH_RCP_DISC.test(s)) return;
+    s = s.replace(/^(?:[A-Z]{1,2}\s+)?#?\d{4,}\s+/, '').replace(/^[*#\-\s]+/, '');
+    let qty = 1; const q1 = s.match(/^(\d+)\s*[x×]\s+(?=\S)/i), q2 = s.match(/\s+[x×]\s?(\d+)$/i);
+    if (q1) { qty = +q1[1]; s = s.slice(q1[0].length); } else if (q2) { qty = +q2[1]; s = s.slice(0, q2.index); }
+    s = s.trim(); if (letters(s) < 3 || MH_RCP_NOISE.test(s)) return;
+    out.push({ qty: qty > 0 ? qty : 1, name: mhRcpExpand(s), qtyGuess: false, wt: '' });
+  });
+  out.forEach(r => { if (r.wt) r.name += ' ' + r.wt; delete r.wt; });
+  return out.length ? out : null;
+}
+const MH_TBL_HEAD = { n: /^(item|items|name|product|products|description|desc|article|goods|ingredient)$/, c: /^(code|sku|barcode|item no|item number|item code|plu|upc|ean|ref|id)$/, q: /^(qty|quantity|count|units|no|number)$/, z: /^(size|pack|pack size|weight|volume)$/, p: /^(price|total|cost|value|line total|unit price|each|gbp|£|\$)$/ };
+// Columns of a pasted table: from the headings when there are any, otherwise from what the values look like. sure=false means ask.
+function mhRcpTable(text) {
+  text = String(text || '').replace(/^﻿/, ''); const lines = text.split(/\r?\n/).filter(l => l.trim()); if (lines.length < 2) return null;
+  let rows = null, delim = '';
+  for (const d of ['\t', '|', ';', ',']) {
+    const rs = d === ',' ? mhCsvParse(text) : lines.map(l => l.split(d).map(x => x.trim())), cnt = {}; rs.forEach(r => { cnt[r.length] = (cnt[r.length] || 0) + 1; });
+    const best = +Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+    if (best >= 2 && cnt[best] >= Math.max(2, Math.ceil(rs.length * 0.7))) { rows = rs.filter(r => r.length === best); delim = d; break; }
   }
+  if (!rows) return null;
+  const n = rows[0].length, hdr = rows[0].map(h => String(h || '').trim().toLowerCase().replace(/[:.]$/, ''));
+  const headRole = h => { for (const k of ['n', 'c', 'q', 'z', 'p']) if (MH_TBL_HEAD[k].test(h)) return k; return h === 'amount' ? '?' : ''; };
+  const hr = hdr.map(headRole), hasHead = hr.includes('n') || hr.filter(Boolean).length >= 2, data = rows.slice(hasHead ? 1 : 0);
+  const col = j => data.map(r => String(r[j] || '').trim()).filter(Boolean), alpha = j => { const c = col(j); return c.length ? c.reduce((a, x) => a + (x.match(/[a-z]/gi) || []).length, 0) / c.length : 0; };
+  const frac = (j, re) => { const c = col(j); return c.length ? c.filter(x => re.test(x)).length / c.length : 0; };
+  const money = /^[£$€]?\s?-?\d+[.,]\d{2}\s?[A-Za-z]?$/, int = /^\d{1,3}(?:[.,]0+)?$/, code = /^\d{5,}$/, unit = new RegExp('\\d\\s?' + MH_ORD_U + '\\b', 'i');
+  const roles = [];
+  for (let j = 0; j < n; j++) {
+    let r = hasHead ? hr[j] : '';
+    if (r === '?') r = frac(j, money) >= 0.6 ? 'p' : 'z';
+    if (!r) { if (frac(j, code) >= 0.7) r = 'c'; else if (frac(j, money) >= 0.6) r = 'p'; else if (frac(j, int) >= 0.7) r = 'q'; else if (frac(j, unit) >= 0.5 && alpha(j) < 14) r = 'z'; }
+    roles.push(r);
+  }
+  if (!roles.includes('n')) { let best = -1, bi = -1; for (let j = 0; j < n; j++) if (!roles[j]) { const a = alpha(j); if (a > best) { best = a; bi = j; } } if (bi >= 0 && best >= 3) roles[bi] = 'n'; }
+  const seen = {}; roles.forEach((r, j) => { if (r && r !== 'n') { if (seen[r]) roles[j] = ''; else seen[r] = 1; } });
+  const sure = roles.includes('n') && (hr.includes('n') || roles.some(r => r && r !== 'n'));
+  return { rows, n, hasHead, delim, sure, roles: roles.map(r => r || 'x') };
+}
+function mhRcpTableLines(tb, roles, hasHead) {
+  const idx = r => roles.map((x, i) => x === r ? i : -1).filter(i => i >= 0), ni = idx('n'), qi = idx('q')[0], zi = idx('z')[0], pi = idx('p')[0], ci = idx('c')[0], out = [];
+  if (!ni.length) return out;
+  tb.rows.slice(hasHead ? 1 : 0).forEach(r => {
+    let nm = ni.map(i => String(r[i] || '').trim()).filter(Boolean).join(' ').trim(); if (!nm || MH_RCP_NOISE.test(nm) || MH_RCP_DISC.test(nm)) return;
+    if (pi != null && /^-|-$/.test(String(r[pi] || '').replace(/[£$€\s]/g, ''))) return;
+    const till = pi != null || ci != null, qv = qi != null ? parseFloat(String(r[qi] || '').replace(',', '.')) : NaN, whole = qv > 0 && qv <= 999 && qv % 1 === 0;
+    if (till) nm = mhRcpExpand(nm);
+    out.push({ qty: whole ? qv : 1, name: (nm + ' ' + (zi != null ? String(r[zi] || '').trim() : '')).trim(), qtyGuess: !whole && !till });
+  });
+  return out;
+}
+// Text of an order into [{qty, name, qtyGuess}]. "You ordered" lines are skipped (they were substituted: "We sent" is what arrived).
+function mhOrdLines(text, map) {
+  text = String(text || '').replace(/^﻿/, ''); const out = [], tb = mhRcpTable(text);
+  if (tb && ((map && map.roles && map.roles.length === tb.n) || tb.sure)) return mhRcpTableLines(tb, map && map.roles && map.roles.length === tb.n ? map.roles : tb.roles, map && map.roles && map.roles.length === tb.n ? !!map.hasHead : tb.hasHead);
+  const rc = mhRcpLines(text); if (rc) return rc;
   let skipNext = false, sect = '';
   text.split(/\r?\n/).forEach(raw => {
     const l = raw.replace(/\s+/g, ' ').trim(); if (!l) return;
@@ -28077,26 +28152,29 @@ function mhOrdLines(text) {
   if (out.some(r => !r.qtyGuess)) return out.filter(r => !r.qtyGuess);   // an order page also has dates, addresses and totals: when lines have quantities, only those are items
   return out;
 }
-function mhOrdParse(text, shop) {
-  const lines = mhOrdLines(text), o = mhStockLoad(), rows = [], seen = {};
+function mhOrdParse(text, shop, map) {
+  const lines = mhOrdLines(text, map), o = mhStockLoad(), rows = [], seen = {}, CNT = /(?:^|\s)(\d+)\s*(?:pack|pk|ct|count|pcs?|pieces?|rl|rolls?)\b/i;
   lines.forEach(L => {
-    const clean = L.name.replace(/\s+/g, ' ').trim().slice(0, 110), sz = mhOrdSize(clean); let base = '', pack = null, amount = '', check = !!L.qtyGuess, hint = '';
-    if (sz) { base = sz.base; pack = sz.pack; amount = mhOrdFmt(L.qty * pack, base); }
-    else { const c = clean.match(/(?:^|\s)(\d+)\s*(?:pack|pk)\b/i) || clean.match(/(?:^|\s)(\d+)\s+(?!x\b)[A-Za-z]{3,}/);
+    const clean = L.name.replace(/\s+/g, ' ').trim().slice(0, 110), sz = mhOrdSize(clean), kind = mhClassify(clean, null).kind; let base = '', pack = null, amount = '', check = !!L.qtyGuess, hint = '';
+    if (kind === 'nonfood') {                          // toilet roll, bin bags, washing-up liquid: counted as items (rolls, bags, bottles), never in g or ml
+      const c = clean.match(CNT) || clean.match(/(?:^|\s)(\d+)\s+(?!x\b)[A-Za-z]{3,}/) || clean.match(/\s(\d{1,2})$/); base = 'each';
+      if (c) { pack = +c[1]; amount = String(L.qty * pack); check = true; hint = 'count read from the name'; } else { pack = 1; amount = String(L.qty); check = true; hint = sz ? 'counted as items, not ' + sz.base : 'how many'; }
+    } else if (sz) { base = sz.base; pack = sz.pack; amount = mhOrdFmt(L.qty * pack, base); }
+    else { const c = clean.match(CNT) || clean.match(/(?:^|\s)(\d+)\s+(?!x\b)[A-Za-z]{3,}/) || clean.match(/\s(\d{1,2})$/);
       if (c) { base = 'each'; pack = +c[1]; amount = String(L.qty * pack); check = true; hint = 'count read from the name'; }
       else if (/\beach\b/i.test(clean)) { base = 'each'; pack = 1; amount = String(L.qty); check = true; hint = 'sold each'; } else hint = 'how many, or how much?'; }
-    const kind = mhClassify(clean, null).kind, m = mhVariantMatch(clean, shop); let track = '', from = '';
+    const m = mhVariantMatch(clean, shop); let track = '', from = '';
     if (m.sure && m.name) { track = m.name; from = m.pass === 0 ? 'remembered' : 'in your library'; }
     else if (m.options && m.options.length === 1 && !m.otherShop) { track = m.options[0]; from = 'in your library'; }
     if (!track) { const lk = mhOrdLibLink(clean); if (lk) { track = lk; from = 'closest in your library'; } }
     if (!track) { let fz = null; try { fz = fuzzyFindInLibrary(mhOrdClean(clean)); } catch (_) {} if (fz && fz.name) { track = fz.name; from = 'closest in your library'; } }
     if (!track) track = mhOrdClean(clean) || clean.slice(0, 40);
     const key = mhShopKey(track), ex = o.items[key] || null;
-    if (seen[key] != null) { const prev = rows[seen[key]]; if (prev && prev.base === base && prev.pack === pack && base) { prev.qty += L.qty; prev.amount = mhOrdFmt(prev.qty * pack, base); return; } }
-    const never = mhIsNever(track, mhCatsOfName(track), ex), food = kind !== 'nonfood';
+    if (seen[key] != null) { const prev = rows[seen[key]]; if (prev && prev.base === base && prev.pack === pack && base) { prev.qty += L.qty; prev.amount = kind === 'nonfood' ? String(prev.qty * pack) : mhOrdFmt(prev.qty * pack, base); return; } }
+    const food = kind !== 'nonfood', never = food ? mhIsNever(track, mhCatsOfName(track), ex) : false;
     const frozenHead = /frozen/i.test(L.sect || ''), store = ex && ex.store ? ex.store : (frozenHead ? 'freezer' : ''), storeNote = ex && ex.store ? 'as before' : (frozenHead ? 'its section says frozen' : '');
     seen[key] = rows.length;
-    rows.push({ store, storeNote, name: clean, qty: L.qty, base, pack, amount, check, hint, track, from, key, on: food && !never && !!amount, kind: food ? 'food' : 'nonfood', never,
+    rows.push({ store, storeNote, name: clean, qty: L.qty, base, pack, amount, check, hint, track, from, key, on: !never && !!amount, kind: food ? 'food' : 'nonfood', never,
       existing: ex && ex.level != null ? { level: ex.level, base: ex.base } : null, mode: ex && ex.level != null ? 'leave' : 'set' });
   });
   return rows;
@@ -28111,60 +28189,157 @@ function mhOrdLibLink(clean) {
     if (!best || t.length > best.n) { best = { name: l.name, n: t.length }; tie = false; } else if (t.length === best.n) tie = true; });
   return best && !tie ? best.name : '';
 }
-function mhOrdOpen() { _shopUi.ord = null; mhShopView('orderimport'); }
-function mhOrdRead() { const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhOrdLoad(t, 'what you pasted'); }
-function mhOrdPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,text/csv,text/plain'; i.onchange = async () => { const f = i.files && i.files[0]; if (f) mhOrdLoad(await f.text(), f.name); }; i.click(); }
-function mhOrdLoad(text, label) {
-  const s = mhShopLoad(), asda = s.shops.find(x => /asda/i.test(x)), shop = /asda/i.test(text) && asda ? asda : s.shop, rows = mhOrdParse(text, shop);
-  if (!rows.length) { _shopUi.msg = 'I could not find any items in that. Paste lines like "2 x Cheddar 400g", one per line, or choose a CSV.'; mhShopRender(); return false; }
-  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }, dm = String(text).match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})\b/i);
-  let bought = mhISO(); if (dm) { const iso = dm[3] + '-' + String(MON[dm[2].toLowerCase()]).padStart(2, '0') + '-' + String(+dm[1]).padStart(2, '0'), n = mhDaysTo(iso); if (n != null && n <= 0 && n >= -120) bought = iso; }
-  _shopUi.ord = { rows, shop, label: label || 'order', bought }; mhShopView('orderimport'); return true;
+const MH_SHOP_NAMES = [['Asda', /\basda\b/i], ['Tesco', /\btesco\b/i], ["Sainsbury's", /\bsainsbury/i], ['Morrisons', /\bmorrisons?\b/i], ['Aldi', /\baldi\b/i], ['Lidl', /\blidl\b/i], ['Waitrose', /\bwaitrose\b/i], ['Costco', /\bcostco\b/i], ['Iceland', /\biceland\b/i], ['Co-op', /\bco-?op\b/i], ['Ocado', /\bocado\b/i], ['M&S', /\bm&s\b|marks (?:&|and) spencer/i]];
+// The shop named in the text (earliest mention), matched to one you already have if possible; otherwise offered as a new one.
+function mhOrdShopGuess(text, s) {
+  let best = null; MH_SHOP_NAMES.forEach(x => { const m = String(text).match(x[1]); if (m && (!best || m.index < best.at)) best = { at: m.index, nm: x[0], re: x[1] }; });
+  if (!best) return null; const have = s.shops.find(n => n.toLowerCase() === best.nm.toLowerCase() || best.re.test(n)); return { name: have || best.nm, isNew: !have };
 }
+function mhOrdOpen(kind) { _shopUi.ord = null; _shopUi.ordKind = kind === 'receipt' ? 'receipt' : 'start'; mhShopView('orderimport'); }
+function mhOrdKind(v) { _shopUi.ordKind = v === 'receipt' ? 'receipt' : 'start'; const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhShopRender(); const e2 = document.getElementById('mhOrdText'); if (e2) e2.value = t; }
+function mhOrdRead() { const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhOrdLoad(t, 'what you pasted'); }
+function mhOrdPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,.tsv,text/csv,text/plain'; i.onchange = async () => { const f = i.files && i.files[0]; if (f) mhOrdLoad(await f.text(), f.name); }; i.click(); }
+// A photo of a paper receipt: shrunk, sent to the same AI the app already uses, which only copies out the text. It then goes through the same reader and the same check screen as pasted text.
+function mhOrdShrink(file) {
+  return new Promise((res, rej) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); res({ base64: c.toDataURL('image/jpeg', 0.82).split(',')[1], mimeType: 'image/jpeg' }); }; im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('image')); }; im.src = u; });
+}
+async function mhOrdReadPhoto(img) {
+  const r = await callHealthAI('Copy out the text of this shop receipt. Output ONLY the lines for things that were bought, one per line, exactly as printed (name, size, quantity and price together). Keep abbreviations as printed. Leave out the shop name and address, totals, tax, payment and card lines, loyalty points and discounts. Do not add, correct or guess anything.', { maxTokens: 1800, image: img });
+  return r && r.ok && r.text ? r.text : '';
+}
+function mhOrdPhoto() {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
+  i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return; _shopUi.msg = 'Reading the receipt…'; mhShopRender();
+    try { const t = await mhOrdReadPhoto(await mhOrdShrink(f)); if (!t) { _shopUi.msg = 'I could not read that photo. Try again in better light, or paste the text.'; mhShopRender(); return; } _shopUi.msg = ''; mhOrdLoad(t, 'your receipt photo (check each line)'); }
+    catch (e) { _shopUi.msg = 'I could not read that photo. Try again, or paste the text.'; mhShopRender(); } };
+  i.click();
+}
+function mhOrdLoad(text, label, map) {
+  const s = mhShopLoad(), g = mhOrdShopGuess(text, s), shop = g ? g.name : s.shop, kind = _shopUi.ordKind === 'receipt' ? 'receipt' : 'start';
+  const tb = map ? null : mhRcpTable(text);
+  if (tb && !tb.sure) { _shopUi.ord = { stage: 'map', text, label: label || 'receipt', tb, roles: tb.roles.slice(), hasHead: tb.hasHead, kind }; mhShopView('orderimport'); return true; }
+  const rows = mhOrdParse(text, shop, map);
+  if (!rows.length) { _shopUi.msg = 'I could not find any items in that. Paste lines like "2 x Cheddar 400g" or a till receipt, one item per line, or choose a CSV.'; mhShopRender(); return false; }
+  if (kind === 'receipt') rows.forEach(r => { if (r.existing) r.mode = 'add'; });
+  const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }, dm = String(text).match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})\b/i), dn = String(text).match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);
+  let bought = mhISO(); const tryIso = iso => { const n = mhDaysTo(iso); if (n != null && n <= 0 && n >= -120) bought = iso; };
+  if (dm) tryIso(dm[3] + '-' + String(MON[dm[2].toLowerCase()]).padStart(2, '0') + '-' + String(+dm[1]).padStart(2, '0'));
+  else if (dn && +dn[1] <= 31 && +dn[2] <= 12) tryIso(dn[3] + '-' + String(+dn[2]).padStart(2, '0') + '-' + String(+dn[1]).padStart(2, '0'));
+  _shopUi.ord = { rows, shop, shops: s.shops.concat(g && g.isNew ? [g.name] : []), label: label || 'order', bought, kind, suffix: true, clearList: kind === 'receipt', pick: null }; mhShopView('orderimport'); return true;
+}
+function mhOrdRole(j, v) { const d = _shopUi.ord; if (!d || d.stage !== 'map') return; if (v !== 'x') d.roles.forEach((r, k) => { if (r === v && k !== j) d.roles[k] = 'x'; }); d.roles[j] = v; mhShopRender(); }
+function mhOrdHead(on) { const d = _shopUi.ord; if (d && d.stage === 'map') { d.hasHead = !!on; mhShopRender(); } }
+function mhOrdMapGo() { const d = _shopUi.ord; if (!d || d.stage !== 'map') return; if (!d.roles.includes('n')) { _shopUi.msg = 'Choose which column is the name of the item'; mhShopRender(); return; } _shopUi.msg = ''; mhOrdLoad(d.text, d.label, { roles: d.roles.slice(), hasHead: d.hasHead }); }
 function mhOrdSet(i, f, v) { const r = _shopUi.ord && _shopUi.ord.rows[i]; if (!r) return; r[f] = v; if (f === 'amount') { r.check = false; r.hint = ''; } }
+function mhOrdKindSet(i, v) { const r = _shopUi.ord && _shopUi.ord.rows[i]; if (!r) return; r.kind = v === 'nonfood' ? 'nonfood' : 'food'; if (r.kind === 'nonfood') { r.never = false; r.base = 'each'; } else r.never = mhIsNever(r.track, mhCatsOfName(r.track), null); mhShopRender(); }
 function mhOrdTick(i, on) { const r = _shopUi.ord && _shopUi.ord.rows[i]; if (r) { r.on = !!on; mhShopRender(); } }
-function mhOrdAll(on) { if (_shopUi.ord) _shopUi.ord.rows.forEach(r => { r.on = !!on && r.kind === 'food' && !r.never && !!String(r.amount).trim(); }); mhShopRender(); }
+function mhOrdAll(on) { if (_shopUi.ord) _shopUi.ord.rows.forEach(r => { r.on = !!on && !r.never && !!String(r.amount).trim(); }); mhShopRender(); }
 function mhOrdBought(v) { if (_shopUi.ord && /^\d{4}-\d{2}-\d{2}$/.test(v)) _shopUi.ord.bought = v; }
-function mhOrdShop(v) { if (_shopUi.ord) _shopUi.ord.shop = v; }
+function mhOrdShop(v) { const d = _shopUi.ord; if (!d) return; if (v === '__new') { mhShopRender(); appPrompt('Name of the shop (e.g. Costco)', 'Shop name', n => mhOrdShopAdd(n)); return; } d.shop = v; mhShopRender(); }
+function mhOrdShopAdd(name) { const d = _shopUi.ord, v = String(name || '').trim().slice(0, 24); if (!d || !v) { mhShopRender(); return; } let m = d.shops.find(x => x.toLowerCase() === v.toLowerCase()); if (!m) { m = v; d.shops.push(m); } d.shop = m; mhShopRender(); }
+function mhOrdSuffix(on) { if (_shopUi.ord) { _shopUi.ord.suffix = !!on; mhShopRender(); } }
+function mhOrdClear(on) { if (_shopUi.ord) _shopUi.ord.clearList = !!on; }
+// Is this name new, i.e. not a food in your library, not already tracked, and not a variant of one?
+function mhOrdIsNew(track, shop) {
+  const key = mhShopKey(track); if (!key) return false; if (mhStockLoad().items[key]) return false;
+  if (loadLibrary().some(l => l && l.name && mhShopKey(l.name) === key)) return false;
+  const m = mhVariantMatch(track, shop); return !(m.sure && m.name);
+}
+// New names get the shop on the end, "Baked Beans (Asda)", the way shop variants of a food are already named. Anything already in your library keeps its name.
+function mhOrdName(r, d) { const t = String(r.track || r.name || '').trim(); if (!d || !d.suffix || !d.shop || /\([^)]*\)\s*$/.test(t)) return t; return mhOrdIsNew(t, d.shop) ? t + ' (' + d.shop + ')' : t; }
+function mhOrdPickCands(q, seed) {
+  const names = new Map(); mhShopKnown().forEach(x => names.set(x.key, x.name)); Object.values(mhStockLoad().items).forEach(it => names.set(it.key, it.name));
+  const sing = w => w.replace(/(ies)$/, 'y').replace(/(es|s)$/, ''), toks = t => mhNameTidy(t).split(' ').filter(x => x.length > 1).map(sing), want = toks(q || seed || ''), all = !!(q && q.trim()), out = [];
+  if (!want.length) return out;
+  names.forEach(nm => { const have = new Set(toks(nm)), hit = want.filter(w => have.has(w) || [...have].some(h => h.startsWith(w) || (w.length > 3 && w.startsWith(h)))).length; if (all ? hit === want.length : hit >= 1) out.push({ nm, hit, len: nm.length }); });
+  return out.sort((a, b) => b.hit - a.hit || a.len - b.len).slice(0, 8).map(x => x.nm);
+}
+function mhOrdPickListHtml() {
+  const d = _shopUi.ord, p = d && d.pick, r = p && d.rows[p.i]; if (!r) return ''; const esc = mhPlanEsc, c = mhOrdPickCands(p.q, mhOrdClean(r.name));
+  return (c.length ? c.map(n => '<button class="copy-btn" data-i="' + p.i + '" data-n="' + esc(n) + '" onclick="mhOrdLink(+this.dataset.i,this.dataset.n,\'picked by you\')" style="font-size:13px;padding:8px 12px;margin:0 6px 6px 0;">' + esc(n) + '</button>').join('') : '<div style="font-size:12px;color:var(--text3);">Nothing in your library or stock matches that.</div>');
+}
+function mhOrdPickOpen(i) { const d = _shopUi.ord; if (!d) return; d.pick = d.pick && d.pick.i === i ? null : { i, q: '' }; mhShopRender(); setTimeout(() => { const e = document.getElementById('mhOrdPickQ'); if (e) e.focus(); }, 0); }
+function mhOrdPickQ(v) { const d = _shopUi.ord; if (!d || !d.pick) return; d.pick.q = v; const el = document.getElementById('mhOrdPickList'); if (el) el.innerHTML = mhOrdPickListHtml(); }
+// Point a line at a food you already have (picked, or just saved). Its existing count, never-runs-out and kind follow the food.
+function mhOrdLink(i, name, from) {
+  const d = _shopUi.ord, r = d && d.rows[i]; if (!r) return; const key = mhShopKey(name), ex = mhStockLoad().items[key] || null;
+  r.track = name; r.key = key; r.from = from || 'picked by you'; r.existing = ex && ex.level != null ? { level: ex.level, base: ex.base } : null; r.mode = r.existing ? (d.kind === 'receipt' ? 'add' : 'leave') : 'set';
+  if (r.kind !== 'nonfood') r.never = mhIsNever(name, mhCatsOfName(name), ex); if (ex && ex.store && !r.store) { r.store = ex.store; r.storeNote = 'as before'; }
+  d.pick = null; mhShopRender();
+}
+// "Create new": the ordinary Add Food form, which only saves to the library (it never logs a meal). When it saves, you land back on this list with the line pointing at the new food.
+function mhOrdCreate(i) {
+  const d = _shopUi.ord, r = d && d.rows[i]; if (!r) return; d.pick = null;
+  openAddFoodModal(); _addFoodOrdContext = { i }; document.getElementById('addFoodName').value = mhOrdName(r, d);
+  const sub = document.querySelector('#addFoodModal .save-modal-sub'); if (sub) sub.textContent = 'Saves to your library only: nothing is logged. You come straight back to your list.';
+}
+function mhOrdAfterCreate(entry) {
+  const c = _addFoodOrdContext; if (!c) return; _addFoodOrdContext = null; const d = _shopUi.ord; if (!d || !d.rows || !d.rows[c.i]) return;
+  _shopUi.view = 'orderimport'; try { switchTabById('shop'); } catch (_) {} mhOrdLink(c.i, entry.name, 'just saved to your library');
+}
 function mhOrdApply() {
-  const d = _shopUi.ord; if (!d) return; const mem = mhMatchLoad(); let n = 0, bad = []; const names = [];
+  const d = _shopUi.ord; if (!d || d.stage) return; const mem = mhMatchLoad(); let n = 0, bad = []; const names = [], ings = [], rc = d.kind === 'receipt';
   d.rows.forEach(r => {
-    if (!r.on) return; const txt = String(r.amount || '').trim(), track = String(r.track || r.name).trim(); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
+    if (!r.on) return; const txt = String(r.amount || '').trim(), track = mhOrdName(r, d); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
     const um = txt.toLowerCase().match(/^[\d.]+\s*([a-z]*)/), u = um && um[1] ? mhStockUnitOf(um[1]) : 'each', key = mhShopKey(track), ex = mhStockLoad().items[key];
-    const base = ex ? ex.base : (r.base || (u === 'g' || u === 'kg' ? 'g' : u === 'ml' || u === 'l' ? 'ml' : 'each'));
+    const base = ex ? ex.base : (r.kind === 'nonfood' ? 'each' : (r.base || (u === 'g' || u === 'kg' ? 'g' : u === 'ml' || u === 'l' ? 'ml' : 'each')));
     const p = mhStockParse(txt, { base }); if (!p.ok) { bad.push(track + ': ' + p.err); return; } if (!(p.base > 0)) { bad.push(track + ': amount must be above zero'); return; }
+    const mode = ex && ex.level != null && !r.existing && rc ? 'add' : r.mode;
     if (!ex) mhStockTrack(track, { base, pack: r.base === base && r.pack > 0 ? r.pack : null, serving: null, shop: d.shop });
-    if (!(ex && r.mode === 'leave')) mhStockSetStore(key, r.store || '');
-    if (ex && r.mode === 'leave') { /* counts untouched */ } else if (ex && r.mode === 'add') mhStockAdjust(key, p.base, 'bought', 'order'); else mhStockSetLevel(key, p.base);
-    if (!(ex && r.mode === 'leave') && r.store) { const o2 = mhStockLoad(), i2 = o2.items[key]; if (i2 && i2.useByAuto && i2.level > 0) { mhStockAutoDate(i2, d.bought); mhStockSave(o2); } }
+    if (r.kind === 'nonfood') { const o3 = mhStockLoad(); if (o3.items[key]) { o3.items[key].nonFood = true; mhStockSave(o3); } }
+    if (!(ex && mode === 'leave')) mhStockSetStore(key, r.store || '');
+    if (ex && mode === 'leave') { /* counts untouched */ } else if (ex && mode === 'add' && ex.level != null) mhStockAdjust(key, p.base, 'bought', rc ? 'receipt' : 'order'); else mhStockSetLevel(key, p.base);
+    if (!(ex && mode === 'leave') && r.store) { const o2 = mhStockLoad(), i2 = o2.items[key]; if (i2 && i2.useByAuto && i2.level > 0) { mhStockAutoDate(i2, d.bought); mhStockSave(o2); } }
     if (mhShopKey(r.name) !== key) mem.link[mhShopKey(r.name)] = track;
-    n++; names.push(track);
+    n++; names.push(track); ings.push(mhNameParts(track).ing);
   });
   if (bad.length) { _shopUi.msg = 'Not started: ' + bad.slice(0, 3).join('; ') + (bad.length > 3 ? ' and ' + (bad.length - 3) + ' more' : ''); }
-  mhMatchSave(mem); const added = mhStockSweep(); _shopUi.ord = null;
-  _shopUi.msg = (n ? 'Stock started for ' + n + ' item' + (n === 1 ? '' : 's') + (bad.length ? ', ' + bad.length + ' skipped (' + bad.slice(0, 2).join('; ') + ')' : '') + (added ? ', ' + added + ' put on your list' : '') + '. Counts are what arrived: use Check the cupboards to adjust anything already used.' : (_shopUi.msg || 'Nothing ticked, so nothing changed'));
+  mhMatchSave(mem);
+  if (n && d.shop) { const s0 = mhShopLoad(); if (!s0.shops.some(x => x.toLowerCase() === d.shop.toLowerCase())) { s0.shops.push(d.shop); mhShopSave(s0); } }
+  let off = 0; if (n && rc && d.clearList) { const s1 = mhShopLoad(), before = s1.items.length; s1.items = s1.items.filter(x => !(names.some(nm => mhShopKey(nm) === x.key) || ings.includes(mhNameParts(x.name).ing))); off = before - s1.items.length; if (off) mhShopSave(s1); }
+  const added = mhStockSweep(); _shopUi.ord = null;
+  _shopUi.msg = (n ? (rc ? 'Added ' + n + ' item' + (n === 1 ? '' : 's') + ' to stock' : 'Stock started for ' + n + ' item' + (n === 1 ? '' : 's')) + (bad.length ? ', ' + bad.length + ' skipped (' + bad.slice(0, 2).join('; ') + ')' : '') + (off ? ', ' + off + ' taken off your list' : '') + (added ? ', ' + added + ' put on your list' : '') + '. Counts are what arrived: use Check the cupboards to adjust anything already used.' : (_shopUi.msg || 'Nothing ticked, so nothing changed'));
   mhShopView('list');
 }
 function mhOrdViewHtml(s, esc, btn) {
-  const d = _shopUi.ord, inp = 'width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
-  if (!d) return '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🧾 Start stock from an order</div>'
-    + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px;">No need to count every cupboard. Paste a recent order (one item per line, like <i>2 x ASDA British Mature Cheddar 400g</i>) or choose a CSV, and stock starts from it. Pack sizes are read from the names (2 × 400 g = 800 g); anything unclear is left for you. Nothing is saved until you say so.</div>'
-    + '<textarea id="mhOrdText" rows="8" placeholder="Paste your order here" style="' + inp + 'font-family:inherit;"></textarea>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button id="mhOrdRead" class="copy-btn" onclick="mhOrdRead()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Read it</button>' + btn('📄 Choose a file', 'mhOrdPick()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
-  const nOn = d.rows.filter(r => r.on).length, look = d.rows.filter(r => r.kind === 'food' && !r.never && (r.check || !String(r.amount).trim())).length;
-  const rowH = (r, i) => '<div data-ord="' + i + '" style="padding:10px 4px;border-top:1px solid var(--border);' + (r.on ? '' : 'opacity:0.6;') + (r.kind === 'food' && !r.never && (r.check || !String(r.amount).trim()) ? 'border-left:3px solid var(--yellow,#e0a800);padding-left:8px;' : '') + '">'
-    + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--text);"><input type="checkbox" data-i="' + i + '" ' + (r.on ? 'checked ' : '') + 'onchange="mhOrdTick(+this.dataset.i,this.checked)" style="margin-top:3px;"><span style="flex:1;min-width:0;">' + esc(r.name) + '<span style="font-size:12px;color:var(--text3);"> · ' + r.qty + ' ordered' + (r.kind === 'nonfood' ? ' · not food' : r.never ? ' · never runs out' : '') + '</span></span></label>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 0 24px;"><div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Track as' + (r.from ? ' (' + esc(r.from) + ')' : '') + '</div><input data-i="' + i + '" value="' + esc(r.track) + '" oninput="mhOrdSet(+this.dataset.i,\'track\',this.value)" style="' + inp + '"></div>'
+  const d = _shopUi.ord, kind = (d && d.kind) || _shopUi.ordKind || 'start', rc = kind === 'receipt', inp = 'width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
+  const sel = 'padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
+  const title = (rc ? '🧾 Add a receipt to stock' : '🧾 Start stock from an order');
+  if (!d) return '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">' + title + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">' + ['receipt', 'start'].map(k => '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text);"><input type="radio" name="mhOrdKind" value="' + k + '" ' + (kind === k ? 'checked ' : '') + 'onchange="mhOrdKind(this.value)" style="margin-top:3px;"><span>' + (k === 'receipt' ? '<b>A receipt or a shop I have just done</b>: add it on top of what I already have' : '<b>Starting my stock</b> from a recent order: set the counts') + '</span></label>').join('') + '</div>'
+    + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:10px;">Paste a till receipt, an order page, an e-mailed receipt, a plain list or a table, choose a file, or take a photo of a paper receipt. Codes, prices, tax letters, "2 @ 3.99", weights and "24CT" are understood, and totals, card and loyalty lines are ignored. I need a name and a pack size (or a count); anything missing is left blank for you, never guessed. If I cannot tell which column is which, I will ask. Nothing is saved until you say so.</div>'
+    + '<textarea id="mhOrdText" rows="8" placeholder="Paste your receipt or order here" style="' + inp + 'font-family:inherit;"></textarea>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button id="mhOrdRead" class="copy-btn" onclick="mhOrdRead()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Read it</button>' + btn('📄 Choose a file', 'mhOrdPick()', 'font-size:14px;padding:11px 14px;') + btn('📷 Photo of a receipt', 'mhOrdPhoto()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);margin-top:8px;">A photo is sent to the AI you have set up, only to copy out the text. Leave out any card details.</div>';
+  if (d.stage === 'map') {
+    const heads = { n: 'Name', q: 'Quantity', z: 'Pack size', p: 'Price (ignored)', c: 'Item code (ignored)', x: 'Skip' }, show = d.tb.rows.slice(0, 6);
+    return '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">' + title + ': which column is which?</div>'
+      + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">I could not be sure, so tell me what each column holds. Name is the only one you must choose. Pack size is things like 400g or 6 pack.</div>'
+      + '<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text);margin-bottom:8px;"><input id="mhOrdHead" type="checkbox" ' + (d.hasHead ? 'checked ' : '') + 'onchange="mhOrdHead(this.checked)"> The first row is headings</label>'
+      + '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:13px;color:var(--text);"><tr>' + d.roles.map((r, j) => '<td style="padding:4px;"><select data-j="' + j + '" onchange="mhOrdRole(+this.dataset.j,this.value)" style="' + sel + '">' + Object.keys(heads).map(k => '<option value="' + k + '"' + (r === k ? ' selected' : '') + '>' + heads[k] + '</option>').join('') + '</select></td>').join('') + '</tr>'
+      + show.map((row, k) => '<tr style="' + (k === 0 && d.hasHead ? 'font-weight:700;' : '') + '">' + row.map(c => '<td style="padding:4px 8px;border-top:1px solid var(--border);white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;">' + esc(c) + '</td>').join('') + '</tr>').join('') + '</table></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"><button id="mhOrdMapGo" class="copy-btn" onclick="mhOrdMapGo()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Use these columns</button>' + btn('Start again', 'mhOrdOpen(_shopUi.ordKind)', 'font-size:14px;padding:11px 14px;') + '</div>';
+  }
+  const nOn = d.rows.filter(r => r.on).length, need = r => !r.never && (r.check || !String(r.amount).trim()), look = d.rows.filter(need).length, unm = d.rows.filter(r => !r.from && r.kind === 'food' && !r.never).length;
+  const rowH = (r, i) => '<div data-ord="' + i + '" style="padding:10px 4px;border-top:1px solid var(--border);' + (r.on ? '' : 'opacity:0.6;') + (need(r) ? 'border-left:3px solid var(--yellow,#e0a800);padding-left:8px;' : '') + '">'
+    + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--text);"><input type="checkbox" data-i="' + i + '" ' + (r.on ? 'checked ' : '') + 'onchange="mhOrdTick(+this.dataset.i,this.checked)" style="margin-top:3px;"><span style="flex:1;min-width:0;">' + esc(r.name) + '<span style="font-size:12px;color:var(--text3);"> · ' + r.qty + (rc ? ' bought' : ' ordered') + (r.kind === 'nonfood' ? ' · not food' : r.never ? ' · never runs out' : '') + '</span></span></label>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 0 24px;"><div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Track as' + (r.from ? ' (' + esc(r.from) + ')' : ' (new)') + '</div><input data-i="' + i + '" value="' + esc(r.track) + '" oninput="mhOrdSet(+this.dataset.i,\'track\',this.value)" style="' + inp + '"></div>'
     + '<div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Have' + (r.check ? ' (check)' : '') + (r.hint && !r.amount ? ' (' + esc(r.hint) + ')' : '') + '</div><input data-i="' + i + '" value="' + esc(r.amount) + '" placeholder="e.g. 800 g or 12" oninput="mhOrdSet(+this.dataset.i,\'amount\',this.value)" style="' + inp + '"></div></div>'
-    + '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Kept in <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'store\',this.value)" style="padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + MH_STORES.map(x => '<option value="' + x + '"' + ((r.store || '') === x ? ' selected' : '') + '>' + mhStoreIcon(x) + ' ' + mhStoreName(x) + '</option>').join('') + '</select>' + (r.storeNote ? ' <span style="color:var(--text3);">' + esc(r.storeNote) + '</span>' : '') + '</div>'
-    + (r.existing ? '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Already tracked at ' + esc(mhOrdFmt(r.existing.level, r.existing.base)) + ': <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'mode\',this.value)" style="padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"><option value="leave"' + (r.mode === 'leave' ? ' selected' : '') + '>Leave it as it is</option><option value="add"' + (r.mode === 'add' ? ' selected' : '') + '>Add this on top</option><option value="set"' + (r.mode === 'set' ? ' selected' : '') + '>Replace with this</option></select></div>' : '') + '</div>';
-  const shopSel = '<select id="mhOrdShop" onchange="mhOrdShop(this.value)" style="' + inp + 'max-width:240px;">' + s.shops.map(n => '<option value="' + esc(n) + '"' + (n === d.shop ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>';
-  return '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🧾 Start stock from ' + esc(d.label) + '</div>'
-    + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">' + d.rows.length + ' lines read, ' + nOn + ' ticked' + (look ? ', <b style="color:var(--text);">' + look + ' need a look</b> (marked with a bar: type the amount, or untick)' : '') + '. Pack sizes come from the names. Change a name to link it to the ingredient you use in recipes.</div>'
+    + (mhOrdName(r, d) !== String(r.track || '').trim() ? '<div data-saveas style="margin:4px 0 0 24px;font-size:12px;color:var(--text3);">Will be saved as <b style="color:var(--text);">' + esc(mhOrdName(r, d)) + '</b></div>' : '')
+    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
+    + '<select data-i="' + i + '" onchange="mhOrdKindSet(+this.dataset.i,this.value)" style="' + sel + '"><option value="food"' + (r.kind === 'food' ? ' selected' : '') + '>🍎 Food</option><option value="nonfood"' + (r.kind === 'nonfood' ? ' selected' : '') + '>🧻 Not food</option></select></div>'
+    + (d.pick && d.pick.i === i ? '<div data-pick style="margin:8px 0 0 24px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Which food is this? Pick one, or search.</div><input id="mhOrdPickQ" value="' + esc(d.pick.q) + '" placeholder="Search your foods" oninput="mhOrdPickQ(this.value)" style="' + inp + 'margin-bottom:8px;"><div id="mhOrdPickList">' + mhOrdPickListHtml() + '</div><div style="margin-top:4px;">' + btn('＋ It is not in my library: create it', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') + '</div></div>' : '')
+    + '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Kept in <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'store\',this.value)" style="' + sel + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((r.store || '') === x ? ' selected' : '') + '>' + mhStoreIcon(x) + ' ' + mhStoreName(x) + '</option>').join('') + '</select>' + (r.storeNote ? ' <span style="color:var(--text3);">' + esc(r.storeNote) + '</span>' : '') + '</div>'
+    + (r.existing ? '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Already tracked at ' + esc(mhOrdFmt(r.existing.level, r.existing.base)) + ': <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'mode\',this.value)" style="' + sel + '"><option value="leave"' + (r.mode === 'leave' ? ' selected' : '') + '>Leave it as it is</option><option value="add"' + (r.mode === 'add' ? ' selected' : '') + '>Add this on top</option><option value="set"' + (r.mode === 'set' ? ' selected' : '') + '>Replace with this</option></select></div>' : '') + '</div>';
+  const shopSel = '<select id="mhOrdShop" onchange="mhOrdShop(this.value)" style="' + inp + 'max-width:240px;">' + (d.shops || s.shops).map(n => '<option value="' + esc(n) + '"' + (n === d.shop ? ' selected' : '') + '>' + esc(n) + (s.shops.includes(n) ? '' : ' (new)') + '</option>').join('') + '<option value="__new">＋ Another shop…</option></select>';
+  return '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">' + (rc ? '🧾 Add ' : '🧾 Start stock from ') + esc(d.label) + (rc ? ' to stock' : '') + '</div>'
+    + '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">' + d.rows.length + ' lines read, ' + nOn + ' ticked' + (look ? ', <b style="color:var(--text);">' + look + ' need a look</b> (marked with a bar: type the amount, or untick)' : '') + (unm ? ', <b style="color:var(--text);">' + unm + ' not matched</b> to your library (Match or Create new)' : '') + '. ' + (rc ? 'Counts are added on top of what you already have; nothing here makes a new shopping list.' : 'Pack sizes come from the names.') + ' Change a name to link it to the ingredient you use in recipes.</div>'
     + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><span style="font-size:12px;color:var(--text3);">Bought at</span>' + shopSel + btn('Tick all', 'mhOrdAll(true)') + btn('Untick all', 'mhOrdAll(false)') + '</div>'
+    + '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text2);margin-bottom:6px;"><input id="mhOrdSuffix" type="checkbox" ' + (d.suffix ? 'checked ' : '') + 'onchange="mhOrdSuffix(this.checked)" style="margin-top:2px;"><span>Put the shop on the end of new names, like <i>Baked Beans (' + esc(d.shop) + ')</i>. Foods already in your library keep their name.</span></label>'
+    + (rc ? '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text2);margin-bottom:6px;"><input id="mhOrdClear" type="checkbox" ' + (d.clearList ? 'checked ' : '') + 'onchange="mhOrdClear(this.checked)" style="margin-top:2px;"><span>Take what I bought off my shopping list</span></label>' : '')
     + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><span style="font-size:12px;color:var(--text3);">Bought on</span><input id="mhOrdBought" type="date" value="' + esc(d.bought || '') + '" onchange="mhOrdBought(this.value)" style="' + inp + 'max-width:170px;"><span style="font-size:11px;color:var(--text3);">fridge and freezer use-by dates count from this day</span></div>'
     + d.rows.map(rowH).join('')
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhOrdGo" class="copy-btn" onclick="mhOrdApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Start stock for ' + nOn + ' item' + (nOn === 1 ? '' : 's') + '</button>' + btn('Start again', 'mhOrdOpen()', 'font-size:14px;padding:11px 14px;') + btn('Cancel', "_shopUi.ord=null;mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhOrdGo" class="copy-btn" onclick="mhOrdApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">' + (rc ? 'Add ' + nOn + ' item' + (nOn === 1 ? '' : 's') + ' to stock' : 'Start stock for ' + nOn + ' item' + (nOn === 1 ? '' : 's')) + '</button>' + btn('Start again', 'mhOrdOpen(_shopUi.ordKind)', 'font-size:14px;padding:11px 14px;') + btn('Cancel', "_shopUi.ord=null;mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
 }
 // ── Cupboard check: one long list, boxes on every row, each change saves as you go (v3.10.1121) ────────────────────────────────────
 // Walk the cupboards with the list open. Type what you have (and, if you like, where it is bought, what one serving is, and when to
@@ -28243,7 +28418,7 @@ function mhStockSweep() {
     if (!shop) return;
     const ex = s.items.find(i => i.key === it.key);
     if (ex) { if (ex.hidden) { ex.hidden = false; sChanged = true; } }
-    else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: false, amount: '' }); added++; sChanged = true; }
+    else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: it.nonFood ? 'nonfood' : mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: !!it.nonFood, amount: '' }); added++; sChanged = true; }
     it.lowFlag = true; oChanged = true;
   });
   if (sChanged) mhShopSave(s); if (oChanged) mhStockSave(o); return added;
@@ -28273,7 +28448,7 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('🧾 Start stock from an order', 'mhOrdOpen()') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('🧾 Add a receipt to stock', "mhOrdOpen('receipt')") + btn('🧾 Start stock from an order', 'mhOrdOpen()') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }

@@ -76,7 +76,7 @@ with fresh_server() as root, sync_playwright() as pw:
     l = by('Lettuce')
     if not l or l['amount'] != '' or l['on']: f.add('BUG', f'1: a line with no size or count is left blank and unticked, never guessed: {l}')
     t = by('Toilet Roll')
-    if not t or t['on'] or t['kind'] != 'nonfood': f.add('BUG', f'1: toilet roll is not food and not ticked: {t}')
+    if not t or t['kind'] != 'nonfood' or t['base'] != 'each' or t['amount'] != '18' or not t['on']: f.add('BUG', f'1: toilet roll is not food: counted as items (2 x 9 = 18), ticked: {t}')
     g = by('Garlic')
     if not g or g['on'] or not g['never']: f.add('BUG', f'1: garlic paste is a never-runs-out food and not ticked: {g}')
     c = by('Cheddar')
@@ -108,12 +108,14 @@ with fresh_server() as root, sync_playwright() as pw:
     ch = it('Cheddar')
     if not ch or ch['level'] != 800 or ch['base'] != 'g' or ch['pack'] != 400: f.add('BUG', f'4: cheddar tracked at 800 g with a 400 g pack: {ch}')
     if not it('Double Cream') or it('Double Cream')['level'] != 3000 or it('Double Cream')['base'] != 'ml': f.add('BUG', f'4: cream 3000 ml: {it("Double Cream")}')
-    if not it('Baked Beans') or it('Baked Beans')['level'] != 1640: f.add('BUG', f'4: the edited name is used: {it("Baked Beans")}')
+    if not it('Baked Beans (Asda)') or it('Baked Beans (Asda)')['level'] != 1640: f.add('BUG', f'4: the edited name is used, new names get the shop on the end: {it("Baked Beans (Asda)")}')
+    tr = next((v for v in o['items'].values() if 'Toilet' in v['name']), None)
+    if not tr or tr['level'] != 18 or tr['base'] != 'each' or not tr.get('nonFood'): f.add('BUG', f'4: non-food is tracked in items and flagged: {tr}')
     if not it('Eggs') and not any('Eggs' in v['name'] for v in o['items'].values()): f.add('BUG', '4: eggs tracked in each')
     if it('Cheddar') and it('Cheddar').get('shop') != 'Asda' and it('Cheddar').get('shop') != ev("mhShopLoad().shop"): f.add('BUG', f'4: shop set: {it("Cheddar").get("shop")}')
     lt = next((v for v in o['items'].values() if 'Lettuce' in v['name']), None)
     if not lt or lt['level'] != 1 or lt['base'] != 'each': f.add('BUG', f'4: the amount typed for lettuce is used: {lt}')
-    if any('Toilet' in v['name'] or 'Garlic' in v['name'] for v in o['items'].values()): f.add('BUG', '4: unticked lines must not be tracked')
+    if any('Garlic' in v['name'] for v in o['items'].values()): f.add('BUG', '4: unticked lines must not be tracked')
     if any('Firestick' in v['name'] for v in o['items'].values()): f.add('BUG', '4: an unreadable typed amount is skipped, not guessed')
     if any(v.get('reorder') is not None for v in o['items'].values()): f.add('BUG', '4: reorder levels are never invented')
     msg = ev("(document.getElementById('mhShopMsg')||{}).textContent") or ''
@@ -122,7 +124,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # remembered link
     rows2 = ev("t=>mhOrdParse(t,'Asda')", "1 x STORE Fresh Double Cream 600ml\n1 x STORE Baked Beans in Tomato Sauce 4 x 410g")
     b2 = next((r for r in rows2 if 'Beans' in r['name']), None)
-    if not b2 or b2['track'] != 'Baked Beans' or b2['from'] != 'remembered': f.add('BUG', f'5: an edited link is remembered for the next order: {b2}')
+    if not b2 or b2['track'] != 'Baked Beans (Asda)' or b2['from'] != 'remembered': f.add('BUG', f'5: an edited link is remembered for the next order: {b2}')
     # existing counts: leave / add / replace
     if not all(r['mode'] == 'leave' for r in rows2 if r['existing']): f.add('BUG', '5: already-tracked lines default to leave as they are')
     def go(mode):
