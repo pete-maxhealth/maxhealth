@@ -184,6 +184,8 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("localStorage.setItem('mh_recipes', JSON.stringify([{id:'b1',name:'Flat bread',servings:4,total:{kcal:100,protein:1,carbs:1,fat:1},ingredients:[{name:'Plain Flour',amount:300,unit:'g',kcal:1,protein:1,fat:1,carbs:1}]}]))")
     lvl('Plain Flour', 650); n = ev("mhStockRecipeNote(loadRecipes()[0])")
     if 'covers 2 batches' not in n: f.add('BUG', f'18: 650 g covers 2 batches of 300 g: {n}')
+    lvl('Plain Flour', 100); n = ev("mhStockRecipeNote(loadRecipes()[0])")
+    if 'data-stock-swap' not in n or "reviewRecipeBeforeLogging('b1',1)" not in n: f.add('BUG', f'18: a short ingredient links to the existing review-and-swap screen: {n}')
     lvl('Plain Flour', 300); n = ev("mhStockRecipeNote(loadRecipes()[0])")
     if 'covers a batch' not in n: f.add('BUG', f'18: 300 g covers a batch: {n}')
     # ---- swaps you have made before ----
