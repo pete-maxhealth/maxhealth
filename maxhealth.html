@@ -27156,7 +27156,11 @@ function mhShopRanked() {
 function mhShopRecipeIngs(mealName, s) {
   const m = mhShopFindMeal(mealName); if (!m) return null;
   const ex = new Set(s.recipeEx[mhShopKey(m.name)] || []);
-  return mhShopMealIngs(m).filter((n, i, a) => a.findIndex(x => mhShopKey(x) === mhShopKey(n)) === i).map(n => ({ name: n, key: mhShopKey(n), off: ex.has(mhShopKey(n)), have: s.pantry.includes(mhShopKey(n)) }));
+  return mhShopMealIngs(m).filter((n, i, a) => a.findIndex(x => mhShopKey(x) === mhShopKey(n)) === i).map(n => ({ name: n, key: mhShopKey(n), off: ex.has(mhShopKey(n)), have: s.pantry.includes(mhShopKey(n)), inStock: mhShopInCupboards(n) }));
+}
+// v3.10.1125: a food you hold in your cupboards (switch on, counted, some left, not low, not past its use-by) is left off a recipe's shopping list.
+function mhShopInCupboards(name) {
+  try { if (!mhStockOn()) return false; const it = mhStockLoad().items[mhShopKey(name)]; return !!it && it.level != null && it.level > 0 && !mhStockIsLow(it) && !mhStockExpired(it); } catch (_) { return false; }
 }
 function mhShopRefresh(planOnly) {
   const s = mhShopLoad(); let added = 0, fromPlan = 0;
@@ -27164,7 +27168,7 @@ function mhShopRefresh(planOnly) {
   let plan = []; try { plan = mhPlanLoad(); } catch (_) {}
   plan.forEach(p => (p.foods || []).forEach(f => {
     const ings = f && f.name ? mhShopRecipeIngs(f.name, s) : null;
-    if (ings && ings.length) ings.forEach(g => { if (!g.off && !g.have && mhShopSetAdd(s, g.name, 'plan', f.name)) { added++; fromPlan++; } });
+    if (ings && ings.length) ings.forEach(g => { if (!g.off && !g.have && !g.inStock && mhShopSetAdd(s, g.name, 'plan', f.name)) { added++; fromPlan++; } });
     else if (f && f.name && !s.pantry.includes(mhShopKey(f.name)) && mhShopSetAdd(s, f.name, 'plan', 'plan')) { added++; fromPlan++; }
   }));
   // 2) top N of what you eat most, counting only those not already on the list and not staples
@@ -27247,8 +27251,9 @@ function mhShopView(v, r) { _shopUi.view = v; _shopUi.recipe = r || null; _shopU
 function mhShopRecipeToggle(mealKey, ingKey) { const s = mhShopLoad(), ex = new Set(s.recipeEx[mealKey] || []); if (ex.has(ingKey)) ex.delete(ingKey); else ex.add(ingKey); s.recipeEx[mealKey] = [...ex]; mhShopSave(s); mhShopRender(); }
 function mhShopRecipeAdd(mealKey) {
   const s = mhShopLoad(), m = mhShopFindMeal(mealKey); if (!m) return; let n = 0;
-  (mhShopRecipeIngs(m.name, s) || []).forEach(g => { if (!g.off) { s.pantry = s.pantry.filter(k => k !== g.key); if (mhShopSetAdd(s, g.name, 'recipe', m.name)) n++; else { const ex = s.items.find(i => i.key === g.key); if (ex) ex.hidden = false; } } });
-  mhShopSave(s); _shopUi.msg = n + ' ingredient' + (n === 1 ? '' : 's') + ' added from ' + m.name; _shopUi.view = 'list'; mhShopRender();
+  let held = 0;
+  (mhShopRecipeIngs(m.name, s) || []).forEach(g => { if (!g.off && g.inStock) held++; else if (!g.off) { s.pantry = s.pantry.filter(k => k !== g.key); if (mhShopSetAdd(s, g.name, 'recipe', m.name)) n++; else { const ex = s.items.find(i => i.key === g.key); if (ex) ex.hidden = false; } } });
+  mhShopSave(s); _shopUi.msg = n + ' ingredient' + (n === 1 ? '' : 's') + ' added from ' + m.name + (held ? ' (' + held + ' already in your cupboards)' : ''); _shopUi.view = 'list'; mhShopRender();
 }
 // Walking order, the way most supermarkets are laid out: fruit and veg first, then bread, meat and fish, dairy, the cupboard aisles, drinks.
 const MH_SHOP_WALK = [['Fruit & veg', ['vegetable', 'salad', 'fruit']], ['Bread', ['bread']], ['Meat & fish', ['meat', 'fish', 'protein']], ['Dairy & eggs', ['dairy']], ['Cupboard', ['grain', 'beansandpulses', 'breakfastcereal', 'savoury', 'herbsandspices', 'fat', 'sweet']], ['Drinks', ['alcohol']]];
@@ -28624,13 +28629,13 @@ function mhShopRender(keepFocus) {
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'recipes') {
     const meals = mhShopMealsAll();
-    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Tap a recipe to put all its ingredients on your list. Take any you do not need off with ✎ Edit.</div>'
+    body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Add a recipe</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Tap a recipe to put its ingredients on your list. Anything already in your cupboards is left off. Take any you do not need off with ✎ Edit.</div>'
       + (meals.map(f => '<div onclick="mhShopRecipeAdd(this.dataset.k)" data-k="' + esc(mhShopKey(f.name)) + '" style="padding:10px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);cursor:pointer;">' + esc(f.name) + ' <span style="font-size:11px;color:var(--text3);">' + mhShopMealIngs(f).length + ' ingredients</span></div>').join('') || '<div style="font-size:12px;color:var(--text3);padding:10px 0;">No saved meals with ingredients yet.</div>')
       + '<div style="margin-top:12px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'recipe') {
     const meal = mhShopFindMeal(_shopUi.recipe), ings = meal ? mhShopRecipeIngs(meal.name, s) : [], mk = meal ? mhShopKey(meal.name) : '';
     body = '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">' + esc(meal ? meal.name : 'Recipe') + '</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Tick what to buy. Unticked ingredients are remembered for this recipe.</div>'
-      + ings.map(g => '<label data-ing="' + esc(g.name) + '" style="display:flex;gap:10px;align-items:center;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><input type="checkbox" ' + (g.off ? '' : 'checked') + ' data-m="' + esc(mk) + '" data-k="' + esc(g.key) + '" onchange="mhShopRecipeToggle(this.dataset.m,this.dataset.k)"><span style="flex:1;">' + esc(g.name) + '</span>' + (g.have ? '<span style="font-size:10px;color:var(--text3);">you always have it</span>' : '') + '</label>').join('')
+      + ings.map(g => '<label data-ing="' + esc(g.name) + '" style="display:flex;gap:10px;align-items:center;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><input type="checkbox" ' + (g.off ? '' : 'checked') + ' data-m="' + esc(mk) + '" data-k="' + esc(g.key) + '" onchange="mhShopRecipeToggle(this.dataset.m,this.dataset.k)"><span style="flex:1;">' + esc(g.name) + '</span>' + (g.have ? '<span style="font-size:10px;color:var(--text3);">you always have it</span>' : g.inStock ? '<span style="font-size:10px;color:var(--text3);">in your cupboards</span>' : '') + '</label>').join('')
       + '<div style="display:flex;gap:8px;margin-top:12px;">' + '<button class="copy-btn" style="font-size:12px;padding:7px 10px;background:var(--accent);color:#fff;" data-m="' + esc(mk) + '" onclick="mhShopRecipeAdd(this.dataset.m)">Add to list</button>' + btn('Back', "mhShopView('recipes')") + '</div>';
   } else if (_shopUi.view === 'quick') {
     const fold = _shopUi.fold || {}, nSel = [5, 10, 15, 20].includes(parseInt(s.topN)) ? parseInt(s.topN) : 10, list = mhShopShortlist(s);
