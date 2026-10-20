@@ -6513,7 +6513,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1122'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1123'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -18556,9 +18556,16 @@ function getEatingHabitsSummary() {
 }
 
 async function suggestMealFromLibrary(kind = 'both', explicitComposition = null) {
-  const lib = loadLibrary();
-  const recipes = loadRecipes();
-  if (!lib.length && !recipes.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
+  const _allLib = loadLibrary(), _allRecipes = loadRecipes();
+  if (!_allLib.length && !_allRecipes.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
+  // Only what can be made: foods and recipes are filtered by stock before anything else sees them (see mhSuggestFilter).
+  const _sf = mhSuggestFilter(_allLib, _allRecipes); window._stockSuggestNotes = _sf.notes;
+  const lib = _sf.lib, recipes = _sf.recipes;
+  if (_sf.active && !lib.length && !recipes.length) {
+    const b = addBubble('📦 Nothing in your cupboards makes a meal right now: ' + ((_sf.hiddenLib || 0) + (_sf.hiddenRec || 0)) + ' foods and recipes are out, short or missing a figure.', 'system', 'warn');
+    b.innerHTML += '<div style="margin-top:8px;"><button onclick="mhSuggestSetMode(\'off\');suggestMealFromLibrary(\'' + kind + '\')" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--accent);border-radius:6px;font-size:12px;cursor:pointer;">Suggest from everything instead</button></div>';
+    return;
+  }
 
   // Deterministic, code-level check rather than leaving this entirely to
   // the AI to notice and explain - for a multi-category request (2+
@@ -18687,7 +18694,8 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
   // number the AI proposes.
   const recipesText = recipes.map(r => {
     const per = { kcal: Math.round(r.total.kcal/r.servings), protein: Math.round(r.total.protein/r.servings*10)/10, carbs: Math.round(r.total.carbs/r.servings*10)/10, fat: Math.round((r.total.fat||0)/r.servings*10)/10 };
-    return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F`;
+    const _n = (_sf.notes || {})[r.name.toLowerCase()] || {}, _extra = (_n.cooked ? ` | LEFTOVERS READY: ${_n.cooked} cooked serving${_n.cooked === 1 ? '' : 's'}` : '') + ((_n.swaps || []).length ? ` | NEEDS SWAP: ${_n.swaps.map(w => w.from + ' for ' + w.to).join(', ')}` : '');
+    return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F${_extra}`;
   }).join('\n');
 
   const systemPrompt = `You are a nutrition assistant helping ${mhDietWho()} pick what to eat next, using ONLY foods and recipes they've actually got saved — never suggest anything not in these exact lists.
@@ -18750,7 +18758,7 @@ Rules:
 ${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}${kind === 'snack' ? '- SNACK REQUESTED: all 5 suggestions should be a real snack - a single, self-contained snack-type food eaten on its own (crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts), not a curated combination of two or more separate savoury ingredients - that\'s tapas, a different thing entirely, even at a small portion. A snack was specifically asked for, not just guidance toward one, so this applies even if the remaining budget would technically support something larger.' : ''}${explicitComposition ? `- EXACT COMPOSITION REQUESTED ("${explicitComposition.map(c=>`${c.count} ${c.category}`).join(' + ')}"): every suggestion should follow this exact shape as closely as the real library allows - ${explicitComposition.map(c => `${c.count} genuinely different item${c.count>1?'s':''} from the "${c.category}" category${c.keyword ? ` (the user specifically said "${c.keyword}" - prefer an item that's genuinely that, not just anything else tagged "${c.category}", if the library has it)` : ' (real categories are listed per item below)'}`).join(', plus ')}. This is the deliberate "meat and veg" style structured request, not a loose preference. If the library can't fully cover every part - fewer distinct items in a category than the count asked for, or (rarely, since this was checked before you were even asked) a category with nothing at all - return the closest real partial match rather than refusing or inventing something: use what's genuinely there, and the note must explicitly name which category came up short and why (e.g. "only 1 vegetable-tagged item in your library, so used it once rather than the 3 asked for"). Never silently substitute a different category to make the numbers look right. Still respect the remaining macro budget as the hard limit.` : !explicitComposition && !['sweet','savoury','snack','both'].includes(kind) ? `- CATEGORY REQUESTED: the user specifically asked for "${kind}" - every suggestion should prominently feature at least one item whose real categories (listed per item below) include "${kind}", not just loosely relate to it. Still respect the remaining macro budget as the hard limit, and still aim for genuinely varied combos rather than 5 near-identical ways of using the same "${kind}" item.` : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
 - COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.${habits.topPairsText ? ` Where it also fits the macro budget, prefer pairings that match this person's own established combos (listed above under "most common category pairings") over generic pairing logic — that's a genuinely stronger cohesion signal than a general rule, since it's what they actually eat together in practice.` : ''}
-- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
+${_sf.active ? '- STOCK: these lists have already been limited to what the person can actually make from their cupboards. Never suggest anything outside them. Where a recipe line says NEEDS SWAP, keep the swap in the note (e.g. "using Cheddar for Gouda"); where it says LEFTOVERS READY, say it is already cooked.\n' : ''}- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
 - Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
 
 LIBRARY (individual ingredients):
@@ -18810,7 +18818,7 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
       parsed = await attemptSuggest(true);
     }
     checkingBubble.remove();
-    renderLibraryComboSuggestions(parsed, lib, recipes);
+    renderLibraryComboSuggestions(parsed, lib, recipes, _sf);
   } catch (e) {
     checkingBubble.remove();
     console.error('suggestMealFromLibrary failed:', e); // real reason, for diagnosis — the user-facing message stays generic
@@ -18822,7 +18830,7 @@ If nothing genuinely fits, return {"combos": []} and explain why in a "note" at 
 // totals (from each item's own stored library values, same as a normal quick-log
 // — never trusting the AI to do this arithmetic) plus a one-tap logging action.
 window._pendingLibraryCombos = [];
-function renderLibraryComboSuggestions(parsed, lib, recipes) {
+function renderLibraryComboSuggestions(parsed, lib, recipes, sf) {
   const combos = parsed.combos || [];
   if (!combos.length) {
     addBubble(parsed.note || 'Nothing in your library fits well right now — worth logging something fresh instead.', 'system');
@@ -18850,6 +18858,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
       html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
         <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">🍽 ${recipe.name} (${servings} serving${servings>1?'s':''})</div>
         ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
+        ${(((sf && sf.notes || {})[recipe.name.toLowerCase()] || {}).swaps || []).map(w => `<div data-recipe-swap="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🔁 Swap ${w.from} for ${w.to} (you have it counted)</div>`).join('')}
         <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.carbs}g C · ${scaled.fat}g F</div>
         <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
       </div>`;
@@ -18871,7 +18880,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes) {
   });
   if (!html) { addBubble('Couldn\'t match the suggested items to your library exactly — try again.', 'system', 'warn'); return; }
   const bubble = addBubble('Here\'s what fits, using real items from your library and recipes:', 'system');
-  bubble.innerHTML += html;
+  bubble.innerHTML += html + mhSuggestFooterHtml(sf);
 }
 
 // ─── SUGGESTED-COMBO PER-ITEM EDITING — substitute, remove, add ────────────
@@ -27384,6 +27393,24 @@ function mhStockFmt(it, b) {
   if (it.base !== 'each' && it.serving > 0) { const sv = Math.round(b / it.serving * 10) / 10; t += ' (' + mhStockNum(sv) + ' serving' + (sv === 1 ? '' : 's') + ')'; }
   return t;
 }
+// "How many go is that?" and "how long will it last?": a count of usual portions (the item's own serving, else the category default from Stock
+// rules) and a pace worked out from what you actually logged and cooked in the last 14 days. Both are arithmetic on your own numbers.
+function mhItemCats(it) { try { const k = it.key || mhShopKey(it.name), l = loadLibrary().find(x => mhShopKey(x.name) === k); return l ? getItemCategories(l) : mhCatsOfName(it.name); } catch (_) { return []; } }
+function mhStockPortionText(it) {
+  if (!it || it.level == null || it.base === 'each' || it.serving > 0) return '';   // an own serving is already shown by mhStockFmt
+  const pt = parseFloat(mhDefaultNeed(mhItemCats(it), it)); if (!(pt > 0)) return '';
+  return ' (≈ ' + mhStockNum(Math.round(it.level / pt * 10) / 10) + ' × ' + mhStockNum(pt) + ' ' + it.base + ')';
+}
+function mhStockPaceText(it) {
+  if (!it || it.level == null || !(it.level > 0)) return '';
+  const o = mhStockLoad(), now = Date.now(), DAY = 864e5, from = Math.max(now - 14 * DAY, it.since || 0);
+  const uses = o.ledger.filter(l => l.k === it.key && l.d < 0 && (l.s === 'log' || l.s === 'cook') && l.t >= from);
+  if (uses.length < 3 || new Set(uses.map(l => new Date(l.t).toDateString())).size < 3) return '';
+  const used = -uses.reduce((a, l) => a + l.d, 0); if (!(used > 0)) return '';
+  const left = it.level / (used / Math.max(3, (now - from) / DAY));
+  if (left >= 120) return '';
+  const n = Math.round(left); return left < 1 ? ' · under a day at your usual pace' : ' · about ' + n + ' day' + (n === 1 ? '' : 's') + ' at your usual pace';
+}
 function mhStockLoad() {
   let o = null; try { o = JSON.parse(localStorage.getItem(MH_STOCK_KEY) || 'null'); } catch (_) {}
   if (!o || typeof o !== 'object') o = {};
@@ -27477,8 +27504,176 @@ function mhStockRecipeLines(r) {
 function mhStockRecipeNote(r) {
   const lines = mhStockRecipeLines(r).filter(x => x.it.base === 'g' && parseFloat(x.ing.amount) > 0); if (!lines.length) return '';
   const short = lines.filter(x => x.it.level < parseFloat(x.ing.amount)).map(x => x.it.name);
+  let batches = Infinity, limit = null; lines.forEach(x => { const b = Math.floor(x.it.level / parseFloat(x.ing.amount)); if (b < batches) { batches = b; limit = x; } }); if (!isFinite(batches)) batches = 1;
   const o = mhStockLoad(), pend = o.cooked && o.cooked[r.id] > 0 ? ' · ' + o.cooked[r.id] + ' cooked serving' + (o.cooked[r.id] === 1 ? '' : 's') + ' waiting' : '';
-  return '<div data-stocknote="1" style="font-size:12px;margin-bottom:8px;color:' + (short.length ? 'var(--red)' : 'var(--text3)') + ';">' + (short.length ? '⚠ Stock is short of ' + short.join(', ') : '✓ Stock covers a batch') + pend + '</div>';
+  return '<div data-stocknote="1" style="font-size:12px;margin-bottom:8px;color:' + (short.length ? 'var(--red)' : 'var(--text3)') + ';">' + (short.length ? '⚠ Stock is short of ' + short.join(', ') : '✓ Stock covers ' + (batches <= 1 ? 'a batch' : batches + ' batches' + (lines.length > 1 && limit ? ' (limited by ' + limit.it.name + ')' : ''))) + pend + '</div>';
+}
+// ─── Meal suggestions that only use what you can make (v3.10.1123) ───────────────────────────────────────────────
+// Next meal idea, Balance my macros and the category picker all go through suggestMealFromLibrary, which filters its lists here first,
+// so nothing is offered that cannot be made. Three modes, stored in their own key (mh_shopping_ so backups carry it):
+//   off    = suggest from everything, as before
+//   hide   = (default) hide what you have counted as out or too short; anything you have not counted is assumed to be in the cupboard
+//   strict = only foods you have counted (plus herbs and spices) are offered
+// Herbs and spices that you have not counted are always treated as in: a made-up default pack would drain on its own, which breaks
+// "never guess". Count one and it is checked like any other. A recipe is offered only if every ingredient has its figures, and is either
+// in stock, swapped for a counted item that passes the swap gate, or already cooked and waiting.
+const MH_SUGGEST_KEY = 'mh_shopping_suggest_v1';
+function mhSuggestMode() { let m = 'hide'; try { const o = JSON.parse(localStorage.getItem(MH_SUGGEST_KEY) || 'null'); if (o && ['off', 'hide', 'strict'].includes(o.mode)) m = o.mode; } catch (_) {} return m; }
+function mhSuggestSetMode(m) { if (!['off', 'hide', 'strict'].includes(m)) return; try { localStorage.setItem(MH_SUGGEST_KEY, JSON.stringify({ mode: m })); } catch (_) {} try { mhShopRender(); } catch (_) {} }
+// ─── Stock rules (v3.10.1123): borrowed from AI as suggested defaults, all yours to change (Shopping > Stock control > Stock rules) ──────
+//  * "Never runs out" (the magic porridge pot): foods like salt or cream of tartar, where a jar lasts for ever and you use half a teaspoon.
+//    They are never counted, never go low, and are always counted as in the cupboard, but they are still ingredients in recipes. A food you
+//    DO count yourself is checked like any other, so counting a jar of oregano is still allowed. Defaults: the herbs and spices category,
+//    plus salt and cream of tartar by name.
+//  * "Usual portion when none is set": how much one go uses, only to check you have enough, never for nutrition. Suggested: herbs and spices
+//    5 g (a teaspoon), oils and fats 15 g (a tablespoon). Everything else falls back to 100 g, which you can change. An item's own portion or
+//    serving always wins over these.
+const MH_RULES_KEY = 'mh_shopping_rules_v1';
+const MH_RULE_CATS = ['meat', 'fish', 'protein', 'dairy', 'vegetable', 'salad', 'fruit', 'grain', 'bread', 'breakfast cereal', 'fat', 'savoury', 'sweet', 'herbs and spices', 'alcohol'];
+const MH_RULE_CAT_NAMES = { 'breakfast cereal': 'Cereal', fat: 'Oils & fats', 'herbs and spices': 'Herbs & spices', savoury: 'Sauces & savoury' };
+function mhRulesDefaults() { return { neverCats: ['herbs and spices'], neverNames: ['salt', 'cream of tartar'], portion: { 'herbs and spices': { n: 5, u: 'g' }, fat: { n: 15, u: 'g' } }, fallback: { n: 100, u: 'g' } }; }
+function mhRulesLoad() {
+  const d = mhRulesDefaults(); let o = null; try { o = JSON.parse(localStorage.getItem(MH_RULES_KEY) || 'null'); } catch (_) {}
+  if (!o || typeof o !== 'object') return d;
+  const okP = v => v && v.n > 0 && (v.u === 'g' || v.u === 'ml');
+  const portion = {}; if (o.portion && typeof o.portion === 'object') Object.keys(o.portion).forEach(k => { if (okP(o.portion[k])) portion[k] = { n: +o.portion[k].n, u: o.portion[k].u }; });
+  return { neverCats: Array.isArray(o.neverCats) ? o.neverCats.filter(c => typeof c === 'string') : d.neverCats, neverNames: Array.isArray(o.neverNames) ? o.neverNames.filter(c => typeof c === 'string').map(c => mhShopKey(c)).filter(Boolean) : d.neverNames, portion: o.portion ? portion : d.portion, fallback: okP(o.fallback) ? { n: +o.fallback.n, u: o.fallback.u } : d.fallback };
+}
+function mhRulesSave(r) { try { localStorage.setItem(MH_RULES_KEY, JSON.stringify(r)); } catch (_) {} }
+function mhRulesEdit(fn) { const r = mhRulesLoad(); fn(r); mhRulesSave(r); try { mhShopRender(); } catch (_) {} }
+function mhRulesParse(txt) {
+  const m = String(txt || '').trim().toLowerCase().match(/^(\d+(?:\.\d+)?|\.\d+)\s*(g|gram|grams|ml|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons)?$/);
+  if (!m) return null; let n = parseFloat(m[1]), w = m[2] || 'g', u = 'g';
+  if (/^tsp|^teaspoon/.test(w)) n *= 5; else if (/^tbsp|^tablespoon/.test(w)) n *= 15; else if (w === 'ml') u = 'ml';
+  return n > 0 ? { n: Math.round(n * 10) / 10, u } : null;
+}
+function mhRulesNeverCatToggle(c) { mhRulesEdit(r => { r.neverCats = r.neverCats.includes(c) ? r.neverCats.filter(x => x !== c) : r.neverCats.concat(c); }); }
+function mhRulesNeverAdd() { const e = document.getElementById('mhRulesNeverIn'), k = e ? mhShopKey(e.value) : ''; if (!k) return; mhRulesEdit(r => { if (!r.neverNames.includes(k)) r.neverNames.push(k); }); }
+function mhRulesNeverDel(k) { mhRulesEdit(r => { r.neverNames = r.neverNames.filter(x => x !== k); }); }
+function mhRulesPortionSet(c, txt) {
+  const v = String(txt || '').trim();
+  mhRulesEdit(r => { if (!v) { if (c === '*') r.fallback = mhRulesDefaults().fallback; else delete r.portion[c]; return; } const p = mhRulesParse(v); if (!p) { _shopUi.msg = 'Type an amount such as 5 g, 15 ml or 1 tsp'; return; } if (c === '*') r.fallback = p; else r.portion[c] = p; });
+}
+function mhRulesReset() { try { localStorage.removeItem(MH_RULES_KEY); } catch (_) {} try { mhShopRender(); } catch (_) {} }
+function mhIsNever(name, cats, st) {
+  if (st && st.level != null) return false;                        // you count it, so it is checked like anything else
+  const r = mhRulesLoad(); if (r.neverNames.includes(mhShopKey(name))) return true;
+  return (cats || mhCatsOfName(name)).some(c => r.neverCats.includes(c));
+}
+// How much one go uses when the food has no portion of its own: its category's usual portion, else the fallback (each-counted foods: 1).
+function mhDefaultNeed(cats, st) {
+  if (st && st.base === 'each') return '1';
+  const r = mhRulesLoad(), c = null, p = r.fallback;
+  return p.n + ' ' + (st && st.base === 'ml' ? 'ml' : p.u);
+}
+function mhCatsOfName(name) { try { return getItemCategories({ name }) || []; } catch (_) { return []; } }
+// Is there enough of this food? needText is what one go uses ('30 g', '1 serving', or '' when unknown, which only needs some in stock).
+function mhHaveCheck(name, needText, cats, o, mode) {
+  const st = o.items[mhShopKey(name)]; cats = cats || mhCatsOfName(name);
+  if (mhIsNever(name, cats, st)) return { ok: true, known: false, never: true };
+  if (!st || st.level == null) return { ok: mode !== 'strict', known: false, why: 'not counted' };
+  const need = mhStockAmountBase(needText || mhDefaultNeed(cats, st), st), ok = st.level > 0 && (need == null || !(need > 0) || st.level + 1e-9 >= need);
+  return { ok, known: true, why: ok ? '' : (st.level > 0 ? 'short' : 'out'), have: st.level, need };
+}
+function mhIngNeed(ing, f, st) {
+  const a = parseFloat(ing.amount); if (!(a > 0)) return '';
+  const u = typeof ing.amount === 'string' ? String(ing.amount).replace(/^[\d.\s]+/, '').trim() : String(ing.unit || '').trim();
+  let n = Math.round(a * f * 100) / 100;
+  if (/^(tsp|teaspoons?|tbsp|tablespoons?)$/i.test(u) && st && st.base !== 'each') return Math.round(n * (/^t(sp|easp)/i.test(u) ? 5 : 15) * 100) / 100 + ' ' + st.base;   // a teaspoon is 5, a tablespoon 15
+  if (!u && st && st.base !== 'each') return n + ' ' + st.base;
+  return n + (u ? ' ' + u : '');
+}
+function mhMacroPerUnit(x, amountText) {
+  const m = String(amountText || '').trim().toLowerCase().match(/^(\d+(?:\.\d+)?|\.\d+)\s*(kg|g|ml|l)\b/); if (!m) return null;
+  const n = parseFloat(m[1]) * (m[2] === 'kg' || m[2] === 'l' ? 1000 : 1), u = (m[2] === 'g' || m[2] === 'kg') ? 'g' : 'ml';
+  if (!(n > 0) || ![x.kcal, x.carbs].every(v => v !== '' && v != null && isFinite(+v))) return null;
+  return { u, kcal: +x.kcal / n, carbs: +x.carbs / n };
+}
+// A swap is only offered when it is a known like-for-like and safe: same group (the curated MH_SWAP_GROUPS below, or the existing
+// word-overlap finder findLibrarySubstitutes for brand/size variants), you have a counted amount of it, and its macros are close: carbs no
+// more than 2 g higher for the same amount, calories within 35%. Herbs and spices are all swappable for each other, and an uncounted one
+// counts as in. Anything else is not offered: a missing swap is better than a wrong one.
+const MH_SWAP_GROUPS = [
+  { terms: ['cheddar', 'gouda', 'edam', 'emmental', 'gruyere', 'red leicester', 'double gloucester', 'parmesan', 'manchego', 'gran padano', 'jarlsberg', 'monterey jack', 'colby'] },
+  { terms: ['double cream', 'whipping cream', 'single cream'] },
+  { terms: ['whole milk', 'semi skimmed', 'semi-skimmed', 'skimmed milk', 'full fat milk'] },
+  { terms: ['almond milk', 'oat milk', 'soy milk', 'soya milk', 'coconut milk'] },
+  { terms: ['butter', 'lurpak', 'kerrygold'], not: /nut|almond|cashew|peanut|cocoa|shea|butternut|buttermilk|butter bean/ },
+  { terms: ['olive oil', 'rapeseed oil', 'sunflower oil', 'vegetable oil', 'avocado oil'] },
+  { terms: ['chicken breast', 'chicken thigh'] },
+  { terms: ['cod', 'haddock', 'pollock', 'hake', 'plaice', 'coley'], not: /cod liver/ },
+  { terms: ['almond', 'walnut', 'pecan', 'hazelnut', 'macadamia', 'brazil nut'] },
+  { terms: ['spinach', 'kale', 'chard'] },
+  { terms: ['onion', 'shallot'] },
+];
+function mhSwapGroup(name) {
+  const l = String(name || '').toLowerCase();
+  for (let i = 0; i < MH_SWAP_GROUPS.length; i++) { const g = MH_SWAP_GROUPS[i]; if (g.terms.some(t => l.includes(t)) && !(g.not && g.not.test(l))) return i; }
+  return -1;
+}
+function mhSwapFor(ing, needText, o, mode, skip) {
+  const lib = loadLibrary(), herb = mhCatsOfName(ing.name).includes('herbs and spices'), gi = mhSwapGroup(ing.name), cands = [];
+  const add = c => { if (c && !cands.some(x => x.name === c.name)) cands.push(c); };
+  if (gi >= 0) lib.forEach(c => { if (mhSwapGroup(c.name) === gi && mhShopKey(c.name) !== mhShopKey(ing.name)) add(c); });
+  if (herb) lib.forEach(c => { if (mhShopKey(c.name) !== mhShopKey(ing.name) && getItemCategories(c).includes('herbs and spices')) add(c); });
+  try { findLibrarySubstitutes(ing.name, ing.name, 8).forEach(add); } catch (_) {}
+  const orig = mhMacroPerUnit(ing, typeof ing.amount === 'string' ? ing.amount : (ing.amount + (ing.unit || 'g'))), amt = parseFloat(needText);
+  if (!orig || !(amt > 0)) return null;
+  for (const c of cands) {
+    if (skip && skip.has(mhShopKey(c.name))) continue;
+    const cats = getItemCategories(c), have = mhHaveCheck(c.name, needText, cats, o, mode);
+    if (!have.ok || !(have.known || have.never)) continue;
+    const cm = mhMacroPerUnit(c, c.portion); if (!cm || cm.u !== orig.u) continue;
+    const kc = cm.kcal * amt, k0 = orig.kcal * amt, cc = cm.carbs * amt, c0 = orig.carbs * amt;
+    if (cc > c0 + 2) continue; if (k0 > 0 ? Math.abs(kc - k0) / k0 > 0.35 : kc > 20) continue;
+    return c;
+  }
+  return null;
+}
+function mhRecipeMakeable(r, o, mode) {
+  if (o.cooked && o.cooked[r.id] > 0) return { ok: true, cooked: o.cooked[r.id], swaps: [] };
+  const ings = r.ingredients || [], swaps = [], used = new Set(), f = 1 / (r.servings || 1);
+  if (!ings.length) return { ok: false, why: 'no ingredients listed', swaps };
+  for (const ing of ings) {
+    if (!ing || !ing.name) continue;
+    if (!['kcal', 'protein', 'carbs'].every(k => ing[k] !== '' && ing[k] != null && isFinite(+ing[k]))) return { ok: false, why: ing.name + ' has no figures', swaps };
+    const st = o.items[mhShopKey(ing.name)], need = mhIngNeed(ing, f, st), have = mhHaveCheck(ing.name, need, null, o, mode);
+    if (have.ok) continue;
+    const sw = mhSwapFor(ing, mhIngNeed(ing, f, null) || need, o, mode, used);
+    if (!sw) return { ok: false, why: ing.name + ' is ' + (have.why === 'not counted' ? 'not counted' : have.why === 'short' ? 'running short' : 'out'), swaps };
+    used.add(mhShopKey(sw.name)); swaps.push({ from: ing.name, to: sw.name });
+  }
+  return { ok: true, swaps };
+}
+function mhSuggestFilter(lib, recipes) {
+  const mode = mhSuggestMode(), o = mhStockLoad();
+  if (mode === 'off' || (mode === 'hide' && !Object.keys(o.items).length)) return { lib, recipes, notes: {}, active: false, mode };
+  const libOk = lib.filter(x => mhHaveCheck(x.name, x.portion || '', getItemCategories(x), o, mode).ok), notes = {};
+  const recOk = recipes.filter(r => { const v = mhRecipeMakeable(r, o, mode); if (v.ok) notes[r.name.toLowerCase()] = { swaps: v.swaps, cooked: v.cooked || 0 }; return v.ok; });
+  return { lib: libOk, recipes: recOk, notes, active: true, mode, hiddenLib: lib.length - libOk.length, hiddenRec: recipes.length - recOk.length };
+}
+function mhRulesHtml() {
+  const r = mhRulesLoad(), d = mhRulesDefaults(), esc = mhPlanEsc, open = !!_shopUi.rulesOpen, nm = c => MH_RULE_CAT_NAMES[c] || (c.charAt(0).toUpperCase() + c.slice(1));
+  const chip = (c, on) => '<button data-rule-cat="' + esc(c) + '" onclick="mhRulesNeverCatToggle(this.dataset.ruleCat)" style="padding:6px 10px;border-radius:14px;font-size:12px;cursor:pointer;border:1px solid var(--accent);' + (on ? 'background:var(--accent);color:#080a0d;' : 'background:transparent;color:var(--accent);') + '">' + (on ? '✓ ' : '') + esc(nm(c)) + '</button>';
+  const inp = 'width:100%;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
+  const fmt = p => p ? p.n + ' ' + p.u : '';
+  const rows = MH_RULE_CATS.map(c => { const mine = r.portion[c], sug = d.portion[c], isSug = mine && sug && mine.n === sug.n && mine.u === sug.u;
+    return '<div data-rule-row="' + esc(c) + '" style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">' + esc(nm(c)) + (isSug ? ' <span style="font-size:10px;color:var(--text3);">suggested</span>' : '') + '</div><input data-rule-portion="' + esc(c) + '" value="' + esc(fmt(mine)) + '" placeholder="' + esc(fmt(r.fallback)) + '" onchange="mhRulesPortionSet(this.dataset.rulePortion,this.value)" style="' + inp + 'width:96px;"></div>'; }).join('');
+  return '<div id="mhRulesBox" style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px;"><div onclick="_shopUi.rulesOpen=!_shopUi.rulesOpen;mhShopRender()" style="cursor:pointer;font-size:14px;color:var(--text);font-weight:700;">⚙ Stock rules <span style="font-size:12px;color:var(--text3);font-weight:400;">' + (open ? '▾ hide' : '▸ show') + '</span></div>'
+    + (!open ? '' : '<div style="font-size:12px;color:var(--text3);line-height:1.5;margin:6px 0 10px;">Suggested defaults, all yours to change. They decide whether you have enough for a meal idea, and show how many usual portions are left (for example 600 g as 6 × 100 g). They are never used for calories or nutrition.</div>'
+    + '<div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px;">Never runs out</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">Foods like salt or cream of tartar: a jar lasts for ever. They are never counted and never go low, but they are still ingredients. Count one yourself and it is checked like anything else.</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' + MH_RULE_CATS.map(c => chip(c, r.neverCats.includes(c))).join('') + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (r.neverNames.map(k => '<span data-rule-name="' + esc(k) + '" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:14px;background:var(--surface2);font-size:12px;color:var(--text);">' + esc(k) + ' <b onclick="mhRulesNeverDel(this.parentNode.dataset.ruleName)" style="cursor:pointer;color:var(--text3);">✕</b></span>').join('') || '<span style="font-size:12px;color:var(--text3);">No named foods yet.</span>') + '</div>'
+    + '<div style="display:flex;gap:6px;"><input id="mhRulesNeverIn" placeholder="Add a food, e.g. bicarbonate of soda" style="' + inp + '"><button class="copy-btn" onclick="mhRulesNeverAdd()" style="padding:8px 12px;">Add</button></div>'
+    + '<div style="font-size:13px;color:var(--text);font-weight:600;margin:14px 0 2px;">Usual portion when none is set</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">Type g, ml, tsp (5 g) or tbsp (15 g). A food\'s own portion always wins. Leave blank to use the fallback.</div>'
+    + rows + '<div data-rule-row="*" style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);margin-top:4px;"><div style="flex:1;font-size:13px;color:var(--text);">Anything else <span style="font-size:10px;color:var(--text3);">fallback</span></div><input data-rule-portion="*" value="' + esc(fmt(r.fallback)) + '" onchange="mhRulesPortionSet(this.dataset.rulePortion,this.value)" style="' + inp + 'width:96px;"></div>'
+    + '<div style="margin-top:10px;"><button class="copy-btn" onclick="mhRulesReset()" style="padding:8px 12px;font-size:12px;">Back to the suggested defaults</button></div>')
+    + '</div>';
+}
+function mhSuggestFooterHtml(sf) {
+  if (!sf || !sf.active) return '';
+  const hid = (sf.hiddenLib || 0) + (sf.hiddenRec || 0);
+  return '<div data-suggest-stock="1" style="font-size:12px;color:var(--text3);margin-top:10px;line-height:1.5;">📦 Only suggesting what you can make' + (hid ? ' (' + hid + ' hidden: out, short or missing a figure)' : '') + '. <a style="color:var(--accent);cursor:pointer;" onclick="mhSuggestSetMode(\'off\');showToast(\'Suggestions now use everything\')">Show everything</a></div>';
 }
 function mhStockCookedAsk(id) {
   const r = loadRecipes().find(x => x.id === id); if (!r) return;
@@ -27735,14 +27930,15 @@ function mhStockCardHtml(s) {
   const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
   const btn = (label, fn) => '<button class="copy-btn" style="font-size:13px;padding:9px 12px;" onclick="' + fn + '">' + label + '</button>';
   const row = it => { const waiting = mhStockIsLow(it) && it.shop && !s.shops.some(x => x.toLowerCase() === it.shop.toLowerCase());
-    return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + '</div></div><span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
+    return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level) + mhStockPortionText(it)) + esc(mhStockPaceText(it)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + '</div></div><span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
   return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl
     + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">' + (items.length ? items.length + ' tracked' + (low ? ' · <b style="color:var(--red);">' + low + ' low</b>' : '') : 'Nothing tracked yet') + '</div></div>'
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div></div></div>';
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div>'
+    + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
 function mhStockEditView(key, nameIn) {
