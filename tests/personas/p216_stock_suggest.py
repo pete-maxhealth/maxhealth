@@ -186,6 +186,38 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'covers 2 batches' not in n: f.add('BUG', f'18: 650 g covers 2 batches of 300 g: {n}')
     lvl('Plain Flour', 300); n = ev("mhStockRecipeNote(loadRecipes()[0])")
     if 'covers a batch' not in n: f.add('BUG', f'18: 300 g covers a batch: {n}')
+    # ---- swaps you have made before ----
+    ev("""saveLibrary([
+      {id:'s1',name:'Rump Steak',kcal:150,protein:22,carbs:0,fat:7,portion:'100g',useCount:5},
+      {id:'s2',name:'Lemon Jam',kcal:250,protein:0,carbs:62,fat:0,portion:'100g',useCount:1},
+      {id:'s3',name:'Cheddar',kcal:410,protein:25,carbs:0.1,fat:34,portion:'100g',useCount:5},
+      {id:'s4',name:'Gouda',kcal:356,protein:25,carbs:2,fat:27,portion:'100g',useCount:5}
+    ])""")
+    ev("localStorage.setItem('mh_recipes', JSON.stringify([{id:'w1',name:'Steak supper',servings:1,total:{kcal:150,protein:22,carbs:0,fat:7},ingredients:[{name:'Rump Steak',amount:100,unit:'g',kcal:150,protein:22,fat:7,carbs:0}]},{id:'w2',name:'Cheesy toastie',servings:1,total:{kcal:356,protein:25,carbs:2,fat:27},ingredients:[{name:'Gouda',amount:100,unit:'g',kcal:356,protein:25,fat:27,carbs:2}]}]))")
+    ev("localStorage.removeItem('mh_shopping_swaps_v1'); mhSuggestSetMode('hide')")
+    ev("mhStockTrack('Rump Steak',{base:'g',pack:500,shop:'Asda'})"); ev("mhStockTrack('Lemon Jam',{base:'g',pack:300,shop:'Asda'})"); ev("mhStockTrack('Cheddar',{base:'g',pack:400,shop:'Asda'})"); ev("mhStockTrack('Gouda',{base:'g',pack:300,shop:'Asda'})")
+    lvl('Rump Steak', 0); lvl('Lemon Jam', 200); lvl('Cheddar', 300); lvl('Gouda', 0)
+    p, lib, rec = run()
+    if 'Steak supper' in rec: f.add('BUG', '19: steak is out and lemon jam is not a known swap: not offered')
+    if 'Cheesy toastie' not in rec or 'Gouda for Cheddar' not in rec: f.add('BUG', '19: gouda -> cheddar is a like-for-like swap')
+    # the user swaps steak for lemon jam (their choice) through the real swap function
+    ev("()=>{const ing={name:'Rump Steak',amount:100};_substituteRecipeIngredient(ing,()=>{});const f=loadLibrary().find(x=>x.name==='Lemon Jam');_libPickerTarget.onPick(f);}")
+    mem = ev("mhSwapsBefore('Rump Steak')")
+    if not mem or mem[0]['name'] != 'Lemon Jam': f.add('BUG', f'19: a swap made in the builder is remembered: {mem}')
+    p, lib, rec = run()
+    if 'Steak supper' not in rec or 'Rump Steak for Lemon Jam' not in rec or 'made this swap before' not in rec: f.add('BUG', f'19: a remembered swap is offered even though it fails the like-for-like and macro checks (their choice): {rec[:300]}')
+    lvl('Lemon Jam', 0); p, lib, rec = run()
+    if 'Steak supper' in rec: f.add('BUG', '19: a remembered swap still needs to be in the cupboard')
+    lvl('Lemon Jam', 200)
+    # picker trawl row
+    ev("()=>_openSubstitutePicker('Rump Steak',()=>{})"); page.wait_for_timeout(300)
+    trawl = ev("document.getElementById('mhSwapTrawl')?document.getElementById('mhSwapTrawl').textContent:''")
+    if 'Lemon Jam' not in trawl or 'Your usual swaps' not in trawl: f.add('BUG', f'20: the picker shows swaps you have made before: {trawl!r}')
+    ev("()=>_openSubstitutePicker('Gouda',()=>{})"); page.wait_for_timeout(300)
+    trawl = ev("document.getElementById('mhSwapTrawl')?document.getElementById('mhSwapTrawl').textContent:''")
+    if 'Cheddar' not in trawl or 'in stock' not in trawl or 'In your cupboards now' not in trawl: f.add('BUG', f'20: the picker shows like-for-likes you have counted: {trawl!r}')
+    if page.locator('#mhSwapTrawl').count() != 1: f.add('BUG', '20: only one trawl row, never stacked')
+    if 'mh_shopping_swaps_v1' not in ev("Object.keys(_collectBackupSettings().settings||_collectBackupSettings())"): f.add('BUG', '20: swap memory travels in backups')
     if errs: f.add('JS-exception', errs[0])
 print('\n'.join(f'{a}: {b}' for a, b in f) or 'PASS')
 sys.exit(1 if f else 0)

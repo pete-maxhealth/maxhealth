@@ -8127,7 +8127,7 @@ function _substituteRecipeIngredient(ing, onSwapped, searchOnlineFallback) {
     // Tags the swap so it's visibly traceable rather than looking identical
     // to having always been this ingredient - shows as a small note in the
     // ingredient row (both builder and Cook Mode) until removed/re-edited.
-    ing._substitutedFrom = oldName;
+    ing._substitutedFrom = oldName; mhSwapRemember(oldName, f.name);
     showToast(`Swapped in "${f.name}" ✓`);
     onSwapped();
   }, searchOnlineFallback);
@@ -18694,7 +18694,7 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
   // number the AI proposes.
   const recipesText = recipes.map(r => {
     const per = { kcal: Math.round(r.total.kcal/r.servings), protein: Math.round(r.total.protein/r.servings*10)/10, carbs: Math.round(r.total.carbs/r.servings*10)/10, fat: Math.round((r.total.fat||0)/r.servings*10)/10 };
-    const _n = (_sf.notes || {})[r.name.toLowerCase()] || {}, _extra = (_n.cooked ? ` | LEFTOVERS READY: ${_n.cooked} cooked serving${_n.cooked === 1 ? '' : 's'}` : '') + ((_n.swaps || []).length ? ` | NEEDS SWAP: ${_n.swaps.map(w => w.from + ' for ' + w.to).join(', ')}` : '');
+    const _n = (_sf.notes || {})[r.name.toLowerCase()] || {}, _extra = (_n.cooked ? ` | LEFTOVERS READY: ${_n.cooked} cooked serving${_n.cooked === 1 ? '' : 's'}` : '') + ((_n.swaps || []).length ? ` | NEEDS SWAP: ${_n.swaps.map(w => w.from + ' for ' + w.to + (w.remembered ? ' (the person has made this swap before)' : '')).join(', ')}` : '');
     return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F${_extra}`;
   }).join('\n');
 
@@ -18858,7 +18858,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes, sf) {
       html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
         <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">🍽 ${recipe.name} (${servings} serving${servings>1?'s':''})</div>
         ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
-        ${(((sf && sf.notes || {})[recipe.name.toLowerCase()] || {}).swaps || []).map(w => `<div data-recipe-swap="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🔁 Swap ${w.from} for ${w.to} (you have it counted)</div>`).join('')}
+        ${(((sf && sf.notes || {})[recipe.name.toLowerCase()] || {}).swaps || []).map(w => `<div data-recipe-swap="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🔁 Swap ${w.from} for ${w.to} (${w.remembered ? 'you have swapped this before' : 'you have it counted'})</div>`).join('')}
         <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.carbs}g C · ${scaled.fat}g F</div>
         <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
       </div>`;
@@ -18999,7 +18999,7 @@ function substituteComboItem(comboIndex, itemIndex) {
   const amount = item.amount || 100;
   _openSubstitutePicker(item.name, (f) => {
     const oldName = item.name;
-    combo.items[itemIndex] = { ..._libItemToScalableIngredient(f, amount), _substitutedFrom: oldName }; // same portion size preserved, same as recipe-ingredient substitute
+    try { mhSwapRemember(oldName, f.name); } catch (_) {} combo.items[itemIndex] = { ..._libItemToScalableIngredient(f, amount), _substitutedFrom: oldName }; // same portion size preserved, same as recipe-ingredient substitute
     _reRenderComboCard(comboIndex);
   }, (q) => openComboItemOnlineSearch(comboIndex, itemIndex, q));
 }
@@ -27593,6 +27593,31 @@ function mhMacroPerUnit(x, amountText) {
 // word-overlap finder findLibrarySubstitutes for brand/size variants), you have a counted amount of it, and its macros are close: carbs no
 // more than 2 g higher for the same amount, calories within 35%. Herbs and spices are all swappable for each other, and an uncounted one
 // counts as in. Anything else is not offered: a missing swap is better than a wrong one.
+// ─── Swaps you have made before (v3.10.1123) ───────────────────────────────────────────────────────────────────
+// Every swap you make in the recipe builder, Cook Mode or a suggested combo is remembered (mh_shopping_swaps_v1, so it is in backups). Next
+// time, those come first, and they are YOUR choice, so they skip the like-for-like and macro checks (steak with lemon jam is allowed).
+// They still need to be in the cupboard to be offered by meal ideas.
+const MH_SWAPS_KEY = 'mh_shopping_swaps_v1';
+function mhSwapMemLoad() { let o = null; try { o = JSON.parse(localStorage.getItem(MH_SWAPS_KEY) || 'null'); } catch (_) {} return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; }
+function mhSwapRemember(fromName, toName) {
+  try {
+    const a = mhShopKey(fromName), b = mhShopKey(toName); if (!a || !b || a === b) return;
+    const o = mhSwapMemLoad(); o[a] = o[a] || {}; o[a][b] = o[a][b] || { name: String(toName).slice(0, 80), n: 0 }; o[a][b].n++; o[a][b].at = Date.now();
+    localStorage.setItem(MH_SWAPS_KEY, JSON.stringify(o));
+  } catch (_) {}
+}
+function mhSwapsBefore(fromName) { const m = mhSwapMemLoad()[mhShopKey(fromName)] || {}; return Object.keys(m).map(k => ({ key: k, name: m[k].name, n: m[k].n })).sort((x, y) => y.n - x.n); }
+// What the picker shows above its list: swaps you have made before, then like-for-likes you have counted and have enough of.
+function mhSwapTrawlHtml(fromName) {
+  const lib = loadLibrary(), o = mhStockLoad(), mode = mhSuggestMode(), esc = mhPlanEsc, key = mhShopKey(fromName), seen = new Set([key]);
+  const chip = (f, tag) => { const idx = lib.findIndex(l => l.name === f.name); if (idx < 0) return ''; seen.add(mhShopKey(f.name)); return '<span data-swap-chip="' + esc(f.name) + '" onclick="_libPickerItemChosen(' + idx + ')" style="display:inline-block;margin:0 6px 6px 0;padding:6px 10px;border-radius:14px;border:1px solid var(--accent);color:var(--accent);font-size:12px;cursor:pointer;">' + esc(f.name) + ' <span style="color:var(--text3);">' + esc(tag) + '</span></span>'; };
+  let before = '', stock = '';
+  mhSwapsBefore(fromName).forEach(b => { const f = lib.find(l => mhShopKey(l.name) === b.key); if (!f) return; const h = mhHaveCheck(f.name, '', getItemCategories(f), o, mode); before += chip(f, (b.n > 1 ? b.n + ' times' : 'before') + (h.known ? (h.ok ? ' · in stock' : ' · ' + h.why) : '')); });
+  const gi = mhSwapGroup(fromName);
+  if (gi >= 0) lib.forEach(f => { const k = mhShopKey(f.name); if (seen.has(k) || mhSwapGroup(f.name) !== gi) return; const h = mhHaveCheck(f.name, '', getItemCategories(f), o, mode); if (h.ok && h.known) stock += chip(f, 'in stock'); });
+  if (!before && !stock) return '';
+  return '<div id="mhSwapTrawl" style="padding:6px 0 8px;border-bottom:1px solid var(--border);">' + (before ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Your usual swaps for this</div>' + before : '') + (stock ? '<div style="font-size:11px;color:var(--text3);margin:4px 0;">In your cupboards now</div>' + stock : '') + '</div>';
+}
 const MH_SWAP_GROUPS = [
   { terms: ['cheddar', 'gouda', 'edam', 'emmental', 'gruyere', 'red leicester', 'double gloucester', 'parmesan', 'manchego', 'gran padano', 'jarlsberg', 'monterey jack', 'colby'] },
   { terms: ['double cream', 'whipping cream', 'single cream'] },
@@ -27617,6 +27642,11 @@ function mhSwapFor(ing, needText, o, mode, skip) {
   if (gi >= 0) lib.forEach(c => { if (mhSwapGroup(c.name) === gi && mhShopKey(c.name) !== mhShopKey(ing.name)) add(c); });
   if (herb) lib.forEach(c => { if (mhShopKey(c.name) !== mhShopKey(ing.name) && getItemCategories(c).includes('herbs and spices')) add(c); });
   try { findLibrarySubstitutes(ing.name, ing.name, 8).forEach(add); } catch (_) {}
+  for (const b of mhSwapsBefore(ing.name)) {   // swaps you have made before: your choice, so no like-for-like or macro checks, but it must be in the cupboard
+    if (skip && skip.has(b.key)) continue; const c = lib.find(l => mhShopKey(l.name) === b.key); if (!c) continue;
+    const cats = getItemCategories(c), have = mhHaveCheck(c.name, needText, cats, o, mode);
+    if (have.ok && (have.known || have.never)) return Object.assign({}, c, { remembered: true });
+  }
   const orig = mhMacroPerUnit(ing, typeof ing.amount === 'string' ? ing.amount : (ing.amount + (ing.unit || 'g'))), amt = parseFloat(needText);
   if (!orig || !(amt > 0)) return null;
   for (const c of cands) {
@@ -27641,7 +27671,7 @@ function mhRecipeMakeable(r, o, mode) {
     if (have.ok) continue;
     const sw = mhSwapFor(ing, mhIngNeed(ing, f, null) || need, o, mode, used);
     if (!sw) return { ok: false, why: ing.name + ' is ' + (have.why === 'not counted' ? 'not counted' : have.why === 'short' ? 'running short' : 'out'), swaps };
-    used.add(mhShopKey(sw.name)); swaps.push({ from: ing.name, to: sw.name });
+    used.add(mhShopKey(sw.name)); swaps.push({ from: ing.name, to: sw.name, remembered: !!sw.remembered });
   }
   return { ok: true, swaps };
 }
@@ -32887,6 +32917,7 @@ function _openSubstitutePicker(currentName, onPick, searchOnlineFallback) {
     input.value = cleanName;
     filterRecipeLibPicker(cleanName);
   }
+  try { const old = document.getElementById('mhSwapTrawl'); if (old) old.remove(); const h = mhSwapTrawlHtml(cleanName), list = document.getElementById('recipeLibPickerList'); if (h && list) list.insertAdjacentHTML('beforebegin', h); } catch (_) {}
 }
 
 // Only shown in the picker's zero-results state, and only when the caller
