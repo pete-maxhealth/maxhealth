@@ -10,7 +10,13 @@
 
 ## What it does
 
-**Newest (v3.10.1078 – 1090):**
+**Newest (v3.10.1118 – 1123): know what you have.**
+
+- **Stock control (Shopping tab).** Count what is in your cupboards, fridge and freezer; logging a meal counts it down, low items join the shopping list (food and non-food, such as toilet roll), and Next meal idea / Balance my macros only suggest what you can make or swap.
+- **Start from what you already bought:** paste a supermarket order, or add a receipt (paste, file, table with "which column is which", or a photo of a paper one). Pack sizes are read, nothing is guessed, new names get the shop on the end, and an unmatched line can be matched by hand or created in your library and you come straight back.
+- **Use-by dates, leftovers, waste, ate-out:** fridge or freezer per food with lengths you set and the app remembers, a Use soon strip, cooked batches with eat-by dates (freeze, thaw, bin), a 30-day used-or-binned record, planned meals held back, and a 🍽 button so eating out never touches stock.
+
+**Earlier (v3.10.1078 – 1090):**
 
 - **Statistics tab (Insights → Statistics).** Build your own statistic from foods, days, weeks, months, weekdays, exercises, kinds of exercise or lifts; measure total, average, highest or lowest; choose top 5 to all, any period or custom dates. A library of ready-made statistics covers food, sleep, body, exercise and micronutrients (fibre, iron, potassium, magnesium, vitamin D, omega-3).
 - **Make each statistic yours.** One-tap 🎨 strip to change how it is shown (ranked list, bars, line, table, donut) and its colour; drag the ⠿ handle to reorder; sections, search, hide/show; 📌 pins up to four on the Today screen; a switch per statistic includes it in the weekly summary, clinician view and AI context. Share a statistic as a small file that carries the question, never the data; colours are validated on import.
