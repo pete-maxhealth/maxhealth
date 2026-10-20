@@ -21,7 +21,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not vis('#stockctlCard'): f.add('BUG', 'the Stock control card should show under the list')
     else:
         head = ev("document.querySelector('#stockctlCard .water-header')?.innerText || ''")
-        if '📦 stock control' not in head.lower() or '?' not in head: f.add('BUG', f'title and the ? help icon expected: {head!r}')
+        if '🏠 my cupboards' not in head.lower() or '?' not in head: f.add('BUG', f'title and the ? help icon expected: {head!r}')
         ctl = ev("document.querySelector('#stockctlCard .mh-ctl')?.innerText.replace(/\\s+/g,' ').trim() || ''")
         if ctl != '▲ ▼ 👁 ▾ hide': f.add('BUG', f'controls should be the standard layout "▲ ▼ 👁 ▾ hide", got {ctl!r}')
     if vis('#stockctlDetail'): f.add('BUG', 'help text should be closed by default')
@@ -88,12 +88,12 @@ with fresh_server() as root, sync_playwright() as pw:
 
     # E. stop tracking asks first
     ev("(k)=>mhStockEditView(k)", it['key']); page.wait_for_timeout(150)
-    page.click('button:has-text("Stop tracking")'); page.wait_for_timeout(200)
+    page.click('button:has-text("Remove from my cupboards")'); page.wait_for_timeout(200)
     if not ev("!!document.querySelector('.app-modal-overlay')"): f.add('BUG', 'stop tracking should ask first')
     modal('appModalCancel')
     if not ev("(k)=>!!mhStockLoad().items[k]", it['key']): f.add('BUG', 'cancel should keep it tracked')
     ev("(k)=>mhStockEditView(k)", it['key']); page.wait_for_timeout(150)
-    page.click('button:has-text("Stop tracking")'); page.wait_for_timeout(200); modal('appModalConfirm')
+    page.click('button:has-text("Remove from my cupboards")'); page.wait_for_timeout(200); modal('appModalConfirm')
     if ev("(k)=>!!mhStockLoad().items[k]", it['key']): f.add('BUG', 'confirming should stop tracking')
     if not ev("mhShopLoad().items.some(i=>i.name==='Whey protein')"): f.add('BUG', 'stopping tracking must not touch the shopping list')
     if errs: f.add('BUG', f'page errors {errs[:3]}')

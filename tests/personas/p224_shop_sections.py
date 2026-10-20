@@ -21,7 +21,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # 1. empty list: the Add section starts open, three cards, standard controls, default order
     ev("mhShopOpen()"); page.wait_for_timeout(300)
     if order() != ['shoplistCard', 'shopaddCard', 'stockctlCard']: f.add('BUG', f'default order list, add, stock: {order()}')
-    for cid, nm in (('shoplistCard', 'my list'), ('shopaddCard', 'add to the list'), ('stockctlCard', 'stock control')):
+    for cid, nm in (('shoplistCard', 'my list'), ('shopaddCard', 'add to the list'), ('stockctlCard', 'my cupboards')):
         head = ev("(i)=>document.querySelector('#'+i+' .water-header')?.innerText || ''", cid)
         if nm not in head.lower() or '?' not in head: f.add('BUG', f'{cid}: title and ? expected: {head!r}')
         c = ctl(cid)
