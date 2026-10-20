@@ -27,6 +27,12 @@
   - **Servings are capped to what stock covers.** Each recipe line tells the AI "STOCK COVERS: up to N servings" and a suggestion for more is cut to N with a note (what is logged is the cut figure).
   - **Fixes.** Red, green, bell, stuffed and mixed peppers (and chillies) are vegetables, not spices, so they are no longer treated as never-runs-out; black pepper, peppercorns and flakes stay spices. The "most used / rarely used" hints sent to the AI no longer name foods that are out of stock. "Suggest a recipe from what is in my library" uses only what you can make, and "Try something new" is told what is in the cupboards (a soft steer: it may still need extras).
   - Test: `p217_stock_realife.py` (mutation-checked).
+- **Start stock from an order** (Stock control card > 🧾). Pete Spence: auditing every cupboard and the freezer is hard work, so start from a recent order instead. Paste an order (lines like `2 x ASDA British Mature Cheddar 400g`, the way a supermarket order page copies) or choose a CSV (item, qty, size), and stock starts from it:
+  - The amount is only ever quantity × the pack size in the name (2 × 400 g = 800 g; `4 x 410g` = 1640 g; litres and kg convert). A count read from a name (`6 Bananas`, `12 Eggs`, `4 Pack`) is shown but marked **check**; a line with no size or count is left blank for you. Nothing is guessed, and reorder levels are never invented.
+  - Order-page noise (dates, addresses, prices, totals, "Write a review") is ignored; where a line was substituted, what was sent is used, not what was ordered.
+  - Each line is linked to your library name where it can be ("British Mature Cheddar" → Cheddar; a food in another category, such as nut butter for butter, is never suggested) and shown in an editable "Track as" box. A name you change is remembered, so next week's order links itself.
+  - Not-food lines and never-runs-out foods (garlic paste, salt) arrive unticked. Foods already tracked default to "leave it as it is", with "add on top" or "replace" per line. A unit clash is refused, a bad amount is skipped with a message, and nothing is saved until you press the button.
+  - Test: `p218_stock_order.py` (invented order; mutation-checked five ways).
 
 ## v3.10.1122 – Fasting now handles planned meals (the timer no longer vanishes)
 - Pete Spence: "if you enter a planned meal, the fasting timer disappears and you only get a line."
