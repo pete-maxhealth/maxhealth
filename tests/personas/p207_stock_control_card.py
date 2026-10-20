@@ -38,11 +38,11 @@ with fresh_server() as root, sync_playwright() as pw:
     if not vis('#stockctlCard'): f.add('BUG', 'the way back should bring the card back')
     pos = lambda: ev("()=>{const c=document.getElementById('stockctlCard'), l=document.getElementById('mhShopChips'); return c && l ? (c.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING ? 'stock-first' : 'list-first') : 'missing'}")
     if pos() != 'list-first': f.add('BUG', f'by default the list comes first: {pos()}')
-    ev("mhStockCtlMove('up')")
+    ev("mhStockCtlMove('up')"); ev("mhStockCtlMove('up')")   # three sections now (list, add, stock): two steps up passes both
     if pos() != 'stock-first': f.add('BUG', 'moving up should put the stock area above the list')
     ev("mhShopOpen()")
     if pos() != 'stock-first': f.add('BUG', 'the order should be remembered')
-    ev("mhStockCtlMove('down')")
+    ev("mhStockCtlMove('down')"); ev("mhStockCtlMove('down')")
     if pos() != 'list-first': f.add('BUG', 'moving down should put it back below the list')
 
     # B. track an ingredient through the form
