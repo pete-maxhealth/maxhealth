@@ -130,7 +130,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # existing counts: leave / add / replace
     if not all(r['mode'] == 'leave' for r in rows2 if r['existing']): f.add('BUG', '5: already-tracked lines default to leave as they are')
     def go(mode):
-        ev("t=>mhOrdLoad(t,'x')", "1 x STORE Fresh Double Cream 600ml"); ev("m=>{_shopUi.ord.rows[0].mode=m}", mode); ev("mhOrdApply()")
+        ev("t=>mhOrdLoad(t,'x')", "1 x STORE Fresh Double Cream 600ml"); ev("m=>{_shopUi.ord.rows[0].mode=m; _shopUi.ord.dupOk=true}", mode); ev("mhOrdApply()")
         return ev("mhStockLoad().items[mhShopKey('Double Cream')].level")
     if go('leave') != 3000: f.add('BUG', '5: leave keeps the count')
     if go('add') != 3600: f.add('BUG', '5: add puts 600 ml on top')
