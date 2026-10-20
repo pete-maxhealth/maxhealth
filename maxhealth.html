@@ -7951,6 +7951,8 @@ function canonicalCategory(matched) { return matched.replace(/es$/, '').replace(
 // categories would quietly break.
 function detectFoodCategory(text) {
   const lower = text.toLowerCase();
+  // Red/green/bell/stuffed peppers and chillies are vegetables; only the seasoning (black pepper, peppercorns, flakes, sauce) is a spice.
+  if (/(^|[^a-z])((red|green|yellow|orange|bell|sweet|chil+i|jalape[nñ]o|romano|stuffed|roasted|mini|baby|mixed)\s+(peppers?|chil+is?)|peppers)(?![a-z])/.test(lower) && !/peppercorn|black pepper|white pepper|ground|cracked|lemon pepper|pepper ?sauce|pepperoni|pepperami|cayenne|flakes|powder|paste|jelly|relish|hummus|dip|soup|steak/.test(lower)) return ['vegetable'];
   const compound = COMPOUND_CATEGORY_WORDS.find(c => lower.includes(c));
   if (compound) return [COMPOUND_CATEGORY_CANONICAL[compound] || canonicalCategory(compound)];
   const key = Object.keys(CATEGORY_MAP).find(c => lower.includes(c));
@@ -18288,8 +18290,7 @@ async function submitRecipeDiscover() {
   // ("interesting keto recipe idea") hit the exact same one on itself) -
   // patching around individual words isn't sustainable for free text, so
   // this bypasses that router entirely and talks to the AI on its own terms.
-  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. The user wants ${request}.
-
+  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. The user wants ${request}.${mhStockPreferLine()}
 Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
 {
   "title": "Recipe name",
@@ -18364,8 +18365,8 @@ CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name
 // generate/parse/retry/addRecipeBubble pipeline as submitRecipeDiscover —
 // only the prompt differs.
 async function submitRecipeFromLibrary() {
-  const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f) && f.kcal > 0);
-  if (!lib.length) { addBubble('Your library is empty — nothing to build a recipe from yet.', 'system', 'warn'); return; }
+  const _libAll = loadLibrary().filter(f => f && f.name && !isMealEntry(f) && f.kcal > 0), _sfL = mhSuggestFilter(_libAll, []), lib = _sfL.lib;
+  if (!lib.length) { addBubble(_libAll.length && _sfL.active ? '📦 Nothing in your cupboards to build a recipe from right now. Count what you have in Shopping, or switch the stock filter off.' : 'Your library is empty — nothing to build a recipe from yet.', 'system', 'warn'); return; }
   closeRecipeDiscoverModal();
 
   switchTabById('chat');
@@ -18375,7 +18376,7 @@ async function submitRecipeFromLibrary() {
   // Same three real signals as suggestMealFromLibrary's habit summary —
   // reused here so the AI leans toward things actually eaten regularly
   // rather than a rarely-touched item that happens to fit macros on paper.
-  const habits = getEatingHabitsSummary();
+  const habits = getEatingHabitsSummary(new Set(lib.map(f => String(f.name).toLowerCase())));
   const t = getTargets().standard;
 
   // Real macros per 100g for every real library item, not a name-only list
@@ -18499,14 +18500,15 @@ function addRecentMealSuggestions(names) {
 //  - RARELY USED: real library items sitting at 0-1 uses despite being
 //    saved a while ago - genuine variety candidates, not just "hasn't
 //    come up in today/yesterday" which barely means anything on its own.
-function getEatingHabitsSummary() {
+function getEatingHabitsSummary(allow) {
   const lib = loadLibrary().filter(f => f && f.name && !isMealEntry(f));
+  const _ok = f => !allow || allow.has(String(f.name).toLowerCase());   // when stock limits the suggestions, hints must not name what is out
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
 
   // Most-used real foods - excludes anything with fewer than 2 uses, since
   // "used once" isn't a habit, it's a single data point.
   const topUsed = [...lib]
-    .filter(f => (f.useCount || 0) >= 2)
+    .filter(f => (f.useCount || 0) >= 2 && _ok(f))
     .sort((a, b) => (b.useCount || 0) - (a.useCount || 0))
     .slice(0, 12);
 
@@ -18546,7 +18548,7 @@ function getEatingHabitsSummary() {
   // real data to gate on. useCount alone is still a genuine signal: an
   // item sitting at 0-1 uses is rarely reached for regardless of when it
   // was saved, not fabricated staleness.
-  const rarelyUsed = lib.filter(f => (f.useCount || 0) <= 1).slice(0, 10);
+  const rarelyUsed = lib.filter(f => (f.useCount || 0) <= 1 && _ok(f)).slice(0, 10);
 
   return {
     topUsedText: topUsed.length ? topUsed.map(f => `${f.name} (used ${f.useCount}x)`).join(', ') : null,
@@ -18673,7 +18675,7 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
     ? _yMeals.map(e => `${e.time || '??:??'} - ${e.description || 'meal'}`).join('\n')
     : '(no data for yesterday)';
 
-  const habits = getEatingHabitsSummary();
+  const habits = getEatingHabitsSummary(new Set(lib.map(f => String(f.name).toLowerCase())));
 
   // 28/09/2026 - given the pulsing 'thinking' look every other waiting
   // state in the app already has, after Pete Spence pointed out this one (and a
@@ -18694,7 +18696,7 @@ async function suggestMealFromLibrary(kind = 'both', explicitComposition = null)
   // number the AI proposes.
   const recipesText = recipes.map(r => {
     const per = { kcal: Math.round(r.total.kcal/r.servings), protein: Math.round(r.total.protein/r.servings*10)/10, carbs: Math.round(r.total.carbs/r.servings*10)/10, fat: Math.round((r.total.fat||0)/r.servings*10)/10 };
-    const _n = (_sf.notes || {})[r.name.toLowerCase()] || {}, _extra = (_n.cooked ? ` | LEFTOVERS READY: ${_n.cooked} cooked serving${_n.cooked === 1 ? '' : 's'}` : '') + ((_n.swaps || []).length ? ` | NEEDS SWAP: ${_n.swaps.map(w => w.from + ' for ' + w.to + (w.remembered ? ' (the person has made this swap before)' : '')).join(', ')}` : '');
+    const _n = (_sf.notes || {})[r.name.toLowerCase()] || {}, _cov = (_n.cover != null ? ` | STOCK COVERS: up to ${_n.cover} serving${_n.cover === 1 ? '' : 's'}` : ''), _extra = _cov + (_n.cooked ? ` | LEFTOVERS READY: ${_n.cooked} cooked serving${_n.cooked === 1 ? '' : 's'}${_n.eatBy ? ' (eat by ' + _n.eatBy + ')' : ''}` : '') + ((_n.swaps || []).length ? ` | NEEDS SWAP: ${_n.swaps.map(w => w.from + ' for ' + w.to + (w.remembered ? ' (the person has made this swap before)' : '')).join(', ')}` : '');
     return `${r.name} | RECIPE, makes ${r.servings} servings | per serving: ${per.kcal}kcal | ${per.protein}g P | ${per.carbs}g C | ${per.fat}g F${_extra}`;
   }).join('\n');
 
@@ -18758,7 +18760,7 @@ Rules:
 ${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}${kind === 'snack' ? '- SNACK REQUESTED: all 5 suggestions should be a real snack - a single, self-contained snack-type food eaten on its own (crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts), not a curated combination of two or more separate savoury ingredients - that\'s tapas, a different thing entirely, even at a small portion. A snack was specifically asked for, not just guidance toward one, so this applies even if the remaining budget would technically support something larger.' : ''}${explicitComposition ? `- EXACT COMPOSITION REQUESTED ("${explicitComposition.map(c=>`${c.count} ${c.category}`).join(' + ')}"): every suggestion should follow this exact shape as closely as the real library allows - ${explicitComposition.map(c => `${c.count} genuinely different item${c.count>1?'s':''} from the "${c.category}" category${c.keyword ? ` (the user specifically said "${c.keyword}" - prefer an item that's genuinely that, not just anything else tagged "${c.category}", if the library has it)` : ' (real categories are listed per item below)'}`).join(', plus ')}. This is the deliberate "meat and veg" style structured request, not a loose preference. If the library can't fully cover every part - fewer distinct items in a category than the count asked for, or (rarely, since this was checked before you were even asked) a category with nothing at all - return the closest real partial match rather than refusing or inventing something: use what's genuinely there, and the note must explicitly name which category came up short and why (e.g. "only 1 vegetable-tagged item in your library, so used it once rather than the 3 asked for"). Never silently substitute a different category to make the numbers look right. Still respect the remaining macro budget as the hard limit.` : !explicitComposition && !['sweet','savoury','snack','both'].includes(kind) ? `- CATEGORY REQUESTED: the user specifically asked for "${kind}" - every suggestion should prominently feature at least one item whose real categories (listed per item below) include "${kind}", not just loosely relate to it. Still respect the remaining macro budget as the hard limit, and still aim for genuinely varied combos rather than 5 near-identical ways of using the same "${kind}" item.` : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
 - COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.${habits.topPairsText ? ` Where it also fits the macro budget, prefer pairings that match this person's own established combos (listed above under "most common category pairings") over generic pairing logic — that's a genuinely stronger cohesion signal than a general rule, since it's what they actually eat together in practice.` : ''}
-${_sf.active ? '- STOCK: these lists have already been limited to what the person can actually make from their cupboards. Never suggest anything outside them. Where a recipe line says NEEDS SWAP, keep the swap in the note (e.g. "using Cheddar for Gouda"); where it says LEFTOVERS READY, say it is already cooked.\n' : ''}- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
+${_sf.active ? '- STOCK: these lists have already been limited to what the person can actually make from their cupboards. Never suggest anything outside them. Where a recipe line says NEEDS SWAP, keep the swap in the note (e.g. "using Cheddar for Gouda"); where it says LEFTOVERS READY, say it is already cooked. Where a recipe line says STOCK COVERS, never suggest more servings than that.\n' + (_sf.soon && _sf.soon.length ? '- USE UP FIRST: these are close to their use-by date, so favour suggestions that use them and say so in the note: ' + mhUseSoonText(_sf.soon) + '.\n' : '') + (_sf.reservedN ? '- Some stock is already set aside for planned meals; the lists already allow for that.\n' : '') : ''}- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
 - Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
 
 LIBRARY (individual ingredients):
@@ -18845,7 +18847,9 @@ function renderLibraryComboSuggestions(parsed, lib, recipes, sf) {
     if (combo.recipe) {
       const recipe = (recipes || []).find(r => r.name.toLowerCase() === combo.recipe.toLowerCase());
       if (!recipe) return; // named recipe no longer exists — skip rather than guess
-      const servings = combo.servings && combo.servings > 0 ? combo.servings : 1;
+      const _nn = ((sf && sf.notes) || {})[recipe.name.toLowerCase()] || {};
+      let servings = combo.servings && combo.servings > 0 ? combo.servings : 1, _cut = 0;
+      if (_nn.cover != null && servings > _nn.cover) { _cut = servings; servings = _nn.cover; }
       const factor = servings / recipe.servings;
       const scaled = {
         kcal: Math.round(recipe.total.kcal * factor),
@@ -18858,7 +18862,7 @@ function renderLibraryComboSuggestions(parsed, lib, recipes, sf) {
       html += `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px;">
         <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:4px;">🍽 ${recipe.name} (${servings} serving${servings>1?'s':''})</div>
         ${combo.note ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${combo.note}</div>` : ''}
-        ${(((sf && sf.notes || {})[recipe.name.toLowerCase()] || {}).swaps || []).map(w => `<div data-recipe-swap="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🔁 Swap ${w.from} for ${w.to} (${w.remembered ? 'you have swapped this before' : 'you have it counted'})</div>`).join('')}
+        ${_cut ? '<div data-servings-cut="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">📦 Cut from ' + _cut + ' to ' + servings + ' serving' + (servings === 1 ? '' : 's') + ': that is all your stock covers</div>' : ''}${_nn.cooked ? '<div data-leftover-line="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🍲 Already cooked' + (_nn.eatBy ? ', eat by ' + _nn.eatBy : '') + '</div>' : ''}${(((sf && sf.notes || {})[recipe.name.toLowerCase()] || {}).swaps || []).map(w => `<div data-recipe-swap="1" style="font-size:11px;color:var(--text2);margin-bottom:6px;">🔁 Swap ${w.from} for ${w.to} (${w.remembered ? 'you have swapped this before' : 'you have it counted'})</div>`).join('')}
         <div style="font-size:12px;color:var(--accent);font-family:Space Mono,monospace;margin-bottom:8px;">${scaled.kcal}kcal · ${scaled.protein}g P · ${scaled.carbs}g C · ${scaled.fat}g F</div>
         <button onclick="logSuggestedCombo(${window._pendingLibraryCombos.length - 1})" style="width:100%;padding:8px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✓ Log this meal</button>
       </div>`;
@@ -23179,7 +23183,7 @@ function mhOutSchedule() { if (!_mhOutTimer) _mhOutTimer = setTimeout(mhOutRefre
 // Values only ever come from the normal preview (library / your own numbers),
 // so nothing here estimates anything.
 function mhPlanLoad() { try { const a = JSON.parse(localStorage.getItem('mh_planned_v1') || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } }
-function mhPlanSave(a) { try { localStorage.setItem('mh_planned_v1', JSON.stringify(a)); } catch (_) {} }
+function mhPlanSave(a) { try { localStorage.setItem('mh_planned_v1', JSON.stringify(a)); } catch (_) {} try { if (typeof mhStockSweep === 'function') mhStockSweep(); } catch (_) {} }
 function mhPlanEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function mhPlanHHMM(h, m) { return String(h).padStart(2, '0') + ':' + String(m || 0).padStart(2, '0'); }
 function mhPlanISOtoDMY(iso) { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(2)}` : todayStr(); }
@@ -24021,6 +24025,7 @@ function logFoods(foods, originalText, aiMessage = null) {
     const _pp = window._planPending; window._planPending = null;
     if (Date.now() - _pp.t < 600000) { mhPlanAdd(foods, originalText, _pp); return; }
   }
+  window._ateOut = mhAteOutText(originalText, foods) ? Date.now() : null;
   _tracePolyolsPipeline('3_logFoods_param_received', foods);
   // Applied here, not at each individual entry point, because this is the one
   // choke point every logging path funnels through — library quick-add, database
@@ -26574,6 +26579,7 @@ function updateDashboard(skipActivityRender) {
   if (state.todayLog.length === 0) {
     logEl.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:20px 0;">No meals logged yet</div>';
   } else {
+    const _stkOn = Object.keys(mhStockLoad().items).length > 0;
     logEl.innerHTML = state.todayLog.map(e => {
       const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
       const name = e.description.length > 45 ? e.description.slice(0,45)+'…' : e.description;
@@ -26590,6 +26596,7 @@ function updateDashboard(skipActivityRender) {
           </div>
         </div>
         <div onclick="copyLogEntryLine(${e.id})" title="Copy this line" style="padding:2px 6px;color:var(--text3);font-size:14px;cursor:pointer;">📋</div>
+        ${_stkOn ? `<div data-ateout="${e.id}" onclick="mhStockAteOutToggle(${e.id})" title="${e.noStock ? 'Ate out: stock left alone (tap to take stock off after all)' : 'Ate out? Tap so this meal does not touch your stock'}" style="padding:2px 6px;font-size:14px;cursor:pointer;${e.noStock ? 'opacity:1;' : 'opacity:0.45;'}">🍽</div>` : ''}
         <div class="log-del" onclick="deleteLogEntry(${e.id})" title="Delete entry" style="padding-top:2px;">🗑</div>
       </div>`;
     }).join('');
@@ -27441,7 +27448,7 @@ function mhStockSetReorder(key, base) { const o = mhStockLoad(), it = o.items[ke
 // Use or add stock. delta is in base units (negative = used). Never goes below zero; the amount really applied is what is remembered.
 function mhStockAdjust(key, delta, src, entryId) {
   const o = mhStockLoad(), it = o.items[key]; if (!it || it.level == null || !isFinite(delta) || !delta) return false;
-  const after = Math.max(0, mhStockRound(it.level + delta)), applied = mhStockRound(after - it.level); it.level = after;
+  const after = Math.max(0, mhStockRound(it.level + delta)), applied = mhStockRound(after - it.level); it.level = after; if (after <= 0 || (src === 'bought' && applied > 0)) delete it.useBy;
   if (applied) o.ledger.push({ k: key, d: applied, t: Date.now(), s: src || 'manual', e: entryId == null ? null : String(entryId) });
   mhStockSave(o); mhStockSweep(); return true;
 }
@@ -27449,8 +27456,129 @@ function mhStockAdjust(key, delta, src, entryId) {
 function mhStockReverse(entryId) {
   const o = mhStockLoad(), id = String(entryId); let n = 0;
   o.ledger = o.ledger.filter(l => { if (l.e !== id) return true; const it = o.items[l.k]; if (it && it.level != null && l.t >= (it.since || 0)) { it.level = Math.max(0, mhStockRound(it.level - l.d)); n++; } return false; });
-  if (o.cookedUse && o.cookedUse[id]) { const c = o.cookedUse[id]; o.cooked = o.cooked || {}; o.cooked[c.r] = Math.round(((o.cooked[c.r] || 0) + c.n) * 1000) / 1000; delete o.cookedUse[id]; }
+  if (o.cookedUse && o.cookedUse[id]) { const c = o.cookedUse[id]; o.cooked = o.cooked || {}; o.cooked[c.r] = Math.round(((o.cooked[c.r] || 0) + c.n) * 1000) / 1000; delete o.cookedUse[id]; o.cookedBy = o.cookedBy || {}; if (!o.cookedBy[c.r]) o.cookedBy[c.r] = mhAddDaysISO(mhRulesLoad().fridge); }
   mhStockSave(o); if (n) mhStockSweep(); return n;
+}
+// ─── Use-by dates, leftovers, waste, planned meals, ate out (v3.10.1123) ───────────────────────────────────────────
+// Use-by: an optional date on a stock item, and an eat-by date on every cooked batch (today + the "leftovers keep" days in Stock rules,
+// which you can change; it is a cautious suggestion, not food-safety advice). Past the date a food stops being suggested. Freezing a
+// batch moves its date out by the "frozen keeps" days. Buying more of an item (or running it out) clears its old date.
+// Waste: "used or binned" takes the amount off stock and is remembered for 30 days so you can see what you throw away.
+// Planned meals: what a planned meal will use is treated as already spoken for in suggestions and on the list.
+// Ate out: a logged meal can be marked so it never touches stock (set from the words used, or by the 🍽 button on the entry).
+function mhISO(d) { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function mhAddDaysISO(n) { const d = new Date(); d.setDate(d.getDate() + n); return mhISO(d); }
+function mhDaysTo(iso) { if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return null; return Math.round((new Date(iso + 'T12:00:00') - new Date(mhISO() + 'T12:00:00')) / 86400000); }
+function mhDateLabel(iso) { try { return new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); } catch (_) { return iso; } }
+function mhUseByText(iso) {
+  const n = mhDaysTo(iso); if (n == null) return '';
+  if (n < 0) return 'past its use-by'; if (n === 0) return 'use today'; if (n === 1) return 'use by tomorrow'; return 'use by ' + mhDateLabel(iso);
+}
+function mhStockExpired(it) { return !!(it && it.useBy && mhDaysTo(it.useBy) < 0); }
+function mhStockSetUseBy(key, iso) {
+  const o = mhStockLoad(), it = o.items[key]; if (!it) return false;
+  if (!iso) delete it.useBy; else if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) it.useBy = iso; else return false;
+  mhStockSave(o); return true;
+}
+function mhCookedExpired(o, id) { const d = (o.cookedBy || {})[id]; return !!(d && mhDaysTo(d) < 0); }
+function mhCookedClear(o, id) { if (o.cookedBy) delete o.cookedBy[id]; if (o.cookedFrozen) delete o.cookedFrozen[id]; }
+function mhCookedByText(o, id) {
+  const d = (o.cookedBy || {})[id]; if (!d) return '';
+  const n = mhDaysTo(d), fz = o.cookedFrozen && o.cookedFrozen[id] ? '❄ frozen, ' : '';
+  return n < 0 ? ' · ⚠ ' + fz + 'past its eat-by date' : ' · ' + fz + (n === 0 ? 'eat today' : n === 1 ? 'eat by tomorrow' : 'eat by ' + mhDateLabel(d));
+}
+function mhCookedFreezeToggle(id) {
+  const o = mhStockLoad(); if (!(o.cooked && o.cooked[id] > 0)) return; const r = mhRulesLoad();
+  o.cookedBy = o.cookedBy || {}; o.cookedFrozen = o.cookedFrozen || {};
+  if (o.cookedFrozen[id]) { delete o.cookedFrozen[id]; o.cookedBy[id] = mhAddDaysISO(r.fridge); showToast('Thawed: eat within ' + r.fridge + ' day' + (r.fridge === 1 ? '' : 's')); }
+  else { o.cookedFrozen[id] = true; o.cookedBy[id] = mhAddDaysISO(r.frozen); showToast('Frozen: keeps ' + r.frozen + ' days'); }
+  mhStockSave(o); try { mhShopRender(); } catch (_) {} try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
+}
+function mhWasteNote(o, rec) { o.waste = (o.waste || []).concat(rec).filter(w => Date.now() - w.t < 30 * 86400000).slice(-300); }
+// Used up or binned: base = amount in the item's own unit (null = all of it). Returns the amount taken off.
+function mhStockWaste(key, base) {
+  const o = mhStockLoad(), it = o.items[key]; if (!it || it.level == null || !(it.level > 0)) return 0;
+  const amt = base == null ? it.level : Math.min(base, it.level); if (!(amt > 0)) return 0;
+  if (!mhStockAdjust(key, -amt, 'waste')) return 0;
+  const o2 = mhStockLoad(); mhWasteNote(o2, { k: key, n: it.name, b: it.base, a: mhStockRound(amt), t: Date.now() }); mhStockSave(o2); return amt;
+}
+function mhStockWasteAsk(key) {
+  const it = mhStockLoad().items[key]; if (!it) return;
+  if (it.level == null || !(it.level > 0)) { showToast('Nothing counted to take off'); return; }
+  appPrompt('How much ' + it.name + ' was used up or binned? Leave empty for all of it (' + mhStockFmt(it, it.level) + ')', 'e.g. 200 g', v => {
+    v = String(v == null ? '' : v).trim(); let amt = null;
+    if (v) { const r = mhStockParse(/^[\d.]+$/.test(v) ? (it.base === 'each' ? v : v + ' ' + it.base) : v, it); if (!r.ok) { showToast(r.err); return; } amt = r.base; }
+    const took = mhStockWaste(key, amt); showToast(took ? 'Taken off stock: ' + mhStockFmt(it, took) : 'Nothing taken off'); try { mhShopRender(); } catch (_) {}
+  });
+}
+function mhCookedBinAsk(id) {
+  const o = mhStockLoad(), r = loadRecipes().find(x => x.id === id); if (!(o.cooked && o.cooked[id] > 0)) return;
+  appConfirm('Bin the ' + o.cooked[id] + ' cooked serving' + (o.cooked[id] === 1 ? '' : 's') + ' of ' + mhPlanEsc(r ? r.name : 'this recipe') + '? Its ingredients stay off stock because they were used when you cooked it.', () => {
+    const o2 = mhStockLoad(); mhWasteNote(o2, { k: 'cooked:' + id, n: (r ? r.name : 'Leftovers'), b: 'servings', a: o2.cooked[id], t: Date.now() });
+    delete o2.cooked[id]; mhCookedClear(o2, id); mhStockSave(o2); showToast('Leftovers binned');
+    try { mhShopRender(); } catch (_) {} try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
+  }, null, true, { confirm: 'Bin them' });
+}
+function mhWasteSummary(o) {
+  const m = {}; (o.waste || []).forEach(w => { if (Date.now() - w.t >= 30 * 86400000) return; const k = w.k; m[k] = m[k] || { n: w.n, b: w.b, a: 0 }; m[k].a += w.a; });
+  return Object.values(m).sort((x, y) => y.a - x.a);
+}
+// What planned meals will use (base units per stock key). Plans older than yesterday are treated as not happening.
+function mhPlanReserved() {
+  const res = {}; let o = null, plans = []; try { plans = mhPlanLoad(); } catch (_) {}
+  if (!plans.length) return res; o = mhStockLoad(); const floor = mhAddDaysISO(-1);
+  plans.forEach(p => { if (String(p.date || mhISO()) < floor) return;
+    (p.foods || []).forEach(f => { const k = mhShopKey(f && f.name || ''), it = o.items[k]; if (!it || it.level == null) return; const b = mhStockAmountBase(f.amount, it); if (b > 0) res[k] = (res[k] || 0) + b; }); });
+  return res;
+}
+function mhStockIsLowRes(it, res) { return !!it && it.level != null && it.reorder != null && (it.level - ((res && res[it.key]) || 0)) <= it.reorder; }
+// A read-only copy of stock with planned meals taken off, used for suggestions only. Never saved.
+function mhStockEffective() {
+  const o = mhStockLoad(), res = mhPlanReserved(); o._reservedN = 0;
+  Object.keys(res).forEach(k => { const it = o.items[k]; if (it && it.level != null) { it.reserved = res[k]; it.level = Math.max(0, mhStockRound(it.level - res[k])); o._reservedN++; } });
+  return o;
+}
+function mhUseSoon(o) {
+  const out = [];
+  Object.values(o.items).forEach(it => { if (it.useBy && it.level > 0) { const n = mhDaysTo(it.useBy); if (n != null && n >= 0 && n <= 3) out.push({ name: it.name, days: n, kind: 'item' }); } });
+  const recs = loadRecipes();
+  Object.keys(o.cooked || {}).forEach(id => { if (!(o.cooked[id] > 0)) return; const d = (o.cookedBy || {})[id], n = d ? mhDaysTo(d) : null, r = recs.find(x => x.id === id); if (r && n != null && n >= 0 && n <= 3) out.push({ name: r.name, days: n, kind: 'leftovers' }); });
+  return out.sort((a, b) => a.days - b.days);
+}
+function mhUseSoonText(list) { return list.map(x => x.name + (x.kind === 'leftovers' ? ' (cooked leftovers, ' : ' (') + (x.days === 0 ? 'today' : x.days === 1 ? 'tomorrow' : 'in ' + x.days + ' days') + ')').join(', '); }
+// For "try something new" ideas: a soft steer toward what is in the cupboards and what needs using up. Empty when nothing is counted.
+function mhStockPreferLine() {
+  try {
+    const o = mhStockEffective(), names = Object.values(o.items).filter(it => it.level > 0 && !mhStockExpired(it)).map(it => it.name).slice(0, 30); if (!names.length) return '';
+    const soon = mhUseSoon(o);
+    return '\nTHE PERSON\'S CUPBOARDS: they have ' + names.join(', ') + ' in stock. Favour these where they suit the idea (not required, it is fine to need a few extra things).' + (soon.length ? ' Needs using up soon: ' + mhUseSoonText(soon) + '. Favour these most.' : '') + '\n';
+  } catch (_) { return ''; }
+}
+const MH_ATEOUT_RE = new RegExp('(^|[^a-z])(takeaway|take-away|take away|restaurant|pub|caf[eé]|ate out|eating out|eaten out|dined out|dinner out|lunch out|fast food|deliveroo|just eat|uber eats|mcdonald\'?s|kfc|nando\'?s|greggs|burger king|pizza hut|domino\'?s|wagamama|starbucks|costa)(?![a-z])', 'i');
+function mhAteOutText(text, foods) { try { return MH_ATEOUT_RE.test(String(text || '') + ' ' + (foods || []).map(f => f && f.name || '').join(' ')); } catch (_) { return false; } }
+function mhStockAteOutToggle(id) {
+  const e = (state.todayLog || []).find(x => x.id == id); if (!e) return;
+  if (e.noStock) { delete e.noStock; mhStockOnLog(e, todayStr()); showToast('Stock taken off again'); }
+  else { const n = mhStockReverse(e.id); e.noStock = true; showToast('Ate out: stock left alone' + (n ? ', and ' + n + ' item' + (n === 1 ? '' : 's') + ' put back' : '')); }
+  saveState(); try { updateDashboard(); } catch (_) {}
+}
+function mhStockExtrasHtml(o) {
+  const esc = mhPlanEsc, soon = mhUseSoon(o), ids = Object.keys(o.cooked || {}).filter(id => o.cooked[id] > 0), recs = loadRecipes(), waste = mhWasteSummary(o);
+  const sm = 'font-size:12px;padding:6px 10px;'; let h = '';
+  const expired = Object.values(o.items).filter(it => mhStockExpired(it) && it.level > 0);
+  if (soon.length) h += '<div data-use-soon="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">⏳ <b>Use soon:</b> ' + esc(mhUseSoonText(soon)) + '. Meal ideas will lead with these.</div>';
+  if (expired.length) h += '<div data-expired="1" style="font-size:13px;line-height:1.6;color:var(--red);margin-bottom:8px;">⚠ Past use-by: ' + expired.map(it => esc(it.name) + ' <a data-k="' + esc(it.key) + '" onclick="mhStockWasteAsk(this.dataset.k)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">bin it</a>').join(' · ') + '</div>';
+  if (ids.length) h += '<div data-leftovers="1" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">🍲 Leftovers</div>' + ids.map(id => { const r = recs.find(x => x.id === id), fz = o.cookedFrozen && o.cookedFrozen[id];
+    return '<div data-cooked="' + esc(id) + '" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:140px;font-size:14px;color:var(--text);">' + esc(r ? r.name : 'Cooked batch') + '<div style="font-size:12px;color:var(--text3);">' + o.cooked[id] + ' serving' + (o.cooked[id] === 1 ? '' : 's') + esc(mhCookedByText(o, id)) + '</div></div>'
+      + '<button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedFreezeToggle(this.dataset.id)" style="' + sm + '">' + (fz ? '☀ Thawed it' : '❄ Freeze') + '</button><button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedBinAsk(this.dataset.id)" style="' + sm + '">🗑 Bin</button></div>'; }).join('') + '</div>';
+  if (waste.length) h += '<div data-waste="1" style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">🗑 Used up or binned in the last 30 days: ' + waste.slice(0, 6).map(w => esc(w.n) + ' ' + (w.b === 'each' ? w.a : w.b === 'servings' ? w.a + ' serving' + (w.a === 1 ? '' : 's') : mhStockNum(w.a) + ' ' + w.b)).join(', ') + '</div>';
+  return h;
+}
+function mhStockRowExtra(it, res) {
+  let h = '';
+  if (it.useBy) { const t = mhUseByText(it.useBy), n = mhDaysTo(it.useBy); h += ' · <span data-useby="1" style="color:' + (n != null && n <= 1 ? 'var(--red)' : 'var(--text3)') + ';">' + mhPlanEsc(t) + '</span>'; }
+  const r = res && res[it.key]; if (r > 0) h += ' · ' + mhPlanEsc(mhStockFmt(it, r)) + ' planned' + (mhStockIsLowRes(it, res) && !mhStockIsLow(it) ? ' (low after your plans)' : '');
+  return h;
 }
 // Stock off the shelf when food is logged. Lenient on purpose about WHAT it reads (leading number + unit of a logged amount) but never
 // guesses: an amount it cannot read leaves stock alone and says so. Planned meals never reach here (they divert before logging).
@@ -27470,15 +27598,17 @@ function mhStockAmountBase(amount, it) {
 // dateStr: the day the food was eaten (past days that fall before the last stock-take are ignored: that count already covers them).
 function mhStockOnLog(entry, dateStr) {
   try {
+    const _ao = window._ateOut && Date.now() - window._ateOut < 5000; window._ateOut = null;
     if (!entry || !entry.id || !Array.isArray(entry.items)) return;
     const o = mhStockLoad(); if (!Object.keys(o.items).length) return;
+    if (_ao || entry.noStock) { if (!entry.noStock) { entry.noStock = true; showToast('🍽 Ate out: your stock was left alone'); } return; }
     const eaten = dateStr && dateStr !== todayStr() ? new Date(dateStr + 'T23:59:59').getTime() : Date.now();
     let skipped = [], took = 0, frac = 1;
     // A batch already cooked (and taken off stock then) is eaten from first, so logging its servings does not take the same food twice.
     const sr = window._stockRecipe; window._stockRecipe = null;
     if (sr && sr.id && sr.servings > 0 && o.cooked && o.cooked[sr.id] > 0) {
       const use = Math.min(o.cooked[sr.id], sr.servings); frac = 1 - use / sr.servings;
-      o.cooked[sr.id] = Math.round((o.cooked[sr.id] - use) * 1000) / 1000; if (o.cooked[sr.id] <= 0) delete o.cooked[sr.id];
+      o.cooked[sr.id] = Math.round((o.cooked[sr.id] - use) * 1000) / 1000; if (o.cooked[sr.id] <= 0) { delete o.cooked[sr.id]; mhCookedClear(o, sr.id); }
       o.cookedUse = o.cookedUse || {}; o.cookedUse[String(entry.id)] = { r: sr.id, n: use }; mhStockSave(o);
       if (frac <= 0) return;
     }
@@ -27505,7 +27635,7 @@ function mhStockRecipeNote(r) {
   const lines = mhStockRecipeLines(r).filter(x => x.it.base === 'g' && parseFloat(x.ing.amount) > 0); if (!lines.length) return '';
   const short = lines.filter(x => x.it.level < parseFloat(x.ing.amount)).map(x => x.it.name);
   let batches = Infinity, limit = null; lines.forEach(x => { const b = Math.floor(x.it.level / parseFloat(x.ing.amount)); if (b < batches) { batches = b; limit = x; } }); if (!isFinite(batches)) batches = 1;
-  const o = mhStockLoad(), pend = o.cooked && o.cooked[r.id] > 0 ? ' · ' + o.cooked[r.id] + ' cooked serving' + (o.cooked[r.id] === 1 ? '' : 's') + ' waiting' : '';
+  const o = mhStockLoad(), pend = o.cooked && o.cooked[r.id] > 0 ? ' · ' + o.cooked[r.id] + ' cooked serving' + (o.cooked[r.id] === 1 ? '' : 's') + ' waiting' + mhCookedByText(o, r.id) : '';
   return '<div data-stocknote="1" style="font-size:12px;margin-bottom:8px;color:' + (short.length ? 'var(--red)' : 'var(--text3)') + ';">' + (short.length ? '⚠ Stock is short of ' + short.join(', ') + ' · <a data-stock-swap="1" onclick="reviewRecipeBeforeLogging(\'' + r.id + '\',1)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">🔁 Review and swap</a>' : '✓ Stock covers ' + (batches <= 1 ? 'a batch' : batches + ' batches' + (lines.length > 1 && limit ? ' (limited by ' + limit.it.name + ')' : ''))) + pend + '</div>';
 }
 // ─── Meal suggestions that only use what you can make (v3.10.1123) ───────────────────────────────────────────────
@@ -27531,13 +27661,13 @@ function mhSuggestSetMode(m) { if (!['off', 'hide', 'strict'].includes(m)) retur
 const MH_RULES_KEY = 'mh_shopping_rules_v1';
 const MH_RULE_CATS = ['meat', 'fish', 'protein', 'dairy', 'vegetable', 'salad', 'fruit', 'grain', 'bread', 'breakfast cereal', 'fat', 'savoury', 'sweet', 'herbs and spices', 'alcohol'];
 const MH_RULE_CAT_NAMES = { 'breakfast cereal': 'Cereal', fat: 'Oils & fats', 'herbs and spices': 'Herbs & spices', savoury: 'Sauces & savoury' };
-function mhRulesDefaults() { return { neverCats: ['herbs and spices'], neverNames: ['salt', 'cream of tartar'], portion: { 'herbs and spices': { n: 5, u: 'g' }, fat: { n: 15, u: 'g' } }, fallback: { n: 100, u: 'g' } }; }
+function mhRulesDefaults() { return { neverCats: ['herbs and spices'], neverNames: ['salt', 'cream of tartar'], portion: { 'herbs and spices': { n: 5, u: 'g' }, fat: { n: 15, u: 'g' } }, fallback: { n: 100, u: 'g' }, fridge: 2, frozen: 90 }; }
 function mhRulesLoad() {
   const d = mhRulesDefaults(); let o = null; try { o = JSON.parse(localStorage.getItem(MH_RULES_KEY) || 'null'); } catch (_) {}
   if (!o || typeof o !== 'object') return d;
   const okP = v => v && v.n > 0 && (v.u === 'g' || v.u === 'ml');
   const portion = {}; if (o.portion && typeof o.portion === 'object') Object.keys(o.portion).forEach(k => { if (okP(o.portion[k])) portion[k] = { n: +o.portion[k].n, u: o.portion[k].u }; });
-  return { neverCats: Array.isArray(o.neverCats) ? o.neverCats.filter(c => typeof c === 'string') : d.neverCats, neverNames: Array.isArray(o.neverNames) ? o.neverNames.filter(c => typeof c === 'string').map(c => mhShopKey(c)).filter(Boolean) : d.neverNames, portion: o.portion ? portion : d.portion, fallback: okP(o.fallback) ? { n: +o.fallback.n, u: o.fallback.u } : d.fallback };
+  return { neverCats: Array.isArray(o.neverCats) ? o.neverCats.filter(c => typeof c === 'string') : d.neverCats, neverNames: Array.isArray(o.neverNames) ? o.neverNames.filter(c => typeof c === 'string').map(c => mhShopKey(c)).filter(Boolean) : d.neverNames, portion: o.portion ? portion : d.portion, fallback: okP(o.fallback) ? { n: +o.fallback.n, u: o.fallback.u } : d.fallback, fridge: o.fridge >= 1 && o.fridge <= 14 ? Math.round(o.fridge) : d.fridge, frozen: o.frozen >= 7 && o.frozen <= 365 ? Math.round(o.frozen) : d.frozen };
 }
 function mhRulesSave(r) { try { localStorage.setItem(MH_RULES_KEY, JSON.stringify(r)); } catch (_) {} }
 function mhRulesEdit(fn) { const r = mhRulesLoad(); fn(r); mhRulesSave(r); try { mhShopRender(); } catch (_) {} }
@@ -27553,6 +27683,10 @@ function mhRulesNeverDel(k) { mhRulesEdit(r => { r.neverNames = r.neverNames.fil
 function mhRulesPortionSet(c, txt) {
   const v = String(txt || '').trim();
   mhRulesEdit(r => { if (!v) { if (c === '*') r.fallback = mhRulesDefaults().fallback; else delete r.portion[c]; return; } const p = mhRulesParse(v); if (!p) { _shopUi.msg = 'Type an amount such as 5 g, 15 ml or 1 tsp'; return; } if (c === '*') r.fallback = p; else r.portion[c] = p; });
+}
+function mhRulesKeepSet(which, v) {
+  const n = parseInt(v); const lim = which === 'frozen' ? [7, 365] : [1, 14];
+  mhRulesEdit(r => { if (n >= lim[0] && n <= lim[1]) r[which] = n; else _shopUi.msg = 'Type a whole number of days between ' + lim[0] + ' and ' + lim[1]; });
 }
 function mhRulesReset() { try { localStorage.removeItem(MH_RULES_KEY); } catch (_) {} try { mhShopRender(); } catch (_) {} }
 function mhIsNever(name, cats, st) {
@@ -27572,6 +27706,7 @@ function mhHaveCheck(name, needText, cats, o, mode) {
   const st = o.items[mhShopKey(name)]; cats = cats || mhCatsOfName(name);
   if (mhIsNever(name, cats, st)) return { ok: true, known: false, never: true };
   if (!st || st.level == null) return { ok: mode !== 'strict', known: false, why: 'not counted' };
+  if (mhStockExpired(st)) return { ok: false, known: true, why: 'past its use-by', have: st.level, need: null };
   const need = mhStockAmountBase(needText || mhDefaultNeed(cats, st), st), ok = st.level > 0 && (need == null || !(need > 0) || st.level + 1e-9 >= need);
   return { ok, known: true, why: ok ? '' : (st.level > 0 ? 'short' : 'out'), have: st.level, need };
 }
@@ -27660,27 +27795,29 @@ function mhSwapFor(ing, needText, o, mode, skip) {
   }
   return null;
 }
+function mhCoverOf(ing, f, st) { if (!st || st.level == null) return Infinity; const b = mhStockAmountBase(mhIngNeed(ing, f, st), st); if (!(b > 0)) return Infinity; return Math.max(1, Math.floor((st.level + 1e-9) / b)); }
 function mhRecipeMakeable(r, o, mode) {
-  if (o.cooked && o.cooked[r.id] > 0) return { ok: true, cooked: o.cooked[r.id], swaps: [] };
-  const ings = r.ingredients || [], swaps = [], used = new Set(), f = 1 / (r.servings || 1);
+  if (o.cooked && o.cooked[r.id] > 0 && !mhCookedExpired(o, r.id)) return { ok: true, cooked: o.cooked[r.id], cover: o.cooked[r.id], eatBy: (o.cookedBy || {})[r.id] ? mhDateLabel(o.cookedBy[r.id]) : '', swaps: [] };
+  const ings = r.ingredients || [], swaps = [], used = new Set(), f = 1 / (r.servings || 1); let cover = Infinity;
   if (!ings.length) return { ok: false, why: 'no ingredients listed', swaps };
   for (const ing of ings) {
     if (!ing || !ing.name) continue;
     if (!['kcal', 'protein', 'carbs'].every(k => ing[k] !== '' && ing[k] != null && isFinite(+ing[k]))) return { ok: false, why: ing.name + ' has no figures', swaps };
     const st = o.items[mhShopKey(ing.name)], need = mhIngNeed(ing, f, st), have = mhHaveCheck(ing.name, need, null, o, mode);
-    if (have.ok) continue;
+    if (have.ok) { cover = Math.min(cover, mhCoverOf(ing, f, st)); continue; }
     const sw = mhSwapFor(ing, mhIngNeed(ing, f, null) || need, o, mode, used);
-    if (!sw) return { ok: false, why: ing.name + ' is ' + (have.why === 'not counted' ? 'not counted' : have.why === 'short' ? 'running short' : 'out'), swaps };
+    if (!sw) return { ok: false, why: ing.name + ' is ' + (have.why === 'not counted' ? 'not counted' : have.why === 'short' ? 'running short' : have.why === 'past its use-by' ? 'past its use-by' : 'out'), swaps };
     used.add(mhShopKey(sw.name)); swaps.push({ from: ing.name, to: sw.name, remembered: !!sw.remembered });
+    cover = Math.min(cover, mhCoverOf(ing, f, o.items[mhShopKey(sw.name)]));
   }
-  return { ok: true, swaps };
+  return { ok: true, swaps, cover: isFinite(cover) ? Math.min(cover, 12) : null };
 }
 function mhSuggestFilter(lib, recipes) {
-  const mode = mhSuggestMode(), o = mhStockLoad();
+  const mode = mhSuggestMode(), o = mhStockEffective();
   if (mode === 'off' || (mode === 'hide' && !Object.keys(o.items).length)) return { lib, recipes, notes: {}, active: false, mode };
   const libOk = lib.filter(x => mhHaveCheck(x.name, x.portion || '', getItemCategories(x), o, mode).ok), notes = {};
-  const recOk = recipes.filter(r => { const v = mhRecipeMakeable(r, o, mode); if (v.ok) notes[r.name.toLowerCase()] = { swaps: v.swaps, cooked: v.cooked || 0 }; return v.ok; });
-  return { lib: libOk, recipes: recOk, notes, active: true, mode, hiddenLib: lib.length - libOk.length, hiddenRec: recipes.length - recOk.length };
+  const recOk = recipes.filter(r => { const v = mhRecipeMakeable(r, o, mode); if (v.ok) notes[r.name.toLowerCase()] = { swaps: v.swaps, cooked: v.cooked || 0, cover: v.cover == null ? null : v.cover, eatBy: v.eatBy || '' }; return v.ok; });
+  return { lib: libOk, recipes: recOk, notes, active: true, mode, hiddenLib: lib.length - libOk.length, hiddenRec: recipes.length - recOk.length, soon: mhUseSoon(o), reservedN: o._reservedN || 0 };
 }
 function mhRulesHtml() {
   const r = mhRulesLoad(), d = mhRulesDefaults(), esc = mhPlanEsc, open = !!_shopUi.rulesOpen, nm = c => MH_RULE_CAT_NAMES[c] || (c.charAt(0).toUpperCase() + c.slice(1));
@@ -27697,6 +27834,9 @@ function mhRulesHtml() {
     + '<div style="display:flex;gap:6px;"><input id="mhRulesNeverIn" placeholder="Add a food, e.g. bicarbonate of soda" style="' + inp + '"><button class="copy-btn" onclick="mhRulesNeverAdd()" style="padding:8px 12px;">Add</button></div>'
     + '<div style="font-size:13px;color:var(--text);font-weight:600;margin:14px 0 2px;">Usual portion when none is set</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">Type g, ml, tsp (5 g) or tbsp (15 g). A food\'s own portion always wins. Leave blank to use the fallback.</div>'
     + rows + '<div data-rule-row="*" style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--border);margin-top:4px;"><div style="flex:1;font-size:13px;color:var(--text);">Anything else <span style="font-size:10px;color:var(--text3);">fallback</span></div><input data-rule-portion="*" value="' + esc(fmt(r.fallback)) + '" onchange="mhRulesPortionSet(this.dataset.rulePortion,this.value)" style="' + inp + 'width:96px;"></div>'
+    + '<div style="font-size:13px;color:var(--text);font-weight:600;margin:14px 0 2px;">How long cooked food keeps</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">A cautious suggestion to date your leftovers, not food-safety advice: check the guidance for what you cooked. Past the date a batch stops being suggested.</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">In the fridge (days)</div><input data-rule-keep="fridge" inputmode="numeric" value="' + r.fridge + '" onchange="mhRulesKeepSet(\'fridge\',this.value)" style="width:90px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"></div>'
+    + '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">Frozen (days)</div><input data-rule-keep="frozen" inputmode="numeric" value="' + r.frozen + '" onchange="mhRulesKeepSet(\'frozen\',this.value)" style="width:90px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"></div>'
     + '<div style="margin-top:10px;"><button class="copy-btn" onclick="mhRulesReset()" style="padding:8px 12px;font-size:12px;">Back to the suggested defaults</button></div>')
     + '</div>';
 }
@@ -27717,7 +27857,7 @@ function mhStockCooked(id, servings) {
     const a = parseFloat(ing.amount);
     if (it.base === 'g' && a > 0) { if (mhStockAdjust(it.key, -Math.round(a * f * 100) / 100, 'cook', ref)) took++; } else skipped.push(it.name);
   });
-  const o = mhStockLoad(); o.cooked = o.cooked || {}; o.cooked[id] = Math.round(((o.cooked[id] || 0) + servings) * 1000) / 1000; mhStockSave(o);
+  const o = mhStockLoad(); o.cooked = o.cooked || {}; o.cookedBy = o.cookedBy || {}; const _had = o.cooked[id] > 0 ? o.cookedBy[id] : null, _nb = mhAddDaysISO(mhRulesLoad().fridge); o.cookedBy[id] = _had && _had < _nb ? _had : _nb; if (o.cookedFrozen) delete o.cookedFrozen[id]; o.cooked[id] = Math.round(((o.cooked[id] || 0) + servings) * 1000) / 1000; mhStockSave(o);
   showToast(took ? 'Cooked: ' + took + ' ingredient' + (took === 1 ? '' : 's') + ' off stock' + (skipped.length ? '; left alone (amount not in grams): ' + skipped.join(', ') : '') : 'Nothing tracked in this recipe, so stock is unchanged', null, null, 4500);
   try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
   return took;
@@ -27731,7 +27871,7 @@ function mhStockExport(label) {
   label = String(label || '').trim() || 'This device'; try { localStorage.setItem('mh_stock_device_label', label); } catch (_) {}
   const o = mhStockLoad(), n = Object.keys(o.items).length;
   if (!n) { showToast('Nothing is tracked yet, so there is no stock to send'); return null; }
-  const pack = { type: 'mh-stock-transfer', v: 1, exportedAt: Date.now(), device: label, tracked: n, low: Object.values(o.items).filter(mhStockIsLow).length, items: o.items, cooked: o.cooked || {} };
+  const pack = { type: 'mh-stock-transfer', v: 1, exportedAt: Date.now(), device: label, tracked: n, low: Object.values(o.items).filter(mhStockIsLow).length, items: o.items, cooked: o.cooked || {}, cookedBy: o.cookedBy || {}, cookedFrozen: o.cookedFrozen || {} };
   try {
     const a = document.createElement('a'), url = URL.createObjectURL(new Blob([JSON.stringify(pack)], { type: 'application/json' }));
     a.href = url; a.download = 'maxhealth_stock_' + todayStr().replace(/\//g, '-') + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -27764,7 +27904,7 @@ async function mhStockImportStart(pack) {
 function mhStockImportApply(pack) {
   const o = mhStockLoad(), now = Date.now(), items = {};
   Object.entries(pack.items).forEach(([k, it]) => { if (it && it.name && MH_STOCK_BASES.includes(it.base)) items[k] = Object.assign({}, it, { key: k, since: now, lowFlag: false }); });
-  o.items = items; o.ledger = []; o.cooked = pack.cooked && typeof pack.cooked === 'object' ? pack.cooked : {}; delete o.review; delete o.cookedUse; mhStockSave(o);
+  o.items = items; o.ledger = []; o.cooked = pack.cooked && typeof pack.cooked === 'object' ? pack.cooked : {}; o.cookedBy = pack.cookedBy && typeof pack.cookedBy === 'object' ? pack.cookedBy : {}; o.cookedFrozen = pack.cookedFrozen && typeof pack.cookedFrozen === 'object' ? pack.cookedFrozen : {}; delete o.review; delete o.cookedUse; mhStockSave(o);
   const added = mhStockSweep(); window._stockXfer = null; _shopUi.msg = 'Stock replaced from ' + (pack.device || 'the other device') + ': ' + Object.keys(items).length + ' tracked' + (added ? ', ' + added + ' put on your list' : '');
   mhShopView('list'); return Object.keys(items).length;
 }
@@ -27929,9 +28069,9 @@ function mhSlSet(el) {
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
 // is left waiting rather than guessed at: its items come back when that shop does.
 function mhStockSweep() {
-  const o = mhStockLoad(), s = mhShopLoad(); let added = 0, oChanged = false, sChanged = false;
+  const o = mhStockLoad(), s = mhShopLoad(), res = mhPlanReserved(); let added = 0, oChanged = false, sChanged = false;
   Object.values(o.items).forEach(it => {
-    if (!mhStockIsLow(it)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
+    if (!mhStockIsLowRes(it, res)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
     if (it.lowFlag) return;
     const shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : s.shops[0];
     if (!shop) return;
@@ -27959,13 +28099,14 @@ function mhStockCardHtml(s) {
   const sp = 'cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;';
   const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
   const btn = (label, fn) => '<button class="copy-btn" style="font-size:13px;padding:9px 12px;" onclick="' + fn + '">' + label + '</button>';
+  const _res = mhPlanReserved();
   const row = it => { const waiting = mhStockIsLow(it) && it.shop && !s.shops.some(x => x.toLowerCase() === it.shop.toLowerCase());
-    return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level) + mhStockPortionText(it)) + esc(mhStockPaceText(it)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + '</div></div><span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
+    return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level) + mhStockPortionText(it)) + esc(mhStockPaceText(it)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + mhStockRowExtra(it, _res) + '</div></div>' + (it.level > 0 ? '<span data-k="' + esc(it.key) + '" title="Used up or binned" onclick="mhStockWasteAsk(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">🗑</span>' : '') + '<span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
   return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl
     + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">' + (items.length ? items.length + ' tracked' + (low ? ' · <b style="color:var(--red);">' + low + ' low</b>' : '') : 'Nothing tracked yet') + '</div></div>'
-    + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes.</div>'
+    + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
-    + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
+    + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
@@ -27973,7 +28114,7 @@ function mhStockCardHtml(s) {
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
 function mhStockEditView(key, nameIn) {
   const o = mhStockLoad(), it = o.items[key], s = mhShopLoad(), name = it ? it.name : String(nameIn || key);
-  _shopUi.stk = { key: mhShopKey(name), name, isNew: !it, base: it ? it.base : '', pack: it && it.pack ? String(it.pack) : '', serv: it && it.serving ? String(it.serving) : '', shop: it && it.shop ? it.shop : s.shop, level: it && it.level != null ? String(it.level) : '', levelU: it ? it.base : '', reorder: it && it.reorder != null ? String(it.reorder) : '', reorderU: it ? it.base : '', err: '' };
+  _shopUi.stk = { useBy: it && it.useBy ? it.useBy : '', key: mhShopKey(name), name, isNew: !it, base: it ? it.base : '', pack: it && it.pack ? String(it.pack) : '', serv: it && it.serving ? String(it.serving) : '', shop: it && it.shop ? it.shop : s.shop, level: it && it.level != null ? String(it.level) : '', levelU: it ? it.base : '', reorder: it && it.reorder != null ? String(it.reorder) : '', reorderU: it ? it.base : '', err: '' };
   mhShopView('stockedit');
 }
 function mhStkSet(f, v) { if (_shopUi.stk) _shopUi.stk[f] = v; }
@@ -27992,6 +28133,7 @@ function mhStockFormSave() {
   mhStockTrack(f.name, { base: f.base, pack, serving: serv, shop: f.shop });
   if (level !== undefined) mhStockSetLevel(f.key, level);
   if (reorder !== undefined) mhStockSetReorder(f.key, reorder);
+  mhStockSetUseBy(f.key, f.useBy || null);
   const added = mhStockSweep(); _shopUi.stk = null; _shopUi.msg = f.name + ' saved' + (added ? ' and put on your list (running low)' : ''); mhShopView('list'); return true;
 }
 function mhStockUntrackAsk(key) {
@@ -28085,6 +28227,7 @@ function mhShopRender(keepFocus) {
       + lab('Bought at') + '<select id="mhStkShop" onchange="mhStkSet(\'shop\',this.value)" style="' + inp + '">' + shopOpts + '</select>'
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value)" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
+      + lab('Use by (optional)') + '<input id="mhStkUseBy" type="date" value="' + esc(f.useBy || '') + '" oninput="mhStkSet(\'useBy\',this.value)" style="' + inp + '">' + hint('Past this date it stops being suggested and shows as past its use-by. Buying more of it clears the date.')
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;"><button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Save</button>' + btn('Cancel', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Stop tracking</button>') + '</div>';
   } else if (_shopUi.view === 'stocklist') {
     const st = mhSlState(), all = mhSlRows(), rows = mhSlFilter(all), shown = rows.slice(0, st.n), nT = all.filter(r => r.it).length;
