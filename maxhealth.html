@@ -18271,17 +18271,18 @@ async function submitRecipeDiscover() {
   const kind = _recipeDiscoverKind;
   closeRecipeDiscoverModal();
 
-  let request;
+  let request; const pair = !freeform && !!kind;   // Surprise sweet / savoury: one made from what you have, then one new idea with the web as inspiration
+  if (pair) { switchTabById('chat'); addBubble(`🆕 Surprise ${kind} recipes`, 'user'); try { await submitRecipeFromLibrary(kind, true); } catch (_) {} }
   if (freeform) {
     request = `a recipe for ${freeform}`;
   } else if (kind) {
-    request = `a surprising ${kind} recipe idea`;
+    request = `a surprising ${kind} recipe idea, something new that would be interesting to try, taking real inspiration from a recipe you find on the internet`;
   } else {
     request = `an interesting recipe idea suited to a strict ketogenic diet`;
   }
 
   switchTabById('chat');
-  addBubble(freeform ? `🆕 ${freeform}` : `🆕 Surprise ${kind || ''} recipe`, 'user');
+  if (pair) addBubble('🌐 Something new, inspired by the web', 'system'); else addBubble(freeform ? `🆕 ${freeform}` : `🆕 Surprise ${kind || ''} recipe`, 'user');
   const thinkingBubble = addBubble('Thinking…', 'system', 'thinking');
 
   // Calls the AI directly rather than going through processMessage() - that
@@ -18293,7 +18294,7 @@ async function submitRecipeDiscover() {
   // ("interesting keto recipe idea") hit the exact same one on itself) -
   // patching around individual words isn't sustainable for free text, so
   // this bypasses that router entirely and talks to the AI on its own terms.
-  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. The user wants ${request}.${mhStockPreferLine()}
+  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. The user wants ${request}.${mhStockPreferLine()}${pair ? '\nSearch the web for a real, current recipe to take inspiration from, then write your OWN adaptation in your own words (never copy a recipe\'s wording). Start the "intro" with "Inspired by" and the name of the recipe and where it was found.' : ''}
 Respond ONLY with JSON, no markdown, no preamble, in exactly this shape:
 {
   "title": "Recipe name",
@@ -18327,8 +18328,9 @@ CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name
     }
   }
 
+  let _web = pair;   // the first try searches the web; if that cannot be done, the retry is plain
   async function attemptGenerate() {
-    const result = await callHealthAI(systemPrompt, { maxTokens: 900 });
+    const result = await callHealthAI(systemPrompt, _web ? { maxTokens: 1500, webSearch: true } : { maxTokens: 900 });
     if (!result.ok) throw new Error(result.error || 'Could not reach the AI');
     return tryParseRecipeJSON(result.text);
   }
@@ -18338,6 +18340,7 @@ CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name
     try {
       recipe = await attemptGenerate();
     } catch (firstErr) {
+      _web = false;
       // One automatic retry before bothering the user with an error -
       // malformed JSON from the AI is usually non-deterministic, so asking
       // again is genuinely likely to just work the second time.
@@ -18367,13 +18370,13 @@ CRITICAL JSON VALIDITY: no trailing commas before ] or }. If any ingredient name
 // hand, sized to the current macro targets. Reuses the exact same
 // generate/parse/retry/addRecipeBubble pipeline as submitRecipeDiscover —
 // only the prompt differs.
-async function submitRecipeFromLibrary() {
+async function submitRecipeFromLibrary(kind, paired) {
   const _libAll = loadLibrary().filter(f => f && f.name && !isMealEntry(f) && f.kcal > 0), _sfL = mhSuggestFilter(_libAll, []), lib = _sfL.lib;
-  if (!lib.length) { addBubble(_libAll.length && _sfL.active ? '📦 Nothing in your cupboards to build a recipe from right now. Count what you have in Shopping, or switch the stock filter off.' : 'Your library is empty — nothing to build a recipe from yet.', 'system', 'warn'); return; }
+  if (!lib.length) { if (paired) { addBubble('🏠 Nothing in your cupboards to build a ' + kind + ' recipe from right now.', 'system'); return; } addBubble(_libAll.length && _sfL.active ? '📦 Nothing in your cupboards to build a recipe from right now. Count what you have in Shopping, or switch the stock filter off.' : 'Your library is empty — nothing to build a recipe from yet.', 'system', 'warn'); return; }
   closeRecipeDiscoverModal();
 
   switchTabById('chat');
-  addBubble('📦 Suggest a recipe from my library', 'user');
+  if (paired) addBubble('🏠 Made from what you have', 'system'); else addBubble('📦 Suggest a recipe from my library', 'user');
   const thinkingBubble = addBubble('Thinking…', 'system', 'thinking');
 
   // Same three real signals as suggestMealFromLibrary's habit summary —
@@ -18394,7 +18397,7 @@ async function submitRecipeFromLibrary() {
     .map(f => `${f.name} — ${f.kcal}kcal, ${f.protein}g P, ${f.carbs}g C, ${f.fat || 0}g F per ${f.portion || '100g'}`)
     .join('\n');
 
-  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. Build a recipe using ONLY ingredients from the list below — do not introduce anything not on this list. Combine 3-6 of them into something genuinely coherent as a meal, sized to roughly fit within these per-meal targets: ~${Math.round(t.kcal / 3)}kcal, ${Math.round(t.protein / 3)}g protein, keep total carbs low (daily ceiling is ${t.carbs}g, this is one meal of several).
+  const systemPrompt = `You are a recipe assistant for ${mhDietWho()}. Build a recipe using ONLY ingredients from the list below — do not introduce anything not on this list. Combine 3-6 of them into something genuinely coherent as a meal${kind ? ' (make it a ' + kind + ' dish)' : ''}, sized to roughly fit within these per-meal targets: ~${Math.round(t.kcal / 3)}kcal, ${Math.round(t.protein / 3)}g protein, keep total carbs low (daily ceiling is ${t.carbs}g, this is one meal of several).
 
 AVAILABLE INGREDIENTS (name — macros per stated portion):
 ${forPrompt}
@@ -27426,8 +27429,9 @@ function mhStockLoad() {
   if (!o || typeof o !== 'object') o = {};
   if (!o.items || typeof o.items !== 'object' || Array.isArray(o.items)) o.items = {};
   if (!Array.isArray(o.ledger)) o.ledger = [];
-  o.rev = parseInt(o.rev) || 0; o.enabled = o.enabled !== false; return o;
+  o.rev = parseInt(o.rev) || 0; o.enabled = o.enabled === undefined ? Object.keys(o.items).length > 0 : o.enabled !== false; return o;
 }
+// Cupboards and stock starts OFF for anyone who has not counted anything (so a new user gets the app as it has always worked and is told it is there); anyone with counted foods keeps it on.
 // The whole cupboards-and-stock module can be switched off. Off: nothing is counted, logging never touches stock, the list is never added to,
 // meal ideas are not filtered and the cards and buttons go away. Counts are kept, so switching it back on picks up where it was.
 function mhStockOn() { return mhStockLoad().enabled !== false; }
@@ -28447,7 +28451,7 @@ function mhStockCardHtml(s) {
   const sp = 'cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;';
   const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
   const btn = (label, fn) => '<button class="copy-btn" style="font-size:13px;padding:9px 12px;" onclick="' + fn + '">' + label + '</button>';
-  if (o.enabled === false) return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">Off</div></div><div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Cupboards and stock is optional. Switched on, it counts what you have, counts it down as you log meals, puts things on your list when they run low and only suggests meals you can make. Switched off, the app works the old way: nothing is counted or filtered.</div><div id="stockctlBody"><div style="font-size:13px;color:var(--text3);line-height:1.5;padding:2px 0 10px;">Not in use. Nothing is counted, meal ideas are not filtered, and your log and list are untouched.' + (Object.keys(o.items).length ? ' Your ' + Object.keys(o.items).length + ' counted item' + (Object.keys(o.items).length === 1 ? ' is' : 's are') + ' kept for if you turn it back on.' : '') + '</div>' + btn('Turn cupboards &amp; stock on', 'mhStockSetOn(true)') + '</div></div>';
+  if (o.enabled === false) return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;"><b style="color:var(--text);">Switched off.</b> Turn it on to use it.</div></div><div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Cupboards and stock is optional. Switched on, it counts what you have, counts it down as you log meals, puts things on your list when they run low and only suggests meals you can make. Switched off, the app works the old way: nothing is counted or filtered.</div><div id="stockctlBody"><div style="font-size:13px;color:var(--text3);line-height:1.5;padding:2px 0 10px;">Cupboards &amp; stock is switched off, so meal ideas can use anything in your library. Switch it on and the app counts what you have, counts it down as you log, adds things to your list when they run low, and only suggests meals you can make, so some foods will not be offered when they are used up. Off, nothing is counted and your log and list are untouched.' + (Object.keys(o.items).length ? ' Your ' + Object.keys(o.items).length + ' counted item' + (Object.keys(o.items).length === 1 ? ' is' : 's are') + ' kept for if you turn it back on.' : '') + '</div>' + btn('Turn cupboards &amp; stock on', 'mhStockSetOn(true)') + '</div></div>';
   const _res = mhPlanReserved();
   const row = it => { const waiting = mhStockIsLow(it) && it.shop && !s.shops.some(x => x.toLowerCase() === it.shop.toLowerCase());
     return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level) + mhStockPortionText(it)) + esc(mhStockPaceText(it)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + mhStockRowExtra(it, _res) + '</div></div><span data-k="' + esc(it.key) + '" data-store="' + esc(it.store || '') + '" title="Kept in: ' + mhStoreName(it.store).toLowerCase() + ' (tap to change)" onclick="mhStockStoreCycle(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;opacity:' + (it.store ? 1 : 0.45) + ';">' + mhStoreIcon(it.store) + '</span>' + (it.level > 0 ? '<span data-k="' + esc(it.key) + '" title="Used up or binned" onclick="mhStockWasteAsk(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">🗑</span>' : '') + '<span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
@@ -53626,7 +53630,7 @@ function mhHold(fn) {
       <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">🆕 TRY SOMETHING NEW</div>
       <div onclick="closeRecipeDiscoverModal()" style="color:var(--text3);cursor:pointer;font-size:20px;padding:4px;">×</div>
     </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">A genuinely new recipe idea, full ingredients/weights/method — may need things you don't have yet. For what's ready right now from what's already in, use "Next meal idea" instead.</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">A genuinely new recipe idea, full ingredients/weights/method — may need things you don't have yet. <b>Surprise sweet</b> or <b>savoury</b> gives you two: one made from what you have, and one new idea inspired by a recipe found on the web. For what's ready right now from what's already in, use "Next meal idea" instead.</div>
     <input id="recipeDiscoverInput" class="modal-input" placeholder="e.g. Chicken and rice bowl — or leave blank for a surprise" style="width:100%;font-size:14px;padding:12px;margin-bottom:10px;box-sizing:border-box;text-align:left;" onkeydown="if(event.key==='Enter'){event.preventDefault();submitRecipeDiscover();}">
     <div style="display:flex;gap:8px;margin-bottom:10px;">
       <button onclick="document.getElementById('recipeDiscoverInput').value='';_recipeDiscoverKind='sweet';submitRecipeDiscover();" style="flex:1;padding:9px;background:var(--surface2);border:1px solid #ec4899;border-radius:8px;color:#ec4899;font-size:12px;font-weight:600;cursor:pointer;">🍰 Surprise sweet</button>

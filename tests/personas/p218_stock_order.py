@@ -91,6 +91,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("t=>mhOrdParse(t,'Asda').length", "Total £5\n£1.20\n"): f.add('BUG', '2: nothing to read gives no rows')
 
     # UI flow: nothing saved until the button
+    if 'Start stock from an order' in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '3: while the module is off the card only offers to turn it on')
+    ev("mhStockSetOn(true)")
     if 'Start stock from an order' not in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '3: the Stock control card has the button')
     ev("mhOrdOpen()"); page.wait_for_timeout(300)
     if not ev("!!document.getElementById('mhOrdText')"): f.add('BUG', '3: the paste box shows')
