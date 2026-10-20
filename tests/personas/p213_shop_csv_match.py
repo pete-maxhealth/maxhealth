@@ -46,7 +46,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Double Cream (Asda)' in txt.split('Import 6 items')[0].split('Import shop.csv')[1].split('need a quick look')[1].split('Same as')[0] and False: pass
     if ev("n=>mhVariantMatch(n,'Asda').name", 'Double Cream') != 'Double Cream (Asda)': f.add('BUG', 'the CSV shop column supplies the shop when the name has none (pass 2)')
     # answer the questions, import
-    page.click('[data-csv="Toilet roll"] button:has-text("Not food")'); page.click('[data-csv="Zorblax"] button:has-text("Food")')
+    page.click('[data-csv="Toilet roll"] button:has-text("Non-nutritional")'); page.click('[data-csv="Zorblax"] button:has-text("Food")')
     page.select_option('[data-csv="Double Cream"] select', 'Double Cream (Lidl)'); page.click('text=Accept all suggestions'); page.wait_for_timeout(100)
     page.click('#mhCsvGo'); page.wait_for_timeout(200)
     s = ev("mhShopLoad()"); names = {i['name']: i for i in s['items']}
