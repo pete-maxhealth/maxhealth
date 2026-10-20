@@ -33,6 +33,11 @@
   - Each line is linked to your library name where it can be ("British Mature Cheddar" → Cheddar; a food in another category, such as nut butter for butter, is never suggested) and shown in an editable "Track as" box. A name you change is remembered, so next week's order links itself.
   - Not-food lines and never-runs-out foods (garlic paste, salt) arrive unticked. Foods already tracked default to "leave it as it is", with "add on top" or "replace" per line. A unit clash is refused, a bad amount is skipped with a message, and nothing is saved until you press the button.
   - Test: `p218_stock_order.py` (invented order; mutation-checked five ways).
+- **Fridge, freezer or cupboard.** Pete Spence: nothing in a name says sliced onions or mushrooms are frozen, so each food has a **kept in** switch (🗄 cupboard, 🧊 fridge, ❄ freezer), tapped on its Stock row or set in the edit form. A kept food gets a use-by date when you buy it (and when it first gets a count): the food's **own length** if you have set one, else the suggested length from Stock rules (fridge 3 days, freezer 90, both adjustable and limited to sensible numbers). Cooked leftovers keep their own two numbers (2 and 90).
+  - **Your own length is remembered** per food and per place ("Lasts (days)": milk 5 days in your fridge), and used every time you buy it again. Saving the form unchanged never resets a countdown.
+  - Moving a food between places restarts the clock from today (freezer to fridge counts as thawed today); back to the cupboard clears only dates it worked out. **A date you type yourself always wins.**
+  - **Order import:** every line has a kept-in choice. A line under a "Frozen ..." heading on the order page is marked freezer (the only clue it trusts); anything else stays in the cupboard until you say. Dates count from the **order's own date** (read from the page, editable as "Bought on"), so milk delivered on the 17th with 5 days is due on the 22nd. A food already kept somewhere is remembered for the next order.
+  - Test: `p219_stock_storage.py` (mutation-checked six ways).
 
 ## v3.10.1122 – Fasting now handles planned meals (the timer no longer vanishes)
 - Pete Spence: "if you enter a planned meal, the fasting timer disappears and you only get a line."
