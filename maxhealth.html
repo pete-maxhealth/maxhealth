@@ -26582,7 +26582,7 @@ function updateDashboard(skipActivityRender) {
   if (state.todayLog.length === 0) {
     logEl.innerHTML = '<div style="font-size:13px; color:var(--text3); text-align:center; padding:20px 0;">No meals logged yet</div>';
   } else {
-    const _stkOn = Object.keys(mhStockLoad().items).length > 0;
+    const _stkOn = mhStockOn() && Object.keys(mhStockLoad().items).length > 0;
     logEl.innerHTML = state.todayLog.map(e => {
       const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
       const name = e.description.length > 45 ? e.description.slice(0,45)+'…' : e.description;
@@ -27426,8 +27426,13 @@ function mhStockLoad() {
   if (!o || typeof o !== 'object') o = {};
   if (!o.items || typeof o.items !== 'object' || Array.isArray(o.items)) o.items = {};
   if (!Array.isArray(o.ledger)) o.ledger = [];
-  o.rev = parseInt(o.rev) || 0; return o;
+  o.rev = parseInt(o.rev) || 0; o.enabled = o.enabled !== false; return o;
 }
+// The whole cupboards-and-stock module can be switched off. Off: nothing is counted, logging never touches stock, the list is never added to,
+// meal ideas are not filtered and the cards and buttons go away. Counts are kept, so switching it back on picks up where it was.
+function mhStockOn() { return mhStockLoad().enabled !== false; }
+function mhStockSetOn(v) { const o = mhStockLoad(); o.enabled = !!v; mhStockSave(o); try { mhShopRender(); } catch (_) {} try { mhShopCardRender(); } catch (_) {} try { updateDashboard(true); } catch (_) {} showToast(v ? 'Cupboards & stock is on' : 'Cupboards & stock is off'); }
+function mhStockOffAsk() { appConfirm('Turn off cupboards & stock? Nothing will be counted, meal ideas will not be filtered, and the stock cards and buttons go away. Your counts are kept for if you turn it back on.', () => mhStockSetOn(false)); }
 function mhStockSave(o) {
   const now = Date.now(), DAY = 86400000;
   o.ledger = o.ledger.filter(l => l && o.items[l.k] && (now - l.t) < 60 * DAY && l.t >= (o.items[l.k].since || 0)).slice(-4000);
@@ -27438,7 +27443,7 @@ function mhStockIsLow(it) { return !!it && it.level != null && it.reorder != nul
 // Start (or update) tracking an ingredient. Changing what it is counted in clears its amounts, since they would mean something else.
 function mhStockTrack(name, opts) {
   const key = mhShopKey(name); opts = opts || {}; if (!key || !MH_STOCK_BASES.includes(opts.base)) return null;
-  const o = mhStockLoad(), prev = o.items[key], num = v => (v == null || v === '' || !(+v > 0)) ? null : mhStockRound(+v);
+  const o = mhStockLoad(); o.enabled = true; const prev = o.items[key], num = v => (v == null || v === '' || !(+v > 0)) ? null : mhStockRound(+v);
   const it = Object.assign({ name: String(name).trim(), key, level: null, reorder: null, since: 0, lowFlag: false }, prev || {});
   if (prev && prev.base !== opts.base) { it.level = null; it.reorder = null; it.lowFlag = false; }
   it.base = opts.base; it.pack = num(opts.pack); it.serving = num(opts.serving); it.shop = opts.shop != null ? String(opts.shop) : (it.shop || '');
@@ -27555,7 +27560,7 @@ function mhWasteSummary(o) {
 }
 // What planned meals will use (base units per stock key). Plans older than yesterday are treated as not happening.
 function mhPlanReserved() {
-  const res = {}; let o = null, plans = []; try { plans = mhPlanLoad(); } catch (_) {}
+  const res = {}; if (!mhStockOn()) return res; let o = null, plans = []; try { plans = mhPlanLoad(); } catch (_) {}
   if (!plans.length) return res; o = mhStockLoad(); const floor = mhAddDaysISO(-1);
   plans.forEach(p => { if (String(p.date || mhISO()) < floor) return;
     (p.foods || []).forEach(f => { const k = mhShopKey(f && f.name || ''), it = o.items[k]; if (!it || it.level == null) return; const b = mhStockAmountBase(f.amount, it); if (b > 0) res[k] = (res[k] || 0) + b; }); });
@@ -27579,6 +27584,7 @@ function mhUseSoonText(list) { return list.map(x => x.name + (x.kind === 'leftov
 // For "try something new" ideas: a soft steer toward what is in the cupboards and what needs using up. Empty when nothing is counted.
 function mhStockPreferLine() {
   try {
+    if (!mhStockOn()) return '';
     const o = mhStockEffective(), names = Object.values(o.items).filter(it => it.level > 0 && !mhStockExpired(it)).map(it => it.name).slice(0, 30); if (!names.length) return '';
     const soon = mhUseSoon(o);
     return '\nTHE PERSON\'S CUPBOARDS: they have ' + names.join(', ') + ' in stock. Favour these where they suit the idea (not required, it is fine to need a few extra things).' + (soon.length ? ' Needs using up soon: ' + mhUseSoonText(soon) + '. Favour these most.' : '') + '\n';
@@ -27630,7 +27636,7 @@ function mhStockOnLog(entry, dateStr) {
   try {
     const _ao = window._ateOut && Date.now() - window._ateOut < 5000; window._ateOut = null;
     if (!entry || !entry.id || !Array.isArray(entry.items)) return;
-    const o = mhStockLoad(); if (!Object.keys(o.items).length) return;
+    const o = mhStockLoad(); if (o.enabled === false || !Object.keys(o.items).length) return;
     if (_ao || entry.noStock) { if (!entry.noStock) { entry.noStock = true; showToast('🍽 Ate out: your stock was left alone'); } return; }
     const eaten = dateStr && dateStr !== todayStr() ? new Date(dateStr + 'T23:59:59').getTime() : Date.now();
     let skipped = [], took = 0, frac = 1;
@@ -27678,7 +27684,7 @@ function mhStockRecipeNote(r) {
 // "never guess". Count one and it is checked like any other. A recipe is offered only if every ingredient has its figures, and is either
 // in stock, swapped for a counted item that passes the swap gate, or already cooked and waiting.
 const MH_SUGGEST_KEY = 'mh_shopping_suggest_v1';
-function mhSuggestMode() { let m = 'hide'; try { const o = JSON.parse(localStorage.getItem(MH_SUGGEST_KEY) || 'null'); if (o && ['off', 'hide', 'strict'].includes(o.mode)) m = o.mode; } catch (_) {} return m; }
+function mhSuggestMode() { if (!mhStockOn()) return 'off'; let m = 'hide'; try { const o = JSON.parse(localStorage.getItem(MH_SUGGEST_KEY) || 'null'); if (o && ['off', 'hide', 'strict'].includes(o.mode)) m = o.mode; } catch (_) {} return m; }
 function mhSuggestSetMode(m) { if (!['off', 'hide', 'strict'].includes(m)) return; try { localStorage.setItem(MH_SUGGEST_KEY, JSON.stringify({ mode: m })); } catch (_) {} try { mhShopRender(); } catch (_) {} }
 // ─── Stock rules (v3.10.1123): borrowed from AI as suggested defaults, all yours to change (Shopping > Stock control > Stock rules) ──────
 //  * "Never runs out" (the magic porridge pot): foods like salt or cream of tartar, where a jar lasts for ever and you use half a teaspoon.
@@ -28410,6 +28416,7 @@ function mhSlSet(el) {
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
 // is left waiting rather than guessed at: its items come back when that shop does.
 function mhStockSweep() {
+  if (!mhStockOn()) return 0;
   const o = mhStockLoad(), s = mhShopLoad(), res = mhPlanReserved(); let added = 0, oChanged = false, sChanged = false;
   Object.values(o.items).forEach(it => {
     if (!mhStockIsLowRes(it, res)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
@@ -28440,6 +28447,7 @@ function mhStockCardHtml(s) {
   const sp = 'cursor:pointer;color:var(--text3);font-size:14px;padding:2px 6px;';
   const ctl = '<div class="mh-ctl"><span onclick="mhStockCtlMove(\'up\')" style="' + sp + '">▲</span><span onclick="mhStockCtlMove(\'down\')" style="' + sp + '">▼</span><span onclick="mhStockCtlHide()" title="Hide" style="' + sp + '">👁</span><span id="stockctlBodyIcon" onclick="mhCardBody(\'stockctl\')" style="cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;">▾ hide</span></div>';
   const btn = (label, fn) => '<button class="copy-btn" style="font-size:13px;padding:9px 12px;" onclick="' + fn + '">' + label + '</button>';
+  if (o.enabled === false) return '<div class="water-card" id="stockctlCard" style="margin-top:18px;"><div class="water-header" style="display:block;"><div class="water-title">📦 Stock control <span title="Details" onclick="mhCardInfo(\'stockctl\')" class="mh-q">?</span></div>' + ctl + '<div style="font-size:13px;color:var(--text3);margin-bottom:4px;">Off</div></div><div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Cupboards and stock is optional. Switched on, it counts what you have, counts it down as you log meals, puts things on your list when they run low and only suggests meals you can make. Switched off, the app works the old way: nothing is counted or filtered.</div><div id="stockctlBody"><div style="font-size:13px;color:var(--text3);line-height:1.5;padding:2px 0 10px;">Not in use. Nothing is counted, meal ideas are not filtered, and your log and list are untouched.' + (Object.keys(o.items).length ? ' Your ' + Object.keys(o.items).length + ' counted item' + (Object.keys(o.items).length === 1 ? ' is' : 's are') + ' kept for if you turn it back on.' : '') + '</div>' + btn('Turn cupboards &amp; stock on', 'mhStockSetOn(true)') + '</div></div>';
   const _res = mhPlanReserved();
   const row = it => { const waiting = mhStockIsLow(it) && it.shop && !s.shops.some(x => x.toLowerCase() === it.shop.toLowerCase());
     return '<div data-stock="' + esc(it.name) + '" style="display:flex;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;"><div style="font-size:15px;color:var(--text);">' + esc(it.name) + (mhStockIsLow(it) ? ' <span style="font-size:11px;font-weight:700;color:var(--red);">LOW</span>' : '') + '</div><div style="font-size:12px;color:var(--text3);">' + esc(mhStockFmt(it, it.level) + mhStockPortionText(it)) + esc(mhStockPaceText(it)) + (it.reorder != null ? ' · reorder at ' + esc(mhStockFmt(it, it.reorder)) : '') + (it.shop ? ' · ' + esc(it.shop) : '') + (waiting ? ' · waiting for ' + esc(it.shop) : '') + mhStockRowExtra(it, _res) + '</div></div><span data-k="' + esc(it.key) + '" data-store="' + esc(it.store || '') + '" title="Kept in: ' + mhStoreName(it.store).toLowerCase() + ' (tap to change)" onclick="mhStockStoreCycle(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;opacity:' + (it.store ? 1 : 0.45) + ';">' + mhStoreIcon(it.store) + '</span>' + (it.level > 0 ? '<span data-k="' + esc(it.key) + '" title="Used up or binned" onclick="mhStockWasteAsk(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">🗑</span>' : '') + '<span data-k="' + esc(it.key) + '" title="Edit" onclick="mhStockEditView(this.dataset.k)" style="cursor:pointer;padding:8px;font-size:16px;color:var(--text3);">✎</span></div>'; };
@@ -28448,7 +28456,7 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone. 🧾 Add a receipt to stock adds a shop on top of what you have (paste it, choose a file or table, or photograph a paper one); Start stock from an order sets counts from a recent order. Each food can be kept in the cupboard, fridge or freezer, and the days it lasts there are yours to change and are remembered. Toilet roll and bin bags can be counted too, as items.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + (items.map(row).join('') || '<div style="font-size:13px;color:var(--text3);padding:8px 2px;">Track the few things you keep running out of, such as cream, butter or whey.</div>')
-    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('🧾 Add a receipt to stock', "mhOrdOpen('receipt')") + btn('🧾 Start stock from an order', 'mhOrdOpen()') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' + ((o.review || []).filter(k => o.items[k]).length ? btn('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + btn('🧾 Add a receipt to stock', "mhOrdOpen('receipt')") + btn('🧾 Start stock from an order', 'mhOrdOpen()') + btn('📋 Check the cupboards', "mhShopView('stocklist')") + btn('＋ Track an ingredient', "mhShopView('stockadd')") + btn('⚡ The ones I use most', "mhShopView('stocksuggest')") + btn('⏻ Turn off', 'mhStockOffAsk()') + '</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">' + btn('📤 Send stock to another device', 'mhStockExportAsk()') + btn('📥 Receive stock', 'mhStockImportPick()') + '</div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
