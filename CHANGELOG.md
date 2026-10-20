@@ -3,6 +3,7 @@
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
 ## v3.10.1125
+- **Recipe to shopping list now leaves off what is in your cupboards.** With the cupboards on, a counted food with some left (not low, not past its use-by) is not put on the list from a recipe or a meal plan, the checklist labels it "in your cupboards", and the message says how many were left off. Low, out, expired and uncounted foods still go on. Test p228.
 - **Fix: ingredients land on the food of the same name.** An AI-suggested ingredient such as "Olive oil" could be matched to a longer, earlier library entry ("Sardines in olive oil, drained") because both scored 100%. An exact name (ignoring case and spacing) now always wins, and on a tie the closest name (fewest extra words) wins. Test p227. Found while recording the short tour.
 
 ## v3.10.1124 – A Shopping page that flows: sections, a compact cupboards view, one Import button
