@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1129
+- **Fix: a list import put 0 items on the list.** Pete added items to Asda and saw 0. In "A list to shop for" a food with no amount started unticked and Tick all would not tick it (the rule that a stock count needs an amount was applied to a shopping list too), so the button read "Put 0 items on my list". Every listed line now starts ticked and Tick all ticks them; stock imports still need an amount.
+
 ## v3.10.1128
 - **✨ Ask AI on an import row that is not matched yet.** Pete: "AI comparison needed before manual maybe?" A row with no match, or only a closest guess, has an **Ask AI** button. It sends the receipt line and the names of foods you already have (library and cupboards, never your numbers or health data) and the AI must answer with exactly one of those names or NONE. Anything else is thrown away, so it cannot invent a food. A good answer is shown with **Use this**; nothing links until you press it, and then the row turns green Matched. If the AI is unavailable it says so and you match by hand.
 
