@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1126
+- **Fix: the ↑ button now appears on Shopping, including Check the cupboards.** The Shopping scroll area was the one view not reporting its scrolling to the shared ↑/↓ buttons, so ↓ showed but ↑ never did.
+- **Edit entry is easier to close.** Pete needed several presses of Cancel in Today's log. I could not reproduce a hard fault, so this makes it forgiving: Cancel is a full finger-sized button, there is a second "✕ Close" at the top of both edit forms (single and per-ingredient), and the form scrolls to the middle of the screen when it opens, away from the screen edge and the floating arrows.
+
 ## v3.10.1125
 - **Import rows show one clear match state.** Pete asked what actually tells him a line is matched: before, only a small grey caption changed. Each row now shows a green "✓ Matched" (picked by you, remembered, or a sure library match), an amber "⚠ Check this" when it is only the closest guess, or "＋ New food" when nothing matched, and a long matched name is shown in full under the box (test p230).
 - **Fix: Cook Mode is readable on the light theme.** The Cook Mode screen had a fixed dark background but used the theme's text colour, so on a light theme the steps were dark on dark. It now follows the theme. Test p229. Found while recording the tour.
