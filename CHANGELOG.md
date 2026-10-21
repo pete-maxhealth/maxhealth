@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1132
+- **Fridge life rules can use a whole section.** Pete wanted "fruit and veg 14". The rule form has a section picker (Fruit and veg, Fruit, Vegetables, Salad, Meat, Fish, Dairy, Bread) as well as words. Sections follow how the app already sorts each food; apples, bananas, grapes and lemons are filed as Other by the app's sorter, so those need their words typed in a rule. (Backlog: teach the sorter common fruit.)
+
 ## v3.10.1131
 - **Fridge life by type of food, set by you.** Pete: cheese keeps much longer than the blanket 3 days, so every cheese showed "use soon". Stock rules > Fridge life by type of food: type words from the food's name ("cheese, cheddar") and the days it keeps; any fridge food with one of those words uses your number. A food's own length still wins, and nothing is built in or guessed. Dates the app worked out move by the difference (the bought date is kept); a date you typed is never moved; deleting a rule puts it back.
 

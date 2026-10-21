@@ -111,3 +111,4 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Other open: GoDaddy redirect to GitHub Pages, monthly competitor sweep on the 1st, Premium pricing decision, re-record tours with Move/Sleep/Statistics chapters.
 
 - [ ] (v3.10.1125) Guide and README: mention that a recipe leaves off foods already in the cupboards.
+- [ ] The category sorter files Apple, Banana, Grape, Lemon as Other (and Pears as vegetable). It is global (aisles, nutrition groups), so extend CATEGORY_MAP deliberately and run the full sweep. Found 21 Oct 2026 while adding section rules for fridge life.
