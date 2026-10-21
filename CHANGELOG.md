@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1134
+- **Lines you switch to Non-nutritional on a receipt import are no longer left behind.** Pete marked about 20 lines non-nutritional and none reached the cupboards: a line the importer could not read kept an empty amount and stayed unticked, and Tick all skips lines without an amount. Switching a line to Non-nutritional now counts it in items (the receipt quantity, or 1; a weight or volume becomes a count, flagged "check how many"), ticks it, and files it as non-food. New button "Tick non-nutritional only" next to Tick all / Untick all. List imports keep free-text amounts like "2 bottles". Cause inferred from reproducing the steps; Pete's own phone data could not be seen.
+
 ## v3.10.1133
 - **Add a non-nutritional item to the cupboards by hand.** Pete could not find non-food stock: it only came from receipts, and the Add a food screen had no way to add one. Type a name there and a second choice, "Add as non-nutritional (toilet roll, cleaning, pet food)", counts it in each, flags it non-food and keeps it out of the food library. The Non-nutritional chip then shows in My cupboards.
 
