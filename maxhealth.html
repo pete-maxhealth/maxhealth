@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1139'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1140'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27653,6 +27653,11 @@ function mhStockAmountBase(amount, it) {
   if (/^(portion|portions|serving|servings)$/.test(w)) return it.serving > 0 ? n * it.serving : null;
   return null;
 }
+// A logged food whose name differs from the stock item only by the shop's brand ("Double Cream" vs "Double Cream (Asda)") is the same product:
+// compare the names with any (bracketed) text and the word asda taken out. Exactly one stock item must match; two or more is ambiguous and
+// is left alone (v3.10.1140). Returns the stock key, 'many', or null.
+function mhStockLooseKey(k) { const x = String(k || '').replace(/\([^)]*\)/g, ' ').replace(/\basda\b/g, ' ').replace(/\s+/g, ' ').trim(); return x || String(k || ''); }
+function mhStockLooseMatch(o, k) { const lk = mhStockLooseKey(k), hits = Object.keys(o.items).filter(x => o.items[x].level != null && mhStockLooseKey(x) === lk); return hits.length === 1 ? hits[0] : hits.length > 1 ? 'many' : null; }
 // dateStr: the day the food was eaten (past days that fall before the last stock-take are ignored: that count already covers them).
 function mhStockOnLog(entry, dateStr) {
   try {
@@ -27671,7 +27676,8 @@ function mhStockOnLog(entry, dateStr) {
       if (frac <= 0) return;
     }
     entry.items.forEach(f => {
-      const k = mhShopKey(f && f.name || ''), it = o.items[k];
+      let k = mhShopKey(f && f.name || ''), it = o.items[k];
+      if (!it) { const m = mhStockLooseMatch(o, k); if (m === 'many') { skipped.push((f && f.name || 'a food') + ' (matches more than one of your items)'); return; } if (m) { k = m; it = o.items[k]; } }
       if (!it || it.level == null) return;
       if (eaten < (it.since || 0)) return;
       const b = mhStockAmountBase(f.amount, it);
