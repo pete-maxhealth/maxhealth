@@ -3,6 +3,7 @@
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
 ## v3.10.1127
+- **"✓ Add this one now" on every import row.** Pete wanted the import to save as he goes. A ticked row with an amount can be put into the cupboards straight away; it then locks as "✓ Added to your cupboards" and the bottom button adds only what is left, so nothing is counted twice (also after a reload). The import is logged once for the duplicate warning. Untick/undo is not offered: fix a count in Check the cupboards.
 - **CSV import rows show the same match state as the receipt import.** Each food row says "✓ Matched", "⚠ Check this" (a suggestion you have not confirmed yet) or "＋ New food". A row you have answered now stays on screen and turns green instead of disappearing, and the "need a quick look" count is only what is still open.
 
 ## v3.10.1126
