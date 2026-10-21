@@ -28232,7 +28232,25 @@ function mhOrdShopGuess(text, s) {
   let best = null; MH_SHOP_NAMES.forEach(x => { const m = String(text).match(x[1]); if (m && (!best || m.index < best.at)) best = { at: m.index, nm: x[0], re: x[1] }; });
   if (!best) return null; const have = s.shops.find(n => n.toLowerCase() === best.nm.toLowerCase() || best.re.test(n)); return { name: have || best.nm, isNew: !have };
 }
-function mhOrdOpen(kind) { _shopUi.ord = null; _shopUi.ordKind = kind === 'receipt' ? 'receipt' : kind === 'list' ? 'list' : 'start'; mhShopView('orderimport'); }
+function mhOrdFresh(kind) { _shopUi.ord = null; _shopUi.ordKind = kind === 'receipt' ? 'receipt' : kind === 'list' ? 'list' : 'start'; mhShopView('orderimport'); }
+// ── An import in progress is saved on this phone after every change (v3.10.1126) ─────────────────────────────────────────────────
+// Ticks, amounts, names, matches, the shop and the date all survive leaving the screen, a phone call or a reload. Opening Import again
+// picks the same list up; "Start again" throws it away; applying it (or starting again) clears the saved copy.
+const MH_ORD_DRAFT_KEY = 'mh_ord_draft_v1';
+// Only the review stage is kept; the column-mapping step is quick to redo.
+function mhOrdDraftSave() { try { const d = _shopUi.ord; if (!d || d.stage) { localStorage.removeItem(MH_ORD_DRAFT_KEY); return; } const c = Object.assign({}, d, { pick: null }); localStorage.setItem(MH_ORD_DRAFT_KEY, JSON.stringify({ at: Date.now(), ordKind: _shopUi.ordKind, ord: c })); } catch (_) {} }
+function mhOrdDraftGet() { try { const j = JSON.parse(localStorage.getItem(MH_ORD_DRAFT_KEY) || 'null'); if (j && j.ord && !j.ord.stage && Array.isArray(j.ord.rows) && j.ord.rows.length) return j; } catch (_) {} return null; }
+function mhOrdDraftClear() { try { localStorage.removeItem(MH_ORD_DRAFT_KEY); } catch (_) {} }
+function mhOrdOpen(kind) {
+  const want = kind === 'receipt' ? 'receipt' : kind === 'list' ? 'list' : 'start', j = mhOrdDraftGet();
+  if (j && (j.ord.kind || j.ordKind) === want) {
+    _shopUi.ord = j.ord; _shopUi.ordKind = want; const n = j.ord.rows ? j.ord.rows.length : 0;
+    _shopUi.msg = n ? 'Picked up where you left off: ' + n + ' lines, saved on this phone as you went. Start again (at the bottom) throws it away.' : '';
+    mhShopView('orderimport'); return;
+  }
+  mhOrdFresh(kind);
+}
+function mhOrdDiscard() { const k = _shopUi.ordKind; mhOrdDraftClear(); mhOrdFresh(k); }
 function mhOrdKind(v) { _shopUi.ordKind = v === 'receipt' ? 'receipt' : v === 'list' ? 'list' : 'start'; const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhShopRender(); const e2 = document.getElementById('mhOrdText'); if (e2) e2.value = t; }
 function mhOrdRead() { const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhOrdLoad(t, 'what you pasted'); }
 function mhOrdPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,.tsv,text/csv,text/plain'; i.onchange = async () => { const f = i.files && i.files[0]; if (f) mhOrdLoad(await f.text(), f.name); }; i.click(); }
@@ -28358,6 +28376,10 @@ function mhOrdApply() {
   _shopUi.msg = (n ? (rc ? 'Added ' + n + ' item' + (n === 1 ? '' : 's') + ' to stock' : 'Stock started for ' + n + ' item' + (n === 1 ? '' : 's')) + (bad.length ? ', ' + bad.length + ' skipped (' + bad.slice(0, 2).join('; ') + ')' : '') + (off ? ', ' + off + ' taken off your list' : '') + (added ? ', ' + added + ' put on your list' : '') + '. Counts are what arrived: use Check the cupboards to adjust anything already used.' : (_shopUi.msg || 'Nothing ticked, so nothing changed'));
   mhShopView('list');
 }
+['mhOrdLoad','mhOrdRole','mhOrdHead','mhOrdSet','mhOrdKindSet','mhOrdTick','mhOrdAll','mhOrdBought','mhOrdShop','mhOrdShopAdd','mhOrdSuffix','mhOrdClear','mhOrdDupOk','mhOrdLink','mhOrdApplyList','mhOrdApply'].forEach(n => {
+  const o = window[n]; if (typeof o !== 'function') return;
+  window[n] = function () { const r = o.apply(this, arguments); mhOrdDraftSave(); return r; };   // saves after every change; clears itself once the import is applied
+});
 function mhOrdViewHtml(s, esc, btn) {
   const d = _shopUi.ord, kind = (d && d.kind) || _shopUi.ordKind || 'start', rc = kind === 'receipt', ls = kind === 'list', inp = 'width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
   const sel = 'padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
@@ -28399,7 +28421,7 @@ function mhOrdViewHtml(s, esc, btn) {
     + (rc ? '<label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text2);margin-bottom:6px;"><input id="mhOrdClear" type="checkbox" ' + (d.clearList ? 'checked ' : '') + 'onchange="mhOrdClear(this.checked)" style="margin-top:2px;"><span>Take what I bought off my shopping list</span></label>' : '')
     + (ls ? '' : '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><span style="font-size:12px;color:var(--text3);">Bought on</span><input id="mhOrdBought" type="date" value="' + esc(d.bought || '') + '" onchange="mhOrdBought(this.value)" style="' + inp + 'max-width:170px;"><span style="font-size:11px;color:var(--text3);">fridge and freezer use-by dates count from this day</span></div>')
     + d.rows.map(rowH).join('')
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhOrdGo" class="copy-btn" onclick="mhOrdApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">' + (rc ? 'Add ' + nOn + ' item' + (nOn === 1 ? '' : 's') + ' to my cupboards' : ls ? 'Put ' + nOn + ' item' + (nOn === 1 ? '' : 's') + ' on my list' : 'Start my cupboards with ' + nOn + ' item' + (nOn === 1 ? '' : 's')) + '</button>' + btn('Start again', 'mhOrdOpen(_shopUi.ordKind)', 'font-size:14px;padding:11px 14px;') + btn('Cancel', "_shopUi.ord=null;mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhOrdGo" class="copy-btn" onclick="mhOrdApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">' + (rc ? 'Add ' + nOn + ' item' + (nOn === 1 ? '' : 's') + ' to my cupboards' : ls ? 'Put ' + nOn + ' item' + (nOn === 1 ? '' : 's') + ' on my list' : 'Start my cupboards with ' + nOn + ' item' + (nOn === 1 ? '' : 's')) + '</button>' + btn('Start again', 'mhOrdDiscard()', 'font-size:14px;padding:11px 14px;') + btn('Leave it for now (saved)', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
 }
 // ── Cupboard check: one long list, boxes on every row, each change saves as you go (v3.10.1121) ────────────────────────────────────
 // Walk the cupboards with the list open. Type what you have (and, if you like, where it is bought, what one serving is, and when to

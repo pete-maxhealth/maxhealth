@@ -104,7 +104,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not any(n == 'Toilet Roll (Asda)' and nf and c == 'nonfood' for n, nf, c in sl): f.add('BUG', f'6: a non-food item that runs low goes on the list as non-food: {sl}')
     if not any(n == 'Cheddar' for n, nf, c in sl): f.add('BUG', f'6: low cheddar is on the list: {sl}')
     RC = "ASDA\nCHEDDAR 400G 2.50\nTOILET ROLL 9 PACK 4.00\nBIN BAGS 20 PACK 2.00\nBAKED BEANS 410G 0.80\n17 Oct 2026\n"
-    ev("mhOrdOpen('receipt')"); page.fill('#mhOrdText', RC); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("mhOrdDraftClear(); mhOrdOpen('receipt')"); page.fill('#mhOrdText', RC); page.click('#mhOrdRead'); page.wait_for_timeout(400)
     d = ev("({kind:_shopUi.ord.kind, shop:_shopUi.ord.shop, suffix:_shopUi.ord.suffix, clear:_shopUi.ord.clearList, bought:_shopUi.ord.bought, n:_shopUi.ord.rows.length, modes:_shopUi.ord.rows.map(r=>r.mode)})")
     if d['kind'] != 'receipt' or d['shop'] != 'Asda' or not d['suffix'] or not d['clear'] or d['n'] != 4: f.add('BUG', f'6: receipt route, shop read from the text, suffix and list clean-up on: {d}')
     if d['bought'] != '2026-10-17': f.add('BUG', f'6: the date in the text is the bought date: {d["bought"]}')
@@ -136,7 +136,7 @@ with fresh_server() as root, sync_playwright() as pw:
 
     # 7: manual match and create new (library only, back to the list)
     RC2 = "MYSTERY SPREAD 300G 2.00\nNUT LOAF 400G 3.00\nCHEDDAR 200G 1.50\n"
-    ev("mhOrdOpen('receipt')"); page.fill('#mhOrdText', RC2); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("mhOrdDraftClear(); mhOrdOpen('receipt')"); page.fill('#mhOrdText', RC2); page.click('#mhOrdRead'); page.wait_for_timeout(400)
     i0 = ev("_shopUi.ord.rows.findIndex(r=>/MYSTERY/.test(r.name))"); i1 = ev("_shopUi.ord.rows.findIndex(r=>/NUT LOAF/.test(r.name))")
     if not ev("_shopUi.ord.rows[%d].from === ''" % i0): f.add('BUG', '7: an unknown food shows as new/unmatched')
     if 'not matched' not in page.locator('#mhShopBody, body').first.inner_text(): f.add('BUG', '7: the screen counts the unmatched lines')
