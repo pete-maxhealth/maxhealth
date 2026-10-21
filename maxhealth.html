@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1127'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1128'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28318,6 +28318,35 @@ function mhOrdPickListHtml() {
   const d = _shopUi.ord, p = d && d.pick, r = p && d.rows[p.i]; if (!r) return ''; const esc = mhPlanEsc, c = mhOrdPickCands(p.q, mhOrdClean(r.name));
   return (c.length ? c.map(n => '<button class="copy-btn" data-i="' + p.i + '" data-n="' + esc(n) + '" onclick="mhOrdLink(+this.dataset.i,this.dataset.n,\'picked by you\')" style="font-size:13px;padding:8px 12px;margin:0 6px 6px 0;">' + esc(n) + '</button>').join('') : '<div style="font-size:12px;color:var(--text3);">Nothing in your library or stock matches that.</div>');
 }
+// ── Ask the AI which of YOUR foods a receipt line is (v3.10.1128) ──────────────────────────────────────────────────────────────────
+// It only ever chooses from names you already have (library and cupboards), or says none. It cannot make up a food or a number, a reply that
+// is not exactly one of your names is thrown away, and you still press "Use this": nothing links on its own.
+function mhOrdAiNames(seed) {
+  const names = new Map(); mhShopKnown().forEach(x => names.set(x.key, x.name)); Object.values(mhStockLoad().items).forEach(it => names.set(it.key, it.name));
+  const rank = mhOrdPickCands('', seed), first = rank.filter(n => n), rest = [...names.values()].filter(n => !first.includes(n)).sort((a, b) => a.localeCompare(b));
+  return first.concat(rest).slice(0, 150);
+}
+async function mhOrdAskAI(i) {
+  const d = _shopUi.ord, r = d && d.rows[i]; if (!r) return;
+  d.pick = { i, q: '', ai: { busy: true } }; mhShopRender();
+  const names = mhOrdAiNames(mhOrdClean(r.name)), line = String(r.name || '').trim();
+  let out = { none: true, note: '' };
+  if (!names.length) out = { none: true, note: 'You have no foods saved yet to compare with.' };
+  else {
+    const res = await callHealthAI('A shop receipt line reads: "' + line + '".\nHere are the foods the person already has, one per line:\n' + names.join('\n') + '\n\nIs the receipt line the same product as one of these foods? Reply with ONLY that food\'s name, copied exactly from the list. If none is clearly the same product, reply with exactly: NONE. Do not invent a name, do not explain.', { maxTokens: 60 });
+    if (!res || !res.ok || !res.text) out = { none: true, note: 'The AI is not available right now (' + ((res && (res.error || res.reason)) || 'no answer') + '). Pick by hand, or try again later.' };
+    else { const t = String(res.text).trim().replace(/^["'`]+|["'`.]+$/g, ''), hit = names.find(n => n.toLowerCase() === t.toLowerCase()); out = hit ? { name: hit } : { none: true, note: 'The AI did not find a clear match in your foods.' }; }
+  }
+  const d2 = _shopUi.ord; if (!d2 || !d2.pick || d2.pick.i !== i) return;
+  d2.pick.ai = out; mhShopRender();
+}
+function mhOrdAiHtml(pk) {
+  const a = pk && pk.ai; if (!a) return ''; const esc = mhPlanEsc, i = pk.i;
+  const box = 'margin-bottom:8px;padding:8px 10px;border-radius:8px;background:var(--surface);border:1px solid var(--border);font-size:13px;color:var(--text);';
+  if (a.busy) return '<div data-ai style="' + box + '">✨ Asking the AI which of your foods this is…</div>';
+  if (a.name) return '<div data-ai style="' + box + '">✨ The AI thinks this is <b>' + esc(a.name) + '</b>. It only chose from your own foods, so check it is right.<div style="margin-top:6px;"><button class="copy-btn" data-i="' + i + '" data-n="' + esc(a.name) + '" onclick="mhOrdLink(+this.dataset.i,this.dataset.n,\'picked by you\')" style="font-size:13px;padding:8px 12px;background:var(--accent);color:#fff;">Use this</button></div></div>';
+  return '<div data-ai style="' + box + 'color:var(--text2);">✨ ' + esc(a.note || 'No clear match.') + '</div>';
+}
 function mhOrdPickOpen(i) { const d = _shopUi.ord; if (!d) return; d.pick = d.pick && d.pick.i === i ? null : { i, q: '' }; mhShopRender(); setTimeout(() => { const e = document.getElementById('mhOrdPickQ'); if (e) e.focus(); }, 0); }
 function mhOrdPickQ(v) { const d = _shopUi.ord; if (!d || !d.pick) return; d.pick.q = v; const el = document.getElementById('mhOrdPickList'); if (el) el.innerHTML = mhOrdPickListHtml(); }
 // Point a line at a food you already have (picked, or just saved). Its existing count, never-runs-out and kind follow the food.
@@ -28410,9 +28439,9 @@ function mhOrdViewHtml(s, esc, btn) {
       : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 0 24px;"><div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Put in my cupboards as</div><input data-i="' + i + '" value="' + esc(r.track) + '" oninput="mhOrdSet(+this.dataset.i,\'track\',this.value)" style="' + inp + '">' + mhOrdMatchBadge(r, esc) + '</div>'
     + '<div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Have' + (r.check ? ' (check)' : '') + (r.hint && !r.amount ? ' (' + esc(r.hint) + ')' : '') + '</div><input data-i="' + i + '" value="' + esc(r.amount) + '" placeholder="e.g. 800 g or 12" oninput="mhOrdSet(+this.dataset.i,\'amount\',this.value)" style="' + inp + '"></div></div>')
     + (mhOrdName(r, d) !== String(r.track || '').trim() ? '<div data-saveas style="margin:4px 0 0 24px;font-size:12px;color:var(--text3);">Will be saved as <b style="color:var(--text);">' + esc(mhOrdName(r, d)) + '</b></div>' : '')
-    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!ls && r.on && !need(r) ? btn('✓ Add this one now', 'mhOrdApply(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
+    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!r.done && r.kind === 'food' && (!r.from || r.from === 'closest in your library') ? btn('✨ Ask AI', 'mhOrdAskAI(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!ls && r.on && !need(r) ? btn('✓ Add this one now', 'mhOrdApply(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
     + '<select data-i="' + i + '" onchange="mhOrdKindSet(+this.dataset.i,this.value)" style="' + sel + '"><option value="food"' + (r.kind === 'food' ? ' selected' : '') + '>🍎 Food</option><option value="nonfood"' + (r.kind === 'nonfood' ? ' selected' : '') + '>🧻 Non-nutritional</option></select></div>'
-    + (d.pick && d.pick.i === i ? '<div data-pick style="margin:8px 0 0 24px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Which food is this? Pick one, or search.</div><input id="mhOrdPickQ" value="' + esc(d.pick.q) + '" placeholder="Search your foods" oninput="mhOrdPickQ(this.value)" style="' + inp + 'margin-bottom:8px;"><div id="mhOrdPickList">' + mhOrdPickListHtml() + '</div><div style="margin-top:4px;">' + btn('＋ It is not in my library: create it', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') + '</div></div>' : '')
+    + (d.pick && d.pick.i === i ? '<div data-pick style="margin:8px 0 0 24px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Which food is this? Pick one, or search.</div>' + mhOrdAiHtml(d.pick) + '<input id="mhOrdPickQ" value="' + esc(d.pick.q) + '" placeholder="Search your foods" oninput="mhOrdPickQ(this.value)" style="' + inp + 'margin-bottom:8px;"><div id="mhOrdPickList">' + mhOrdPickListHtml() + '</div><div style="margin-top:4px;">' + btn('＋ It is not in my library: create it', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') + '</div></div>' : '')
     + (ls ? '' : '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Kept in <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'store\',this.value)" style="' + sel + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((r.store || '') === x ? ' selected' : '') + '>' + mhStoreIcon(x) + ' ' + mhStoreName(x) + '</option>').join('') + '</select>' + (r.storeNote ? ' <span style="color:var(--text3);">' + esc(r.storeNote) + '</span>' : '') + '</div>')
     + (r.existing && !ls ? '<div style="margin:6px 0 0 24px;font-size:12px;color:var(--text2);">Already in your cupboards at ' + esc(mhOrdFmt(r.existing.level, r.existing.base)) + ': <select data-i="' + i + '" onchange="mhOrdSet(+this.dataset.i,\'mode\',this.value)" style="' + sel + '"><option value="leave"' + (r.mode === 'leave' ? ' selected' : '') + '>Leave it as it is</option><option value="add"' + (r.mode === 'add' ? ' selected' : '') + '>Add this on top</option><option value="set"' + (r.mode === 'set' ? ' selected' : '') + '>Replace with this</option></select></div>' : '') + '</div>';
   const shopSel = '<select id="mhOrdShop" onchange="mhOrdShop(this.value)" style="' + inp + 'max-width:240px;">' + (d.shops || s.shops).map(n => '<option value="' + esc(n) + '"' + (n === d.shop ? ' selected' : '') + '>' + esc(n) + (s.shops.includes(n) ? '' : ' (new)') + '</option>').join('') + '<option value="__new">＋ Another shop…</option></select>';
