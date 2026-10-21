@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1130'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1131'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27511,7 +27511,9 @@ function mhStockSetUseBy(key, iso) {
 const MH_STORES = ['', 'fridge', 'freezer'];
 function mhStoreName(s) { return s === 'fridge' ? 'Fridge' : s === 'freezer' ? 'Freezer' : 'Cupboard'; }
 function mhStoreIcon(s) { return s === 'fridge' ? '🧊' : s === 'freezer' ? '❄' : '🗄'; }
-function mhItemLife(it, store) { store = store === undefined ? it.store : store; if (!store) return null; const own = it.life && it.life[store], r = mhRulesLoad(); return own > 0 ? own : (store === 'freezer' ? r.freezerItem : r.fridgeItem); }
+// Fridge life rules you type yourself (v3.10.1131): words in a food's name and a number of days, e.g. "cheese, cheddar" = 28. None are built in.
+function mhLifeRuleDays(name, r) { const n = String(name || '').toLowerCase(); const hit = (r.lifeRules || []).find(x => x.words.some(w => n.includes(w))); return hit ? hit.days : 0; }
+function mhItemLife(it, store) { store = store === undefined ? it.store : store; if (!store) return null; const own = it.life && it.life[store], r = mhRulesLoad(); if (own > 0) return own; const lr = store === 'fridge' ? mhLifeRuleDays(it.name, r) : 0; return lr > 0 ? lr : (store === 'freezer' ? r.freezerItem : r.fridgeItem); }
 function mhStockAutoDate(it, fromISO) {
   const n = mhItemLife(it); if (!n) return false;
   const d = fromISO && /^\d{4}-\d{2}-\d{2}$/.test(fromISO) ? new Date(fromISO + 'T12:00:00') : new Date(); d.setDate(d.getDate() + n);
@@ -27714,13 +27716,13 @@ function mhSuggestSetMode(m) { if (!['off', 'hide', 'strict'].includes(m)) retur
 const MH_RULES_KEY = 'mh_shopping_rules_v1';
 const MH_RULE_CATS = ['meat', 'fish', 'protein', 'dairy', 'vegetable', 'salad', 'fruit', 'grain', 'bread', 'breakfast cereal', 'fat', 'savoury', 'sweet', 'herbs and spices', 'alcohol'];
 const MH_RULE_CAT_NAMES = { 'breakfast cereal': 'Cereal', fat: 'Oils & fats', 'herbs and spices': 'Herbs & spices', savoury: 'Sauces & savoury' };
-function mhRulesDefaults() { return { neverCats: ['herbs and spices'], neverNames: ['salt', 'cream of tartar'], portion: { 'herbs and spices': { n: 5, u: 'g' }, fat: { n: 15, u: 'g' } }, fallback: { n: 100, u: 'g' }, fridge: 2, frozen: 90, fridgeItem: 3, freezerItem: 90 }; }
+function mhRulesDefaults() { return { neverCats: ['herbs and spices'], neverNames: ['salt', 'cream of tartar'], portion: { 'herbs and spices': { n: 5, u: 'g' }, fat: { n: 15, u: 'g' } }, fallback: { n: 100, u: 'g' }, fridge: 2, frozen: 90, fridgeItem: 3, freezerItem: 90, lifeRules: [] }; }
 function mhRulesLoad() {
   const d = mhRulesDefaults(); let o = null; try { o = JSON.parse(localStorage.getItem(MH_RULES_KEY) || 'null'); } catch (_) {}
   if (!o || typeof o !== 'object') return d;
   const okP = v => v && v.n > 0 && (v.u === 'g' || v.u === 'ml');
   const portion = {}; if (o.portion && typeof o.portion === 'object') Object.keys(o.portion).forEach(k => { if (okP(o.portion[k])) portion[k] = { n: +o.portion[k].n, u: o.portion[k].u }; });
-  return { neverCats: Array.isArray(o.neverCats) ? o.neverCats.filter(c => typeof c === 'string') : d.neverCats, neverNames: Array.isArray(o.neverNames) ? o.neverNames.filter(c => typeof c === 'string').map(c => mhShopKey(c)).filter(Boolean) : d.neverNames, portion: o.portion ? portion : d.portion, fallback: okP(o.fallback) ? { n: +o.fallback.n, u: o.fallback.u } : d.fallback, fridge: o.fridge >= 1 && o.fridge <= 14 ? Math.round(o.fridge) : d.fridge, frozen: o.frozen >= 7 && o.frozen <= 365 ? Math.round(o.frozen) : d.frozen, fridgeItem: o.fridgeItem >= 1 && o.fridgeItem <= 30 ? Math.round(o.fridgeItem) : d.fridgeItem, freezerItem: o.freezerItem >= 7 && o.freezerItem <= 730 ? Math.round(o.freezerItem) : d.freezerItem };
+  return { neverCats: Array.isArray(o.neverCats) ? o.neverCats.filter(c => typeof c === 'string') : d.neverCats, neverNames: Array.isArray(o.neverNames) ? o.neverNames.filter(c => typeof c === 'string').map(c => mhShopKey(c)).filter(Boolean) : d.neverNames, portion: o.portion ? portion : d.portion, fallback: okP(o.fallback) ? { n: +o.fallback.n, u: o.fallback.u } : d.fallback, fridge: o.fridge >= 1 && o.fridge <= 14 ? Math.round(o.fridge) : d.fridge, frozen: o.frozen >= 7 && o.frozen <= 365 ? Math.round(o.frozen) : d.frozen, fridgeItem: o.fridgeItem >= 1 && o.fridgeItem <= 30 ? Math.round(o.fridgeItem) : d.fridgeItem, freezerItem: o.freezerItem >= 7 && o.freezerItem <= 730 ? Math.round(o.freezerItem) : d.freezerItem, lifeRules: Array.isArray(o.lifeRules) ? o.lifeRules.filter(x => x && Array.isArray(x.words) && x.words.length && x.days >= 1 && x.days <= 365).map(x => ({ words: x.words.map(w => String(w).toLowerCase().trim()).filter(Boolean), days: Math.round(x.days) })).filter(x => x.words.length) : [] };
 }
 function mhRulesSave(r) { try { localStorage.setItem(MH_RULES_KEY, JSON.stringify(r)); } catch (_) {} }
 function mhRulesEdit(fn) { const r = mhRulesLoad(); fn(r); mhRulesSave(r); try { mhShopRender(); } catch (_) {} }
@@ -27741,6 +27743,20 @@ function mhRulesKeepSet(which, v) {
   const n = parseInt(v); const lim = { frozen: [7, 365], fridge: [1, 14], fridgeItem: [1, 30], freezerItem: [7, 730] }[which] || [1, 14];
   mhRulesEdit(r => { if (n >= lim[0] && n <= lim[1]) r[which] = n; else _shopUi.msg = 'Type a whole number of days between ' + lim[0] + ' and ' + lim[1]; });
 }
+// Changing a life rule moves the use-by of dates the app worked out (never one you typed) by the difference, so the bought date is kept.
+function mhRulesLifeEdit(fn) {
+  const o = mhStockLoad(), before = {}; Object.values(o.items).forEach(it => { before[it.key] = it.store ? mhItemLife(it) : null; });
+  mhRulesEdit(fn);
+  const o2 = mhStockLoad(); let ch = 0;
+  Object.values(o2.items).forEach(it => { if (!it.store || !it.useByAuto || !it.useBy || !(it.level > 0)) return; const a = before[it.key], b = mhItemLife(it); if (!a || !b || a === b) return; const d = new Date(it.useBy + 'T12:00:00'); d.setDate(d.getDate() + (b - a)); it.useBy = mhISO(d); ch++; });
+  if (ch) { mhStockSave(o2); try { mhShopRender(); } catch (_) {} }
+}
+function mhRulesLifeAdd() {
+  const w = document.getElementById('mhLifeWords'), dd = document.getElementById('mhLifeDays'), words = String(w ? w.value : '').split(',').map(x => x.toLowerCase().trim()).filter(Boolean), days = parseInt(dd ? dd.value : '');
+  if (!words.length || !(days >= 1 && days <= 365)) { _shopUi.msg = 'Type the words in the food\'s name (like cheese, cheddar) and a whole number of days from 1 to 365'; try { mhShopRender(); } catch (_) {} return; }
+  mhRulesLifeEdit(r => { r.lifeRules = (r.lifeRules || []).concat({ words, days }); });
+}
+function mhRulesLifeDel(i) { mhRulesLifeEdit(r => { r.lifeRules = (r.lifeRules || []).filter((x, k) => k !== i); }); }
 function mhRulesReset() { try { localStorage.removeItem(MH_RULES_KEY); } catch (_) {} try { mhShopRender(); } catch (_) {} }
 function mhIsNever(name, cats, st) {
   if (st && st.level != null) return false;                        // you count it, so it is checked like anything else
@@ -27893,6 +27909,9 @@ function mhRulesHtml() {
     + '<div style="font-size:13px;color:var(--text);font-weight:600;margin:14px 0 2px;">Fresh and frozen food you buy</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">Tell a food it is kept in the fridge or freezer (the small icon on its stock row) and it gets a use-by date when you buy it. These are the suggested lengths; a food\'s own length (milk, say, lasts 5 days) overrides them and is remembered.</div>'
     + '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">Fridge (days)</div><input data-rule-keep="fridgeItem" inputmode="numeric" value="' + r.fridgeItem + '" onchange="mhRulesKeepSet(\'fridgeItem\',this.value)" style="width:90px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"></div>'
     + '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">Freezer (days)</div><input data-rule-keep="freezerItem" inputmode="numeric" value="' + r.freezerItem + '" onchange="mhRulesKeepSet(\'freezerItem\',this.value)" style="width:90px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"></div>'
+    + '<div style="font-size:13px;color:var(--text);font-weight:600;margin:14px 0 2px;">Fridge life by type of food</div><div style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:6px;">Cheese keeps longer than milk. Type words that appear in the food\'s name and how many days it keeps in your fridge. Any fridge food with one of those words uses your number instead of the one above. A food\'s own length still wins. Nothing is filled in for you.</div>'
+    + (r.lifeRules || []).map((x, i) => '<div data-life-rule="' + i + '" style="display:flex;align-items:center;gap:8px;padding:5px 0;"><div style="flex:1;font-size:13px;color:var(--text);">' + esc(x.words.join(', ')) + ' <span style="color:var(--text3);">: ' + x.days + ' days</span></div><b onclick="mhRulesLifeDel(' + i + ')" style="cursor:pointer;color:var(--text3);padding:6px;">✕</b></div>').join('')
+    + '<div style="display:flex;gap:6px;align-items:center;margin-top:4px;"><input id="mhLifeWords" placeholder="Words, e.g. cheese, cheddar" style="' + inp + '"><input id="mhLifeDays" inputmode="numeric" placeholder="days" style="width:70px;box-sizing:border-box;padding:8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);"><button class="copy-btn" onclick="mhRulesLifeAdd()" style="padding:8px 12px;">Add</button></div>'
     + '<div style="margin-top:10px;"><button class="copy-btn" onclick="mhRulesReset()" style="padding:8px 12px;font-size:12px;">Back to the suggested defaults</button></div>')
     + '</div>';
 }

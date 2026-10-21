@@ -101,7 +101,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 ## From the 20 Oct 2026 cupboard session
 - [ ] Retire the old CSV import screen (`mhCsvPlan`, view `csvimport`, `mhShopCsvPick`) now that Import covers it; move the CSV-only checks in p213 and p223 onto the Import screen first. Nothing in the UI opens it any more.
-- [ ] Fridge life of 3 days for everything makes every fridge food "use soon". Consider letting Pete set a default per category himself (never a built-in guess).
+- [x] v3.10.1131 Fridge life by type of food, typed by Pete (rules by name words). Was: Fridge life of 3 days for everything makes every fridge food "use soon". Consider letting Pete set a default per category himself (never a built-in guess).
 - [ ] Custom storage places ("garage freezer", "utility") if three places (fridge, freezer, cupboard) prove too few.
 - [ ] Videos: short tour "idea to plate", 45 s knockout reel, then the clip series (see scratchpad storyboard); record the Import scene last, it changed.
 - [ ] Whole-journey tests (Pete agreed to "test everything"): fresh install, a shopping week, real-life mess, switching it all off. Build from his real-phone checklist, after his cupboard testing.
