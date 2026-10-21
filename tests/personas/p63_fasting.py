@@ -5,7 +5,7 @@ migration), Compare Metrics, the Reports section, the AI context and the conditi
 diabetes / ketogenic users, and that someone with no data sees nothing broken."""
 import sys, os, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, time as dtime
 from playwright.sync_api import sync_playwright
 f = Findings()
 dmy = lambda n: (date.today() - timedelta(days=n)).strftime('%d/%m/%y')
@@ -17,6 +17,9 @@ with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []
     ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
     ctx.route(re.compile(r'^https?://(?!localhost)'), lambda r: r.abort())
+    # Pin the browser clock to 12:00 today so the 08:00 "today" meal below is always in the past (the app ignores meals stamped
+    # later than now, v3.10.1122); without this the test fails whenever it runs before 08:00. Time still ticks on from there.
+    ctx.clock.install(time=datetime.combine(date.today(), dtime(12, 0)))
     page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:200]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     page.evaluate("localStorage.setItem('mh_condition','general')")
