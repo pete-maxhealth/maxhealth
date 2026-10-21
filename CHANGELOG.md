@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1133
+- **Add a non-nutritional item to the cupboards by hand.** Pete could not find non-food stock: it only came from receipts, and the Add a food screen had no way to add one. Type a name there and a second choice, "Add as non-nutritional (toilet roll, cleaning, pet food)", counts it in each, flags it non-food and keeps it out of the food library. The Non-nutritional chip then shows in My cupboards.
+
 ## v3.10.1132
 - **Fridge life rules can use a whole section.** Pete wanted "fruit and veg 14". The rule form has a section picker (Fruit and veg, Fruit, Vegetables, Salad, Meat, Fish, Dairy, Bread) as well as words. Sections follow how the app already sorts each food; apples, bananas, grapes and lemons are filed as Other by the app's sorter, so those need their words typed in a rule. (Backlog: teach the sorter common fruit.)
 
