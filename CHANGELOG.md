@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1139
+- **Non-nutritional things you buy now land on the shelf.** Pete imported cola, Irn-Bru, Vimto and sugar as a list marked non-nutritional; after Shopping complete they were nowhere, because only items already tracked in My cupboards were carried over and a list import never touches the cupboards. Now any non-nutritional item in the basket is put on the shelf (flagged non-food, no count invented) when you press Shopping complete, so it shows under Add > Non-nutritional and gets the 🛒 button. Foods are unchanged. Items already completed before this version are gone from the list and must be added again.
+
 ## v3.10.1138
 - **Add > Non-nutritional shows what is on your shelf.** Pete: he had to type the name of a non-nutritional item without knowing what he already held. Choosing Non-nutritional on the Add card now lists every non-nutritional item in My cupboards, each with "＋ Add to list" (or ON LIST if it is already there); typing a new one is still below.
 - **My cupboards always shows the Non-nutritional tab,** even when empty, with a line saying how to fill it. Typing a name in the cupboards search now also offers "Add as non-nutritional" next to "Add as a new food", so you can put one on the shelf from there.
