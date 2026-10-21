@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1136
+- **Basket button renamed** so it cannot be mistaken for the import screen's Untick all: in "In basket" it now reads "Put everything back on the list". Same action.
+
 ## v3.10.1135
 - **Untick all in the shopping basket.** Pete could not find one: Untick all lived only on the import review screen. Open "In basket" and the first button, "Untick all (put everything back on the list)", puts every ticked item back on the list. Nothing is deleted.
 

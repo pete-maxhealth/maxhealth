@@ -14,9 +14,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(()=>{const s=mhShopLoad(); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()"); ev("_shopUi.basketOpen=true; mhShopRender()"); page.wait_for_timeout(200)
     n = ev("mhShopLoad().items.filter(i=>i.checked).length")
     if n < 1: f.add('BUG', f'setup: items in the basket: {n}')
-    if not page.locator('button:has-text("Untick all")').count(): f.add('BUG', '1: basket offers an Untick all')
+    if not page.locator('button:has-text("Put everything back")').count(): f.add('BUG', '1: basket offers a Put everything back on the list button')
     else:
-        page.click('button:has-text("Untick all")'); page.wait_for_timeout(200)
+        page.click('button:has-text("Put everything back")'); page.wait_for_timeout(200)
         left = ev("mhShopLoad().items.filter(i=>i.checked).length")
         if left != 0: f.add('BUG', f'2: all put back on the list, {left} still ticked')
     if errs: f.add('BUG', f'page errors: {errs}')
