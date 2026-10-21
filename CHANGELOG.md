@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1127
+- **CSV import rows show the same match state as the receipt import.** Each food row says "✓ Matched", "⚠ Check this" (a suggestion you have not confirmed yet) or "＋ New food". A row you have answered now stays on screen and turns green instead of disappearing, and the "need a quick look" count is only what is still open.
+
 ## v3.10.1126
 - **An import in progress is saved as you go.** Pete: "we need it to be saving as we're going along". Every change on the import review (ticks, amounts, names, a Match pick, the shop, the date) is saved on the phone straight away. Leave the screen, take a call or reload, press Import again and the same list is back. "Start again" throws it away; adding it to the cupboards clears the saved copy. (Only the review step is kept, not the which-column-is-which step.) "Cancel" became "Leave it for now (saved)".
 - **Fix: the ↑ button now appears on Shopping, including Check the cupboards.** The Shopping scroll area was the one view not reporting its scrolling to the shared ↑/↓ buttons, so ↓ showed but ↑ never did.
