@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1145'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1146'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -18110,7 +18110,7 @@ function declineBalanceMacrosSnackIdeas() {
   addBubble('No worries — done for today then.', 'system');
 }
 
-function startNextMealFlow() {
+function startNextMealFlow(prefill) {
   addBubble('Next meal idea', 'user');
   const bubble = addBubble(`Tap the categories you want, then Send.${helpToggle('mealpicker', 'Adjust the number next to a pill if you want more than one of that category - e.g. tap Meat once, Vegetable and set it to 3. Typing works too, straight into the chat box: "protein and pasta" or "meat and 2 veg" does the same thing without opening this picker. If your library genuinely does not cover what is asked, you will get an explanation of what is missing rather than a suggestion quietly padded out with the wrong thing.')}`, 'system');
   const cats = getLibraryCategoriesInUse();
@@ -18127,7 +18127,7 @@ function startNextMealFlow() {
   const disableAll = `this.closest('.chat-bubble').querySelectorAll('button,input,.mealPillEl').forEach(b=>{if(!b.classList.contains('mealPillReset')){b.disabled=true;b.style.pointerEvents='none';if(!b.classList.contains('mh-meal-on'))b.style.opacity='0.5';}});`;
 
   const quickPill = (kind, label, emoji, color) =>
-    `<button onclick="${disableAll}suggestMealFromLibrary('${kind}')" style="padding:6px 12px;background:transparent;border:1px dashed ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label} →</button>`;
+    `<button onclick="${disableAll}suggestMealFromLibrary('${kind}', null, mhMealFocusText())" style="padding:6px 12px;background:transparent;border:1px dashed ${color};border-radius:20px;color:${color};font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">${emoji} ${label} →</button>`;
 
   // Pete Spence's exact spec: each category pill gets its own count, hidden/0
   // until the pill itself is tapped (which sets it to 1 and reveals the
@@ -18141,7 +18141,12 @@ function startNextMealFlow() {
     </div>`;
   }).join('');
 
+  const _uuVal = String(prefill || '').replace(/"/g, '&quot;');
   bubble.innerHTML += `<div class="mh-mealpicker mh-mealpicker-live">
+    <div style="margin-top:10px;"><div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Use up (optional): ingredients to build the idea around</div>
+      <input class="mhMealUseUp" value="${_uuVal}" placeholder="e.g. kimchi, cheddar" style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;">
+      <button class="mhMealUseUpGo" onclick="mhMealIdeasWithFocus()" style="width:100%;margin-top:8px;padding:10px;background:var(--accent);border:1px solid var(--accent);color:#080a0d;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">💡 Ideas using these</button>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Or pick categories below; whatever is in this box is used for those too.</div></div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
       ${catPills}
     </div>
@@ -18203,6 +18208,14 @@ function updateMealSendButtonState() {
   }
 }
 
+// The "Use up" box of the picker that is open (v3.10.1146). Only what is typed there is ever used; nothing carries over from an earlier flow.
+function mhMealFocusText() { const el = document.querySelector('.mh-mealpicker-live .mhMealUseUp'); return el ? String(el.value || '').trim().slice(0, 200) : ''; }
+async function mhMealIdeasWithFocus() {
+  const txt = mhMealFocusText(), scroll = document.getElementById('chatScroll'), markStart = scroll ? scroll.children.length : 0;
+  const live = document.querySelector('.mh-mealpicker-live'); if (live) live.querySelectorAll('button,input,.mealPillEl').forEach(b => { if (!b.classList.contains('mealPillReset')) { b.disabled = true; b.style.pointerEvents = 'none'; } });
+  await suggestMealFromLibrary('both', null, txt);
+  if (scroll) for (let i = markStart; i < scroll.children.length; i++) scroll.children[i].setAttribute('data-meal-suggestion-result', 'true');
+}
 async function sendMealPillSelections() {
   const composition = Object.entries(window._mealPillSelections || {}).map(([category, count]) => ({ category, count: parseInt(count, 10) || 1 }));
   if (!composition.length) return;
@@ -18213,7 +18226,7 @@ async function sendMealPillSelections() {
   // fired without needing to track each individually.
   const scroll = document.getElementById('chatScroll');
   const markStart = scroll ? scroll.children.length : 0;
-  await suggestMealFromLibrary('both', composition);
+  await suggestMealFromLibrary('both', composition, mhMealFocusText());
   if (scroll) {
     for (let i = markStart; i < scroll.children.length; i++) {
       scroll.children[i].setAttribute('data-meal-suggestion-result', 'true');
@@ -18570,7 +18583,7 @@ function getEatingHabitsSummary(allow) {
   };
 }
 
-async function suggestMealFromLibrary(kind = 'both', explicitComposition = null) {
+async function suggestMealFromLibrary(kind = 'both', explicitComposition = null, focusText = '') {
   const _allLib = loadLibrary(), _allRecipes = loadRecipes();
   if (!_allLib.length && !_allRecipes.length) { addBubble('Your library is empty — nothing to check against yet.', 'system', 'warn'); return; }
   // Only what can be made: foods and recipes are filtered by stock before anything else sees them (see mhSuggestFilter).
@@ -18773,7 +18786,7 @@ Rules:
 ${kind === 'sweet' ? '- SWEET REQUESTED: all 5 suggestions should be sweet/dessert-style (sweeteners, dark chocolate, dairy, berries etc. from the library) if the library can genuinely support that many - fewer than 5 is fine if it can\'t, rather than forcing a savoury option in.' : ''}${kind === 'savoury' ? '- SAVOURY REQUESTED: all 5 suggestions should be savoury - fewer than 5 is fine if the library can\'t genuinely support five, rather than forcing a sweet option in.' : ''}${kind === 'snack' ? '- SNACK REQUESTED: all 5 suggestions should be a real snack - a single, self-contained snack-type food eaten on its own (crisps, chocolate, sweets, a cured-meat snack like peperami, pork scratchings, a small amount of nuts), not a curated combination of two or more separate savoury ingredients - that\'s tapas, a different thing entirely, even at a small portion. A snack was specifically asked for, not just guidance toward one, so this applies even if the remaining budget would technically support something larger.' : ''}${explicitComposition ? `- EXACT COMPOSITION REQUESTED ("${explicitComposition.map(c=>`${c.count} ${c.category}`).join(' + ')}"): every suggestion should follow this exact shape as closely as the real library allows - ${explicitComposition.map(c => `${c.count} genuinely different item${c.count>1?'s':''} from the "${c.category}" category${c.keyword ? ` (the user specifically said "${c.keyword}" - prefer an item that's genuinely that, not just anything else tagged "${c.category}", if the library has it)` : ' (real categories are listed per item below)'}`).join(', plus ')}. This is the deliberate "meat and veg" style structured request, not a loose preference. If the library can't fully cover every part - fewer distinct items in a category than the count asked for, or (rarely, since this was checked before you were even asked) a category with nothing at all - return the closest real partial match rather than refusing or inventing something: use what's genuinely there, and the note must explicitly name which category came up short and why (e.g. "only 1 vegetable-tagged item in your library, so used it once rather than the 3 asked for"). Never silently substitute a different category to make the numbers look right. Still respect the remaining macro budget as the hard limit.` : !explicitComposition && !['sweet','savoury','snack','both'].includes(kind) ? `- CATEGORY REQUESTED: the user specifically asked for "${kind}" - every suggestion should prominently feature at least one item whose real categories (listed per item below) include "${kind}", not just loosely relate to it. Still respect the remaining macro budget as the hard limit, and still aim for genuinely varied combos rather than 5 near-identical ways of using the same "${kind}" item.` : ''}
 - Each ingredient-combo uses 1-3 items from the LIBRARY list. Each recipe suggestion names a whole number of servings (can be more than 1 if the remaining budget genuinely allows it).
 - COHESION: each item now lists its real categories (meat, fish, protein, dairy, vegetable, fruit, fat, grain, breakfast cereal, bread, sweet, savoury, herbs and spices, alcohol, salad). A genuinely cohesive combo pairs complementary categories — a protein (meat/fish/dairy/protein) with a vegetable or salad, optionally plus a fat, reads as an actual meal. Two items from the exact same category with nothing else (e.g. two different cheeses, or two different meats) is rarely a cohesive combo on its own — only do this if the remaining budget genuinely can't support anything more varied, or the request is specifically for a sweet/snack-style option where this doesn't apply the same way.${habits.topPairsText ? ` Where it also fits the macro budget, prefer pairings that match this person's own established combos (listed above under "most common category pairings") over generic pairing logic — that's a genuinely stronger cohesion signal than a general rule, since it's what they actually eat together in practice.` : ''}
-${_sf.active ? '- STOCK: these lists have already been limited to what the person can actually make from their cupboards. Never suggest anything outside them. Where a recipe line says NEEDS SWAP, keep the swap in the note (e.g. "using Cheddar for Gouda"); where it says LEFTOVERS READY, say it is already cooked. Where a recipe line says STOCK COVERS, never suggest more servings than that.\n' + (_sf.soon && _sf.soon.length ? (window._mhUseUp ? '- FOCUS: the person has asked for ideas to use up ' + window._mhUseUp + '. Build every suggestion around it, using only items from the lists below; if nothing in the lists can use it, say so plainly instead of suggesting something unrelated.\n' : '') + '- USE UP FIRST: these are close to their use-by date, so favour suggestions that use them and say so in the note: ' + mhUseSoonText(_sf.soon) + '.\n' : '') + (_sf.reservedN ? '- Some stock is already set aside for planned meals; the lists already allow for that.\n' : '') : ''}- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
+${_sf.active ? '- STOCK: these lists have already been limited to what the person can actually make from their cupboards. Never suggest anything outside them. Where a recipe line says NEEDS SWAP, keep the swap in the note (e.g. "using Cheddar for Gouda"); where it says LEFTOVERS READY, say it is already cooked. Where a recipe line says STOCK COVERS, never suggest more servings than that.\n' + (_sf.soon && _sf.soon.length ? (focusText ? '- FOCUS: the person has asked for ideas to use up ' + String(focusText).replace(/[\r\n]+/g, ' ').slice(0, 200) + '. Build every suggestion around it, using only items from the lists below; if nothing in the lists can use it, say so plainly instead of suggesting something unrelated.\n' : '') + '- USE UP FIRST: these are close to their use-by date, so favour suggestions that use them and say so in the note: ' + mhUseSoonText(_sf.soon) + '.\n' : '') + (_sf.reservedN ? '- Some stock is already set aside for planned meals; the lists already allow for that.\n' : '') : ''}- Use each item/recipe's name EXACTLY as listed — the app looks these up by exact name, so any name that doesn't match exactly will fail silently.
 - Be honest if nothing fits well — return fewer suggestions rather than force a bad one.
 
 LIBRARY (individual ingredients):
@@ -27615,9 +27628,12 @@ function mhSoonGo(key) {
   setTimeout(() => { const el = [...document.querySelectorAll('[data-stock]')].find(e => e.dataset.stock === it.name); if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' }); const bg = el.style.background; el.style.transition = 'background 0.4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); }, 150);
 }
-async function mhUseUpIdea(name) {
-  window._mhUseUp = String(name || ''); try { switchTabById('log'); } catch (_) {}
-  try { await suggestMealFromLibrary('both'); } finally { window._mhUseUp = null; }
+function mhUseUpIdea(name) {
+  const live = document.querySelector('.mh-mealpicker-live .mhMealUseUp'), have = live ? String(live.value || '').trim() : '', nm = String(name || '').trim();
+  try { switchSubTab('log', 'log', document.getElementById('logtab-log')); switchTab('log', document.getElementById('maintab-log')); } catch (_) {}   // the chat lives on Log > Log, not Today
+  // pressing Ideas on several lines builds one list in the same box
+  const list = have && live && !have.toLowerCase().split(/\s*,\s*/).includes(nm.toLowerCase()) ? have + ', ' + nm : (have && live ? have : nm);
+  if (live && have && !live.disabled) { live.value = list; try { live.scrollIntoView({ block: 'center' }); } catch (_) {} } else startNextMealFlow(nm);
 }
 function mhUseSoonText(list) { return list.map(x => x.name + (x.kind === 'leftovers' ? ' (cooked leftovers, ' : ' (') + (x.days === 0 ? 'today' : x.days === 1 ? 'tomorrow' : 'in ' + x.days + ' days') + ')').join(', '); }
 // For "try something new" ideas: a soft steer toward what is in the cupboards and what needs using up. Empty when nothing is counted.

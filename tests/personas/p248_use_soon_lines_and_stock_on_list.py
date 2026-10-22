@@ -18,13 +18,28 @@ with fresh_server() as root, sync_playwright() as pw:
     rows = ev("[...document.querySelectorAll('[data-soon-row]')].map(e=>e.innerText.replace(/\\n+/g,' | '))")
     if len(rows) != 2: f.add('BUG', f'1: one line per food: {rows}')
     elif not any('Zzqx Kimchi' in r and '400' in r and 'tomorrow' in r for r in rows): f.add('BUG', f'2: each line shows its amount and when: {rows}')
-    # Ideas button: the prompt is focused on that food, and the focus is cleared afterwards
+    # Ideas opens Next meal idea on the Log chat with the food typed into the "Use up" box; nothing is sent until you choose
     ev("window.__p=''; window.callHealthAI=async(p)=>{window.__p=p; return {ok:true,text:'{\"combos\":[]}'}}")
-    ev("mhUseUpIdea('Zzqx Kimchi')"); page.wait_for_timeout(900)
+    ev("mhUseUpIdea('Zzqx Kimchi')"); page.wait_for_timeout(700)
+    vis = ev("(()=>{const m=document.getElementById('maintab-log'), l=document.getElementById('logtab-log'); const i=document.querySelector('.mh-mealpicker-live .mhMealUseUp'); return [m.classList.contains('active'), l.classList.contains('active'), !!(i && i.offsetParent), i && i.value];})()")
+    if vis != [True, True, True, 'Zzqx Kimchi']: f.add('BUG', f'3a: Ideas opens Log > Log, Next meal idea, with the food in the Use up box: {vis}')
+    if ev("window.__p"): f.add('BUG', '3b: nothing is sent until you choose')
+    # pressing Ideas on another line adds to the same box
+    ev("mhUseUpIdea('Zzqx Cheddar')"); page.wait_for_timeout(300)
+    if ev("document.querySelector('.mh-mealpicker-live .mhMealUseUp').value") != 'Zzqx Kimchi, Zzqx Cheddar': f.add('BUG', '3c: a second Ideas press adds to the same box')
+    ev("mhUseUpIdea('Zzqx Cheddar')"); page.wait_for_timeout(300)
+    if ev("document.querySelector('.mh-mealpicker-live .mhMealUseUp').value") != 'Zzqx Kimchi, Zzqx Cheddar': f.add('BUG', '3d: the same food is not added twice')
+    page.click('.mh-mealpicker-live .mhMealUseUpGo'); page.wait_for_timeout(900)
     p = ev("window.__p") or ''
-    if 'FOCUS' not in p or 'Zzqx Kimchi' not in p.split('FOCUS')[1][:200]: f.add('BUG', '3: Ideas asks the AI to build around that food')
+    if 'FOCUS' not in p or 'Zzqx Kimchi, Zzqx Cheddar' not in p.split('FOCUS')[1][:260]: f.add('BUG', '3e: Ideas using these asks the AI to build around the box')
+    # a used picker is not reused: the next Ideas press opens a fresh one
+    ev("mhUseUpIdea('Zzqx Cheddar')"); page.wait_for_timeout(500)
+    if ev("document.querySelector('.mh-mealpicker-live .mhMealUseUp').value") != 'Zzqx Cheddar': f.add('BUG', '3f: after sending, the next Ideas press starts a fresh box')
+    # the category route uses the box too, and a plain request later has no focus
+    ev("window.__p=''; window._mealPillSelections={meat:1}"); ev("sendMealPillSelections()"); page.wait_for_timeout(900)
+    if 'FOCUS' not in (ev("window.__p") or ''): f.add('BUG', '4a: choosing categories also uses the Use up box')
     ev("window.__p=''; suggestMealFromLibrary('both')"); page.wait_for_timeout(700)
-    if 'FOCUS' in (ev("window.__p") or ''): f.add('BUG', '4: the focus is cleared afterwards')
+    if 'FOCUS' in (ev("window.__p") or ''): f.add('BUG', '4b: a plain suggestion has no focus')
     # buttons exist on the lines
     if page.locator('[data-soon-row] button:has-text("Ideas")').count() != 2: f.add('BUG', '5: an Ideas button on each line')
     # the name on a Use soon line goes to that food in the cupboard list, even from another tab or a search that hides it
