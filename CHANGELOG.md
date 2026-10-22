@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1169
+- **My cupboards: see what is in each shop.** A "Show what is bought at" row (All shops, Asda, Heylo, No shop, each with a count) filters the cupboards by shop, together with Fridge / Freezer / Cupboard / Low / Use soon, so you can check every food is under the right shop and tap one to adjust its stock. It is remembered. Test p274.
+
 ## v3.10.1168
 - **Add foods bar: set Have now and Reorder at for everything ticked.** Two optional boxes in the bar, in each food's own unit (g, ml or each); blank keeps what each food already has. Nothing is guessed. Test p273.
 
