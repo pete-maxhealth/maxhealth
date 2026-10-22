@@ -23,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if '📥 Import' not in add_txt or 'Import a CSV' in add_txt: f.add('BUG', f'the Add section has one Import button, no separate CSV button: {add_txt[-160:]!r}')
     ev("mhStockTrack('Whole Milk',{base:'ml',pack:2000,serving:null,shop:'Asda'}); mhStockSetLevel(mhShopKey('Whole Milk'),1000); mhShopRender()"); page.wait_for_timeout(200)
     st = txt('#stockctlCard')
-    if '📥 Import a receipt or order' not in st or 'Start stock from an order' in st or 'Add a receipt to stock' in st: f.add('BUG', f'the cupboards section has one Import button: {st[-300:]!r}')
+    if '📥 Import' not in st or 'Import a receipt or order' in st or 'Start stock from an order' in st or 'Add a receipt to stock' in st: f.add('BUG', f'the cupboards section has one Import button: {st[-300:]!r}')
     page.click('#shopaddCard .mh-tile:has-text("Import")'); page.wait_for_timeout(250)
     if ev("_shopUi.view") != 'orderimport' or ev("document.querySelector('#mhOrdPurpose input:checked')?.value") != 'list': f.add('BUG', 'the Add section opens Import with "a list to shop for" chosen')
     ev("mhShopView('list')"); page.click('#stockctlCard .mh-tile:has-text("Import")'); page.wait_for_timeout(250)

@@ -9,6 +9,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("mhStockTrack('Zzqx Seed',{base:'g'})")   # stock on: with it switched off nothing is shelved (v3.10.1147)
     ev("mhShopOpen()"); ev("mhOrdOpen('list')"); page.wait_for_timeout(200)
     page.fill('#mhOrdText', "Zzqx Cola\nZzqx Squash\nZzqx Double Cream\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
     ev("mhOrdKindSet(0,'nonfood'); mhOrdKindSet(1,'nonfood')"); ev("mhOrdShop('Asda')"); page.click('#mhOrdGo'); page.wait_for_timeout(500)
