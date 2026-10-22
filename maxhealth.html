@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1147'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1148'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -24360,6 +24360,7 @@ function logFoods(foods, originalText, aiMessage = null) {
   // the per-item Total: line above, just in the day-cumulative bar instead.
   macrosDiv.innerHTML = `<span class="c">${newTotals.kcal}/${targets.kcal}kcal</span><span class="p">${newTotals.protein}/${targets.protein}g P</span>${newTotals.fat > 0 ? `<span style="color:#a78bfa;">${newTotals.fat}/${fatTgt}g F</span>` : ''}<span class="k">${displayCarbs}/${targets.carbs}g C</span>${fibreLogged > 0 ? `<span style="color:var(--green);">${fibreLogged}g fibre</span>` : ''}${polyolsLogged > 0 ? `<span style="color:var(--text3);">🍬 ${polyolsLogged}g polyols</span>` : ''}`;
   bubbleDiv.appendChild(macrosDiv);
+  try { const sl = mhStockLeftLine(); if (sl) { const d = document.createElement('div'); d.className = 'mh-stock-left'; d.style.cssText = 'margin-top:8px;font-size:12px;color:var(--text2);'; d.innerHTML = sl; bubbleDiv.appendChild(d); } } catch (_) {}
 
   // ── Edit right from here — the natural moment to notice something needs
   // fixing (wrong ingredient, wrong amount) is right after seeing the
@@ -27728,7 +27729,7 @@ function mhStockAskLink(entry, f, k, sg, b) {
 // dateStr: the day the food was eaten (past days that fall before the last stock-take are ignored: that count already covers them).
 function mhStockOnLog(entry, dateStr) {
   try {
-    const _ao = window._ateOut && Date.now() - window._ateOut < 5000; window._ateOut = null;
+    const _ao = window._ateOut && Date.now() - window._ateOut < 5000; window._ateOut = null; window._stockTook = [];
     if (!entry || !entry.id || !Array.isArray(entry.items)) return;
     const o = mhStockLoad(); if (o.enabled === false || !Object.keys(o.items).length) return;
     if (_ao || entry.noStock) { if (!entry.noStock) { entry.noStock = true; showToast('🍽 Ate out: your stock was left alone'); } return; }
@@ -27752,11 +27753,20 @@ function mhStockOnLog(entry, dateStr) {
       const b = mhStockAmountBase(f.amount, it);
       if ((b == null || !(b > 0)) && mhStockNeedsDensity(f.amount, it)) { needDensity.push({ k, it, f }); return; }
       if (b == null || !(b > 0)) { skipped.push(it.name); return; }
-      if (mhStockAdjust(k, -(frac < 1 ? Math.round(b * frac * 100) / 100 : b), 'log', entry.id)) took++;
+      if (mhStockAdjust(k, -(frac < 1 ? Math.round(b * frac * 100) / 100 : b), 'log', entry.id)) { took++; try { window._stockTook.push(k); } catch (_) {} }
     });
     if (needDensity.length) mhStockAskDensity(entry, needDensity[0], frac, eaten);
     if (skipped.length) showToast('Stock: could not read the amount of ' + skipped.join(', ') + ', so its stock was left alone', null, null, 4500);
   } catch (e) { console.warn('stock hook', e); }
+}
+// The 'what is left' line on the Logged card: one line per cupboard item the log just took from, read after the deduction (v3.10.1148).
+function mhStockLeftLine() {
+  const ks = (window._stockTook || []).filter((k, i, a) => a.indexOf(k) === i); window._stockTook = []; if (!ks.length) return '';
+  const o = mhStockLoad(); if (o.enabled === false) return '';
+  return ks.map(k => o.items[k]).filter(it => it && it.level != null).map(it => {
+    const low = it.reorder != null && it.level <= it.reorder;
+    return '📦 Stock left: <strong>' + mhPlanEsc(it.name) + ' ' + mhPlanEsc(mhStockFmt(it, it.level)) + '</strong>' + (it.level <= 0 ? ' (all used)' : low ? ' (running low)' : '');
+  }).join('<br>');
 }
 // An edit changes what was eaten: put back what the old version took, then take what the new one does.
 function mhStockResync(entry, dateStr) { if (!entry || !entry.id) return; mhStockReverse(entry.id); mhStockOnLog(entry, dateStr); }
