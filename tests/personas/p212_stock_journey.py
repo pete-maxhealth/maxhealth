@@ -35,7 +35,7 @@ with fresh_server() as root, sync_playwright() as pw:
     log([food('Beef mince', '400g')])
     if lv('Beef mince') != 200 or onlist('Beef mince'): f.add('BUG', '2: mince is low but Butchers is not on this trip: it must wait, not be guessed onto Asda')
     # 3 wrong shop first
-    ev("window.prompt=()=>'Butchers'"); ev("mhShopAddShop()")
+    ev("mhShopAddShop()"); page.wait_for_timeout(200); page.fill('#appPromptInput', 'Butchers'); page.click('#appModalConfirm'); page.wait_for_timeout(200)
     if not onlist('Beef mince'): f.add('BUG', '3: adding Butchers brings the waiting mince onto the list')
     if ev("k=>mhShopLoad().items.find(i=>i.key===k).shop", K('Beef mince')) != 'Butchers': f.add('BUG', '3: mince is under Butchers')
     ev("mhShopSetShop('Butchers')")

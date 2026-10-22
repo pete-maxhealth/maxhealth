@@ -43,7 +43,7 @@ with fresh_server() as root, sync_playwright() as pw:
     w.locator('[data-f="amt"]').fill('lots'); w.locator('[data-f="amt"]').blur(); page.wait_for_timeout(100)
     if ev("k=>mhStockLoad().items[k].level", ev("n=>mhShopKey(n)", 'Whey protein')) != 100 or not w.locator('[data-err]').is_visible(): f.add('BUG', 'a bad entry must show on the row and change nothing')
     # shop and serving on a tracked row
-    ev("mhShopAddShop = mhShopAddShop; window.prompt=()=>'Tesco'"); ev("mhShopAddShop()"); ev("mhShopView('stocklist')"); page.wait_for_timeout(300)
+    ev("mhShopAddShop()"); page.wait_for_timeout(200); page.fill('#appPromptInput', 'Tesco'); page.click('#appModalConfirm'); page.wait_for_timeout(200); ev("mhShopView('stocklist')"); page.wait_for_timeout(300)
     w = R('Whey protein'); w.locator('[data-f="shop"]').select_option('Tesco'); page.wait_for_timeout(100)
     w.locator('[data-f="serv"]').fill('30'); w.locator('[data-f="serv"]').blur(); page.wait_for_timeout(150)
     it = ev("k=>mhStockLoad().items[k]", ev("n=>mhShopKey(n)", 'Whey protein'))

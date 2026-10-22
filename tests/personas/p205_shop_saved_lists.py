@@ -126,7 +126,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopView('lists')"); page.wait_for_timeout(200)
     rows = ev("document.querySelectorAll('#mhShopPane [data-list]').length")
     if rows != n_saved or not ev("!!document.getElementById('mhShopListSaveBar')"): f.add('BUG', f'lists view should show {n_saved} rows and the save bar, saw {rows}')
-    ev("mhShopListSaveAs('shop')"); page.wait_for_timeout(300)
+    ev("mhShopListSaveAs('shop')"); page.wait_for_timeout(300); page.fill('#appPromptInput', 'Prompted Name'); page.click('#appModalConfirm'); page.wait_for_timeout(300)
     if 'Prompted Name' not in [l['name'] for l in lists()]: f.add('BUG', 'the prompt-driven Save should create a list with the typed name')
 
     # J. the saved lists are in the backup and come back through a real restore

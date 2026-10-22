@@ -6516,7 +6516,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1155'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1156'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27252,16 +27252,26 @@ function mhShopComplete() {
   const s = mhShopLoad(), n = s.items.filter(i => i.checked && i.shop === s.shop).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
   // The app's own confirm box, not the browser's: a browser can silently swallow its pop-ups (it answers "no"), and then this button seemed to do nothing (v3.10.1144).
-  appConfirm('Shopping complete? This empties the basket: the ' + n + ' ticked ' + mhPlanEsc(s.shop) + ' item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked, and your other shops, stay.', mhShopCompleteGo, null, false, { confirm: 'Empty the basket', cancel: 'Not yet' });
+  // Two ways to finish, for everyone whether or not stock counting is on: empty the basket, or keep the whole list for the next shop (everything unticked again) (v3.10.1156).
+  const on = mhStockOn(), ov = document.createElement('div'); ov.className = 'app-modal-overlay';
+  ov.innerHTML = '<div class="app-modal"><div class="app-modal-title">Shopping complete?</div><div class="app-modal-msg">The ' + n + ' ticked ' + mhPlanEsc(s.shop) + ' item' + (n === 1 ? '' : 's') + '. What should happen to them? Anything unticked, and your other shops, stay as they are.</div>'
+    + '<div class="app-modal-btns" style="flex-direction:column;"><button class="app-modal-btn confirm" id="appModalConfirm">Empty the basket' + (on ? ' (they go to my cupboards)' : '') + '</button><button class="app-modal-btn" id="appModalKeep" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Keep the whole list for next shop</button><button class="app-modal-btn cancel" id="appModalCancel">Not yet</button></div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#appModalConfirm').onclick = () => { ov.remove(); mhShopCompleteGo(); };
+  ov.querySelector('#appModalKeep').onclick = () => { ov.remove(); mhShopCompleteGo(true); };
+  ov.querySelector('#appModalCancel').onclick = () => ov.remove();
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
 }
-function mhShopCompleteGo() {
+function mhShopCompleteGo(keep) {
   const s = mhShopLoad();
-  const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = bought.filter((k, n) => so.items[k] && !so.items[k].nonFood && bought.indexOf(k) === n);
+  const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = !mhStockOn() ? [] : bought.filter((k, n) => so.items[k] && !so.items[k].nonFood && bought.indexOf(k) === n);
   // Non-nutritional things you bought land on the shelf (no count is invented: the shelf just knows you keep it), so next time they are listed under Add > Non-nutritional and can be flagged as running low (v3.10.1139).
   let shelved = 0; if (mhStockOn()) s.items.filter(i => i.checked && i.shop === s.shop && i.nonFood).forEach(i => { try { if (!mhStockLoad().items[i.key]) { mhStockTrack(i.name, { base: 'each', shop: s.shop }); const o2 = mhStockLoad(); if (o2.items[i.key]) { o2.items[i.key].nonFood = true; mhStockSave(o2); shelved++; } } } catch (_) {} });
   // A non-nutritional regular (marked ⭐ in My usuals: toilet roll every week) stays on the list, unticked, ready for next time; the rest leave the list and live on the shelf (v3.10.1153).
-  let stayed = 0; s.items.forEach(i => { if (i.checked && i.shop === s.shop && i.nonFood && mhShopUsualFind(s, i.key)) { i.checked = false; stayed++; } });
-  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied' + (stayed ? '; ' + stayed + ' regular' + (stayed === 1 ? '' : 's') + ' stay on your list' : '') + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
+  // With stock counting off there is no reorder level to bring a food back, so every regular stays, food or not. "Keep the whole list" leaves everything on, unticked.
+  const stockOn = mhStockOn(); let stayed = 0;
+  s.items.forEach(i => { if (i.checked && i.shop === s.shop && (keep || (mhShopUsualFind(s, i.key) && (i.nonFood || !stockOn)))) { i.checked = false; stayed++; } });
+  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = (keep ? 'The whole list is back, ready for next shop' : 'Basket emptied') + (!keep && stayed ? '; ' + stayed + ' regular' + (stayed === 1 ? '' : 's') + ' stay on your list' : '') + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
   // Tracked things you just bought go to a review step: stock is only added from what you confirm (nothing is assumed about quantity).
   if (track.length) { so.review = Array.from(new Set((so.review || []).concat(track))); mhStockSave(so); _shopUi.bgt = {}; _shopUi.view = 'stockbought'; }
   mhShopRender();
@@ -27341,7 +27351,8 @@ function mhShopUsualDelete(key) { const s = mhShopLoad(); s.usuals = s.usuals.fi
 function mhShopQuickN(v) { const s = mhShopLoad(); s.topN = [5, 10, 15, 20].includes(parseInt(v)) ? parseInt(v) : 10; mhShopSave(s); mhShopRender(); }
 function mhShopSwitch(s, n) { s.usualsBy[s.shop] = s.usuals; s.shop = n; if (!Array.isArray(s.usualsBy[n])) s.usualsBy[n] = []; s.usuals = s.usualsBy[n]; }
 function mhShopSetShop(n) { const s = mhShopLoad(); if (s.shops.includes(n)) { mhShopSwitch(s, n); mhShopSave(s); } mhShopRender(); }
-function mhShopAddShop() { const v = (prompt('Name of the shop (e.g. Butchers)') || '').trim().slice(0, 24); if (!v) return; const s = mhShopLoad(); if (!s.shops.some(x => x.toLowerCase() === v.toLowerCase())) s.shops.push(v); mhShopSwitch(s, s.shops.find(x => x.toLowerCase() === v.toLowerCase())); mhShopSave(s); try { mhStockSweep(); } catch (_) {} mhShopRender(); }
+function mhShopAddShop() { appPrompt('Name of the shop (e.g. Butchers)', 'e.g. Butchers', mhShopAddShopNamed); }   // the app's own box: a browser can silently swallow its pop-ups (v3.10.1156)
+function mhShopAddShopNamed(nameIn) { const v = String(nameIn || '').trim().slice(0, 24); if (!v) return; const s = mhShopLoad(); if (!s.shops.some(x => x.toLowerCase() === v.toLowerCase())) s.shops.push(v); mhShopSwitch(s, s.shops.find(x => x.toLowerCase() === v.toLowerCase())); mhShopSave(s); try { mhStockSweep(); } catch (_) {} mhShopRender(); }
 // Removing a shop from THIS list doesn't mean it stopped selling anything - it means you don't
 // need it this trip. Pete Spence (17/10/2026): its items should come off the list, not get
 // silently reassigned to another shop (the old behaviour) - the shop itself, its usuals and its
@@ -27376,8 +27387,7 @@ function mhShopListShops(l) { return [...new Set((l.items || []).map(i => i.shop
 function mhShopListSaveAs(scope) {
   const s = mhShopLoad(), n = s.items.filter(i => !i.hidden && (scope === 'all' || i.shop === s.shop)).length;
   if (!n) { _shopUi.msg = 'Nothing to save yet: add some items first'; mhShopRender(); return; }
-  const nm = (prompt('Name this saved list', scope === 'all' ? 'Whole list' : s.shop) || '').trim(); if (!nm) return;
-  mhShopListSaveNamed(scope, nm);
+  appPrompt('Name this saved list', 'e.g. Weekly shop', nm => mhShopListSaveNamed(scope, nm), mhPlanEsc(scope === 'all' ? 'Whole list' : s.shop));
 }
 function mhShopListSaveNamed(scope, nameIn) {
   const nm = String(nameIn || '').trim().slice(0, 40); if (!nm) return false;
@@ -27425,7 +27435,7 @@ function mhShopListApply(id, mode) {
 }
 function mhShopListRename(id) {
   const l = mhShopListsLoad().lists.find(x => x.id === id); if (!l) return;
-  const nm = prompt('Rename this saved list', l.name); if (nm == null) return; mhShopListRenameTo(id, nm);
+  appPrompt('Rename this saved list', 'New name', nm => mhShopListRenameTo(id, nm), mhPlanEsc(l.name));
 }
 function mhShopListRenameTo(id, nameIn) {
   const nm = String(nameIn || '').trim().slice(0, 40); if (!nm) return false;
