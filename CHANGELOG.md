@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1162
+- **The Add foods screen no longer buries you.** The big "Tick all shown / Add to my cupboards / Put on the list" bar sat over the rows all the time, even with nothing ticked. It now only appears once something is ticked (with Untick all), and "Tick all shown" lives beside the "shown" count above the list. The search box is pinned at the top of the screen, so wherever you have scrolled in a long list you can type "heylo flat" without scrolling back up.
+- p255 updated for both.
+
 ## v3.10.1161
 - **A typed daily step total no longer disappears.** Pete typed 10k and it wasn't kept. The most likely cause: the next sync of watch data for today wiped the typed figure even when the watch had counted fewer steps, though the box promises "used until your devices report the same or more". It is now only retired once the devices report the same or more. Test p268 (could not reproduce a plain loss locally, so a sync clash is the suspect).
 

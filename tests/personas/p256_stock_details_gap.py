@@ -28,7 +28,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Still to add' not in page.inner_text('#mhSlRows'): f.add('BUG', '7: the row says what is missing')
     # bulk add: tick the library food, add to a shop: it lands incomplete and is shown straight away
     ev("(()=>{const st=mhSlState(); st.f='all'; st.q='heylo wrap'; mhShopView('stocklist');})()"); page.wait_for_timeout(300)
-    page.click('#mhSlBulk button:has-text("Tick all shown")'); page.click('#mhSlBulk button:has-text("Add to my cupboards")'); page.wait_for_timeout(400)
+    page.click('button:has-text("Tick all shown")'); page.click('#mhSlBulk button:has-text("Add to my cupboards")'); page.wait_for_timeout(400)
     if ev("mhSlState().f") != 'gaps': f.add('BUG', '8: after adding, the foods that need details are shown')
     if 'need details' not in ev("document.getElementById('mhShopMsg')?.innerText||''"): f.add('BUG', '9: and it says so')
     # filling everything in clears the gap

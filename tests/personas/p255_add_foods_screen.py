@@ -28,7 +28,10 @@ with fresh_server() as root, sync_playwright() as pw:
     n = ' '.join(page.locator('#mhSlRows [data-sl]').all_inner_texts())
     if 'Zzqx Heylo Flatbread' not in n or 'closest' not in page.inner_text('body'): f.add('BUG', '5: when nothing fits every word, the closest come first and it says so')
     ev("mhSlQ('')"); page.wait_for_timeout(300)
-    # the bar stays on screen while scrolling a long list
+    # the bar is hidden until something is ticked, then stays on screen while scrolling a long list; the search box stays reachable
+    if ev("getComputedStyle(document.getElementById('mhSlBulk')).display") != 'none': f.add('BUG', '6: the action bar stays hidden until something is ticked')
+    ev("mhSlPickAll(true)"); page.wait_for_timeout(200)
+    if ev("getComputedStyle(document.getElementById('mhSlQBox')).position") != 'sticky': f.add('BUG', '6: the search box is pinned so it is always within reach')
     page.evaluate("window.scrollTo(0, 400)"); page.wait_for_timeout(200)
     b = ev("(()=>{const r=document.getElementById('mhSlBulk').getBoundingClientRect(); return [r.top, r.bottom, innerHeight];})()")
     if not (b[1] <= b[2] + 1 and b[0] > 0): f.add('BUG', f'6: the action bar is on screen while scrolling: {b}')

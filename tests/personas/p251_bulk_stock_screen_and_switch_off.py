@@ -26,7 +26,7 @@ with fresh_server() as root, sync_playwright() as pw:
         names = ev("[...document.querySelectorAll('#mhSlRows [data-sl]')].map(e=>e.dataset.n).sort()")
         if names != ['Zzqx Heylo Mystery', 'Zzqx Heylo Soup', 'Zzqx Heylo Yoghurt']: f.add('BUG', f'3: only the matching foods are listed: {names}')
         # 2) tick all shown, apply Bought at Heylo + Kept in fridge
-        page.click('#mhSlBulk button:has-text("Tick all shown")'); page.wait_for_timeout(200)
+        page.click('button:has-text("Tick all shown")'); page.wait_for_timeout(200)
         if '3 ticked' not in ev("document.getElementById('mhSlTicked').innerText"): f.add('BUG', '4: Tick all shown ticks every shown row')
         k0 = ev("mhShopKey('Zzqx Heylo Yoghurt')"); page.uncheck('[data-pick="%s"]' % k0); page.wait_for_timeout(150)
         if '2 ticked' not in ev("document.getElementById('mhSlTicked').innerText") or ev("!!mhSlState().sel[%r]" % k0): f.add('BUG', '4b: unticking one row removes it from the ticked set')
