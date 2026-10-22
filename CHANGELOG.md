@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1161
+- **A typed daily step total no longer disappears.** Pete typed 10k and it wasn't kept. The most likely cause: the next sync of watch data for today wiped the typed figure even when the watch had counted fewer steps, though the box promises "used until your devices report the same or more". It is now only retired once the devices report the same or more. Test p268 (could not reproduce a plain loss locally, so a sync clash is the suspect).
+
 ## v3.10.1160
 - **The Add box on the shopping list is now the search.** Pete couldn't find where to search for Heylo Flatbread: the box said "Type an item" and just added his words as plain text, with the real search tucked away on a small button. Now it says "Search or type a food", and as you type, matching foods from your cupboards and library appear right under it. One tap puts the food on the shop you have selected. A library food not yet in your cupboards also opens the stock form with that shop already filled in, and returns you to the list. A name that matches nothing offers "New food" on the same shop. With stock off the food simply goes on the list.
 - **Removing a mistake is one tap.** Every list row now has a ✕ (no Edit mode needed) and a 6-second Undo.
