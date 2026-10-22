@@ -6516,7 +6516,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1156'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1157'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -17835,7 +17835,8 @@ function logFoodFromDatabase() {
   const potassium = _selectedFoodItem.potassium ? Math.round(_selectedFoodItem.potassium * factor) : 0;
   const magnesium = _selectedFoodItem.magnesium ? Math.round(_selectedFoodItem.magnesium * factor) : 0;
   const vitd = _selectedFoodItem.vitd ? Math.round(_selectedFoodItem.vitd * factor * 10) / 10 : 0, omega3 = _selectedFoodItem.omega3 ? Math.round(_selectedFoodItem.omega3 * factor * 100) / 100 : 0;
-  const food = { name: displayName, kcal, protein: prot, carbs: carb, fat, fibre, polyols, satFat, sugars, salt, iron, potassium, magnesium, vitd, omega3, amount: `${grams}g` };
+  // The food's own name, with the amount in the amount field: with "30g" baked into the name it could never match the same food in the cupboards, so stock never came off (v3.10.1157).
+  const food = { name: _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name, kcal, protein: prot, carbs: carb, fat, fibre, polyols, satFat, sugars, salt, iron, potassium, magnesium, vitd, omega3, amount: `${grams}g` };
   // Save to recently scanned
   _saveRecentScan({
     name: _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name,
@@ -28057,18 +28058,45 @@ function mhSuggestFooterHtml(sf) {
 }
 function mhStockCookedAsk(id) {
   const r = loadRecipes().find(x => x.id === id); if (!r) return;
-  appPrompt('Servings cooked of "' + r.name + '"?', 'Recipe makes ' + (r.servings || 1), v => mhStockCooked(id, parseFloat(v)));
+  appPrompt('Servings cooked of "' + r.name + '"?', 'Recipe makes ' + (r.servings || 1), v => {
+    const n = parseFloat(v), sw = n > 0 ? mhStockCookSwaps(r, n) : [];
+    if (!sw.length) { mhStockCooked(id, n); return; }
+    appConfirm(sw.map(x => mhPlanEsc(x.from) + ' is out or short, and you have ' + mhPlanEsc(x.to)).join('. ') + '. Take ' + (sw.length === 1 ? 'that' : 'those') + ' off stock instead?', () => mhStockCooked(id, n, { swap: true }), () => mhStockCooked(id, n), false, { confirm: 'Yes, I used ' + (sw.length === 1 ? 'it' : 'them'), cancel: 'No, leave those alone' });
+  });
 }
-function mhStockCooked(id, servings) {
+// What a recipe line takes off an item, in that item's own unit, or null when it cannot be worked out without guessing. Recipe amounts are grams unless they say otherwise;
+// grams to millilitres only with a density you gave for that item (v3.10.1157).
+function mhCookTake(ing, f, it) {
+  const a = parseFloat(ing.amount); if (!(a > 0) || !it) return null;
+  const u = typeof ing.amount === 'string' ? String(ing.amount).replace(/^[\d.\s]+/, '').trim() : String(ing.unit || '').trim(), n = Math.round(a * f * 100) / 100;
+  if (/^(tsp|teaspoons?|tbsp|tablespoons?)$/i.test(u)) return it.base === 'each' ? null : Math.round(n * (/^t(sp|easp)/i.test(u) ? 5 : 15) * 100) / 100;
+  const b = mhStockAmountBase(n + ' ' + (u || 'g'), it); return b > 0 ? Math.round(b * 100) / 100 : null;
+}
+// If an ingredient is out, short or past its use-by and a like-for-like swap is in the cupboards, which swap would be used: [{ from, to, key, take }].
+function mhStockCookSwaps(r, servings) {
+  const o = mhStockLoad(), f = servings / (r.servings || 1), used = new Set(), out = [];
+  (r.ingredients || []).forEach(ing => {
+    if (!ing || !ing.name) return; const it = o.items[mhShopKey(ing.name)]; if (!it || it.level == null) return;
+    const have = mhHaveCheck(ing.name, mhIngNeed(ing, f, it), null, o, 'strict'); if (have.ok) return;
+    const sw = mhSwapFor(ing, mhIngNeed(ing, f, null) || mhIngNeed(ing, f, it), o, 'strict', used); if (!sw) return;
+    const si = o.items[mhShopKey(sw.name)]; if (!si || si.level == null) return; const take = mhCookTake(ing, f, si); if (!(take > 0) || si.level + 1e-9 < take) return;
+    used.add(mhShopKey(sw.name)); out.push({ from: ing.name, to: si.name, key: si.key, take });
+  });
+  return out;
+}
+function mhStockCooked(id, servings, opts) {
   const r = loadRecipes().find(x => x.id === id); if (!r) return 0;
   if (!(servings > 0)) { showToast('Enter how many servings you cooked'); return 0; }
-  const f = servings / (r.servings || 1), skipped = []; let took = 0; const ref = 'cook:' + id + ':' + Date.now();
+  const f = servings / (r.servings || 1), skipped = [], swapped = []; let took = 0; const ref = 'cook:' + id + ':' + Date.now();
+  const sw = opts && opts.swap ? mhStockCookSwaps(r, servings) : [], swFrom = new Set(sw.map(x => mhShopKey(x.from)));
   mhStockRecipeLines(r).forEach(({ ing, it }) => {
-    const a = parseFloat(ing.amount);
-    if (it.base === 'g' && a > 0) { if (mhStockAdjust(it.key, -Math.round(a * f * 100) / 100, 'cook', ref)) took++; } else skipped.push(it.name);
+    if (swFrom.has(it.key)) return;   // out or short, and its swap is taken off instead
+    const b = mhCookTake(ing, f, it);
+    if (b > 0) { if (mhStockAdjust(it.key, -b, 'cook', ref)) took++; } else skipped.push(it.name);
   });
+  sw.forEach(x => { if (mhStockAdjust(x.key, -x.take, 'cook', ref)) { took++; swapped.push(x.to + ' instead of ' + x.from); } });
   const o = mhStockLoad(); o.cooked = o.cooked || {}; o.cookedBy = o.cookedBy || {}; const _had = o.cooked[id] > 0 ? o.cookedBy[id] : null, _nb = mhAddDaysISO(mhRulesLoad().fridge); o.cookedBy[id] = _had && _had < _nb ? _had : _nb; if (o.cookedFrozen) delete o.cookedFrozen[id]; o.cooked[id] = Math.round(((o.cooked[id] || 0) + servings) * 1000) / 1000; mhStockSave(o);
-  showToast(took ? 'Cooked: ' + took + ' ingredient' + (took === 1 ? '' : 's') + ' off stock' + (skipped.length ? '; left alone (amount not in grams): ' + skipped.join(', ') : '') : 'Nothing tracked in this recipe, so stock is unchanged', null, null, 4500);
+  showToast(took ? 'Cooked: ' + took + ' ingredient' + (took === 1 ? '' : 's') + ' off stock' + (swapped.length ? ' (' + swapped.join(', ') + ')' : '') + (skipped.length ? '; left alone (the amount cannot be worked out in how you count it): ' + skipped.join(', ') : '') : 'Nothing tracked in this recipe, so stock is unchanged', null, null, 4500);
   try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
   return took;
 }
