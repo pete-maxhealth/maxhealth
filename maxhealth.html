@@ -6516,7 +6516,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1154'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1155'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -9017,6 +9017,7 @@ function renderLibrary() {
         <div style="font-size:8px;color:var(--text3);font-family:Space Mono,monospace;">hold card</div>
       </div>
       <div class="library-edit-btn" onclick="openLibraryEdit(${origIdx})">EDIT</div>
+      ${isMealEntry(f) ? '' : `<div class="library-edit-btn" title="Add to my cupboards" onclick="mhLibToCupboards(${origIdx})">📦</div>`}
     </div>
   `;
   }).join('');
@@ -17687,8 +17688,7 @@ function mhProductCupboardRow(defaultOn) {
 function mhStockFromProduct(p) {
   if (!p || !mhStockOn()) return false; const name = mhProductName(p), key = mhShopKey(name); if (!key || mhStockLoad().items[key]) return false;
   const q = mhProductQty(p.qty), base = q ? q.base : 'g', serv = p.servingQty > 0 ? p.servingQty : null;
-  if (!mhStockTrack(name, { base, pack: q ? q.pack : null, serving: serv, shop: mhShopLoad().shop })) return false;
-  setTimeout(() => showToast('📦 ' + name + ' is in your cupboards' + (q ? ' (pack ' + q.pack + ' ' + base + ')' : '') + '. Say how much you have in Check the cupboards.', null, null, 4500), 700);
+  setTimeout(() => mhStockAddFood({ name, origin: 'product', base, pack: q ? q.pack : null, serving: serv, ret: () => { try { switchTab('log', document.getElementById('maintab-log')); switchSubTab('log', 'log', document.getElementById('logtab-log')); } catch (_) {} } }), 500);
   return true;
 }
 function mhProductKeep() { const cb = document.getElementById('foodAmountCupboard'); if (cb && cb.checked && !cb.disabled) { try { mhStockFromProduct(_selectedFoodItem); } catch (e) { console.warn('keep product', e); } cb.checked = false; } }
@@ -28677,11 +28677,39 @@ function mhSlToList() {
 }
 // From the Add box: open the list of every food you know with what you typed as the filter, so several can be picked at once.
 // Typed a name that matches nothing: offer to make it a new food right here. A shop named in the text ("Heylo flatbread") becomes its shop (v3.10.1149).
+// ─── Adding a food to the cupboards from anywhere (v3.10.1155) ───
+// Cupboard search, a library entry, or a barcode / Open Food Facts product all come through here. It opens the stock form with what is already known filled in
+// (the shop from where you came from, or named in the title; serving and pack from the library or the product), asks only for what it cannot know, and returns you
+// to where you were. With stock switched off the food just goes on the list for that shop.
+function mhShopFromTitle(name, shops) { const t = String(name || '').toLowerCase(); return (shops || []).filter(n => n && new RegExp('(^|[^a-z0-9])' + String(n).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z0-9]|$)').test(t)).sort((a, b) => b.length - a.length)[0] || ''; }
+function mhStockAddFood(spec) {
+  spec = spec || {}; const name = String(spec.name || '').trim(); if (!name) return;
+  const s = mhShopLoad(), key = mhShopKey(name), shop = spec.shop || mhShopFromTitle(name, s.shops) || '', ret = typeof spec.ret === 'function' ? spec.ret : null;
+  if (!mhStockOn()) {
+    const sh = shop || s.shop, added = mhShopSetAdd(s, name, 'own', spec.origin === 'library' ? 'from my library' : '', null); if (added) s.items[s.items.length - 1].shop = sh; mhShopSave(s);
+    showToast(added ? '🛒 ' + name + ' put on your ' + sh + ' list' : name + ' is already on your list'); if (ret) ret(); return;
+  }
+  try { switchTabById('shop'); } catch (_) {}
+  mhStockEditView(key, name); const f = _shopUi.stk; if (!f) return;
+  f.ret = ret; f.origin = spec.origin || '';
+  if (f.isNew) {
+    const lib = mhSlLibUnit(name); f.shop = shop; f.shopAsk = !shop; f.base = spec.base || (lib ? lib.base : ''); f.levelU = f.base; f.reorderU = f.base;
+    f.pack = spec.pack ? String(spec.pack) : ''; f.serv = spec.serving ? String(spec.serving) : (lib && lib.base === f.base ? String(lib.n) : '');
+  }
+  mhShopRender();
+}
+function mhStkBack() { const f = _shopUi.stk, r = f && f.ret; _shopUi.stk = null; if (r) { _shopUi.view = 'list'; r(); } else mhShopView('list'); }
+function mhStkShopPick(v) {
+  if (v !== '__new') { mhStkSet('shop', v); if (v) { _shopUi.stk.shopAsk = false; } mhStkCommit('shop'); return; }
+  appPrompt('What is the new shop called?', 'e.g. Lidl', n => { n = String(n || '').trim().slice(0, 24); if (n) { const s = mhShopLoad(); let m = s.shops.find(x => x.toLowerCase() === n.toLowerCase()); if (!m) { m = n; s.shops.push(m); mhShopSave(s); } if (_shopUi.stk) { _shopUi.stk.shop = m; _shopUi.stk.shopAsk = false; mhStkCommit('shop'); } } mhShopRender(); });
+  mhShopRender();
+}
+function mhLibToCupboards(i) { const f = loadLibrary()[i]; if (!f || !f.name) return; const tab = (document.getElementById('logtab-library') || {}), y = window.scrollY; mhStockAddFood({ name: f.name, origin: 'library', ret: () => { try { switchTab('log', document.getElementById('maintab-log')); switchSubTab('log', 'library', document.getElementById('logtab-library')); setTimeout(() => window.scrollTo(0, y), 80); } catch (_) {} } }); }
 function mhSlNewName() { const q = String(mhSlState().q || '').trim(); if (!q) return ''; const lq = q.toLowerCase(); return mhSlRows().some(r => String(r.name).toLowerCase() === lq) ? '' : q.charAt(0).toUpperCase() + q.slice(1); }
 function mhSlNewFood() {
   const nm = mhSlNewName(); if (!nm) return; const sh = mhShopLoad(), low = nm.toLowerCase();
   const hit = sh.shops.filter(n => n && low.includes(String(n).toLowerCase())).sort((a, b) => b.length - a.length)[0];
-  const dest = hit || mhSlShop(); mhStockEditView(mhShopKey(nm), nm); if (_shopUi.stk && dest) { _shopUi.stk.shop = dest; mhShopRender(); }
+  const y = window.scrollY; mhStockAddFood({ name: nm, origin: 'cupboard', shop: hit || mhSlShop(), ret: () => { mhShopView('stocklist'); setTimeout(() => window.scrollTo(0, y), 80); } });
 }
 function mhSlFromAdd() { if (!mhStockOn()) return; const v = ((document.getElementById('mhShopOwn') || {}).value || '').trim(), st = mhSlState(); st.q = v; st.f = 'all'; st.n = 60; st.shop = ''; mhShopView('stocklist'); }
 function mhSlQ(v) { mhSlState().q = v; mhSlState().n = 60; mhShopRender('sl'); }
@@ -28872,6 +28900,7 @@ function mhStkBase(v) { const f = _shopUi.stk; if (!f) return; f.base = v; if (!
 function mhStockFormApply(f) {
   const fail = m => ({ ok: false, err: m });
   if (!MH_STOCK_BASES.includes(f.base)) return fail('Choose how this is counted: g, ml or each');
+  if (!f.shop) return fail('Choose which shop it is bought at');
   const numOrNull = v => { v = String(v || '').trim(); if (!v) return null; const n = parseFloat(v); return n > 0 ? n : NaN; };
   const pack = numOrNull(f.pack), serv = numOrNull(f.serv);
   if (Number.isNaN(pack) || Number.isNaN(serv)) return fail('Pack and serving sizes must be numbers above zero');
@@ -28889,7 +28918,7 @@ function mhStockFormApply(f) {
 function mhStockFormSave() {
   const f = _shopUi.stk; if (!f) return;
   const r = mhStockFormApply(f); if (!r.ok) { f.err = r.err; mhShopRender(); return false; }
-  _shopUi.stk = null; _shopUi.msg = f.name + (f.isNew ? ' added' : ' saved') + (r.added ? ' and put on your list (running low)' : ''); mhShopView('list'); return true;
+  _shopUi.stk = null; _shopUi.msg = f.name + (f.isNew ? ' added' : ' saved') + (r.added ? ' and put on your list (running low)' : ''); if (f.ret) { showToast(_shopUi.msg); _shopUi.view = 'list'; f.ret(); } else mhShopView('list'); return true;
 }
 // Existing items save as you change them (v3.10.1145). Each change keeps a copy of how the item was, so the Undo button on the screen puts it back; nothing to submit.
 const MH_STK_FIELDS = { level: 'Stock now', reorder: 'Reorder at', pack: 'One pack holds', serv: 'One serving is', base: 'Counted in', shop: 'Bought at', store: 'Kept in', life: 'Lasts (days)', useBy: 'Use by' };
@@ -29004,7 +29033,7 @@ function mhShopRender(keepFocus) {
     const f = _shopUi.stk, inp = 'width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;';
     const lab = t => '<div style="font-size:12px;color:var(--text2);margin:14px 0 4px;">' + t + '</div>', hint = t => t ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">' + t + '</div>' : '';
     const uopts = sel => [[f.base || '', f.base || 'unit'], ['serving', 'servings'], ['pack', 'packs']].map(a => '<option value="' + a[0] + '"' + (sel === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('');
-    const lp = mhStockLibraryPortion(f.name), shopOpts = s.shops.map(n => '<option value="' + esc(n) + '"' + (n === f.shop ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+    const lp = mhStockLibraryPortion(f.name), shopOpts = (f.shopAsk && !f.shop ? '<option value="" selected>Which shop?</option>' : '') + s.shops.map(n => '<option value="' + esc(n) + '"' + (n === f.shop ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '<option value="__new">＋ New shop…</option>';
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);">📦 ' + esc(f.name) + '</div>'
       + (f.isNew ? '' : '<div style="font-size:12px;color:var(--text3);margin-top:4px;">Changes save as you make them. Undo steps back.</div>')
       + (!f.isNew && (f.undo && f.undo.length || f.saved) ? '<div id="mhStkSaved" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--text);"><span style="flex:1;min-width:0;">✓ ' + (f.undo && f.undo.length ? 'Saved: ' + esc(f.undo[f.undo.length - 1].label) : esc(f.saved)) + (f.note ? ' · ' + esc(f.note) : '') + '</span>' + (f.undo && f.undo.length ? '<button id="mhStkUndo" class="copy-btn" onclick="mhStkUndo()" style="font-size:14px;padding:10px 14px;white-space:nowrap;">↩ Undo</button>' : '') + '</div>' : '')
@@ -29013,13 +29042,13 @@ function mhShopRender(keepFocus) {
       + lab('One pack holds (' + esc(f.base || 'in that unit') + ')') + '<input id="mhStkPack" inputmode="decimal" value="' + esc(f.pack) + '" oninput="mhStkSet(\'pack\',this.value)" onchange="mhStkCommit(\'pack\')" placeholder="optional, e.g. 750" style="' + inp + '">'
       + lab('One serving is (' + esc(f.base || 'in that unit') + ')') + '<input id="mhStkServ" inputmode="decimal" value="' + esc(f.serv) + '" oninput="mhStkSet(\'serv\',this.value)" onchange="mhStkCommit(\'serv\')" placeholder="optional, e.g. 25" style="' + inp + '">'
       + hint('For example whey: a 750 tub, 30 servings of 25. Once a serving is set you can type either "2 servings" or "50 g" anywhere.' + (lp ? ' Your library says one portion is ' + esc(lp) + '; type the amount if that is right.' : ''))
-      + lab('Bought at') + '<select id="mhStkShop" onchange="mhStkSet(\'shop\',this.value);mhStkCommit(\'shop\')" style="' + inp + '">' + shopOpts + '</select>'
+      + lab('Bought at') + '<select id="mhStkShop" onchange="mhStkShopPick(this.value)" style="' + inp + '">' + shopOpts + '</select>'
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" onchange="mhStkCommit(\'level\')" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value);mhStkCommit(\'level\')" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" onchange="mhStkCommit(\'reorder\')" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value);mhStkCommit(\'reorder\')" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
       + lab('Kept in') + '<select id="mhStkStore" onchange="mhStkSet(\'store\',this.value);mhStkCommit(\'store\');" style="' + inp + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((f.store || '') === x ? ' selected' : '') + '>' + mhStoreIcon(x) + ' ' + mhStoreName(x) + '</option>').join('') + '</select>'
       + (f.store ? lab('Lasts (days)') + '<input id="mhStkLife" inputmode="numeric" value="' + esc(f.life) + '" oninput="mhStkSet(\'life\',this.value)" onchange="mhStkCommit(\'life\')" placeholder="suggested ' + mhItemLife({}, f.store) + ' days" style="' + inp + '">' + hint('Your own figure is remembered for this food in the ' + f.store + ' (milk 5 days, say). Leave empty to use the suggested length, which you can change in Stock rules. It sets the use-by date each time you buy it.') : '')
       + lab('Use by (optional)') + '<input id="mhStkUseBy" type="date" value="' + esc(f.useBy || '') + '" oninput="mhStkSet(\'useBy\',this.value)" onchange="mhStkCommit(\'useBy\')" style="' + inp + '">' + hint('Past this date it stops being suggested and shows as past its use-by. Buying more of it clears the date.')
-      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">' + (f.isNew ? '<button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Add to my cupboards</button>' : '') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockToList(this.dataset.k)" style="font-size:14px;padding:11px 16px;">🛒 Add to shopping list</button>') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Remove from my cupboards</button>') + '</div>';
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;">' + (f.isNew ? '<button id="mhStkSave" class="copy-btn" onclick="mhStockFormSave()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Add to my cupboards</button>' : '') + btn('Back', "mhStkBack()", 'font-size:14px;padding:11px 16px;') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockToList(this.dataset.k)" style="font-size:14px;padding:11px 16px;">🛒 Add to shopping list</button>') + (f.isNew ? '' : '<button class="copy-btn" data-k="' + esc(f.key) + '" onclick="mhStockUntrackAsk(this.dataset.k)" style="font-size:14px;padding:11px 16px;color:var(--red);">Remove from my cupboards</button>') + '</div>';
   } else if (_shopUi.view === 'stocklist') {
     const st = mhSlState(), all = mhSlRows(), rows = mhSlFilter(all), shown = rows.slice(0, st.n), nT = all.filter(r => r.it).length;
     const tl0 = (label, fn) => '<button class="copy-btn mh-tile" onclick="' + fn + '">' + label + '</button>';
