@@ -69,7 +69,8 @@ with fresh_server() as root, sync_playwright() as pw:
 
     # C. running low: LOW chip, onto the list with a tag
     ev("(k)=>mhStockEditView(k)", it['key']); page.wait_for_timeout(150)
-    page.fill('#mhStkLevel', '100'); page.select_option('#mhStkLevelU', 'g'); page.click('#mhStkSave'); page.wait_for_timeout(250)
+    page.select_option('#mhStkLevelU', 'g'); page.fill('#mhStkLevel', '100'); page.press('#mhStkLevel', 'Tab'); page.wait_for_timeout(250)   # existing items save as you change them (v3.10.1145)
+    page.click('button:has-text("Back")'); page.wait_for_timeout(250)   # autosaved: Back returns to the list
     row = ev("document.querySelector('[data-stock=\"Whey protein\"]')?.innerText.replace(/\\s+/g,' ') || ''")
     if 'LOW' not in row: f.add('BUG', f'100 g is under the 125 g reorder level so it should say LOW: {row!r}')
     on = ev("mhShopLoad().items.filter(i=>i.name==='Whey protein').map(i=>i.src)")

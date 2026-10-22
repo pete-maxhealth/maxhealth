@@ -101,7 +101,9 @@ with fresh_server() as root, sync_playwright() as pw:
       mhStockSetLevel(mhShopKey('Toilet Roll (Asda)'),4); mhStockSetReorder(mhShopKey('Toilet Roll (Asda)'),5);
       const o=mhStockLoad(); o.items[mhShopKey('Toilet Roll (Asda)')].nonFood=true; mhStockSave(o); mhStockSweep(); }""")
     sl = ev("mhShopLoad().items.map(i=>[i.name,i.nonFood,i.cat])")
-    if not any(n == 'Toilet Roll (Asda)' and nf and c == 'nonfood' for n, nf, c in sl): f.add('BUG', f'6: a non-food item that runs low goes on the list as non-food: {sl}')
+    if any(n == 'Toilet Roll (Asda)' for n, nf, c in sl): f.add('BUG', f'6: a non-food item is never listed by a number; only your 🛒 button lists it (v3.10.1144): {sl}')
+    ev("mhStockLowNow(mhShopKey('Toilet Roll (Asda)'))"); sl = ev("mhShopLoad().items.map(i=>[i.name,i.nonFood,i.cat])")
+    if not any(n == 'Toilet Roll (Asda)' and nf and c == 'nonfood' for n, nf, c in sl): f.add('BUG', f'6b: flagged low by hand, a non-food item goes on the list as non-food: {sl}')
     if not any(n == 'Cheddar' for n, nf, c in sl): f.add('BUG', f'6: low cheddar is on the list: {sl}')
     RC = "ASDA\nCHEDDAR 400G 2.50\nTOILET ROLL 9 PACK 4.00\nBIN BAGS 20 PACK 2.00\nBAKED BEANS 410G 0.80\n17 Oct 2026\n"
     ev("mhOrdDraftClear(); mhOrdOpen('receipt')"); page.fill('#mhOrdText', RC); page.click('#mhOrdRead'); page.wait_for_timeout(400)
