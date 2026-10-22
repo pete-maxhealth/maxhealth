@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1152'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1153'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27228,7 +27228,9 @@ function mhShopCompleteGo() {
   const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = bought.filter((k, n) => so.items[k] && !so.items[k].nonFood && bought.indexOf(k) === n);
   // Non-nutritional things you bought land on the shelf (no count is invented: the shelf just knows you keep it), so next time they are listed under Add > Non-nutritional and can be flagged as running low (v3.10.1139).
   let shelved = 0; if (mhStockOn()) s.items.filter(i => i.checked && i.shop === s.shop && i.nonFood).forEach(i => { try { if (!mhStockLoad().items[i.key]) { mhStockTrack(i.name, { base: 'each', shop: s.shop }); const o2 = mhStockLoad(); if (o2.items[i.key]) { o2.items[i.key].nonFood = true; mhStockSave(o2); shelved++; } } } catch (_) {} });
-  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied' + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
+  // A non-nutritional regular (marked ⭐ in My usuals: toilet roll every week) stays on the list, unticked, ready for next time; the rest leave the list and live on the shelf (v3.10.1153).
+  let stayed = 0; s.items.forEach(i => { if (i.checked && i.shop === s.shop && i.nonFood && mhShopUsualFind(s, i.key)) { i.checked = false; stayed++; } });
+  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied' + (stayed ? '; ' + stayed + ' regular' + (stayed === 1 ? '' : 's') + ' stay on your list' : '') + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
   // Tracked things you just bought go to a review step: stock is only added from what you confirm (nothing is assumed about quantity).
   if (track.length) { so.review = Array.from(new Set((so.review || []).concat(track))); mhStockSave(so); _shopUi.bgt = {}; _shopUi.view = 'stockbought'; }
   mhShopRender();
@@ -28906,6 +28908,13 @@ function mhShopIsShut(fold, k, sec) { return (k in fold) ? !!fold[k] : (String(k
 function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; const sec = +String(k).split('_').pop().replace(/^m/, ''); _shopUi.fold[k] = !mhShopIsShut(_shopUi.fold, k, sec); mhShopRender(); }
 // Tick everything still to get in one aisle (the visible items only, so a search filter is respected).
 function mhShopTickSection(sec) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.checked && mhShopSection(i.cat) === sec).map(i => i.id)); let n = 0; s.items.forEach(i => { if (ids.has(i.id)) { i.checked = true; n++; } }); _shopUi.msg = n ? n + ' ticked into the basket' : ''; mhShopSave(s); mhShopRender(); }
+// A non-nutritional item flagged as a regular stays on the list after every shop; switch it off and it goes back to the shelf like the rest (v3.10.1153).
+function mhNfRegular(key) {
+  const s = mhShopLoad(), o = mhStockLoad(), it = o.items[key]; if (!it) return; const u = mhShopUsualFind(s, key);
+  if (u) { s.usuals = s.usuals.filter(x => mhShopKey(x) !== key); _shopUi.msg = it.name + ' is no longer a regular'; }
+  else { s.usuals.push(it.name); if (mhShopSetAdd(s, it.name, 'usual', 'regular', null, { nonFood: true })) s.items[s.items.length - 1].shop = it.shop || s.shop; _shopUi.msg = it.name + ' is a regular: it stays on your list after every shop'; }
+  mhShopSave(s); mhShopRender();
+}
 function mhShopUsualFromItem(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; if (!mhShopUsualFind(s, i.key)) s.usuals.push(i.name); _shopUi.msg = i.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 function mhShopUnpantry(key) { const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
 function mhShopRender(keepFocus) {
@@ -29068,7 +29077,7 @@ function mhShopRender(keepFocus) {
       + (addKind === 'nonfood' ? (() => {
         const nf = Object.values(mhStockLoad().items).filter(x => x.nonFood).sort((x, y) => x.name.localeCompare(y.name));
         return nf.length ? '<div id="mhNfShelf" style="margin:2px 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">On your shelf: tap to put one on the list</div>' + nf.map(x => { const on = s.items.some(i => i.key === x.key);
-          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span style="font-size:15px;color:var(--text);min-width:0;">' + esc(x.name) + '</span>' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k)" style="font-size:13px;padding:8px 12px;white-space:nowrap;">＋ Add to list</button>') + '</div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
+          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span style="font-size:15px;color:var(--text);min-width:0;">' + esc(x.name) + '</span>' + '<span style="display:flex;align-items:center;gap:6px;flex:0 0 auto;"><button class="copy-btn" data-regk="' + esc(x.key) + '" onclick="mhNfRegular(this.dataset.regk)" title="A regular stays on your list after every shop" style="font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, x.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, x.key) ? '⭐ Regular' : '☆ Regular') + '</button>' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k)" style="font-size:13px;padding:8px 12px;white-space:nowrap;">＋ Add to list</button>') + '</span></div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
           : '<div id="mhNfShelf" style="font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.5;">Nothing non-nutritional on your shelf yet. Type one below, or add them to My cupboards (Add a food, then Add as non-nutritional) and they will be listed here.</div>'; })() : '')
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="' + (addKind === 'nonfood' ? 'What do you need? e.g. Toilet roll' : 'Type an item') + '" onkeydown="if(event.key===\'Enter\')' + (addKind === 'nonfood' ? 'document.getElementById(\'mhShopOwnAmount\').focus()' : 'mhShopAddOwn()') + '" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + (addKind === 'food' ? btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') : '') + '</div>'
       + (addKind === 'nonfood' ? '<div style="display:flex;gap:6px;margin-top:6px;"><input id="mhShopOwnAmount" placeholder="Amount, e.g. 24 pack, 2 bottles" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px;">Non-nutritional: kept off your list of ingredients, My foods and every nutrition search or stat — just here so a real shopping trip has everything on one list.</div>' : '')
