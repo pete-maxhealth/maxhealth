@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1151'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1152'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28577,6 +28577,10 @@ function mhOrdViewHtml(s, esc, btn) {
 // Walk the cupboards with the list open. Type what you have (and, if you like, where it is bought, what one serving is, and when to
 // reorder). Nothing to submit. An ingredient becomes tracked the moment you give it an amount; it needs to know how it is counted
 // (g, ml or each) from the unit box or from the unit you type ("500 g"), and it never guesses that.
+// What the shopping system needs to know about a food before it can warn you it is running out (v3.10.1152). Hand-marked non-nutritional items need nothing.
+function mhStockGaps(it) { if (!it || it.nonFood) return []; const g = []; if (it.level == null) g.push('how much you have'); if (it.reorder == null) g.push('when to reorder'); if (!(it.serving > 0)) g.push('one serving'); return g; }
+function mhStockGapCount() { try { return Object.values(mhStockLoad().items).filter(it => mhStockGaps(it).length).length; } catch (_) { return 0; } }
+function mhSlGaps() { const st = mhSlState(); st.f = 'gaps'; st.q = ''; st.n = 60; mhShopView('stocklist'); }
 function mhSlState() { _shopUi.sl = _shopUi.sl || { q: '', f: 'all', n: 60 }; if (!_shopUi.sl.sel) _shopUi.sl.sel = {}; return _shopUi.sl; }
 function mhSlRows() {
   const o = mhStockLoad(), seen = new Set(), out = [];
@@ -28595,7 +28599,7 @@ function mhSlMatch(rows, q) {
 }
 function mhSlFilter(rows) {
   const st = mhSlState();
-  return mhSlMatch(rows, st.q).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null)) || (st.f === 'nonfood' && r.it && r.it.nonFood)));
+  return mhSlMatch(rows, st.q).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null)) || (st.f === 'gaps' && r.it && mhStockGaps(r.it).length) || (st.f === 'nonfood' && r.it && r.it.nonFood)));
 }
 // Several at once (v3.10.1147): tick rows (or Tick all shown), then set where they are bought and kept, or put them on the list. Rows the app does not know how to
 // count (no g/ml/each from your library) are skipped and counted, never guessed.
@@ -28627,7 +28631,10 @@ function mhSlBulk() {
     done++;
   });
   mhStockSweep(); mhSlState().sel = {};
-  _shopUi.msg = done + ' added to ' + shop + (skipped ? '; ' + skipped + ' skipped (tell me how each is counted first: g, ml or each)' : ''); showToast(_shopUi.msg, null, null, 3500); mhShopRender();
+  const gaps = rows.filter(r => mhStockGaps(mhStockLoad().items[r.key]).length).length;
+  _shopUi.msg = done + ' added to ' + shop + (skipped ? '; ' + skipped + ' skipped (tell me how each is counted first: g, ml or each)' : '') + (gaps ? '. ' + gaps + ' still need details (how much you have, when to reorder, one serving), so they are listed below for you to fill in' : '');
+  if (gaps) { const st = mhSlState(); st.f = 'gaps'; st.q = ''; }
+  showToast(_shopUi.msg, null, null, 4500); mhShopRender();
 }
 function mhSlToList() {
   const rows = mhSlTickedRows(); if (!rows.length) { _shopUi.msg = 'Tick some first'; mhShopRender(); return; }
@@ -28660,6 +28667,7 @@ function mhSlRowHtml(r, s) {
     + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><input type="checkbox" data-pick="' + esc(r.key) + '" ' + (mhSlState().sel[r.key] ? 'checked ' : '') + 'onchange="mhSlPick(this)" title="Tick to change several at once" style="width:24px;height:24px;flex:0 0 auto;"><div style="flex:1;min-width:0;font-size:15px;color:var(--text);">' + esc(r.name) + ' <span style="font-size:11px;color:var(--text3);">' + esc(mhShopAisleName(r.cat)) + '</span></div>' + unit + '<span data-st style="font-size:12px;color:' + (low ? 'var(--red)' : 'var(--green)') + ';min-width:44px;text-align:right;">' + (low ? 'low' : '') + '</span></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + f('amt', 'Have now', it ? mhSlNumText(it, it.level) : '', 'e.g. 500 g', 'text') + f('thr', 'Reorder at', it ? mhSlNumText(it, it.reorder) : '', 'e.g. 125 g', 'text')
     + f('serv', 'One serving', it ? (it.serving || '') : (lib ? lib.n : ''), 'if known', 'decimal') + '<div>' + lab('Bought at') + shopSel + '</div><div>' + lab('Kept in') + '<select data-f="store" onchange="mhSlSet(this)" style="' + inp + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((it && it.store || '') === x ? ' selected' : '') + '>' + mhStoreName(x) + '</option>').join('') + '</select></div></div>'
+    + (it && mhStockGaps(it).length ? '<div data-gaps style="font-size:12px;color:var(--yellow);margin-top:6px;">Still to add: ' + esc(mhStockGaps(it).join(', ')) + '</div>' : '')
     + '<div data-err style="font-size:12px;color:var(--red);margin-top:4px;display:none;"></div></div>';
 }
 function mhSlSet(el) {
@@ -28808,7 +28816,7 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone. 🧾 Add a receipt to stock adds a shop on top of what you have (paste it, choose a file or table, or photograph a paper one); Start stock from an order sets counts from a recent order. Each food can be kept in the cupboard, fridge or freezer, and the days it lasts there are yours to change and are remembered. Toilet roll and bin bags can be counted too, as items.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + cbHtml
-    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + tile('📋 Check the cupboards', "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + tile('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
+    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + tile('⚡ The ones I use most', "mhShopView('stocksuggest')") + '</div>'
     + '<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3);"><span onclick="mhStockExportAsk()" style="cursor:pointer;text-decoration:underline;">📤 Send stock to another device</span><span onclick="mhStockImportPick()" style="cursor:pointer;text-decoration:underline;">📥 Receive stock</span><span onclick="mhStockOffAsk()" style="cursor:pointer;text-decoration:underline;">⏻ Turn off</span></div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
@@ -28980,7 +28988,7 @@ function mhShopRender(keepFocus) {
     const chip = (k, t) => '<button class="copy-btn" data-f="' + k + '" onclick="mhSlF(this.dataset.f)" style="font-size:12px;padding:7px 10px;' + (st.f === k ? 'background:var(--accent);color:#fff;' : '') + '">' + t + '</button>';
     const find = '<input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Search your library and cupboards (any words, any order)" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:8px;">'
       + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('noamt', 'No amount yet') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (mhStockGapCount() ? chip('gaps', 'Needs details (' + mhStockGapCount() + ')') : '') + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('noamt', 'No amount yet') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
       + (st.q.trim() && rows.length && mhSlWords(st.q).length > 1 && !all.filter(r => mhSlWords(st.q).every(x => r.name.toLowerCase().includes(x))).length ? '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">No exact match, so these are the closest:</div>' : '')
       + '<div id="mhSlRows">' + (shown.map(r => mhSlRowHtml(r, s)).join('') || '<div style="font-size:13px;color:var(--text3);padding:14px 0;">Nothing matches.</div>') + '</div>'
       + (rows.length > shown.length ? '<div style="margin-top:10px;">' + btn('Show more (' + (rows.length - shown.length) + ' left)', 'mhSlMore()') + '</div>' : '');
