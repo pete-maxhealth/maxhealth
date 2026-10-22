@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1165
+- **Untick all now really unticks, and the bar can be closed.** On the Add foods screen, Untick all only cleared the rows currently shown, so a ticked food hidden by the search (or a filter) stayed ticked and the bar never went away. It now clears every tick, and the bar has a ✕ that does the same. Test p255 covers a tick hidden by the search.
+
 ## v3.10.1164
 - **My cupboards: Add foods is at the top, and Close all / Open all.** Pete only found Add foods after collapsing every aisle group. There is now a big **➕ Add foods** button at the top of the card, above the search box. **Close all / Open all** shut or open every aisle group and the Use soon list in one tap. The Use soon list shows five rows with **Show all (15)** / **Show fewer**, and folds from its heading. Test p270.
 

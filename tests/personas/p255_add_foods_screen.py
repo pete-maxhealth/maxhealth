@@ -35,6 +35,12 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("window.scrollTo(0, 400)"); page.wait_for_timeout(200)
     b = ev("(()=>{const r=document.getElementById('mhSlBulk').getBoundingClientRect(); return [r.top, r.bottom, innerHeight];})()")
     if not (b[1] <= b[2] + 1 and b[0] > 0): f.add('BUG', f'6: the action bar is on screen while scrolling: {b}')
+    # a tick hidden by the search is still cleared by Untick all, and the bar goes away
+    ev("(()=>{const st=mhSlState(); st.sel={}; const r=mhSlRows()[0]; st.sel[r.key]=1; st.q='zzzzqqq'; mhShopRender();})()"); page.wait_for_timeout(300)
+    if ev("getComputedStyle(document.getElementById('mhSlBulk')).display") == 'none': f.add('BUG', '7: setup: a ticked row hidden by the search still shows the bar')
+    page.click('#mhSlBulk >> text=Untick all'); page.wait_for_timeout(300)
+    if ev("Object.keys(mhSlState().sel).length") != 0 or ev("getComputedStyle(document.getElementById('mhSlBulk')).display") != 'none': f.add('BUG', '7: Untick all clears every tick (even ones the search hides) and closes the bar')
+    ev("mhSlQ('')"); page.wait_for_timeout(200)
     # show/hide and reorder of the blocks
     page.evaluate("window.scrollTo(0, 0)"); first = ev("[...document.querySelectorAll('[id^=mhAddf_]')].map(e=>e.id)")
     ev("mhAddfMove('ways','up')"); page.wait_for_timeout(200)
