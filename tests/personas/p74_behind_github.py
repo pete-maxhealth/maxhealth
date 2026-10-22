@@ -23,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not page.query_selector('#mhBehindBanner'): f.add('BUG', 'no banner when GitHub is ahead')
     else:
         t = page.inner_text('#mhBehindBanner')
-        if 'v3.10.5000' not in t or 'mh_autoupdate' not in t: f.add('BUG', f'banner text unhelpful: {t[:120]}')
+        if 'v3.10.5000' not in t or 'Update now' not in t: f.add('BUG', f'banner text unhelpful: {t[:120]}')
         page.click('#mhBehindClose'); page.wait_for_timeout(200)
         if page.query_selector('#mhBehindBanner'): f.add('BUG', 'Dismiss did not remove banner')
         page.evaluate("mhBehindRender()")

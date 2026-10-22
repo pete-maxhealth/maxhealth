@@ -5857,9 +5857,10 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
             <li>The server process was killed to free memory</li>
           </ul>
         </div>
-        <div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Open Termux and type:</div>
-        <div class="command-box" style="margin-top:4px;font-size:15px;letter-spacing:0.05em;">mhstart</div>
-        <button class="copy-btn" style="margin-top:8px;width:100%;" onclick="navigator.clipboard.writeText('mhstart').then(()=>showToast('Copied ✓'))">📋 COPY COMMAND</button>
+        <button class="copy-btn" style="width:100%;padding:12px;font-size:15px;background:var(--accent);color:#fff;" onclick="mhRestartDialog('start')">▶ START THE SERVER</button>
+        <details style="margin-top:10px;"><summary style="font-size:12px;color:var(--text3);cursor:pointer;">Still stuck? Start it by hand in Termux</summary>
+        <div class="command-box" style="margin-top:6px;font-size:15px;letter-spacing:0.05em;">mhstart</div>
+        <button class="copy-btn" style="margin-top:8px;width:100%;" onclick="navigator.clipboard.writeText('mhstart').then(()=>showToast('Copied ✓'))">📋 COPY COMMAND</button></details>
         <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.7;border-top:1px solid var(--border);padding-top:10px;">
           The sync button will go green within a few seconds.<br>
           <strong style="color:var(--yellow);">Important:</strong> Keep Termux open in the background — minimise it with the home button, don't swipe it away. Swiping Termux away stops the server.<br>
@@ -6516,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1162'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1163'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -13738,7 +13739,7 @@ async function syncAllNutritionToServer() {
       showToast('Sync failed — server error');
     }
   } catch(e) {
-    showToast('Server not running — start with mhstart');
+    showToast('The server is not running', 'Start it', () => mhRestartDialog('start'), 8000);
   }
 }
 
@@ -30030,6 +30031,42 @@ function saveLogEdit(id) {
   }
 }
 
+// ─── Restarting or updating the local server without Termux (v3.10.1163) ───
+// A web page cannot type into Termux (Android does not allow it). What it CAN do: open the MaxedHealth Sync launcher, which starts the server itself and brings you back
+// here, and, when the server is already running, ask it to run its own update. The box says only what is really happening and watches /ping for the server coming back.
+const MH_LAUNCHER_PKG = 'com.maxedhealth.launcher';
+function mhLauncherIntent() { return 'intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=' + MH_LAUNCHER_PKG + ';S.browser_fallback_url=' + encodeURIComponent(location.origin + '/?launcher=missing') + ';end'; }
+let _mhRestartTimer = null;
+function mhRestartClose() { const b = document.getElementById('mhRestartBox'); if (b) b.remove(); }
+async function mhPingOnce() { try { const r = await fetch(`${MH_SERVER}/ping`, { cache: 'no-store', signal: AbortSignal.timeout(2500) }); return r.ok; } catch (_) { return false; } }
+function mhRestartWatch(kind) {
+  if (_mhRestartTimer) clearInterval(_mhRestartTimer);
+  const t0 = Date.now(); let sawDown = kind === 'start' ? true : false, busy = false;
+  const say = (m, done) => { const e = document.getElementById('mhRestartMsg'); if (e) e.textContent = m; const t = document.getElementById('mhRestartTitle'); if (t && done) t.textContent = done; };
+  _mhRestartTimer = setInterval(async () => {
+    if (busy) return; busy = true; const up = await mhPingOnce(); busy = false; const secs = Math.round((Date.now() - t0) / 1000);
+    if (!up) { sawDown = true; say(kind === 'update' ? 'Installing the update. The server restarts by itself, usually within a minute (' + secs + 's)…' : 'Waiting for the server to start (' + secs + 's)…'); }
+    else if (kind === 'start' || sawDown) { clearInterval(_mhRestartTimer); _mhRestartTimer = null; _serverOnline = true; try { checkServer && checkServer(); } catch (_) {} say(kind === 'update' ? 'Updated. Reloading with the new version…' : 'The server is running again.', kind === 'update' ? 'Updated ✓' : 'Server is back ✓'); showToast(kind === 'update' ? 'Updated, reloading' : 'Server is back ✓'); if (kind === 'update') setTimeout(() => location.reload(), 1200); }
+    else if (secs > 25) { clearInterval(_mhRestartTimer); _mhRestartTimer = null; say('Nothing needed installing. This phone already has the newest version.', 'Up to date ✓'); }
+    else say('Checking for an update (' + secs + 's)…');
+    if (secs > 150 && _mhRestartTimer) { clearInterval(_mhRestartTimer); _mhRestartTimer = null; say(kind === 'update' ? 'The update is taking longer than expected. Open MaxedHealth Sync from your home screen, which starts the server again.' : 'The server has not answered yet. Open MaxedHealth Sync from your home screen to try again.', 'Still not answering'); }
+  }, 3000);
+}
+async function mhRestartDialog(kind) {
+  if (kind === 'update' && !(await mhPingOnce())) kind = 'start';   // nothing to ask for an update if the server is not running: start it first
+  mhRestartClose();
+  const o = document.createElement('div'); o.id = 'mhRestartBox'; o.className = 'app-modal-overlay';
+  const startMsg = 'MaxedHealth Sync is starting the server for you and will bring you back here. This only restarts the server on your phone; nothing is lost.';
+  o.innerHTML = '<div class="app-modal"><div class="app-modal-title" id="mhRestartTitle">' + (kind === 'update' ? 'Updating' : 'Server restarting') + '</div><div class="app-modal-msg" id="mhRestartMsg">' + (kind === 'update' ? 'Asking your phone to install the newest version…' : startMsg) + '</div><div class="app-modal-btns"><button class="app-modal-btn confirm" id="mhRestartOk">OK</button></div></div>';
+  document.body.appendChild(o); document.getElementById('mhRestartOk').onclick = mhRestartClose;
+  if (kind === 'update') {
+    try { const r = await fetch(`${MH_SERVER}/update-now`, { method: 'POST' }); const d = await r.json().catch(() => ({})); if (!r.ok || d.status === 'error') { const m = document.getElementById('mhRestartMsg'); if (m) m.textContent = (d.message || 'The update could not be started.') + ' Open MaxedHealth Sync from your home screen and try again.'; document.getElementById('mhRestartTitle').textContent = 'Could not update'; return; } } catch (_) { kind = 'start'; }
+  }
+  mhRestartWatch(kind);
+  if (kind === 'start') setTimeout(() => { try { location.href = mhLauncherIntent(); } catch (_) {} }, 350);
+}
+window.addEventListener('load', () => mhLauncherMissingNote());
+function mhLauncherMissingNote() { try { if (new URLSearchParams(location.search).get('launcher') === 'missing') { history.replaceState(null, '', location.pathname); setTimeout(() => appConfirm('MaxedHealth Sync is not installed on this phone, so the server cannot be started from here. Get it from the apk folder of the MaxedHealth page on GitHub, install it once, and this button will work from then on.', null, null, false, { confirm: 'OK', cancel: 'Close' }), 800); } } catch (_) {} }
 async function showServerStatus() {
   // _serverOnline only ever gets set once, from a single ping at startup -
   // if that one check happened to fail (server still starting up, Termux
@@ -30063,7 +30100,7 @@ async function showServerStatus() {
   } else {
     title = '☁ SERVER OFFLINE';
     colour = 'var(--yellow)';
-    body = `Server not responding at <strong>${MH_SERVER}</strong><br><br>Open Termux — the server will start automatically.<br><br>Or run this command in Termux:<br><code id="restartCmd" onclick="navigator.clipboard.writeText('mhstart').then(()=>showToast('Copied ✓')).catch(()=>{})" style="display:block;margin-top:6px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--accent);cursor:pointer;">mhstart<br><span style="font-size:10px;color:var(--text3);">Tap to copy</span></code>`;
+    body = `Server not responding at <strong>${MH_SERVER}</strong><br><br><button class="copy-btn" onclick="document.getElementById('serverStatusModal')?.remove();mhRestartDialog('start')" style="width:100%;padding:12px;font-size:15px;background:var(--accent);color:#fff;">▶ Start the server</button><details style="margin-top:10px;"><summary style="font-size:12px;color:var(--text3);cursor:pointer;">Still stuck? Start it by hand</summary><code id="restartCmd" onclick="navigator.clipboard.writeText('mhstart').then(()=>showToast('Copied ✓')).catch(()=>{})" style="display:block;margin-top:6px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--accent);cursor:pointer;">mhstart<br><span style="font-size:10px;color:var(--text3);">In Termux. Tap to copy</span></code></details>`;
   }
 
   // Remove existing
@@ -49120,7 +49157,7 @@ function manualCheckForUpdate() {
       clearInterval(watcherInterval);
       if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
       if (!bannerShown && !document.getElementById('swUpdateBanner')) {
-        mhBehindCheck(true).then(() => { if (mhBehindState().behind) showToast('This phone is behind ' + mhBehindState().latest + ' - see the update note'); else showToast("You're on the latest version ✓"); });
+        mhBehindCheck(true).then(() => { if (mhBehindState().behind) showToast('This phone is behind ' + mhBehindState().latest, 'Update now', () => mhRestartDialog('update'), 10000); else showToast("You're on the latest version ✓"); });
       }
     }, 500);
   }).catch(() => {
@@ -49160,16 +49197,16 @@ function mhBehindRender() {
   const st = mhBehindState();
   const old = document.getElementById('mhBehindBanner'); if (old) old.remove();
   const note = document.getElementById('mhBehindNote');
-  if (note) note.textContent = st.behind ? `⚠ This phone is on ${APP_VERSION}; ${st.latest} is out. Run the update command in Termux.` : '';
+  if (note) note.textContent = st.behind ? `⚠ This phone is on ${APP_VERSION}; ${st.latest} is out. Tap Update now.` : '';
   let dismissed = ''; try { dismissed = localStorage.getItem('mh_behind_dismissed') || ''; } catch (e) {}
   if (!st.behind || dismissed === st.latest) return;
   const b = document.createElement('div');
   b.id = 'mhBehindBanner';
   b.style.cssText = 'position:fixed;left:12px;right:12px;top:12px;z-index:9998;background:var(--surface2,#1c222b);color:var(--text,#e8edf2);border:1px solid var(--accent,#7cc4ff);padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.5;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
-  b.innerHTML = `<div><b>Update waiting:</b> this phone is on ${APP_VERSION}, ${st.latest} is out. In Termux run <code>bash ~/mh_autoupdate.sh</code> then reopen the app.</div><div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;"><button class="copy-btn" id="mhBehindCopy" style="padding:4px 10px;">Copy command</button><button class="copy-btn" id="mhBehindClose" style="padding:4px 10px;">Dismiss</button></div>`;
+  b.innerHTML = `<div><b>Update waiting:</b> this phone is on ${APP_VERSION}, ${st.latest} is out. Tap Update now and I will install it for you.</div><div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end;"><button class="copy-btn" id="mhBehindCopy" style="padding:6px 12px;background:var(--accent);color:#fff;">Update now</button><button class="copy-btn" id="mhBehindClose" style="padding:4px 10px;">Dismiss</button></div>`;
   document.body.appendChild(b);
   document.getElementById('mhBehindClose').onclick = () => { try { localStorage.setItem('mh_behind_dismissed', st.latest); } catch (e) {} b.remove(); };
-  document.getElementById('mhBehindCopy').onclick = () => { try { navigator.clipboard.writeText('bash ~/mh_autoupdate.sh'); showToast('Command copied'); } catch (e) { showToast('Copy failed - type it in Termux'); } };
+  document.getElementById('mhBehindCopy').onclick = () => { b.remove(); mhRestartDialog('update'); };
 }
 
 function showUpdateAvailableBanner(newWorker) {

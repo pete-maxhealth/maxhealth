@@ -789,6 +789,20 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         # get_precedence() reads. Merges rather than overwrites pipeline_prefs.json
         # wholesale, since load_prefs()'s own docstring ("source precedence
         # etc.") leaves room for other keys to live in this same file later.
+        # v3.10.1163: "Update now" inside the app, so nobody has to open Termux. Runs the same fixed script the 30-minute job runs (no input is taken from the request);
+        # if there is a newer version the script restarts this server on the new code, and the app watches for it coming back.
+        if path == '/update-now':
+            script = os.environ.get('MH_AUTOUPDATE_SCRIPT') or os.path.expanduser('~/mh_autoupdate.sh')
+            if not os.path.exists(script):
+                self.send_json({'status': 'error', 'message': 'The update script is not installed on this phone'}, 404)
+                return
+            try:
+                subprocess.Popen(['bash', script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                self.send_json({'status': 'started'})
+            except Exception as e:
+                self.send_json({'status': 'error', 'message': str(e)}, 500)
+            return
+
         if path == '/save-precedence':
             try:
                 incoming = body.get('source_precedence', {})
