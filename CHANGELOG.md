@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1150
+- **Foods saved as "1 serving" now show up in the cupboard search and shop pickers.** Pete's Heylo Flatbread was in his library but the search said nothing matched. Any library entry saved with the portion "1 serving" was treated as a meal, and for a meal the app offers only the ingredients inside it; a single product has none, so it vanished. A saved entry with no ingredients inside is now counted as a food in its own right. Real meals still offer their ingredients as before. Test p254.
+
 ## v3.10.1149
 - **Add a brand-new food straight from the cupboard search.** Pete wanted "Heylo flatbread" in his Heylo shop. The obvious route, typing it into the search on Check the cupboards, found nothing and stopped there, because that screen only lists foods the app already knows. When what you typed matches nothing, a button now appears: **＋ Add "Heylo flatbread" as a new food**. It opens the new-food form with the name filled in, and if a shop's name is in the text (Heylo) that shop is already chosen. Say how it is counted (g, ml or each) and add it. Nothing is guessed. Test p253.
 
