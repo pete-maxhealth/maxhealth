@@ -6517,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1165'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1166'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27128,6 +27128,9 @@ const MH_SHOP_TOPN_DEFAULT = 10;
 const MH_SHOP_AISLES = ['meat', 'fish', 'dairy', 'vegetable', 'salad', 'fruit', 'bread', 'grain', 'beansandpulses', 'breakfastcereal', 'fat', 'herbsandspices', 'savoury', 'sweet', 'alcohol', 'protein'];
 const MH_SHOP_AISLE_NAMES = { meat: 'Meat', fish: 'Fish', dairy: 'Dairy', vegetable: 'Vegetables', salad: 'Salad', fruit: 'Fruit', bread: 'Bread', grain: 'Grains', beansandpulses: 'Beans & pulses', breakfastcereal: 'Cereal', fat: 'Oils & fats', herbsandspices: 'Herbs & spices', savoury: 'Savoury', sweet: 'Sweet', alcohol: 'Drinks', protein: 'Protein', other: 'Other' };
 let _shopUi = { view: 'list', cat: '', showHidden: false, q: '', recipe: null, msg: '' };
+// Folded sections and "Show all" on the shopping list and My cupboards survive a reload (v3.10.1166).
+try { const _f = JSON.parse(localStorage.getItem('mh_shop_folds') || '{}'); if (_f.fold && typeof _f.fold === 'object') _shopUi.fold = _f.fold; if (_f.cb && typeof _f.cb === 'object') _shopUi.cb = Object.assign({ tab: 'all', q: '', fold: {} }, { fold: _f.cb.fold || {}, soonAll: !!_f.cb.soonAll }); } catch (_) {}
+function mhShopFoldSave() { try { const c = _shopUi.cb || {}; localStorage.setItem('mh_shop_folds', JSON.stringify({ fold: _shopUi.fold || {}, cb: { fold: c.fold || {}, soonAll: !!c.soonAll } })); } catch (_) {} }
 function mhShopLoad() {
   let s = null; try { s = JSON.parse(localStorage.getItem(MH_SHOP_KEY) || 'null'); } catch (_) {}
   if (!s || typeof s !== 'object') s = {};
@@ -27706,7 +27709,7 @@ function mhUseSoon(o) {
 // The name on a Use soon line takes you to that food in the cupboard list below (All tab, no search, aisle open), scrolled into view and flashed,
 // so you can check the real shelf while you audit (v3.10.1144).
 function mhSoonGo(key) {
-  const it = mhStockLoad().items[key]; if (!it) return; const cb = mhCbState(); cb.tab = 'all'; cb.q = ''; cb.fold = {}; mhShopRender();
+  const it = mhStockLoad().items[key]; if (!it) return; const cb = mhCbState(); cb.tab = 'all'; cb.q = ''; cb.fold = {}; mhShopFoldSave(); mhShopRender();
   setTimeout(() => { const el = [...document.querySelectorAll('[data-stock]')].find(e => e.dataset.stock === it.name); if (!el) return;
     el.scrollIntoView({ block: 'center', behavior: 'smooth' }); const bg = el.style.background; el.style.transition = 'background 0.4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); }, 150);
 }
@@ -28905,11 +28908,11 @@ function mhStockLibraryPortion(name) { try { const k = mhShopKey(name), f = load
 function mhCbState() { _shopUi.cb = _shopUi.cb || { tab: 'all', q: '', fold: {} }; return _shopUi.cb; }
 function mhCbTab(t) { mhCbState().tab = t; mhShopRender(); }
 function mhCbQ(v) { mhCbState().q = v; mhShopRender('cq'); }
-function mhCbSoonAll() { const c = mhCbState(); c.soonAll = !c.soonAll; mhShopRender(); }
+function mhCbSoonAll() { const c = mhCbState(); c.soonAll = !c.soonAll; mhShopFoldSave(); mhShopRender(); }
 // Close all / open all for the Use soon list and every aisle group (v3.10.1164)
-function mhCbFoldAll(shut) { const c = mhCbState(); document.querySelectorAll('[data-cb-aisle]').forEach(e => { c.fold['a' + e.dataset.cbAisle] = !!shut; }); c.fold.soon = !!shut; mhShopRender(); }
+function mhCbFoldAll(shut) { const c = mhCbState(); document.querySelectorAll('[data-cb-aisle]').forEach(e => { c.fold['a' + e.dataset.cbAisle] = !!shut; }); c.fold.soon = !!shut; mhShopFoldSave(); mhShopRender(); }
 function mhSlOpen() { const st = mhSlState(); st.q = ''; st.f = 'all'; st.n = 60; st.shop = ''; st.sel = {}; mhShopView('stocklist'); }
-function mhCbFold(k) { const c = mhCbState(); c.fold[k] = !c.fold[k]; mhShopRender(); }
+function mhCbFold(k) { const c = mhCbState(); c.fold[k] = !c.fold[k]; mhShopFoldSave(); mhShopRender(); }
 function mhCbMatch(it, tab, soonKeys) {
   if (tab === 'fridge') return it.store === 'fridge'; if (tab === 'freezer') return it.store === 'freezer';
   if (tab === 'cupboard') return !it.store && !it.nonFood; if (tab === 'nonfood') return !!it.nonFood;
@@ -29049,7 +29052,7 @@ function mhShopSuggestRestore(key) { const s = mhShopLoad(); s.never = s.never.f
 function mhShopSuggestStar(key) { const s = mhShopLoad(), x = mhShopShortlist(s).find(y => y.key === key); if (!x) return; if (!mhShopUsualFind(s, key)) s.usuals.push(x.name); _shopUi.msg = x.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 // The Non-nutritional group starts folded (v3.10.1137); a fold you set yourself is remembered either way.
 function mhShopIsShut(fold, k, sec) { return (k in fold) ? !!fold[k] : (String(k).charAt(0) === 'm' && sec === MH_SHOP_WALK.length + 1); }
-function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; const sec = +String(k).split('_').pop().replace(/^m/, ''); _shopUi.fold[k] = !mhShopIsShut(_shopUi.fold, k, sec); mhShopRender(); }
+function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; const sec = +String(k).split('_').pop().replace(/^m/, ''); _shopUi.fold[k] = !mhShopIsShut(_shopUi.fold, k, sec); mhShopFoldSave(); mhShopRender(); }
 // Tick everything still to get in one aisle (the visible items only, so a search filter is respected).
 function mhShopTickSection(sec) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.checked && mhShopSection(i.cat) === sec).map(i => i.id)); let n = 0; s.items.forEach(i => { if (ids.has(i.id)) { i.checked = true; n++; } }); _shopUi.msg = n ? n + ' ticked into the basket' : ''; mhShopSave(s); mhShopRender(); }
 // A non-nutritional item flagged as a regular stays on the list after every shop; switch it off and it goes back to the shelf like the rest (v3.10.1153).
