@@ -6516,7 +6516,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1157'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1158'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27254,7 +27254,8 @@ function mhShopComplete() {
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
   // The app's own confirm box, not the browser's: a browser can silently swallow its pop-ups (it answers "no"), and then this button seemed to do nothing (v3.10.1144).
   // Two ways to finish, for everyone whether or not stock counting is on: empty the basket, or keep the whole list for the next shop (everything unticked again) (v3.10.1156).
-  const on = mhStockOn(), ov = document.createElement('div'); ov.className = 'app-modal-overlay';
+  if (document.getElementById('mhShopDoneAsk')) return;   // already asking: a second tap does not stack another (v3.10.1158)
+  const on = mhStockOn(), ov = document.createElement('div'); ov.className = 'app-modal-overlay'; ov.id = 'mhShopDoneAsk';
   ov.innerHTML = '<div class="app-modal"><div class="app-modal-title">Shopping complete?</div><div class="app-modal-msg">The ' + n + ' ticked ' + mhPlanEsc(s.shop) + ' item' + (n === 1 ? '' : 's') + '. What should happen to them? Anything unticked, and your other shops, stay as they are.</div>'
     + '<div class="app-modal-btns" style="flex-direction:column;"><button class="app-modal-btn confirm" id="appModalConfirm">Empty the basket' + (on ? ' (they go to my cupboards)' : '') + '</button><button class="app-modal-btn" id="appModalKeep" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Keep the whole list for next shop</button><button class="app-modal-btn cancel" id="appModalCancel">Not yet</button></div></div>';
   document.body.appendChild(ov);
@@ -27530,7 +27531,10 @@ function mhStockTrack(name, opts) {
   const it = Object.assign({ name: String(name).trim(), key, level: null, reorder: null, since: 0, lowFlag: false }, prev || {});
   if (prev && prev.base !== opts.base) { it.level = null; it.reorder = null; it.lowFlag = false; }
   it.base = opts.base; it.pack = num(opts.pack); it.serving = num(opts.serving); it.shop = opts.shop != null ? String(opts.shop) : (it.shop || '');
-  o.items[key] = it; mhStockSave(o); return it;
+  o.items[key] = it; mhStockSave(o);
+  // Moving a food to another shop takes its place on the list with it (once; if the new shop already has it, the old copy just goes) (v3.10.1158)
+  if (prev && prev.shop && it.shop && prev.shop !== it.shop) { try { const sh = mhShopLoad(); let ch = false; sh.items.filter(i => i.key === key && i.shop === prev.shop).forEach(i => { if (sh.items.some(j => j !== i && j.key === key && j.shop === it.shop)) sh.items = sh.items.filter(j => j !== i); else i.shop = it.shop; ch = true; }); if (ch) mhShopSave(sh); } catch (_) {} }
+  return it;
 }
 function mhStockUntrack(key) { const o = mhStockLoad(); if (!o.items[key]) return false; delete o.items[key]; mhStockSave(o); return true; }
 // A stock-take: you counted it, so this is the number. Everything logged before this moment can no longer change it.
@@ -27538,6 +27542,7 @@ function mhStockSetLevel(key, base) { const o = mhStockLoad(), it = o.items[key]
 function mhStockSetReorder(key, base) { const o = mhStockLoad(), it = o.items[key]; if (!it) return false; it.reorder = base == null ? null : mhStockRound(base); mhStockSave(o); return true; }
 // Use or add stock. delta is in base units (negative = used). Never goes below zero; the amount really applied is what is remembered.
 function mhStockAdjust(key, delta, src, entryId) {
+  if (!mhStockOn()) return false;   // counting is off: nothing moves (v3.10.1158)
   const o = mhStockLoad(), it = o.items[key]; if (!it || it.level == null || !isFinite(delta) || !delta) return false;
   const after = Math.max(0, mhStockRound(it.level + delta)), applied = mhStockRound(after - it.level); it.level = after; if (after <= 0) { delete it.useBy; delete it.useByAuto; } else if (src === 'bought' && applied > 0) { delete it.useBy; delete it.useByAuto; if (it.store) mhStockAutoDate(it); }
   if (applied) o.ledger.push({ k: key, d: applied, t: Date.now(), s: src || 'manual', e: entryId == null ? null : String(entryId) });
@@ -27545,6 +27550,7 @@ function mhStockAdjust(key, delta, src, entryId) {
 }
 // A logged entry was deleted or changed: put back what it took (only if it happened after the last stock-take).
 function mhStockReverse(entryId) {
+  if (!mhStockOn()) return 0;   // counting is off: an entry deleted or edited now leaves the counts alone (v3.10.1158)
   const o = mhStockLoad(), id = String(entryId); let n = 0;
   o.ledger = o.ledger.filter(l => { if (l.e !== id) return true; const it = o.items[l.k]; if (it && it.level != null && l.t >= (it.since || 0)) { it.level = Math.max(0, mhStockRound(it.level - l.d)); n++; } return false; });
   if (o.cookedUse && o.cookedUse[id]) { const c = o.cookedUse[id]; o.cooked = o.cooked || {}; o.cooked[c.r] = Math.round(((o.cooked[c.r] || 0) + c.n) * 1000) / 1000; delete o.cookedUse[id]; o.cookedBy = o.cookedBy || {}; if (!o.cookedBy[c.r]) o.cookedBy[c.r] = mhAddDaysISO(mhRulesLoad().fridge); }
@@ -28085,6 +28091,7 @@ function mhStockCookSwaps(r, servings) {
   return out;
 }
 function mhStockCooked(id, servings, opts) {
+  if (!mhStockOn()) return 0;   // counting is off (v3.10.1158)
   const r = loadRecipes().find(x => x.id === id); if (!r) return 0;
   if (!(servings > 0)) { showToast('Enter how many servings you cooked'); return 0; }
   const f = servings / (r.servings || 1), skipped = [], swapped = []; let took = 0; const ref = 'cook:' + id + ':' + Date.now();
@@ -37365,6 +37372,7 @@ function _doLogRecipe(recipe, s) {
 
 // ─── CUSTOM MODALS ───────────────────────────────────────────────────────────
 function appConfirm(message, onConfirm, onCancel, dangerMode=false, labels=null) {
+  if ([...document.querySelectorAll('.app-modal-overlay .app-modal-msg')].some(m => m.innerHTML === message)) return;   // the same question is already open: a second tap does not stack another (v3.10.1158)
   const overlay = document.createElement('div');
   overlay.className = 'app-modal-overlay';
   const cancelLabel = labels?.cancel || 'Cancel';

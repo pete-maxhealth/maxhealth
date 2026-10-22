@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1158
+- **More stock tests (p262–p266) found four real faults, now fixed.**
+  - **With stock counting off, some things still moved counts.** Cooking a batch, binning/adding stock and deleting or editing a logged entry changed counts even when counting was off. Now nothing counts while it is off, and switching it back on picks up exactly where the counts were left.
+  - **Tapping Shopping complete twice stacked two questions.** A second tap now does nothing while the first question is open (same for any identical confirm box).
+  - **Moving a food to another shop left it on the old shop's list.** Changing "Bought at" (cupboard row or edit form) now takes the food's place on the list with it, once; count, reorder, pack and history stay as they were.
+  - Tests also lock in: a whole simulated week with expected counts worked out independently; unit traps (kg, l, counts convert exactly; spoons, cups, ounces, slices and weights on a counted food change nothing); double taps never count twice; phone-to-tablet transfer and a mid-shop backup restore arrive exactly; foods with no amount yet count as available for recipes and ideas (only the strict setting excludes them).
+
 ## v3.10.1157
 - **Scenario tests found three real gaps, now fixed.** Pete asked for end-to-end scenarios (a recipe with everything in, a recipe with substitutes, stock going down for a recorded item, stock going up, every way in and out). Each step is checked against arithmetic done in the test (new test p261). It found:
   - **Logging from a barcode or Open Food Facts result never took stock off.** The food was saved as "Name 30g" with the amount baked into the name, so it could never match the cupboard item "Name". The name is now bare and the amount sits in the amount field (the History line reads the same).
