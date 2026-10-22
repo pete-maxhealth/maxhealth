@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1140'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1141'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27658,6 +27658,21 @@ function mhStockAmountBase(amount, it) {
 // is left alone (v3.10.1140). Returns the stock key, 'many', or null.
 function mhStockLooseKey(k) { const x = String(k || '').replace(/\([^)]*\)/g, ' ').replace(/\basda\b/g, ' ').replace(/\s+/g, ' ').trim(); return x || String(k || ''); }
 function mhStockLooseMatch(o, k) { const lk = mhStockLooseKey(k), hits = Object.keys(o.items).filter(x => o.items[x].level != null && mhStockLooseKey(x) === lk); return hits.length === 1 ? hits[0] : hits.length > 1 ? 'many' : null; }
+// When a logged food matches nothing, offer the one stock item whose name shares all its words (one clear candidate only, never a pick between several).
+// Say yes once and the link is remembered, so that food comes off the same cupboard item every time (v3.10.1140).
+function mhStockSuggest(o, k) {
+  const w = x => mhStockLooseKey(x).split(' ').filter(Boolean), lw = w(k); if (!lw.length) return null; if (o.nolink && o.nolink[k]) return null;
+  const hits = Object.keys(o.items).filter(x => { if (o.items[x].level == null) return false; if (o.nolink && o.nolink[k + '|' + x]) return false; const sw = w(x); return lw.every(t => sw.includes(t)) || sw.every(t => lw.includes(t)); });
+  return hits.length === 1 ? hits[0] : null;
+}
+function mhStockAskLink(entry, f, k, sg, b) {
+  const it = mhStockLoad().items[sg]; if (!it) return;
+  setTimeout(() => appConfirm('You logged ' + mhPlanEsc(f.name) + ' (' + mhPlanEsc(String(f.amount || '')) + '). Is that the ' + mhPlanEsc(it.name) + ' in your cupboards? Yes takes it off now and remembers, so it always matches.', () => {
+    const o = mhStockLoad(); o.alias = o.alias || {}; o.alias[k] = sg; mhStockSave(o);
+    if (mhStockAdjust(sg, -b, 'log', entry.id)) showToast('Stock: took ' + mhStockFmt(o.items[sg], b) + ' off ' + it.name);
+    try { mhShopRender(); } catch (_) {}
+  }, () => { const o = mhStockLoad(); o.nolink = o.nolink || {}; o.nolink[k + '|' + sg] = 1; mhStockSave(o); }, false, { confirm: 'Yes, that one', cancel: 'No' }), 400);
+}
 // dateStr: the day the food was eaten (past days that fall before the last stock-take are ignored: that count already covers them).
 function mhStockOnLog(entry, dateStr) {
   try {
@@ -27677,7 +27692,9 @@ function mhStockOnLog(entry, dateStr) {
     }
     entry.items.forEach(f => {
       let k = mhShopKey(f && f.name || ''), it = o.items[k];
+      if (!it) { const al = o.alias && o.alias[k]; if (al && o.items[al]) { k = al; it = o.items[k]; } }
       if (!it) { const m = mhStockLooseMatch(o, k); if (m === 'many') { skipped.push((f && f.name || 'a food') + ' (matches more than one of your items)'); return; } if (m) { k = m; it = o.items[k]; } }
+      if (!it) { const sg = mhStockSuggest(o, k); if (sg) { const b0 = mhStockAmountBase(f.amount, o.items[sg]); if (b0 > 0 && !(eaten < (o.items[sg].since || 0))) mhStockAskLink(entry, f, k, sg, frac < 1 ? Math.round(b0 * frac * 100) / 100 : b0); } return; }
       if (!it || it.level == null) return;
       if (eaten < (it.since || 0)) return;
       const b = mhStockAmountBase(f.amount, it);
