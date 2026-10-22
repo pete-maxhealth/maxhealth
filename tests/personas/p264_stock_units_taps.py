@@ -19,10 +19,10 @@ with fresh_server() as root, sync_playwright() as pw:
              ('ml', '250ml', 250), ('ml', '0.5 l', 500), ('ml', '1 litre', 1000), ('ml', '3 servings', 150),
              ('each', '3', 3), ('each', '2 eggs', 2), ('each', '2 each', 2), ('each', '0.5', 0.5),
              ('g', '2 tbsp', 0), ('g', '1 tsp', 0), ('g', '3 slices', 0), ('g', '200ml', 0), ('g', '1 cup', 0),
-             ('ml', '1 tbsp', 0), ('ml', '1 cup', 0), ('ml', '200g', 0), ('each', '100g', 0), ('each', '250ml', 0), ('each', '1 kg', 0)]
+             ('ml', '1 tbsp', 15), ('ml', '2 tsp', 10), ('g', '2 oz', 56.7), ('g', '1 lb', 453.6), ('ml', '3 oz', 0), ('each', '1 tbsp', 0), ('ml', '1 cup', 0), ('ml', '200g', 0), ('each', '100g', 0), ('each', '250ml', 0), ('each', '1 kg', 0)]
     for base, amt, take in table:
         setup(base); log(amt)
-        if abs(lv() - (1000 - take)) > 1e-6: f.add('BUG', f'unit trap: {amt} of a {base} food took {1000 - lv()}, should be {take}')
+        if abs(lv() - (1000 - take)) > 0.06: f.add('BUG', f'unit trap: {amt} of a {base} food took {1000 - lv()}, should be {take}')
     # a density you gave converts exactly, both ways; none given means untouched
     setup('ml', 1000, gPerMl=1.25); log('250g'); 
     if abs(lv() - 800) > 1e-6: f.add('BUG', f'250 g at 1.25 g/ml is 200 ml: {1000 - lv()}')

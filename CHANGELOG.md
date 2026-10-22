@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1159
+- **Logging now understands spoons on millilitre foods and ounces/pounds on gram foods.** 1 tsp = 5 ml, 1 tbsp = 15 ml (as cooking already did), 1 oz = 28.35 g, 1 lb = 453.6 g. Spoons on a gram food, cups, slices and anything on a counted food are still left alone, since they would need a density or size you haven't given. Locked in by p264.
+
 ## v3.10.1158
 - **More stock tests (p262–p266) found four real faults, now fixed.**
   - **With stock counting off, some things still moved counts.** Cooking a batch, binning/adding stock and deleting or editing a logged entry changed counts even when counting was off. Now nothing counts while it is off, and switching it back on picks up exactly where the counts were left.
