@@ -41,7 +41,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopSetShop('Butchers')")
     if ev("mhShopLoad().shop") != 'Butchers' or not onlist('Whey protein'): f.add('BUG', '3: switching to Butchers must not lose the Asda things')
     # 4 Butchers: buy mince, complete, review
-    ev("()=>{const s=mhShopLoad();s.items.filter(i=>i.shop==='Butchers').forEach(i=>i.checked=true);mhShopSave(s);}"); ev("mhShopComplete()"); page.wait_for_timeout(200)
+    ev("()=>{const s=mhShopLoad();s.items.filter(i=>i.shop==='Butchers').forEach(i=>i.checked=true);mhShopSave(s);}"); ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(200)
     if ev("_shopUi.view") != 'stockbought': f.add('BUG', '4: completing with a tracked item opens the review')
     if page.locator(f'input[data-k="{K("Beef mince")}"]').input_value() != '500 g': f.add('BUG', '4: the usual pack is prefilled')
     page.click('#mhBoughtDone'); page.wait_for_timeout(200)
@@ -50,7 +50,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # 5 Asda, forgot the cream (cream is added by hand, not ticked)
     ev("mhShopSetShop('Asda')")
     ev("()=>{const s=mhShopLoad();mhShopSetAdd(s,'Double Cream (Asda)','own','',null);s.items.forEach(i=>{if(i.shop==='Asda'&&i.key!==mhShopKey('Double Cream (Asda)'))i.checked=true;});mhShopSave(s);}")
-    ev("mhShopComplete()"); page.wait_for_timeout(200)
+    ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(200)
     if page.locator(f'input[data-k="{K("Double Cream (Asda)")}"]').count(): f.add('BUG', '5: the forgotten cream was not bought and must not be in the review')
     page.locator(f'input[data-k="{K("Whey protein")}"]').fill('1 pack'); page.click('#mhBoughtDone'); page.wait_for_timeout(200)
     if lv('Whey protein') != 875 or lv('Eggs') != 7: f.add('BUG', f'5: whey 125+750, eggs 1+6: {lv("Whey protein")} {lv("Eggs")}')

@@ -19,7 +19,7 @@ with fresh_server() as root, sync_playwright() as pw:
         ev("([a,b,c])=>{mhStockSetLevel(a,100);mhStockSetLevel(b,50);const o=mhStockLoad();o.items[c].level=null;delete o.review;mhStockSave(o);}", [wk, ck, ek])
         ev("""()=>{const s=mhShopLoad();s.items=[];['Whey protein','Double Cream (Asda)','Eggs','Milk'].forEach(n=>mhShopSetAdd(s,n,'own','',null));
           s.items.forEach(i=>{i.checked=true;i.shop=s.shop;});mhShopSave(s);}""")
-        ev("mhShopComplete()"); page.wait_for_timeout(200)
+        ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(200)
     def box(k): return page.locator(f'input[data-k="{k}"]')
     setup()
     if ev("_shopUi.view") != 'stockbought': f.add('BUG', 'Shopping complete with tracked items must go to the review step')

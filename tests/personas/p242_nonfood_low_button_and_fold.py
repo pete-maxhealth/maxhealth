@@ -26,7 +26,7 @@ with fresh_server() as root, sync_playwright() as pw:
         ev("mhShopFold('m' + (MH_SHOP_WALK.length + 1))"); page.wait_for_timeout(200)
         if not page.locator('#mhShopPane [data-item="Zzqx Toilet Roll"]').count(): f.add('BUG', '5: one tap opens it')
         # basket, complete: still on the shelf
-        ev("(()=>{const s=mhShopLoad(); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()"); ev("mhShopComplete()"); page.wait_for_timeout(300)
+        ev("(()=>{const s=mhShopLoad(); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()"); ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(300)
         if ev("mhShopLoad().items.length") != 0: f.add('BUG', '6: Shopping complete clears it from the list')
         if not ev("!!mhStockLoad().items[mhShopKey('Zzqx Toilet Roll')]"): f.add('BUG', '7: it is still on the shelf afterwards')
     if errs: f.add('BUG', f'page errors: {errs}')

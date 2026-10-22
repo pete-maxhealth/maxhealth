@@ -12,7 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopOpen()"); ev("mhOrdOpen('list')"); page.wait_for_timeout(200)
     page.fill('#mhOrdText', "Zzqx Cola\nZzqx Squash\nZzqx Double Cream\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
     ev("mhOrdKindSet(0,'nonfood'); mhOrdKindSet(1,'nonfood')"); ev("mhOrdShop('Asda')"); page.click('#mhOrdGo'); page.wait_for_timeout(500)
-    ev("(()=>{const s=mhShopLoad(); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()"); ev("mhShopComplete()"); page.wait_for_timeout(400)
+    ev("(()=>{const s=mhShopLoad(); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()"); ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(400)
     st = ev("Object.values(mhStockLoad().items).map(i=>[i.name,!!i.nonFood,i.level])")
     if sorted(n for n, nf, l in st if nf) != ['Zzqx Cola (Asda)', 'Zzqx Squash (Asda)']: f.add('BUG', f'1: the two non-nutritional items are on the shelf as non-food: {st}')
     if any('Cream' in n for n, nf, l in st): f.add('BUG', f'2: the food is not put on the shelf: {st}')

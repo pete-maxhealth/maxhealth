@@ -89,7 +89,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # persistence + shopping complete
     ev("mhShopToggle('a1'); mhShopToggle('a2')"); page.reload(); page.wait_for_timeout(1500)
     if ev("mhShopLoad().items.filter(i=>i.checked).length") != 2 or len(ev("mhShopLoad().usuals")) != 1: f.add('BUG', 'ticks or usuals lost across reload')
-    n1 = ev("mhShopLoad().items.length"); ev("mhShopComplete()")
+    n1 = ev("mhShopLoad().items.length"); ev("mhShopComplete()"); page.click("#appModalConfirm")
     if ev("mhShopLoad().items.length") != n1 - 2: f.add('BUG', 'shop complete should remove only the ticked items')
     # buttons are not stretched full width
     ev("mhShopOpen(); if(!document.getElementById('mhShopAddPanel')) mhShopAddToggle()")
@@ -126,7 +126,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("k=>mhShopSuggestSkip(k)", first)
     if first in ev("mhShopShortlist().map(x=>x.key)") or len(names()) != 10: f.add('BUG', 'not this time should hide it and let the next one fill in')
     ev("k=>mhShopSuggestNever(k)", ev("mhShopShortlist()[0].key"))
-    ev("mhShopComplete = mhShopComplete; (()=>{const s=mhShopLoad(); s.items=[{id:'t1',key:'t1',name:'T',cat:'other',checked:true}]; mhShopSave(s)})(); window.confirm=()=>true; mhShopComplete()")
+    ev("mhShopComplete = mhShopComplete; (()=>{const s=mhShopLoad(); s.items=[{id:'t1',key:'t1',name:'T',cat:'other',checked:true}]; mhShopSave(s)})(); mhShopComplete()"); page.click('#appModalConfirm')
     if first not in ev("mhShopShortlist().map(x=>x.key)"): f.add('BUG', 'a not-this-time item should come back after shopping is complete')
     if len(ev("mhShopLoad().never")) != 1: f.add('BUG', 'never should stay hidden for good')
     ev("mhShopSuggestRestore(mhShopLoad().never[0])")
@@ -170,7 +170,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'Butchers' not in txt or 'Asda' not in txt: f.add('BUG', 'both shops should show on the list')
     ev("mhShopSetShop('Asda')")
     if ev("mhShopLoad().usuals") != []: f.add('BUG', 'Asda usuals should be separate from butchers')
-    ev("mhShopSetShop('Butchers'); window.confirm=()=>true; mhShopComplete()")
+    ev("mhShopSetShop('Butchers'); mhShopComplete()"); page.click('#appModalConfirm')
     if ev("mhShopLoad().items.map(i=>i.name)") != ['Milk']: f.add('BUG', 'complete should clear only the active shop')
     ev("mhShopQuickSrc('recent'); mhShopView('quick')")
     if ev("mhShopLoad().qsrc") != 'recent' or 'Lamb chops' not in ev("mhShopShortlist().map(x=>x.name)"): f.add('BUG', 'recently added should feed the quick list')

@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1143'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1144'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27205,8 +27205,12 @@ function mhShopSetTopN(v) { const s = mhShopLoad(), n = parseInt(v); if (n > 0 &
 function mhShopComplete() {
   const s = mhShopLoad(), n = s.items.filter(i => i.checked && i.shop === s.shop).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
-  if (!confirm('Shopping complete? This empties the basket: the ' + n + ' ticked ' + s.shop + ' item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked, and your other shops, stay.')) return;
-  const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = bought.filter((k, n) => so.items[k] && bought.indexOf(k) === n);
+  // The app's own confirm box, not the browser's: a browser can silently swallow its pop-ups (it answers "no"), and then this button seemed to do nothing (v3.10.1144).
+  appConfirm('Shopping complete? This empties the basket: the ' + n + ' ticked ' + mhPlanEsc(s.shop) + ' item' + (n === 1 ? '' : 's') + ' come off the list. Anything unticked, and your other shops, stay.', mhShopCompleteGo, null, false, { confirm: 'Empty the basket', cancel: 'Not yet' });
+}
+function mhShopCompleteGo() {
+  const s = mhShopLoad();
+  const bought = s.items.filter(i => i.checked && i.shop === s.shop).map(i => i.key), so = mhStockLoad(), track = bought.filter((k, n) => so.items[k] && !so.items[k].nonFood && bought.indexOf(k) === n);
   // Non-nutritional things you bought land on the shelf (no count is invented: the shelf just knows you keep it), so next time they are listed under Add > Non-nutritional and can be flagged as running low (v3.10.1139).
   let shelved = 0; s.items.filter(i => i.checked && i.shop === s.shop && i.nonFood).forEach(i => { try { if (!mhStockLoad().items[i.key]) { mhStockTrack(i.name, { base: 'each', shop: s.shop }); const o2 = mhStockLoad(); if (o2.items[i.key]) { o2.items[i.key].nonFood = true; mhStockSave(o2); shelved++; } } } catch (_) {} });
   s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = 'Basket emptied' + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
@@ -27604,6 +27608,13 @@ function mhUseSoon(o) {
 }
 // 💡 Ideas on a Use soon line: the normal meal-idea flow (your library and recipes, limited to what your cupboards can make) with a request to build
 // around that one food (v3.10.1143).
+// The name on a Use soon line takes you to that food in the cupboard list below (All tab, no search, aisle open), scrolled into view and flashed,
+// so you can check the real shelf while you audit (v3.10.1144).
+function mhSoonGo(key) {
+  const it = mhStockLoad().items[key]; if (!it) return; const cb = mhCbState(); cb.tab = 'all'; cb.q = ''; cb.fold = {}; mhShopRender();
+  setTimeout(() => { const el = [...document.querySelectorAll('[data-stock]')].find(e => e.dataset.stock === it.name); if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' }); const bg = el.style.background; el.style.transition = 'background 0.4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); }, 150);
+}
 async function mhUseUpIdea(name) {
   window._mhUseUp = String(name || ''); try { switchTabById('log'); } catch (_) {}
   try { await suggestMealFromLibrary('both'); } finally { window._mhUseUp = null; }
@@ -27632,7 +27643,7 @@ function mhStockExtrasHtml(o) {
   const expired = Object.values(o.items).filter(it => mhStockExpired(it) && it.level > 0);
   if (soon.length) h += '<div data-use-soon="1" style="font-size:13px;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;"><div style="margin-bottom:4px;">⏳ <b>Use soon</b> (' + soon.length + '). Tap Ideas for a meal built around one; meal ideas lead with these anyway.</div>'
     + soon.map(x => { const it = x.key ? o.items[x.key] : null, when = x.days === 0 ? 'today' : x.days === 1 ? 'tomorrow' : 'in ' + x.days + ' days', amt = it && it.level != null ? ' · ' + esc(mhStockFmt(it, it.level)) : '';
-      return '<div data-soon-row="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;line-height:1.35;"><div style="font-size:14px;color:var(--text);">' + esc(x.name) + (x.kind === 'leftovers' ? ' <span style="font-size:11px;color:var(--text3);">cooked leftovers</span>' : '') + '</div><div style="font-size:12px;color:' + (x.days <= 1 ? 'var(--red)' : 'var(--text3)') + ';">' + when + amt + '</div></div>'
+      return '<div data-soon-row="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;line-height:1.35;"><div style="font-size:14px;color:var(--text);">' + (x.kind === 'item' && x.key ? '<span data-soon-go="1" data-k="' + esc(x.key) + '" onclick="mhSoonGo(this.dataset.k)" title="Show it in my cupboards" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;">' + esc(x.name) + '</span>' : esc(x.name)) + (x.kind === 'leftovers' ? ' <span style="font-size:11px;color:var(--text3);">cooked leftovers</span>' : '') + '</div><div style="font-size:12px;color:' + (x.days <= 1 ? 'var(--red)' : 'var(--text3)') + ';">' + when + amt + '</div></div>'
         + (x.kind === 'item' ? '<button class="copy-btn" data-n="' + esc(x.name) + '" onclick="mhUseUpIdea(this.dataset.n)" style="font-size:12px;padding:8px 10px;white-space:nowrap;">💡 Ideas</button>' : '') + '</div>'; }).join('') + '</div>';
   if (expired.length) h += '<div data-expired="1" style="font-size:13px;line-height:1.6;color:var(--red);margin-bottom:8px;">⚠ Past use-by: ' + expired.map(it => esc(it.name) + ' <a data-k="' + esc(it.key) + '" onclick="mhStockWasteAsk(this.dataset.k)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">bin it</a>').join(' · ') + '</div>';
   if (ids.length) h += '<div data-leftovers="1" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">🍲 Leftovers</div>' + ids.map(id => { const r = recs.find(x => x.id === id), fz = o.cookedFrozen && o.cookedFrozen[id];
@@ -28608,6 +28619,7 @@ function mhStockSweep() {
   if (!mhStockOn()) return 0;
   const o = mhStockLoad(), s = mhShopLoad(), res = mhPlanReserved(); let added = 0, oChanged = false, sChanged = false;
   Object.values(o.items).forEach(it => {
+    if (it.nonFood) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }   // non-nutritional things are flagged low by hand (🛒), never by a number (v3.10.1144)
     if (!mhStockIsLowRes(it, res)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
     if (it.lowFlag) return;
     const shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : s.shops[0];
@@ -28890,12 +28902,12 @@ function mhShopRender(keepFocus) {
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else {
     const vis = mhShopVisible(s), edit = !!_shopUi.edit, srcIcon = {};
-    const stkO = mhStockLoad().items, stkNote = i => { const t = stkO[i.key]; if (!t || t.level == null) return ''; return ' <span data-stocknote="1" style="font-size:13px;color:var(--text3);">· ' + (i.src === 'stock' && i.from === 'running low' ? 'running low: ' : 'in stock: ') + esc(mhStockFmt(t, t.level)) + (t.reorder != null ? ' (reorder at ' + esc(mhStockFmt(t, t.reorder)) + ')' : '') + '</span>'; };
+    const stkO = mhStockLoad().items, stkNote = i => { const t = stkO[i.key]; if (!t || t.level == null) return ''; return ' <span data-stocknote="1" style="font-size:13px;color:var(--text3);">· ' + (i.src === 'stock' ? '' : 'in stock: ') + esc(mhStockFmt(t, t.level)) + (i.src === 'stock' ? ' left' : '') + (t.reorder != null ? ' (reorder at ' + esc(mhStockFmt(t, t.reorder)) + ')' : '') + '</span>'; };
     // Built for the shop floor: big rows, tap anywhere to tick, grouped in the order you walk the shop. No controls on the rows unless Edit is on.
     const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-top:1px solid var(--border);">'
       + '<div onclick="mhShopToggle(\'' + i.id + '\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:14px;cursor:pointer;">'
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
-      + '<div style="flex:1;min-width:0;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
+      + '<div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
       + (edit ? '<span title="Add to My usuals" onclick="mhShopUsualFromItem(\'' + i.id + '\')" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span><span title="Remove from the list" onclick="mhShopRemove(\'' + i.id + '\')" style="cursor:pointer;color:var(--red);padding:6px;font-size:18px;">✕</span>' : '') + '</div>';
     const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
     const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
@@ -28903,7 +28915,7 @@ function mhShopRender(keepFocus) {
     let rows = '', lastSec = -1, lastShop = null;
     const fold = _shopUi.fold || {};
     pendingVis.forEach(i => { const sec = mhShopSection(i.cat), fk = (multi ? shopIx(i.shop) + '_' : '') + sec; if (multi && i.shop !== lastShop) { lastShop = i.shop; lastSec = -1; rows += '<div class="mh-shophead" style="margin-top:18px;padding:6px 4px;font-size:14px;font-weight:700;color:var(--text);border-bottom:2px solid var(--accent);">🛒 ' + esc(i.shop) + '</div>'; } if (sec !== lastSec) { lastSec = sec; const n = pendingVis.filter(x => mhShopSection(x.cat) === sec && (!multi || x.shop === i.shop)).length, shut = mhShopIsShut(fold, 'm' + fk, sec); rows += '<div class="mh-aisle" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text2);"><span onclick="mhShopFold(\'m' + fk + '\')" style="flex:1;cursor:pointer;">' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' <span style="font-weight:400;color:var(--text3);">' + n + '</span></span><span onclick="mhShopTickSection(' + sec + ')" title="Tick every item in this aisle into the basket" style="cursor:pointer;font-weight:600;color:var(--accent);padding:2px 4px;">☑ all</span></div>'; } if (!mhShopIsShut(fold, 'm' + fk, sec)) rows += rowHtml(i); });
-    rows += (basketVis.length ? '<div id="mhShopBasketBar" onclick="mhShopBasketToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px;margin-top:16px;border-top:1px solid var(--border);cursor:pointer;font-size:15px;color:var(--text2);"><span>✓ In basket (' + basketVis.length + ')</span><span style="color:var(--text3);font-size:13px;">' + (basketOpen ? '▾ hide' : '▸ show') + '</span></div>' + (basketOpen ? '<div style="padding:4px 4px 10px;"><button class="btn btn-secondary" style="min-height:44px;" onclick="mhShopUntickAll()">Put everything back on the list</button></div>' + basketVis.map(rowHtml).join('') : '') : '') + (!pendingVis.length && basketVis.length ? '<div style="font-size:14px;color:var(--green);padding:8px 4px;">Everything is in the basket.</div>' : '');
+    rows += (basketVis.length ? '<div id="mhShopBasketBar" onclick="mhShopBasketToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px;margin-top:16px;border-top:1px solid var(--border);cursor:pointer;font-size:15px;color:var(--text2);"><span>✓ In basket (' + basketVis.length + ')</span><span style="color:var(--text3);font-size:13px;">' + (basketOpen ? '▾ hide' : '▸ show') + '</span></div>' + (basketOpen ? '<div style="padding:4px 4px 10px;"><button class="copy-btn" style="min-height:44px;font-size:14px;padding:10px 14px;" onclick="mhShopUntickAll()">Put everything back on the list</button></div>' + basketVis.map(rowHtml).join('') : '') : '') + (!pendingVis.length && basketVis.length ? '<div style="font-size:14px;color:var(--green);padding:8px 4px;">Everything is in the basket.</div>' : '');
     const total = s.items.length, got = s.items.filter(i => i.checked).length, lq = (_shopUi.lq || '').trim();
     const filt = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;"><input id="mhShopLQ" value="' + esc(_shopUi.lq || '') + '" oninput="mhShopLQ(this.value)" type="search" enterkeyhint="search" onkeydown="if(event.key===\'Enter\')this.blur()" placeholder="🔍 Search your list (e.g. Asda, cream)" style="flex:1;min-width:0;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;">' + (lq ? '<span onclick="mhShopLQ(\'\')" title="Clear" style="cursor:pointer;color:var(--text3);padding:6px;font-size:18px;">✕</span>' : '') + '</div>';
     const count = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;color:var(--text3);"><span>' + (total ? (lq ? 'Showing ' + vis.length + ' of ' + total + '. ' : '') + (total - got) + ' to get · ' + got + ' in basket' : 'Your list is empty. Add things below.') + '</span><span onclick="mhShopEditToggle()" style="cursor:pointer;color:var(--accent);font-size:13px;">' + (edit ? '✓ Done' : '✎ Edit') + '</span></div>';

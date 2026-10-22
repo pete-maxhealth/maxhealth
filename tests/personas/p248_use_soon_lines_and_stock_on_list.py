@@ -27,6 +27,14 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'FOCUS' in (ev("window.__p") or ''): f.add('BUG', '4: the focus is cleared afterwards')
     # buttons exist on the lines
     if page.locator('[data-soon-row] button:has-text("Ideas")').count() != 2: f.add('BUG', '5: an Ideas button on each line')
+    # the name on a Use soon line goes to that food in the cupboard list, even from another tab or a search that hides it
+    ev("for (let n = 0; n < 30; n++) { mhStockTrack('Cheese ' + n, {base:'g', shop:'Asda'}); mhStockSetLevel(mhShopKey('Cheese ' + n), 100); }")   # push the target well below the fold
+    ev("switchTabById('shop'); mhCbTab('fridge'); mhCbQ('zzzzz')"); page.wait_for_timeout(300)
+    page.click('[data-soon-row=\"Zzqx Cheddar\"] [data-soon-go]'); page.wait_for_timeout(700)
+    if ev("mhCbState().tab") != 'all' or ev("mhCbState().q") != '': f.add('BUG', '7: tapping the name shows the All tab with no search')
+    if not page.locator('#stockctlBody [data-stock=\"Zzqx Cheddar\"]').count(): f.add('BUG', '8: the food is in the cupboard list')
+    inview = ev("(()=>{const e=[...document.querySelectorAll('[data-stock]')].find(x=>x.dataset.stock==='Zzqx Cheddar'); if(!e) return false; const r=e.getBoundingClientRect(); return r.top>=0 && r.bottom<=innerHeight;})()")
+    if not inview: f.add('BUG', '9: and it is scrolled into view')
     # shopping list shows stock
     ev("(()=>{const s=mhShopLoad(); s.items=[]; mhShopSave(s); mhStockLowNow(mhShopKey('Zzqx Cheddar'));})()")
     ev("mhShopView('list')"); page.wait_for_timeout(300)
