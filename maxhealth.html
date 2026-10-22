@@ -3109,6 +3109,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
            opportunity at all). Optional, left blank still auto-detects
            normally. -->
       <input id="foodAmountCategories" list="allKnownCategories" type="text" placeholder="Categories for library save (optional, comma-separated)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px;">
+      <label id="foodAmountCupboardRow" style="display:none;align-items:center;gap:10px;margin:10px 0 4px;font-size:14px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="foodAmountCupboard" style="width:22px;height:22px;flex:0 0 auto;"><span id="foodAmountCupboardTxt">📦 Also keep this in my cupboards</span></label>
       <div class="food-amount-btns">
         <div class="food-amount-back" onclick="backToFoodSearch()">← Back</div>
         <button class="food-amount-save" onclick="saveFoodToLibraryFromPanel()">💾 Save</button>
@@ -6515,7 +6516,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1153'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1154'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -16826,7 +16827,7 @@ async function lookupBarcode(barcode, statusBubble) {
     // Populate food amount panel
     const servingQty = parseFloat(p.serving_quantity) || 0;
     const servingLabel = p.serving_size ? p.serving_size.trim() : '';
-    _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre, polyols, satFat, sugars, salt, iron, potassium, magnesium, vitd, omega3, servingQty, servingLabel };
+    _selectedFoodItem = { name, brand, kcal, prot: protein, carb: carbs, fat, fibre, polyols, satFat, sugars, salt, iron, potassium, magnesium, vitd, omega3, servingQty, servingLabel, qty: p.quantity || '' };
     _lastFoodSourceType = 'barcode'; // genuinely from a barcode scan this time, unlike text-search selections
     document.getElementById('foodSearchView').style.display = 'none';
     document.getElementById('foodAmountView').classList.add('open');
@@ -16843,6 +16844,7 @@ async function lookupBarcode(barcode, statusBubble) {
       (polyols ? `<div style="color:var(--accent);margin-top:4px;">🍬 Contains ${polyols}g polyols — subtracted automatically in Net Carbs mode</div>` : '');
     document.getElementById('foodAmountGrams').value = '';
     document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
+    mhProductCupboardRow(true);   // holding the product: offer to keep it in the cupboards, ticked
     renderPortionSuggestions(name, brand, p.quantity || '', servingQty, servingLabel);
     setTimeout(() => document.getElementById('foodAmountGrams')?.focus(), 100);
 
@@ -17487,7 +17489,7 @@ async function searchOpenFoodFacts(query) {
         data-kcal="${kcal}" data-prot="${prot}" data-carb="${carb}" data-fat="${fat}"
         data-fibre="${fibre}" data-polyols="${polyols}"
         data-satfat="${satFat}" data-sugars="${sugars}" data-salt="${salt}" data-iron="${iron}"
-        data-potassium="${potassium}" data-magnesium="${magnesium}">
+        data-potassium="${potassium}" data-magnesium="${magnesium}" data-qty="${String(qty).replace(/"/g,'&quot;')}">
         <div class="food-result-name">${name}</div>
         ${brand ? `<div class="food-result-brand">${brand}</div>` : ''}
         <div class="food-result-macros">per 100g: ${kcal}kcal · ${prot}g P · ${carb}g C · ${fat}g F</div>
@@ -17588,6 +17590,7 @@ function selectFoodResult(i) {
     iron:   parseFloat(item.dataset.iron)   || 0,
     potassium: parseFloat(item.dataset.potassium) || 0,
     magnesium: parseFloat(item.dataset.magnesium) || 0,
+    qty: item.dataset.qty || '',
   };
   _lastFoodSourceType = 'search'; // text search, not a barcode scan - see the matching flag in handleBarcodeCapture
   // Show amount entry panel
@@ -17628,6 +17631,7 @@ function selectFoodResult(i) {
   document.getElementById('foodAmountGrams').value = _fixingIngredientGrams(fixingIngredient);
   document.getElementById('foodAmountScaled').textContent = 'Enter amount above';
   // Render portion suggestions from product data
+  mhProductCupboardRow(false);
   renderPortionSuggestions(_selectedFoodItem.name, _selectedFoodItem.brand, '');
   setTimeout(() => {
     document.getElementById('foodAmountGrams')?.focus();
@@ -17663,11 +17667,37 @@ function updateFoodAmountScaled() {
     (polyo ? `<div style="color:var(--accent);margin-top:2px;font-size:11px;">🍬 ${polyo}g polyols — subtracted automatically in Net Carbs mode</div>` : '');
 }
 
+// ─── A product found by barcode or Open Food Facts can go straight into the cupboards (v3.10.1154) ───
+// The pack size and serving come from the product's own data; how much you have and when to reorder are left for you (they show as "needs details").
+function mhProductQty(str) {
+  const m = String(str || '').trim().toLowerCase().match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|ml|cl|l|litres?|liters?)\.?$/); if (!m) return null;
+  const n = parseFloat(m[1].replace(',', '.')), u = m[2]; if (!(n > 0)) return null;
+  if (u === 'kg') return { base: 'g', pack: n * 1000 }; if (u === 'g') return { base: 'g', pack: n };
+  if (u === 'ml') return { base: 'ml', pack: n }; if (u === 'cl') return { base: 'ml', pack: n * 10 };
+  return { base: 'ml', pack: n * 1000 };
+}
+function mhProductName(p) { return p && p.brand ? p.name + ' (' + p.brand + ')' : (p && p.name) || ''; }
+function mhProductCupboardRow(defaultOn) {
+  const row = document.getElementById('foodAmountCupboardRow'), cb = document.getElementById('foodAmountCupboard'), tx = document.getElementById('foodAmountCupboardTxt'); if (!row || !cb) return;
+  const p = _selectedFoodItem; if (!p || !mhStockOn()) { row.style.display = 'none'; cb.checked = false; return; }
+  const have = !!mhStockLoad().items[mhShopKey(mhProductName(p))];
+  row.style.display = 'flex'; cb.disabled = have; cb.checked = !have && !!defaultOn;
+  tx.textContent = have ? '✓ Already in your cupboards' : '📦 Also keep this in my cupboards';
+}
+function mhStockFromProduct(p) {
+  if (!p || !mhStockOn()) return false; const name = mhProductName(p), key = mhShopKey(name); if (!key || mhStockLoad().items[key]) return false;
+  const q = mhProductQty(p.qty), base = q ? q.base : 'g', serv = p.servingQty > 0 ? p.servingQty : null;
+  if (!mhStockTrack(name, { base, pack: q ? q.pack : null, serving: serv, shop: mhShopLoad().shop })) return false;
+  setTimeout(() => showToast('📦 ' + name + ' is in your cupboards' + (q ? ' (pack ' + q.pack + ' ' + base + ')' : '') + '. Say how much you have in Check the cupboards.', null, null, 4500), 700);
+  return true;
+}
+function mhProductKeep() { const cb = document.getElementById('foodAmountCupboard'); if (cb && cb.checked && !cb.disabled) { try { mhStockFromProduct(_selectedFoodItem); } catch (e) { console.warn('keep product', e); } cb.checked = false; } }
 function logFoodFromDatabase() {
   if (!_selectedFoodItem) return;
   const grams = parseFloat(document.getElementById('foodAmountGrams').value);
   if (isNaN(grams) || grams <= 0) { showToast('Enter an amount in grams'); return; }
   const factor = grams / 100;
+  mhProductKeep();
 
   // Meal-preview "find it myself" mode — tier 2 of the library-first
   // resolution order. Checked before the combo/recipe modes below (same
@@ -17838,6 +17868,7 @@ function logFoodFromDatabase() {
 
 function saveFoodToLibraryFromPanel() {
   if (!_selectedFoodItem) return;
+  mhProductKeep();
   // Save per-100g values to library with clean name (no gram suffix)
   const displayName = _selectedFoodItem.brand
     ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})`
