@@ -30,7 +30,7 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = ev("document.getElementById('mhShopPane').innerText")
     for gone in ('Refresh', 'Always have', 'Refresh adds top', 'By aisle'):
         if gone in txt: f.add('BUG', f'old control still shown: {gone}')
-    if 'Type an item' not in ev("document.getElementById('mhShopPane').innerHTML"): f.add('BUG', 'an empty list should open the Add items panel')
+    if 'Search or type a food' not in ev("document.getElementById('mhShopPane').innerHTML"): f.add('BUG', 'an empty list should open the Add items panel')
     # add own, recipe, plan
     ev("document.getElementById('mhShopOwn').value='Washing up liquid'; mhShopAddOwn()")
     if 'Washing up liquid' not in ev("mhShopLoad().items.map(i=>i.name)"): f.add('BUG', 'own item not added')

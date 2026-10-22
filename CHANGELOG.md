@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1160
+- **The Add box on the shopping list is now the search.** Pete couldn't find where to search for Heylo Flatbread: the box said "Type an item" and just added his words as plain text, with the real search tucked away on a small button. Now it says "Search or type a food", and as you type, matching foods from your cupboards and library appear right under it. One tap puts the food on the shop you have selected. A library food not yet in your cupboards also opens the stock form with that shop already filled in, and returns you to the list. A name that matches nothing offers "New food" on the same shop. With stock off the food simply goes on the list.
+- **Removing a mistake is one tap.** Every list row now has a ✕ (no Edit mode needed) and a 6-second Undo.
+- Test p267 locks both in; p197 updated for the new wording.
+
 ## v3.10.1159
 - **Logging now understands spoons on millilitre foods and ounces/pounds on gram foods.** 1 tsp = 5 ml, 1 tbsp = 15 ml (as cooking already did), 1 oz = 28.35 g, 1 lb = 453.6 g. Spoons on a gram food, cups, slices and anything on a counted food are still left alone, since they would need a density or size you haven't given. Locked in by p264.
 
