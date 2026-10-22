@@ -6515,7 +6515,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1141'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1142'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27645,13 +27645,29 @@ function mhStockAmountBase(amount, it) {
   if (!m) return null;
   const n = parseFloat(m[1]), w = m[2], b = it.base;
   if (!w) return b === 'each' ? n : null;
-  if (w === 'g' || w === 'gram' || w === 'grams') return b === 'g' ? n : null;
-  if (w === 'kg') return b === 'g' ? n * 1000 : null;
-  if (w === 'ml') return b === 'ml' ? n : null;
-  if (w === 'l' || w === 'litre' || w === 'litres' || w === 'liter') return b === 'ml' ? n * 1000 : null;
+  // g <-> ml only with a conversion YOU gave for this item (it.gPerMl: grams in 1 ml); never a guessed density (v3.10.1142)
+  const gm = it.gPerMl > 0 ? it.gPerMl : 0;
+  if (w === 'g' || w === 'gram' || w === 'grams') return b === 'g' ? n : (b === 'ml' && gm ? n / gm : null);
+  if (w === 'kg') return b === 'g' ? n * 1000 : (b === 'ml' && gm ? n * 1000 / gm : null);
+  if (w === 'ml') return b === 'ml' ? n : (b === 'g' && gm ? n * gm : null);
+  if (w === 'l' || w === 'litre' || w === 'litres' || w === 'liter') return b === 'ml' ? n * 1000 : (b === 'g' && gm ? n * 1000 * gm : null);
   if (w === 'x' || w === 'each' || w === 'piece' || w === 'pieces' || w === 'egg' || w === 'eggs') return b === 'each' ? n : null;
   if (/^(portion|portions|serving|servings)$/.test(w)) return it.serving > 0 ? n * it.serving : null;
   return null;
+}
+// Weight logged against a stock item counted in ml (or the reverse), e.g. 500 g of a cream kept as 1200 ml: asks ONCE how many grams are in 1 ml for that item,
+// remembers it, and converts from then on. No density is ever assumed (v3.10.1142).
+function mhStockNeedsDensity(amount, it) {
+  if (!it || it.gPerMl > 0) return false; const m = String(amount == null ? '' : amount).trim().toLowerCase().match(/^(\d+(?:\.\d+)?|\.\d+)\s*([a-z]*)/); if (!m) return false;
+  const w = m[2]; return (it.base === 'ml' && /^(g|gram|grams|kg)$/.test(w)) || (it.base === 'g' && /^(ml|l|litre|litres|liter)$/.test(w));
+}
+function mhStockAskDensity(entry, nd, frac, eaten) {
+  setTimeout(() => appPrompt('You logged ' + mhPlanEsc(String(nd.f.amount)) + ' of ' + mhPlanEsc(nd.it.name) + ', but your cupboards count it in ' + (nd.it.base === 'ml' ? 'ml' : 'g') + '. How many grams is 1 ml of it? (Water is 1. Check the pack if you are unsure; nothing is assumed.)', 'grams in 1 ml, e.g. 1', v => {
+    const g = parseFloat(String(v).replace(',', '.')); if (!(g > 0 && g < 25)) { showToast('That does not look like grams per ml, so stock was left alone'); return; }
+    const o = mhStockLoad(), it = o.items[nd.k]; if (!it) return; it.gPerMl = g; mhStockSave(o);
+    let b = mhStockAmountBase(nd.f.amount, it); if (!(b > 0)) return; if (frac < 1) b = Math.round(b * frac * 100) / 100;
+    if (mhStockAdjust(nd.k, -b, 'log', entry.id)) { showToast('Stock: took ' + mhStockFmt(mhStockLoad().items[nd.k], b) + ' off ' + it.name + ' (1 ml = ' + g + ' g, remembered)'); try { mhShopRender(); } catch (_) {} }
+  }), 400);
 }
 // A logged food whose name differs from the stock item only by the shop's brand ("Double Cream" vs "Double Cream (Asda)") is the same product:
 // compare the names with any (bracketed) text and the word asda taken out. Exactly one stock item must match; two or more is ambiguous and
@@ -27681,7 +27697,7 @@ function mhStockOnLog(entry, dateStr) {
     const o = mhStockLoad(); if (o.enabled === false || !Object.keys(o.items).length) return;
     if (_ao || entry.noStock) { if (!entry.noStock) { entry.noStock = true; showToast('🍽 Ate out: your stock was left alone'); } return; }
     const eaten = dateStr && dateStr !== todayStr() ? new Date(dateStr + 'T23:59:59').getTime() : Date.now();
-    let skipped = [], took = 0, frac = 1;
+    let skipped = [], took = 0, frac = 1; const needDensity = [];
     // A batch already cooked (and taken off stock then) is eaten from first, so logging its servings does not take the same food twice.
     const sr = window._stockRecipe; window._stockRecipe = null;
     if (sr && sr.id && sr.servings > 0 && o.cooked && o.cooked[sr.id] > 0) {
@@ -27698,9 +27714,11 @@ function mhStockOnLog(entry, dateStr) {
       if (!it || it.level == null) return;
       if (eaten < (it.since || 0)) return;
       const b = mhStockAmountBase(f.amount, it);
+      if ((b == null || !(b > 0)) && mhStockNeedsDensity(f.amount, it)) { needDensity.push({ k, it, f }); return; }
       if (b == null || !(b > 0)) { skipped.push(it.name); return; }
       if (mhStockAdjust(k, -(frac < 1 ? Math.round(b * frac * 100) / 100 : b), 'log', entry.id)) took++;
     });
+    if (needDensity.length) mhStockAskDensity(entry, needDensity[0], frac, eaten);
     if (skipped.length) showToast('Stock: could not read the amount of ' + skipped.join(', ') + ', so its stock was left alone', null, null, 4500);
   } catch (e) { console.warn('stock hook', e); }
 }
