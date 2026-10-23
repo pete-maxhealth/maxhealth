@@ -6517,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1169'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1170'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28703,8 +28703,14 @@ function mhSlRows() {
   mhShopKnown().forEach(x => { seen.add(x.key); out.push({ key: x.key, name: x.name, cat: x.cat, it: o.items[x.key] || null }); });
   Object.values(o.items).forEach(it => { if (!seen.has(it.key)) out.push({ key: it.key, name: it.name, cat: it.nonFood ? 'nonfood' : mhShopCat(it.name), it }); });
   out.forEach(r => { if (r.it && r.it.nonFood) r.cat = 'nonfood'; });   // toilet roll is not "Oils & fats"
+  // The same product under another shop's name ("Cauliflower Rice" held, "Cauliflower Rice (Asda)" in the library) is a twin of the one you already hold (v3.10.1170).
+  // Same comparison the log matching already uses (mhStockLooseKey): brackets and the word asda taken out. A twin is hidden from Add foods unless you ask to see it.
+  const held = new Map(); out.forEach(r => { if (r.it) { const lk = mhStockLooseKey(r.key); if (!held.has(lk)) held.set(lk, r.name); } });
+  out.forEach(r => { if (!r.it) { const h = held.get(mhStockLooseKey(r.key)); if (h) r.twin = h; } });
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
+function mhSlTwinHides(r, st) { return !!r.twin && !st.twins && String(r.name).toLowerCase() !== String(st.q || '').trim().toLowerCase(); }
+function mhSlTwins(on) { mhSlState().twins = !!on; mhShopRender(); }
 // Words in any order: every word must be in the name; if none fits, the names sharing most of the words come first (v3.10.1151).
 function mhSlWords(q) { return String(q || '').toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean); }
 function mhSlMatch(rows, q) {
@@ -28715,7 +28721,7 @@ function mhSlMatch(rows, q) {
 }
 function mhSlFilter(rows) {
   const st = mhSlState();
-  return mhSlMatch(rows, st.q).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null)) || (st.f === 'gaps' && r.it && mhStockGaps(r.it).length) || (st.f === 'nonfood' && r.it && r.it.nonFood)));
+  return mhSlMatch(rows, st.q).filter(r => !mhSlTwinHides(r, st)).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null)) || (st.f === 'gaps' && r.it && mhStockGaps(r.it).length) || (st.f === 'nonfood' && r.it && r.it.nonFood)));
 }
 // Several at once (v3.10.1147): tick rows (or Tick all shown), then set where they are bought and kept, or put them on the list. Rows the app does not know how to
 // count (no g/ml/each from your library) are skipped and counted, never guessed.
@@ -29153,6 +29159,7 @@ function mhShopRender(keepFocus) {
       + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (mhStockGapCount() ? chip('gaps', 'Needs details (' + mhStockGapCount() + ')') : '') + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('noamt', 'No amount yet') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
       + (st.q.trim() && rows.length && mhSlWords(st.q).length > 1 && !all.filter(r => mhSlWords(st.q).every(x => r.name.toLowerCase().includes(x))).length ? '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">No exact match, so these are the closest:</div>' : '')
+      + (() => { const tw = mhSlMatch(all, st.q).filter(r => r.twin && String(r.name).toLowerCase() !== String(st.q || '').trim().toLowerCase()); if (!tw.length) return ''; return '<div id="mhSlTwinNote" style="font-size:12px;color:var(--text3);margin:2px 0 6px;line-height:1.5;">' + (st.twins ? 'Showing ' + tw.length + ' food' + (tw.length === 1 ? '' : 's') + ' that ' + (tw.length === 1 ? 'is' : 'are') + ' the same as something you already hold. ' + btn('Hide them', 'mhSlTwins(false)', 'font-size:12px;padding:5px 9px;') : tw.length + ' food' + (tw.length === 1 ? ' is' : 's are') + ' hidden because you already hold the same thing under another name (for example ' + esc(tw[0].twin) + '). ' + btn('Show them', 'mhSlTwins(true)', 'font-size:12px;padding:5px 9px;')) + '</div>'; })()
       + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0;font-size:13px;color:var(--text);"><b>' + rows.length + ' shown</b>' + btn('Tick all shown', 'mhSlPickAll(true)', 'font-size:12px;padding:6px 9px;') + btn('Untick all', 'mhSlPickAll(false)', 'font-size:12px;padding:6px 9px;') + '</div>'
       + '<div id="mhSlRows">' + (shown.map(r => mhSlRowHtml(r, s)).join('') || '<div style="font-size:13px;color:var(--text3);padding:14px 0;">Nothing matches.</div>') + '</div>'
       + (rows.length > shown.length ? '<div style="margin-top:10px;">' + btn('Show more (' + (rows.length - shown.length) + ' left)', 'mhSlMore()') + '</div>' : '');

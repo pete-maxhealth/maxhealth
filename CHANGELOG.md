@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1170
+- **Add foods no longer lists the same product twice.** If you already hold "Cauliflower Rice", the library's "Cauliflower Rice (Asda)" is the same food under a shop's name, so it is hidden from the Add foods list (the same comparison the log matching already uses: brackets and the word Asda ignored). A line says how many are hidden and why, with a **Show them** button; typing the exact name still finds it, and Tick all shown never ticks a hidden food. Two variants where you hold neither are both shown. Test p275.
+
 ## v3.10.1169
 - **My cupboards: see what is in each shop.** A "Show what is bought at" row (All shops, Asda, Heylo, No shop, each with a count) filters the cupboards by shop, together with Fridge / Freezer / Cupboard / Low / Use soon, so you can check every food is under the right shop and tap one to adjust its stock. It is remembered. Test p274.
 
