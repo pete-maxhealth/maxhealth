@@ -19,7 +19,7 @@ with fresh_server() as root, sync_playwright() as pw:
     check('recent days listed with names and effort', 'Recent days:' in c and '(Moderate)' in c or '(Hard)' in c or '(Easy)' in c)
     block = ev("patientContextBlock(buildPatientContext(state.history.slice(0,30)))")
     check('context block includes LOGGED EXERCISE and the association caution', 'LOGGED EXERCISE' in block and 'never proof of cause' in block)
-    check('too little exercise -> no block', ev("mhExerciseContext([{date:'01/10/26',exercises:[]}])") is None)
+    check('too little exercise -> no block', ev("mhExerciseContext([{date:'01/01/20',exercises:[]}])") is None)
     block2 = ev("(()=>{const h=state.history.slice(0,30).map(d=>({...d,exercises:[]})); state.strengthLog=[]; return patientContextBlock(buildPatientContext(h))})()")
     check('no exercise -> block omits the line', 'LOGGED EXERCISE' not in block2)
     check('no JS errors', not errs, str(errs[:2]))

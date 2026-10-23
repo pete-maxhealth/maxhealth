@@ -8,7 +8,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
-    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("mhShopOpen()")
+    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("localStorage.setItem('mh_shop_pane','both')"); ev("mhShopOpen()")
     ev("""()=>{ ['Seriously Strong Cheddar','Whole Milk','Mild Cheese Slices','Typed Date Cheese'].forEach(n=>{ mhStockTrack(n,{base:'g',pack:400,shop:'Asda'}); mhStockSetLevel(mhShopKey(n),400); mhStockSetStore(mhShopKey(n),'fridge'); });
       mhStockSetStore(mhShopKey('Mild Cheese Slices'),'fridge',5); mhStockSetUseBy && mhStockSetUseBy(mhShopKey('Typed Date Cheese'),'2030-01-02'); }""")
     life = lambda n: ev("n=>mhItemLife(mhStockLoad().items[mhShopKey(n)])", n)
