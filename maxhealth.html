@@ -6521,7 +6521,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1189'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1190'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27617,7 +27617,7 @@ function mhStockTrack(name, opts) {
   it.base = opts.base; it.pack = num(opts.pack); it.serving = num(opts.serving); it.shop = opts.shop != null ? String(opts.shop) : (it.shop || '');
   o.items[key] = it; mhStockSave(o);
   // Moving a food to another shop takes its place on the list with it (once; if the new shop already has it, the old copy just goes) (v3.10.1158)
-  if (prev && prev.shop && it.shop && prev.shop !== it.shop) { try { const sh = mhShopLoad(); let ch = false; sh.items.filter(i => i.key === key && i.shop === prev.shop).forEach(i => { if (sh.items.some(j => j !== i && j.key === key && j.shop === it.shop)) sh.items = sh.items.filter(j => j !== i); else i.shop = it.shop; ch = true; }); if (ch) mhShopSave(sh); } catch (_) {} }
+  if (prev && it.shop && prev.shop !== it.shop) { try { const sh = mhShopLoad(); let ch = false; sh.items.filter(i => i.key === key && (i.shop === prev.shop || (!prev.shop && i.src === 'stock' && !i.checked))).forEach(i => { if (sh.items.some(j => j !== i && j.key === key && j.shop === it.shop)) sh.items = sh.items.filter(j => j !== i); else i.shop = it.shop; ch = true; }); if (ch) mhShopSave(sh); } catch (_) {} }
   return it;
 }
 function mhStockUntrack(key) { const o = mhStockLoad(); if (!o.items[key]) return false; delete o.items[key]; mhStockSave(o); return true; }
@@ -29216,7 +29216,53 @@ function mhNfRegular(key) {
 }
 function mhShopUsualFromItem(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; if (!mhShopUsualFind(s, i.key)) s.usuals.push(i.name); _shopUi.msg = i.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 function mhShopUnpantry(key) { const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
+// A food's list entry belongs to the shop the food is bought at (v3.10.1190). Entries put on the list by "running low" or by hand from the stock
+// (src 'stock') are moved to that shop when the food has one set and the entry is on another, so a shop's items are never filed under Asda.
+function mhShopReconcile() {
+  try {
+    if (!mhStockOn()) return;
+    const o = mhStockLoad(), s = mhShopLoad(); let ch = false;
+    s.items.forEach(i => {
+      if (i.src !== 'stock' || i.checked) return;
+      const f = o.items[i.key]; if (!f || !f.shop) return;
+      const shop = s.shops.find(x => x.toLowerCase() === String(f.shop).toLowerCase());
+      if (shop && i.shop !== shop && !s.items.some(j => j !== i && j.key === i.key && j.shop === shop)) { i.shop = shop; ch = true; }
+    });
+    if (ch) mhShopSave(s);
+  } catch (_) {}
+}
+// Why is it on my list? (v3.10.1190) Groups the items still to get by how they got there, so a whole group can be taken off at once (and put back).
+function mhShopWhyLabel(i) {
+  const k = (i.src || '') + '|' + (i.from || '');
+  const m = { 'stock|running low': 'Running low in my cupboards', 'stock|added by hand': 'Chosen as Shopping list / Both in Add foods', 'usual|regular': 'My usuals (regular)', 'usual|': 'My usuals', 'quick|': 'Quick list', 'own|': 'Typed in by hand', 'csv|': 'Imported', 'order|': 'Linked from an order', 'pick|': 'Picked from the library', 'top|': 'Top foods', 'plan|plan': 'Meal plan' };
+  return m[k] || (i.from ? 'Other: ' + i.from : 'Other (' + (i.src || 'unknown') + ')');
+}
+function mhShopWhyGroups(s) { const g = {}; s.items.filter(i => !i.checked).forEach(i => { const k = mhShopWhyLabel(i); g[k] = (g[k] || 0) + 1; }); return Object.keys(g).map(k => ({ label: k, n: g[k] })).sort((a, b) => b.n - a.n); }
+function mhShopWhyToggle() { _shopUi.whyOpen = !_shopUi.whyOpen; mhShopRender(); }
+function mhShopWhyClear(label) {
+  const s = mhShopLoad(), gone = s.items.filter(i => !i.checked && mhShopWhyLabel(i) === label); if (!gone.length) return;
+  appConfirm('Take ' + gone.length + ' item' + (gone.length === 1 ? '' : 's') + ' off your list (' + mhPlanEsc(label) + ')? Nothing is deleted from your cupboards, and you can put them back straight afterwards.', () => {
+    const s2 = mhShopLoad(), ids = new Set(gone.map(i => i.id));
+    try { localStorage.setItem('mh_shop_undo', JSON.stringify({ at: Date.now(), label, items: gone })); } catch (_) {}
+    s2.items = s2.items.filter(i => !ids.has(i.id)); mhShopSave(s2);
+    _shopUi.msg = 'Took ' + gone.length + ' off your list (' + label + '). Open "Why are these on my list?" to put them back.'; mhShopRender();
+  }, null, true, { confirm: 'Take off' });
+}
+function mhShopWhyUndo() {
+  let u = null; try { u = JSON.parse(localStorage.getItem('mh_shop_undo') || 'null'); } catch (_) {} if (!u || !Array.isArray(u.items)) return;
+  const s = mhShopLoad(); let n = 0; u.items.forEach(i => { if (!s.items.some(j => j.id === i.id || (j.key === i.key && j.shop === i.shop))) { s.items.push(i); n++; } });
+  mhShopSave(s); try { localStorage.removeItem('mh_shop_undo'); } catch (_) {}
+  _shopUi.msg = 'Put ' + n + ' back on your list.'; mhShopRender();
+}
+function mhShopWhyHtml(s) {
+  let u = null; try { u = JSON.parse(localStorage.getItem('mh_shop_undo') || 'null'); } catch (_) {}
+  const g = mhShopWhyGroups(s), hasU = u && Array.isArray(u.items) && u.items.length; if (!g.length && !hasU) return '';
+  const rows = g.map(x => '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:13px;color:var(--text);"><span>' + mhPlanEsc(x.label) + ' <span style="color:var(--text3);">(' + x.n + ')</span></span><button class="copy-btn" data-why="' + mhPlanEsc(x.label) + '" onclick="mhShopWhyClear(this.dataset.why)" style="width:auto;font-size:12px;padding:6px 10px;white-space:nowrap;">Take off</button></div>').join('');
+  return '<div id="mhShopWhy" style="margin:0 0 8px;"><span onclick="mhShopWhyToggle()" style="cursor:pointer;font-size:12px;color:var(--text3);">' + (_shopUi.whyOpen ? '▾' : '▸') + ' Why are these on my list?</span>'
+    + (_shopUi.whyOpen ? '<div style="margin-top:6px;">' + rows + (hasU ? '<div style="padding-top:8px;border-top:1px solid var(--border);"><button class="copy-btn" onclick="mhShopWhyUndo()" style="width:auto;font-size:12px;padding:6px 10px;">↩ Put back ' + u.items.length + ' (' + mhPlanEsc(u.label || '') + ')</button></div>' : '') + '</div>' : '') + '</div>';
+}
 function mhShopRender(keepFocus) {
+  mhShopReconcile();
   const esc = mhPlanEsc, s = mhShopLoad(); const m = document.getElementById('mhShopPane'); if (!m) return;
   const btn = (label, fn, extra) => '<button class="copy-btn" style="font-size:12px;padding:7px 10px;' + (extra || '') + '" onclick="' + fn + '">' + label + '</button>';
   const head = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">🛒 Shopping list</div></div>';
@@ -29372,7 +29418,7 @@ function mhShopRender(keepFocus) {
     rows += (basketVis.length ? '<div id="mhShopBasketBar" onclick="mhShopBasketToggle()" style="display:flex;justify-content:space-between;align-items:center;padding:14px 4px;margin-top:16px;border-top:1px solid var(--border);cursor:pointer;font-size:15px;color:var(--text2);"><span>✓ In basket (' + basketVis.length + ')</span><span style="color:var(--text3);font-size:13px;">' + (basketOpen ? '▾ hide' : '▸ show') + '</span></div>' + (basketOpen ? '<div style="padding:4px 4px 10px;"><button class="copy-btn" style="min-height:44px;font-size:14px;padding:10px 14px;" onclick="mhShopUntickAll()">Put everything back on the list</button></div>' + basketVis.map(rowHtml).join('') : '') : '') + (!pendingVis.length && basketVis.length ? '<div style="font-size:14px;color:var(--green);padding:8px 4px;">Everything is in the basket.</div>' : '');
     const total = s.items.length, got = s.items.filter(i => i.checked).length, lq = (_shopUi.lq || '').trim();
     const filt = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;"><input id="mhShopLQ" value="' + esc(_shopUi.lq || '') + '" oninput="mhShopLQ(this.value)" type="search" enterkeyhint="search" onkeydown="if(event.key===\'Enter\')this.blur()" placeholder="🔍 Search your list (e.g. Asda, cream)" style="flex:1;min-width:0;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;box-sizing:border-box;">' + '</div>';
-    const count = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;color:var(--text3);"><span>' + (total ? (lq ? 'Showing ' + vis.length + ' of ' + total + '. ' : '') + (total - got) + ' to get · ' + got + ' in basket' : 'Your list is empty. Add things below.') + '</span><span onclick="mhShopEditToggle()" style="cursor:pointer;color:var(--accent);font-size:13px;">' + (edit ? '✓ Done' : '✎ Edit') + '</span></div>';
+    const count = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;color:var(--text3);"><span>' + (total ? (lq ? 'Showing ' + vis.length + ' of ' + total + '. ' : '') + (total - got) + ' to get · ' + got + ' in basket' : 'Your list is empty. Add things below.') + '</span><span onclick="mhShopEditToggle()" style="cursor:pointer;color:var(--accent);font-size:13px;">' + (edit ? '✓ Done' : '✎ Edit') + '</span></div>' + mhShopWhyHtml(s);
     const addOpen = mhShopAddIsOpen(total);
     const planN = (() => { try { return mhPlanLoad().length; } catch (_) { return 0; } })();
     const addKind = _shopUi.addKind === 'nonfood' ? 'nonfood' : 'food';

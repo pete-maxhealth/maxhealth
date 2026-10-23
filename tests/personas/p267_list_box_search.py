@@ -45,6 +45,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("_shopUi.stk") or not ev("mhShopLoad().items.some(i=>i.key===mhShopKey('Zz Offbread'))"): f.add('BUG', 'stock off: the food just goes on the list')
     # removing a mistake: one tap on the row's ✕ (no Edit mode), and Undo brings it back
     ev("mhShopView('list'); const s=mhShopLoad(); mhShopSetAdd(s,'Heylo','own','',null); mhShopSave(s); mhShopRender()"); page.wait_for_timeout(300)
+    ev("window.mhShopIsShut=()=>false; mhShopRender()"); page.wait_for_timeout(200)
     page.click('[data-item="Heylo"] [data-rm]'); page.wait_for_timeout(300)
     if ev("mhShopLoad().items.some(i=>i.key===mhShopKey('Heylo'))"): f.add('BUG', 'one tap on the cross removes it, without Edit mode')
     page.click('#toast span >> text=Undo'); page.wait_for_timeout(300)
