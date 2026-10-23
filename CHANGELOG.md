@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1186
+- **On a food that needs details, the "Where does it go?" button that said "Cupboards" now says "Shelves"**, so it no longer reads like the "Kept in: Cupboard" box above it. Nothing else changed.
+
 ## v3.10.1185
 - **Removed the pinned Shopping list / My cupboards switch (v3.10.1183).** It floated over the content and hid the top of the search box and the Use soon bar, which is not how any other screen works. The switch is back to being part of the page; the standard ↑ button takes you to the top where it is. Test p287 removed.
 
