@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1179
+- **An ✕ to clear every typing and search box** on the Shopping tab (Add to the list, search your list, Add foods search, cupboard search, ingredient search, usuals). It appears once there is text in the box and empties it.
+- **An ✕ on every cupboard row** removes the food from My cupboards (asks first, your shopping list is not touched). The 🗑 stays and still means "used up or binned".
+- **＋ Shop in the cupboards pane** (next to "Show what is bought at"), so a shop can be added from there too. Test p282.
+
 ## v3.10.1178
 - **Adding something to the list now shows you where it went.** Since aisles start closed (1172), "Added" gave no sign that the item was there, and adding it again said "Already on the list" with nothing to see. Now the message names the item and the shop list it is on ("Added Washing up liquid to your Asda list", or "... is already on your Asda list (ticked, in the basket)"), its aisle opens, and the page scrolls to the row and flashes it. Searching your list also opens aisles that match. Test p281.
 
