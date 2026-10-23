@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1182
+- **Fixed the search box spilling over the Add button.** The clear ✕ wrapper (v3.10.1179) stopped the box filling its row, so it ran over the Add button and the ✕ was hidden. The box now fits its row and the ✕ appears inside it as soon as you type. Test p285 added.
+
 ## v3.10.1181
 - **Add a non-nutritional item from the shopping list and it is also put in My cupboards** (if it is not there already; the message says "and to your cupboards" or "already in your cupboards"). Plain foods are not copied. Adding from the cupboards behaves as before.
 - **Shops can be created and removed from the shopping list, My cupboards and Add foods.** Every shop except the first has a visible ✕ in all three places. Removing one asks first, names the list items that come off and the cupboard foods that lose that shop (the foods stay in the cupboards, with no shop).
