@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1195
+- **The red "running low" tag on the list now only shows on entries that really came from running low.** Entries that were added by hand from Add foods or My cupboards said "running low" too, so foods with plenty in stock (jam at 200 g against a reorder of 100 g) looked low. They now say "from my cupboards".
+- **A shop can be hidden even when it has items on the list** (✕ beside any shop). It asks first, its items come off the list (nothing is deleted from your cupboards, and Put back works), and while it is hidden its low foods are not added. Bring it back from "Hidden shops" and anything low there returns to the list. Tests p289, p284 and p291 updated; p296 added.
+
 ## v3.10.1194
 - **Shopping complete has a way out that leaves your cupboards alone.** With stock on, the box now offers "Just clear them: leave my cupboards alone", which empties the ticked items from the list without the add-to-cupboards review and without putting anything on the shelf. "Empty the basket" now says what it does: "then I choose what to add to my cupboards" (it never changed a count by itself; the review is where you confirm amounts, and you can skip all). Test p295 added.
 

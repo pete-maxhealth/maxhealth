@@ -18,7 +18,6 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("const s=mhShopLoad(); s.items.find(i=>i.key===mhShopKey('Zzqx Bread')).shop='Asda'; mhShopSave(s)")
     ev("switchTabById('shop')"); page.wait_for_timeout(500)
     if ev("mhShopLoad().items.find(i=>i.key===mhShopKey('Zzqx Bread'))?.shop") != 'Zzqx Heylo': f.add('BUG', 'an entry filed under the wrong shop is moved to the food\'s shop')
-    if page.locator('#mhShopChips span[data-shop="Zzqx Heylo"]').count(): f.add('BUG', 'the shop with the item has no hide ✕')
     if 'Zzqx Heylo (1)' not in ev("document.getElementById('mhShopChips').innerText"): f.add('BUG', 'the shop chip shows its count')
     # something ticked in the basket is left where it is
     if errs: f.add('BUG', f'page errors: {errs}')

@@ -13,7 +13,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("const s=mhShopLoad(); mhShopSetAdd(s,'Zzqx Loaf','own','',null); s.items[s.items.length-1].shop='Zzqx Bakery'; mhShopSave(s)"); ev("mhShopRender()"); page.wait_for_timeout(300)
     ev("switchTabById('shop')"); page.wait_for_timeout(500)
     x = lambda n: page.locator('#mhShopChips span[data-shop="%s"]' % n).count()
-    if x('Zzqx Bakery'): f.add('BUG', 'a shop with something on the list has no ✕')
+    if not x('Zzqx Bakery'): f.add('BUG', 'a shop with something on the list also has a ✕ (it asks first)')
     if not x('Zzqx Butchers'): f.add('BUG', 'a shop with nothing on the list has a ✕')
     page.click('#mhShopChips span[data-shop="Zzqx Butchers"]'); page.wait_for_timeout(300)
     if 'Zzqx Butchers' not in ev("mhShopLoad().shops"): f.add('BUG', 'hiding does not delete the shop')

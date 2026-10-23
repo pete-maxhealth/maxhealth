@@ -53,7 +53,7 @@ with fresh_server() as root, sync_playwright() as pw:
     inview = ev("(()=>{const e=[...document.querySelectorAll('[data-stock]')].find(x=>x.dataset.stock==='Zzqx Cheddar'); if(!e) return false; const r=e.getBoundingClientRect(); return r.top>=0 && r.bottom<=innerHeight;})()")
     if not inview: f.add('BUG', '9: and it is scrolled into view')
     # shopping list shows stock
-    ev("(()=>{const s=mhShopLoad(); s.items=[]; mhShopSave(s); mhStockLowNow(mhShopKey('Zzqx Cheddar'));})()")
+    ev("(()=>{const s=mhShopLoad(); s.items=[]; mhShopSave(s); mhStockSetReorder(mhShopKey('Zzqx Cheddar'),900); mhStockLowNow(mhShopKey('Zzqx Cheddar'));})()")
     ev("mhShopView('list')"); page.wait_for_timeout(300)
     t = ev("document.querySelector('[data-item^=\"Zzqx Cheddar\"]')?.innerText||''")
     if 'running low' not in t or '800' not in t: f.add('BUG', f'6: the list row shows the stock behind it: {t!r}')

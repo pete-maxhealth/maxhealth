@@ -6521,7 +6521,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1194'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1195'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27435,10 +27435,19 @@ function mhShopOffLoad() { try { const a = JSON.parse(localStorage.getItem('mh_s
 function mhShopOffSave(a) { try { localStorage.setItem('mh_shop_off', JSON.stringify(a)); } catch (_) {} }
 function mhShopOff(n) {
   const s = mhShopLoad(), off = mhShopOffLoad();
-  if (!s.shops.includes(n) || s.items.some(i => i.shop === n) || s.shops.filter(x => !off.includes(x)).length < 2) return;
-  off.push(n); mhShopOffSave(off);
-  if (s.shop === n) { mhShopSwitch(s, s.shops.find(x => !off.includes(x))); mhShopSave(s); }
-  mhShopRender();
+  if (!s.shops.includes(n) || s.shops.filter(x => !off.includes(x)).length < 2) return;
+  const mine = s.items.filter(i => i.shop === n && !i.checked), go = () => {
+    const s2 = mhShopLoad(), off2 = mhShopOffLoad(), gone = s2.items.filter(i => i.shop === n && !i.checked), ids = new Set(gone.map(i => i.id));
+    if (gone.length) { try { localStorage.setItem('mh_shop_undo', JSON.stringify({ at: Date.now(), label: n, items: gone })); } catch (_) {} }
+    s2.items = s2.items.filter(i => !ids.has(i.id));
+    // foods that were on the list as "running low" are put back to be noticed again when the shop is brought back
+    try { const o = mhStockLoad(); let ch = false; gone.forEach(i => { const f = o.items[i.key]; if (f && f.lowFlag) { f.lowFlag = false; ch = true; } }); if (ch) mhStockSave(o); } catch (_) {}
+    if (!off2.includes(n)) off2.push(n); mhShopOffSave(off2);
+    if (s2.shop === n) mhShopSwitch(s2, s2.shops.find(x => !off2.includes(x)));
+    mhShopSave(s2); _shopUi.msg = n + ' is hidden for now' + (gone.length ? ': ' + gone.length + ' item' + (gone.length === 1 ? '' : 's') + ' came off the list' : ''); mhShopRender();
+  };
+  if (mine.length) appConfirm('Not shopping at ' + mhPlanEsc(n) + ' this time? Its ' + mine.length + ' item' + (mine.length === 1 ? '' : 's') + ' come off your list and the shop is hidden. Nothing is deleted from your cupboards. Bring the shop back from "Hidden shops" and anything low there returns to the list.', go, null, true, { confirm: 'Hide ' + n });
+  else go();
 }
 function mhShopOn(n) { mhShopOffSave(mhShopOffLoad().filter(x => x !== n)); mhShopRender(); }
 function mhShopOffToggle() { _shopUi.offOpen = !_shopUi.offOpen; mhShopRender(); }
@@ -29000,6 +29009,7 @@ function mhStockSweep() {
     if (it.lowFlag) return;
     const shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : s.shops[0];
     if (!shop) return;
+    if (mhShopOffLoad().includes(shop)) return;   // not shopping there for now: its low foods wait until the shop is brought back (v3.10.1195)
     const ex = s.items.find(i => i.key === it.key);
     if (ex) { if (ex.hidden) { ex.hidden = false; sChanged = true; } }
     else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: it.nonFood ? 'nonfood' : mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: !!it.nonFood, amount: '' }); added++; sChanged = true; }
@@ -29422,7 +29432,7 @@ function mhShopRender(keepFocus) {
     const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-top:1px solid var(--border);">'
       + '<div onclick="mhShopToggle(\'' + i.id + '\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:14px;cursor:pointer;">'
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
-      + '<div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
+      + '<div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' ? (i.from === 'running low' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : ' <span style="font-size:11px;color:var(--text3);">from my cupboards</span>') : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
       + (edit ? '<span title="Add to My usuals" onclick="mhShopUsualFromItem(\'' + i.id + '\')" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span>' : '') + '<span title="Remove from the list" data-rm="' + i.id + '" onclick="mhShopRemove(this.dataset.rm)" style="cursor:pointer;color:var(--text3);padding:10px 12px;font-size:18px;flex:0 0 auto;">✕</span></div>';
     const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
     const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
@@ -29454,7 +29464,7 @@ function mhShopRender(keepFocus) {
     let off = mhShopOffLoad().filter(n => s.shops.includes(n) && !s.items.some(i => i.shop === n)); mhShopOffSave(off);
     if (off.includes(s.shop)) { mhShopSwitch(s, s.shops.find(x => !off.includes(x)) || s.shops[0]); mhShopSave(s); }
     const nOn = s.shops.filter(n => !off.includes(n)).length, cntOf = n => s.items.filter(i => i.shop === n).length;
-    const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.filter(n => !off.includes(n)).map(n => '<button class="hist-filter-btn' + (n === s.shop ? ' active' : '') + '" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)">' + esc(n) + (cntOf(n) ? ' (' + cntOf(n) + ')' : '') + '</button>' + (!cntOf(n) && nOn > 1 ? '<span title="Not shopping here this week" data-shop="' + esc(n) + '" onclick="mhShopOff(this.dataset.shop)" class="hist-filter-btn" style="padding:6px 10px;margin:0 8px 0 -4px;">✕</span>' : '')).join('') + '<button class="hist-filter-btn" onclick="mhShopAddShop()">＋ Shop</button></div>'
+    const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.filter(n => !off.includes(n)).map(n => '<button class="hist-filter-btn' + (n === s.shop ? ' active' : '') + '" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)">' + esc(n) + (cntOf(n) ? ' (' + cntOf(n) + ')' : '') + '</button>' + (nOn > 1 ? '<span title="Not shopping here this week" data-shop="' + esc(n) + '" onclick="mhShopOff(this.dataset.shop)" class="hist-filter-btn" style="padding:6px 10px;margin:0 8px 0 -4px;">✕</span>' : '')).join('') + '<button class="hist-filter-btn" onclick="mhShopAddShop()">＋ Shop</button></div>'
       + (off.length ? '<div style="margin:-2px 0 8px;"><span onclick="mhShopOffToggle()" style="cursor:pointer;font-size:12px;color:var(--text3);">' + (_shopUi.offOpen ? '▾' : '▸') + ' Hidden shops (' + off.length + ')</span>'
         + (_shopUi.offOpen ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text3);width:100%;">Tap a shop to bring it back. ✕ deletes it for good.</span>' + off.map(n => '<button class="hist-filter-btn" data-shop="' + esc(n) + '" onclick="mhShopOn(this.dataset.shop)">' + esc(n) + '</button>' + (n !== s.shops[0] ? '<span title="Delete this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" class="hist-filter-btn" style="padding:6px 10px;margin:0 8px 0 -4px;">✕</span>' : '')).join('') + '</div>' : '') + '</div>' : '');
     _isList = true;

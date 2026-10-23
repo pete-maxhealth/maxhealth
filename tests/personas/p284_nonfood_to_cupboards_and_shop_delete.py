@@ -34,7 +34,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopAddShopNamed('Zzqx Butchers')"); page.wait_for_timeout(300)
     ev("mhStockTrack('Zzqx Sausages',{base:'g',shop:'Zzqx Butchers'}); const s=mhShopLoad(); mhShopSetAdd(s,'Zzqx Mince','own','',null); s.items[s.items.length-1].shop='Zzqx Butchers'; mhShopSave(s)")
     ev("mhShopRender()"); page.wait_for_timeout(300)
-    if page.locator('#mhShopChips span[data-shop="Zzqx Butchers"]').count(): f.add('BUG', 'a shop with items on the list has no list-screen ✕ (it is hide-only, and only for empty shops)')
+    if not page.locator('#mhShopChips span[data-shop="Zzqx Butchers"]').count(): f.add('BUG', 'the list-screen ✕ is on every shop (it only hides)')
     page.click('#mhShopSwitch [data-pane="stock"]'); page.wait_for_timeout(400)
     if not page.locator('#mhCbShops [data-delshop="Zzqx Butchers"]').count(): f.add('BUG', 'an X on the cupboards pane shop row')
     page.click('#mhCbShops [data-delshop="Zzqx Butchers"]'); page.wait_for_timeout(300); page.click('#appModalConfirm'); page.wait_for_timeout(500)
