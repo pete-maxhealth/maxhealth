@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1197
+- **Filtered: ✕ on a running-low item means "not this week".** The item leaves the list but stays on your shelves and keeps counting; the list stops adding it, so it will not come back while you shop. A collapsed "Filtered (n)" section under the list count shows them grouped by aisle, with Select all / Deselect all, tick individual foods, and "Put back on shelf". A put-back food that is still low goes on the list as normal. Adding a filtered food by hand also releases it. Works for non-food items. My cupboards shows "filtered" instead of LOW on those rows. Other items (typed, usuals, added by hand) still just come off the list.
+
 ## v3.10.1196
 - **A shop's ✕ means the same thing in all three places.** On the shopping list, My cupboards and Add foods it now hides the shop for now (same ✕, same confirmation, same "Hidden shops (n)" line to bring it back). Before, the ✕ in My cupboards and Add foods deleted the shop for good while the one on the list only hid it. Deleting a shop for good is now only under "Hidden shops" ("delete for good", with its confirmation), out of the way. A hidden shop disappears from the chips in all three places and comes back everywhere together. Tests p279, p284 and p296 updated; p297 added.
 
