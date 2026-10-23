@@ -13,7 +13,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # list pane: type in Add to the list, X appears, clears
     ev("_shopUi.addOpen = true; mhShopRender()"); page.wait_for_timeout(300)
     vis = lambda sel: ev("(s)=>{const e=document.querySelector(s); return !!e && getComputedStyle(e).display!=='none'}", sel)
-    if vis('[data-clear-for="mhShopOwn"]'): f.add('BUG', 'no X while the box is empty')
+    if not vis('[data-clear-for="mhShopOwn"]'): f.add('BUG', 'the X is always shown, like the Log box, even when empty')
     page.fill('#mhShopOwn', 'Zzqx test'); page.wait_for_timeout(200)
     if not vis('[data-clear-for="mhShopOwn"]'): f.add('BUG', 'an X shows once there is text')
     page.click('[data-clear-for="mhShopOwn"]'); page.wait_for_timeout(200)

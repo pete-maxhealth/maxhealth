@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1188
+- **The clear ✕ on every Shopping and My cupboards search/type box now matches the Log box**: the same bordered 22px square with a thin ✕, always shown, at the left inside the box, with the text indented. Before, mine sat on the right, only appeared once you typed, and the list search had a second one beside it. The phone's own built-in clear mark on search boxes is hidden so there is only one. Test p285 updated.
+
 ## v3.10.1187
 - **On the shopping list the ✕ beside a shop now means "not shopping here this week", not delete.** It only shows on a shop with nothing on the list, and hides that shop from the list screen. The shop, its usuals, its history and the cupboard foods bought there are untouched. Hidden shops sit under "Hidden shops (n)": tap one to bring it back, or use its ✕ there to delete it for good (with the usual confirmation). A hidden shop comes back by itself if something is added to it. Permanent delete is also on My cupboards and Add foods, as in 1181. Test p289 added.
 

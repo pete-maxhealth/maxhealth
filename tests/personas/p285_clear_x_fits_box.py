@@ -13,8 +13,13 @@ with fresh_server() as root, sync_playwright() as pw:
         r = ev("(()=>{const i=document.getElementById('mhShopOwn'),b=i.parentNode.parentNode.querySelector('button.copy-btn,button');const a=i.getBoundingClientRect(),c=b?b.getBoundingClientRect():null;return {ir:a.right,bl:c?c.left:null,w:a.width}})()")
         if r['bl'] is not None and r['ir'] > r['bl'] + 1: f.add('BUG', f'the box covers the Add button: {r}')
         if r['w'] < 150: f.add('BUG', f'the box is a sensible width: {r}')
+    # one look everywhere: same size, border and radius as the Log box's clear
+    std = ev("(()=>{const l=document.querySelector('span[onclick=\"clearChatInput()\"]');const c=getComputedStyle(l);return {w:c.width,b:c.borderTopWidth,r:c.borderTopLeftRadius,fs:c.fontSize}})()")
+    for id_ in ['mhShopOwn']:
+        got = ev("(()=>{const x=document.querySelector('[data-clear-for=%s]');const c=getComputedStyle(x);return {w:c.width,b:c.borderTopWidth,r:c.borderTopLeftRadius,fs:c.fontSize}})()" % id_)
+        if got != std: f.add('BUG', f'{id_} clear looks like the Log one: {got} vs {std}')
     page.fill('#mhShopOwn', 'abc')
-    vis = ev("(()=>{const x=document.querySelector('[data-clear-for=mhShopOwn]');if(!x)return null;const r=x.getBoundingClientRect(),i=document.getElementById('mhShopOwn').getBoundingClientRect();return {shown:getComputedStyle(x).display!=='none',inside:r.right<=i.right+1&&r.left>=i.left}})()")
+    vis = ev("(()=>{const x=document.querySelector('[data-clear-for=mhShopOwn]');if(!x)return null;const r=x.getBoundingClientRect(),i=document.getElementById('mhShopOwn').getBoundingClientRect();return {shown:getComputedStyle(x).display!=='none',inside:r.left>=i.left&&r.left<=i.left+10&&r.right<=i.right,st:getComputedStyle(x),w:r.width,h:r.height}})()")
     if not vis or not vis['shown'] or not vis['inside']: f.add('BUG', f'a ✕ shows inside the box once text is typed: {vis}')
     page.click('[data-clear-for=mhShopOwn]'); page.wait_for_timeout(200)
     if ev("document.getElementById('mhShopOwn').value") != '': f.add('BUG', 'tapping ✕ clears the text')
