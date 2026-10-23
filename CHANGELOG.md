@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1191
+- **"Why are these on my list?" says when each group was added** (e.g. "added 23 Oct 14:02 to 14:09"), so a batch added in one go shows up as one batch, and the group formerly called "Chosen as Shopping list / Both in Add foods" is now "Added from Add foods or My cupboards".
+
 ## v3.10.1190
 - **Foods bought at Heylo (or any shop) no longer sit on the list under Asda.** A food that moved from "no shop" to a shop kept its list entry under the old default shop, so the shop looked empty (and could be hidden) while its items were still on the list under Asda. List entries that came from your cupboards now follow the food's shop, for existing entries as well as new ones. A shop that gets its items back shows again by itself. Test p291 added.
 
