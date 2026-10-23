@@ -6521,7 +6521,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1192'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1193'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28990,7 +28990,12 @@ function mhStockSweep() {
   const o = mhStockLoad(), s = mhShopLoad(), res = mhPlanReserved(); let added = 0, oChanged = false, sChanged = false;
   Object.values(o.items).forEach(it => {
     if (it.nonFood) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }   // non-nutritional things are flagged low by hand (🛒), never by a number (v3.10.1144)
-    if (!mhStockIsLowRes(it, res)) { if (it.lowFlag) { it.lowFlag = false; oChanged = true; } return; }
+    if (!mhStockIsLowRes(it, res)) {
+      if (it.lowFlag) { it.lowFlag = false; oChanged = true; }
+      // no longer low (the count was corrected or restocked): its "running low" entry comes off the list unless you already ticked it (v3.10.1193)
+      const before = s.items.length; s.items = s.items.filter(i => !(i.key === it.key && i.src === 'stock' && i.from === 'running low' && !i.checked)); if (s.items.length !== before) sChanged = true;
+      return;
+    }
     if (it.lowFlag) return;
     const shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : s.shops[0];
     if (!shop) return;
@@ -29222,6 +29227,10 @@ function mhShopReconcile() {
   try {
     if (!mhStockOn()) return;
     const o = mhStockLoad(), s = mhShopLoad(); let ch = false;
+    const res = (typeof mhPlanReserved === 'function') ? mhPlanReserved() : {};
+    const before = s.items.length;
+    s.items = s.items.filter(i => { if (i.src !== 'stock' || i.from !== 'running low' || i.checked) return true; const f = o.items[i.key]; return !f || f.nonFood || mhStockIsLowRes(f, res); });
+    if (s.items.length !== before) ch = true;
     s.items.forEach(i => {
       if (i.src !== 'stock' || i.checked) return;
       const f = o.items[i.key]; if (!f || !f.shop) return;
