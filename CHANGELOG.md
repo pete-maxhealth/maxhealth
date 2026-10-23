@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1184
+- **The four Today tiles (Calories, Protein, Carbs, Fat) show what your planned meals would add**, as a small line under each, e.g. "+162 kcal planned · 2,022 kcal total". It uses the same planned meals as the Meal plan card (today's and overdue ones), the figures stored with each planned food (nothing estimated), and net carbs if that setting is on. No planned meals, no line. Test p288 added.
+
 ## v3.10.1183
 - **The Shopping list / My cupboards switch stays pinned at the top of the Shop tab.** Once you were down a long list or cupboard there was no way back to it without scrolling to the top. Test p287 added.
 

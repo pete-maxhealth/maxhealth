@@ -2709,18 +2709,21 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         <div class="prog-label">Calories <span id="calStatusDot" style="display:none;"></span></div>
         <div class="prog-current" id="calCurrent">0</div>
         <div class="prog-target" id="calTarget">/ 3670</div>
+        <div class="prog-planned" id="calPlanned" style="display:none;font-size:11px;color:var(--text3);line-height:1.3;margin-top:2px;"></div>
         <div class="bar" id="calBar" style="width:0%"></div>
       </div>
       <div class="prog-card protein" style="cursor:pointer;" onclick="openChartLightbox('protein')">
         <div class="prog-label">Protein <span id="protStatusDot" style="display:none;"></span></div>
         <div class="prog-current" id="protCurrent">0<span class="prog-unit">g</span></div>
         <div class="prog-target" id="protTarget">/ 165g</div>
+        <div class="prog-planned" id="protPlanned" style="display:none;font-size:11px;color:var(--text3);line-height:1.3;margin-top:2px;"></div>
         <div class="bar" id="protBar" style="width:0%"></div>
       </div>
       <div class="prog-card carbs" style="cursor:pointer;" onclick="openChartLightbox('carbs')">
         <div class="prog-label">Carbs <span id="carbStatusDot" style="display:none;"></span></div>
         <div class="prog-current" id="carbCurrent">0<span class="prog-unit">g</span></div>
         <div class="prog-target" id="carbTarget">/ 50g</div>
+        <div class="prog-planned" id="carbPlanned" style="display:none;font-size:11px;color:var(--text3);line-height:1.3;margin-top:2px;"></div>
         <div class="bar" id="carbBar" style="width:0%"></div>
       </div>
 
@@ -2728,6 +2731,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         <div class="prog-label">Fat <span id="fatStatusDot" style="display:none;"></span></div>
         <div class="prog-current" id="fatCurrent" style="color:#a78bfa;">0<span class="prog-unit">g</span></div>
         <div class="prog-target" id="fatTarget" style="color:var(--text3);">/ 247g</div>
+        <div class="prog-planned" id="fatPlanned" style="display:none;font-size:11px;color:var(--text3);line-height:1.3;margin-top:2px;"></div>
         <div class="bar" id="fatBar" style="width:0%;background:#a78bfa;"></div>
       </div>
     </div>
@@ -6517,7 +6521,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1183'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1184'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -23379,6 +23383,20 @@ function mhPlanStart() {
 }
 function mhPlanSetAuto(on) { try { localStorage.setItem('mh_plan_auto', on ? '1' : '0'); } catch (_) {} mhPlanRender(); }
 
+// The four Today tiles show what your planned meals would add, as a small line under each (v3.10.1184).
+// Same rule as the Meal plan card: plans dated today or overdue count as planned until you answer them.
+function mhPlanTileNotes() {
+  const ids = { cal: 'calPlanned', prot: 'protPlanned', carb: 'carbPlanned', fat: 'fatPlanned' };
+  const set = (k, txt) => { const e = document.getElementById(ids[k]); if (!e) return; e.textContent = txt || ''; e.style.display = txt ? '' : 'none'; };
+  try {
+    const today = localISODate(), foods = [].concat(...mhPlanLoad().filter(p => p.date <= today).map(p => p.foods || []));
+    if (!foods.length) { Object.keys(ids).forEach(k => set(k, '')); return; }
+    const eat = calcTotals(state.todayLog), pl = calcTotals(foods), all = calcTotals(state.todayLog.concat(foods));
+    const row = (k, pv, av, unit) => set(k, Math.round(pv) > 0 ? '+' + Math.round(pv) + unit + ' planned \u00B7 ' + Math.round(av).toLocaleString('en-GB') + unit + ' total' : '');
+    row('cal', pl.kcal, all.kcal, ' kcal'); row('prot', pl.protein, all.protein, 'g');
+    row('carb', getEffectiveCarbs(pl), getEffectiveCarbs(all), 'g'); row('fat', pl.fat || 0, all.fat || 0, 'g');
+  } catch (_) {}
+}
 function mhPlanRender() {
   const host = document.getElementById('mhPlanBlock'); if (!host) return;
   let plans = mhPlanLoad();
@@ -23387,6 +23405,7 @@ function mhPlanRender() {
   const kept = plans.filter(p => p.date >= cutoff);
   if (kept.length !== plans.length) { plans = kept; mhPlanSave(plans); }
   plans.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  mhPlanTileNotes();
   const today = localISODate(), now = nowTime();
   const auto = localStorage.getItem('mh_plan_auto') === '1';
   const due = p => p.date < today || (p.date === today && p.time <= now);
@@ -26427,6 +26446,7 @@ function updateDashboard(skipActivityRender) {
   document.getElementById('protCurrent').innerHTML = Math.round(totals.protein) + '<span class="prog-unit">g</span>';
   document.getElementById('carbCurrent').innerHTML = Math.round(effCarbs) + '<span class="prog-unit">g</span>';
   document.getElementById('carbTarget').textContent = `/ ${targets.carbs}g`;
+  mhPlanTileNotes();
 
   document.getElementById('calBar').style.width = calPct + '%';
   document.getElementById('protBar').style.width = protPct + '%';
