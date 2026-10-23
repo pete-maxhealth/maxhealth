@@ -17,6 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
     n = ev("Object.keys(mhSlState().sel).length")
     if str(n) not in t or 'Heylo' not in t: f.add('BUG', f'the bar names the count and the shop: {t!r}')
     if 'stock' not in t or 'shopping list' not in t: f.add('BUG', 'the bar explains both buttons')
+    ev("document.getElementById('mhSlBulkMore').open=true"); page.wait_for_timeout(200)
     if page.input_value('#mhSlBulkShop') != 'Heylo': f.add('BUG', 'the Bought at picker shows Heylo')
     other = ev("mhShopLoad().shops.find(x=>x!=='Heylo')")
     page.select_option('#mhSlBulkShop', other); page.wait_for_timeout(400)

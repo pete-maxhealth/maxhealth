@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1171
+- **Add foods bar slimmed down for a phone.** The bar now shows the count, the three actions side by side (**Add to my cupboards**, **Put on the list** and a new **Both**), and tucks *Bought at* and *Kept in* behind a "change the shop or where it is kept" line. Have now / Reorder at appear only when exactly one food is ticked, because an amount cannot mean the same for several foods (the others get their amounts on their own rows via Needs details). Ticks now stay after an action so a second action can follow; Untick all clears them. The buttons keep clear of the floating scroll arrows. Tests p276, p273, p272, p251.
+- **Use by can be cleared.** A "Clear the date" button appears under the Use by date, and picking the same date again after clearing it now saves. Test p276.
+
 ## v3.10.1170
 - **Add foods no longer lists the same product twice.** If you already hold "Cauliflower Rice", the library's "Cauliflower Rice (Asda)" is the same food under a shop's name, so it is hidden from the Add foods list (the same comparison the log matching already uses: brackets and the word Asda ignored). A line says how many are hidden and why, with a **Show them** button; typing the exact name still finds it, and Tick all shown never ticks a hidden food. Two variants where you hold neither are both shown. Test p275.
 
