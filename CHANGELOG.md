@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1175
+- **An X on every food in the Add foods lists removes it from My cupboards.** For foods you do not want tracked (a typo, something you no longer keep): ✕ on the row, then Remove to confirm. The row goes, the counts update, and your shopping list is not touched. Test p278.
+
 ## v3.10.1174
 - **"Needs details" and "No amount yet" are to-do lists with no ticking and no pop-up.** Each food's own row already holds Have now, Reorder at, One serving, Bought at and Kept in, so the tick boxes, Tick all shown and the bottom bar are gone from those two views.
 - **Each food asks "Where does it go?" on its own row, and it is required.** Three buttons, **Cupboards**, **Shopping list** and **Both**, none pre-selected. Pressing one applies it to that food at once (Cupboards starts counting it, Shopping list puts it on that shop's list, Both does each). A food leaves the list when its amounts are filled in and one is chosen; until then the row says "choose one to finish this food". If a food has no unit yet it asks how it is counted first.

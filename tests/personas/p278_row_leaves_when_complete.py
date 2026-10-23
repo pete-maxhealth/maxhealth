@@ -35,6 +35,12 @@ with fresh_server() as root, sync_playwright() as pw:
     names = sorted(ev("mhShopLoad().items.map(i=>i.name)"))
     if names != ['Zzqx Alpha', 'Zzqx Beta']: f.add('BUG', f'Shopping list puts only that food on the list: {names}')
     if not ev("!!document.querySelector('[data-sl=\"%s\"]')" % ev("mhShopKey('Zzqx Gamma')")): f.add('BUG', 'the other food is untouched')
+    # an X takes a food out of the cupboards for good, after asking
+    gk = ev("mhShopKey('Zzqx Gamma')")
+    page.click('[data-sl="%s"] [title="Remove from my cupboards"]' % gk); page.wait_for_timeout(300); page.click('#appModalConfirm'); page.wait_for_timeout(500)
+    if ev("!!mhStockLoad().items[%r]" % gk): f.add('BUG', 'the X removes the food from my cupboards')
+    if ev("!!document.querySelector('[data-sl=\"%s\"]')" % gk): f.add('BUG', 'and its row goes')
+    if ev(rows) != 1 or '1 shown' not in page.inner_text('#mhSlShownN'): f.add('BUG', 'the shown count follows')
     # other lists still tick, with a slim bar that names the food
     ev("mhSlF('all')"); page.wait_for_timeout(300)
     page.click('[data-sl] [data-pick] >> nth=0'); page.wait_for_timeout(300)
