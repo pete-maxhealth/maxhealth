@@ -9,8 +9,8 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
     ev("switchTabById('library')"); page.wait_for_timeout(600)
-    ev("(()=>{const e=document.getElementById('libraryScroll'); const p=document.createElement('div'); p.style.height='6000px'; e.appendChild(p); e.scrollTo(0,1500); e.dispatchEvent(new Event('scroll')); })()"); page.wait_for_timeout(600)
-    vis = ev("[...document.querySelectorAll('button')].filter(b=>/^[↑↓]$/.test(b.textContent.trim()) && getComputedStyle(b).display!=='none' && b.offsetParent!==null && b.getBoundingClientRect().width>0).map(b=>b.id)")
+    ev("(()=>{const e=document.getElementById('libraryScroll'); const p=document.createElement('div'); p.style.height='6000px'; e.appendChild(p); e.scrollTo(0,1500); e.dispatchEvent(new Event('scroll')); toggleLibraryBackToTop(); refreshActiveScrollContainer(); updateGlobalScrollNav(); })()"); page.wait_for_timeout(600)
+    vis = ev("[...document.querySelectorAll('button')].filter(b=>/^[↑↓]$/.test(b.textContent.trim()) && getComputedStyle(b).display!=='none' && b.getBoundingClientRect().width>0).map(b=>b.id)")
     if sorted(vis) != ['globalScrollBottomBtn', 'globalScrollTopBtn']: f.add('BUG', f'one pair of arrows on Library, saw {vis}')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)

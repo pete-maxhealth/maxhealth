@@ -8,7 +8,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("localStorage.setItem('mh_shop_pane','both')")
-    ev("window.appConfirm=(m,fn)=>fn()")
+    ev("window.appConfirm=(m,fn)=>{fn&&fn()}")
     for n in ['Zzqx Jam', 'Zzqx Rice']: ev(f"mhStockTrack('{n}',{{base:'g',shop:'Asda'}}); mhStockSetLevel(mhShopKey('{n}'),250); mhStockSetReorder(mhShopKey('{n}'),100)")
     ev("switchTabById('shop')"); page.wait_for_timeout(500)
     k = ev("mhShopKey('Zzqx Jam')"); k2 = ev("mhShopKey('Zzqx Rice')")
