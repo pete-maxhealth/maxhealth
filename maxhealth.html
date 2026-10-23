@@ -6517,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1180'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1181'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27337,8 +27337,11 @@ function mhShopAddOwn() {
   const added = mhShopSetAdd(s, v, 'own', '', null, { nonFood, amount }), it = s.items.find(i => i.key === mhShopKey(v));
   if (it && it.hidden) it.hidden = false;
   mhShopSave(s);
+  // A non-nutritional item added from the list is also put in My cupboards if it is not there yet (v3.10.1181)
+  let cupNote = '';
+  if (nonFood && mhStockOn()) { const key = mhShopKey(v), o0 = mhStockLoad(); if (!o0.items[key]) { mhStockTrack(v, { base: 'each', pack: null, serving: null, shop: s.shop }); const o1 = mhStockLoad(); if (o1.items[key]) { o1.items[key].nonFood = true; mhStockSave(o1); cupNote = ' and to your cupboards'; } } else cupNote = ' (already in your cupboards)'; }
   // Say where it is, and open that aisle and scroll to it: aisles start closed, so a bare "Added" left it out of sight (v3.10.1178)
-  _shopUi.msg = it ? (added ? 'Added ' + it.name + ' to your ' + it.shop + ' list' : it.name + ' is already on your ' + it.shop + ' list' + (it.checked ? ' (ticked, in the basket)' : '')) : (added ? 'Added' : 'Already on the list');
+  _shopUi.msg = it ? (added ? 'Added ' + it.name + ' to your ' + it.shop + ' list' + cupNote : it.name + ' is already on your ' + it.shop + ' list' + (it.checked ? ' (ticked, in the basket)' : '')) : (added ? 'Added' : 'Already on the list');
   if (it) mhShopRevealItem(s, it);
   mhShopRender();
   if (it) setTimeout(() => { const el = [...document.querySelectorAll('#mhShopPane [data-item]')].find(e => e.dataset.item === it.name); if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} const bg = el.style.background; el.style.transition = 'background .4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); } }, 150);
@@ -27407,15 +27410,19 @@ function mhShopAddShopNamed(nameIn) { const v = String(nameIn || '').trim().slic
 // discards list rows rather than just moving them.
 function mhShopDelShop(n) {
   const s = mhShopLoad(); if (s.shops.length < 2 || n === s.shops[0] || !s.shops.includes(n)) return;
-  const cnt = s.items.filter(i => i.shop === n).length;
+  const cnt = s.items.filter(i => i.shop === n).length, nl = String(n).toLowerCase(), cup = Object.values(mhStockLoad().items).filter(it => String(it.shop || '').toLowerCase() === nl).length;
   const go = () => {
     const s2 = mhShopLoad();
     s2.items = s2.items.filter(i => i.shop !== n);
     s2.shops = s2.shops.filter(x => x !== n);
     if (s2.shop === n) mhShopSwitch(s2, s2.shops[0]);
-    delete s2.usualsBy[n]; mhShopSave(s2); mhShopRender();
+    delete s2.usualsBy[n]; mhShopSave(s2);
+    // foods in the cupboards that said they were bought here stay, with no shop (v3.10.1181)
+    const o = mhStockLoad(); let ch = false; Object.values(o.items).forEach(it => { if (String(it.shop || '').toLowerCase() === nl) { delete it.shop; ch = true; } }); if (ch) mhStockSave(o);
+    try { const cb = mhCbState(); if (String(cb.shop || '').toLowerCase() === nl) cb.shop = ''; mhShopFoldSave(); const st = mhSlState(); if (st.shop === n) st.shop = ''; } catch (_) {}
+    mhShopRender();
   };
-  if (cnt) appConfirm('Remove ' + mhPlanEsc(n) + ' from this list? ' + cnt + ' item' + (cnt === 1 ? '' : 's') + ' on your list ' + (cnt === 1 ? 'is' : 'are') + ' only at ' + mhPlanEsc(n) + ' and will come off the list too - nothing is deleted from ' + mhPlanEsc(n) + "'s own history or usuals.", go, null, true, { confirm: 'Remove' });
+  if (cnt || cup) appConfirm('Remove ' + mhPlanEsc(n) + '? ' + (cnt ? cnt + ' item' + (cnt === 1 ? '' : 's') + ' on your list ' + (cnt === 1 ? 'is' : 'are') + ' only at ' + mhPlanEsc(n) + ' and will come off the list. ' : '') + (cup ? cup + ' food' + (cup === 1 ? '' : 's') + ' in your cupboards ' + (cup === 1 ? 'is' : 'are') + ' bought there and will stay, with no shop. ' : '') + 'Nothing is deleted from ' + mhPlanEsc(n) + "'s history or usuals.", go, null, true, { confirm: 'Remove' });
   else go();
 }
 // Saved lists (v3.10.1116): a named copy of what you were buying, kept so you can pull it back in later, e.g. after a few weeks away
@@ -29045,7 +29052,7 @@ function mhStockCardHtml(s) {
   const tabsH = '<div id="mhCbTabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px;">' + tabDefs.map(([k, l]) => { const n = items.filter(it => mhCbMatch(it, k, soonKeys)).length; return (k === 'all' || k === 'nonfood' || n > 0 || cb.tab === k) ? '<button class="copy-btn" data-cb="' + k + '" onclick="mhCbTab(\'' + k + '\')" style="font-size:12px;padding:7px 10px;' + (cb.tab === k ? 'background:var(--accent);color:#fff;' : '') + '">' + l + ' (' + n + ')</button>' : ''; }).join('') + '</div>';
   const shopOf = it => (it.shop || '').toLowerCase(), shopNames = s.shops.filter(n => items.some(it => shopOf(it) === n.toLowerCase())), nNoShop = items.filter(it => !it.shop).length;
   const shopBtn = (k, l, n) => '<button class="copy-btn" data-cbshop="' + esc(k) + '" onclick="mhCbShop(this.dataset.cbshop)" style="font-size:12px;padding:7px 10px;' + ((cb.shop || '') === k ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(l) + ' (' + n + ')</button>';
-  const shopsH = (shopNames.length || nNoShop) && items.length ? '<div id="mhCbShops" style="margin:0 0 8px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Show what is bought at:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + shopBtn('', 'All shops', items.length) + shopNames.map(n => shopBtn(n, n, items.filter(it => shopOf(it) === n.toLowerCase()).length)).join('') + (nNoShop ? shopBtn('__none', 'No shop', nNoShop) : '') + '<button class="copy-btn" data-cbshop-add="1" onclick="mhShopAddShop()" style="font-size:12px;padding:7px 10px;">＋ Shop</button></div></div>' : '';
+  const shopsH = items.length ? '<div id="mhCbShops" style="margin:0 0 8px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Show what is bought at:</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + shopBtn('', 'All shops', items.length) + s.shops.map((n, x) => shopBtn(n, n, items.filter(it => shopOf(it) === n.toLowerCase()).length) + (x > 0 ? '<span title="Remove this shop" data-delshop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.delshop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + (nNoShop ? shopBtn('__none', 'No shop', nNoShop) : '') + '<button class="copy-btn" data-cbshop-add="1" onclick="mhShopAddShop()" style="font-size:12px;padding:7px 10px;">＋ Shop</button></div></div>' : '';
   const shopOk = it => !cb.shop || (cb.shop === '__none' ? !it.shop : shopOf(it) === cb.shop.toLowerCase());
   const shownIt = items.filter(it => mhCbMatch(it, cb.tab, soonKeys) && shopOk(it) && (!cq || it.name.toLowerCase().includes(cq)));
   let rowsH = '';
@@ -29243,7 +29250,7 @@ function mhShopRender(keepFocus) {
     const st = mhSlState(), all = mhSlRows(), rows = mhSlFilter(all), shown = rows.slice(0, st.n), nT = all.filter(r => r.it).length;
     const tl0 = (label, fn) => '<button class="copy-btn mh-tile" onclick="' + fn + '">' + label + '</button>';
     if (mhSlTodo()) st.sel = {}; const dest = mhSlShop(), nTick = Object.keys(st.sel).length;
-    const shopChips = '<div id="mhSlShops" style="margin:0 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Everything below goes to this shop. Tap another to change it:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + s.shops.map(n => '<button class="copy-btn" data-slshop="' + esc(n) + '" onclick="mhSlShopPick(this.dataset.slshop)" style="font-size:14px;padding:9px 13px;' + (n === dest ? 'background:var(--accent);color:#fff;font-weight:700;' : '') + '">' + esc(n) + '</button>').join('') + '<button class="copy-btn" data-slshop-add="1" onclick="mhSlAddShop()" style="font-size:14px;padding:9px 13px;">＋ Shop</button></div></div>';
+    const shopChips = '<div id="mhSlShops" style="margin:0 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Everything below goes to this shop. Tap another to change it:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + s.shops.map(n => '<button class="copy-btn" data-slshop="' + esc(n) + '" onclick="mhSlShopPick(this.dataset.slshop)" style="font-size:14px;padding:9px 13px;' + (n === dest ? 'background:var(--accent);color:#fff;font-weight:700;' : '') + '">' + esc(n) + '</button>' + (s.shops.indexOf(n) > 0 ? '<span title="Remove this shop" data-delshop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.delshop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" data-slshop-add="1" onclick="mhSlAddShop()" style="font-size:14px;padding:9px 13px;">＋ Shop</button></div></div>';
     const chip = (k, t) => '<button class="copy-btn" data-f="' + k + '" onclick="mhSlF(this.dataset.f)" style="font-size:12px;padding:7px 10px;' + (st.f === k ? 'background:var(--accent);color:#fff;' : '') + '">' + t + '</button>';
     const find = '<div id="mhSlQBox" style="position:sticky;top:-16px;z-index:6;background:var(--bg);padding:22px 0 6px;margin:-16px 0 4px;"><input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Search your library and cupboards (any words, any order)" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;"></div>'
       + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
@@ -29340,7 +29347,7 @@ function mhShopRender(keepFocus) {
       + (addKind === 'nonfood' ? '<div style="display:flex;gap:6px;margin-top:6px;"><input id="mhShopOwnAmount" placeholder="Amount, e.g. 24 pack, 2 bottles" onkeydown="if(event.key===\'Enter\')mhShopAddOwn()" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') + '</div><div style="font-size:11px;color:var(--text3);margin-top:4px;">Non-nutritional: kept off your list of ingredients, My foods and every nutrition search or stat — just here so a real shopping trip has everything on one list.</div>' : '')
       + (addKind === 'food' && mhStockOn() ? '<div style="margin:6px 0 8px;">' + btn('🔍 Search my foods and pick several', 'mhSlFromAdd()', 'font-size:13px;padding:9px 12px;') + '</div>' : '')
       + '<div class="mh-tiles">' + [tl('📥 Import', "mhOrdOpen('list')"), tl('⭐ My usuals (' + s.usuals.length + ')', "mhShopView('usuals')"), tl('⚡ Quick list (' + (() => { try { return mhShopShortlist(s).length; } catch (_) { return 0; } })() + ')', "mhShopView('quick')"), tl('🍲 Recipe', "mhShopView('recipes')"), tl('➕ My foods', "mhShopView('picker')"), (planN ? tl('🗓 From my plan', 'mhShopRefresh(true)') : ''), tl('📁 Saved lists (' + mhShopListsLoad().lists.length + ')', "mhShopView('lists')")].join('') + '</div></div>' : '';
-    const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.map((n, x) => '<button class="copy-btn" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)" style="font-size:13px;padding:8px 12px;' + (n === s.shop ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(n) + (s.items.filter(i => i.shop === n).length ? ' (' + s.items.filter(i => i.shop === n).length + ')' : '') + '</button>' + (edit && x > 0 ? '<span title="Remove this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" onclick="mhShopAddShop()" style="font-size:13px;padding:8px 12px;">＋ Shop</button></div>';
+    const chips = '<div id="mhShopChips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' + s.shops.map((n, x) => '<button class="copy-btn" data-shop="' + esc(n) + '" onclick="mhShopSetShop(this.dataset.shop)" style="font-size:13px;padding:8px 12px;' + (n === s.shop ? 'background:var(--accent);color:#fff;' : '') + '">' + esc(n) + (s.items.filter(i => i.shop === n).length ? ' (' + s.items.filter(i => i.shop === n).length + ')' : '') + '</button>' + (x > 0 ? '<span title="Remove this shop" data-shop="' + esc(n) + '" onclick="mhShopDelShop(this.dataset.shop)" style="cursor:pointer;color:var(--red);padding:4px;">✕</span>' : '')).join('') + '<button class="copy-btn" onclick="mhShopAddShop()" style="font-size:13px;padding:8px 12px;">＋ Shop</button></div>';
     _isList = true;
     const done = got > 0 ? '<button onclick="mhShopComplete()" style="width:100%;margin-top:16px;padding:16px;background:var(--green);border:none;border-radius:12px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;">✓ Shopping complete: empty the basket</button>' : '';
     const copyRow = total ? '<div style="margin-top:10px;">' + btn('📋 Copy list', 'mhShopCopy()') + '</div>' : '';
