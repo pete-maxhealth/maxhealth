@@ -6521,7 +6521,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1199'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1200'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27669,6 +27669,29 @@ function mhStockTrack(name, opts) {
   if (prev && it.shop && prev.shop !== it.shop) { try { const sh = mhShopLoad(); let ch = false; sh.items.filter(i => i.key === key && (i.shop === prev.shop || (!prev.shop && i.src === 'stock' && !i.checked))).forEach(i => { if (sh.items.some(j => j !== i && j.key === key && j.shop === it.shop)) sh.items = sh.items.filter(j => j !== i); else i.shop = it.shop; ch = true; }); if (ch) mhShopSave(sh); } catch (_) {} }
   return it;
 }
+// Removing a food keeps a copy of it (counts and all) so it can be put back: Undo on the message, and "Recently removed" under the shop chips (v3.10.1200).
+function mhStockRemovedLoad() { try { const a = JSON.parse(localStorage.getItem('mh_stock_removed') || '[]'); return Array.isArray(a) ? a.filter(x => x && x.it && x.it.key) : []; } catch (_) { return []; } }
+function mhStockUntrackUndoable(key, name) {
+  const o = mhStockLoad(), it = o.items[key]; if (!it) return false;
+  const copy = JSON.parse(JSON.stringify(it)), ledger = o.ledger.filter(l => l.k === key);
+  const list = mhStockRemovedLoad().filter(x => x.it.key !== key); list.unshift({ at: Date.now(), it: copy, ledger }); try { localStorage.setItem('mh_stock_removed', JSON.stringify(list.slice(0, 30))); } catch (_) {}
+  mhStockUntrack(key);
+  showToast(String(name || copy.name).replace(/</g, '&lt;') + ' removed from my cupboards', 'Undo', () => mhStockRestoreRemoved(key), 10000);
+  return true;
+}
+function mhStockRestoreRemoved(key) {
+  const list = mhStockRemovedLoad(), r = list.find(x => x.it.key === key); if (!r) return false;
+  const o = mhStockLoad(); if (!o.items[key]) { o.items[key] = r.it; o.enabled = true; (r.ledger || []).forEach(l => o.ledger.push(l)); mhStockSave(o); }
+  try { localStorage.setItem('mh_stock_removed', JSON.stringify(list.filter(x => x.it.key !== key))); } catch (_) {}
+  try { mhStockSweep(); } catch (_) {} _shopUi.cbRemOpen = _shopUi.cbRemOpen; try { mhShopRender(); } catch (_) {} return true;
+}
+function mhStockRemovedToggle() { _shopUi.cbRemOpen = !_shopUi.cbRemOpen; mhShopRender(); }
+function mhStockRemovedHtml() {
+  const l = mhStockRemovedLoad(); if (!l.length) return '';
+  const open = !!_shopUi.cbRemOpen;
+  return '<div id="mhCbRemoved" style="margin-top:6px;"><span onclick="mhStockRemovedToggle()" style="cursor:pointer;font-size:12px;color:var(--text3);">' + (open ? '▾' : '▸') + ' Recently removed (' + l.length + ')</span>'
+    + (open ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text3);width:100%;">Tap a food to put it back with its counts.</span>' + l.map(x => '<button class="hist-filter-btn" data-restore="' + mhPlanEsc(x.it.key) + '" onclick="mhStockRestoreRemoved(this.dataset.restore)">' + mhPlanEsc(x.it.name) + '</button>').join('') + '</div>' : '') + '</div>';
+}
 function mhStockUntrack(key) { const o = mhStockLoad(); if (!o.items[key]) return false; delete o.items[key]; mhStockSave(o); return true; }
 // A stock-take: you counted it, so this is the number. Everything logged before this moment can no longer change it.
 function mhStockSetLevel(key, base) { const o = mhStockLoad(), it = o.items[key]; if (!it || !(base >= 0)) return false; it.level = mhStockRound(base); it.since = Date.now(); o.ledger = o.ledger.filter(l => l.k !== key); if (!(it.level > 0)) { delete it.useBy; delete it.useByAuto; } else if (it.store && !it.useBy) mhStockAutoDate(it); mhStockSave(o); return true; }
@@ -29029,7 +29052,7 @@ function mhSlRowGone(row, key) {
 // ✕ on a food's row: take it out of My cupboards for good (asks first). Your shopping list is not touched (v3.10.1175).
 function mhSlRemove(el) {
   const row = el.closest('[data-sl]'); if (!row) return; const key = row.dataset.sl, it = mhStockLoad().items[key]; if (!it) return;
-  appConfirm('Remove ' + mhPlanEsc(it.name) + ' from my cupboards? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrack(key); mhSlRowGone(row, key); showToast(it.name + ' removed from my cupboards'); }, null, true, { confirm: 'Remove' });
+  appConfirm('Remove ' + mhPlanEsc(it.name) + ' from my cupboards? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrackUndoable(key, it.name); mhSlRowGone(row, key); }, null, true, { confirm: 'Remove' });
 }
 // Anything at or under its reorder level goes on the shopping list under its shop, once per time it runs low (taking it off the list
 // yourself means you decided; it only returns after you have restocked and it runs low again). A shop that is not on this trip's list
@@ -29151,7 +29174,7 @@ function mhStockCardHtml(s) {
   const shopOf = it => (it.shop || '').toLowerCase(), shopNames = s.shops.filter(n => items.some(it => shopOf(it) === n.toLowerCase())), nNoShop = items.filter(it => !it.shop).length;
   const shopBtn = (k, l, n) => '<button class="hist-filter-btn' + ((cb.shop || '') === k ? ' active' : '') + '" data-cbshop="' + esc(k) + '" onclick="mhCbShop(this.dataset.cbshop)">' + esc(l) + ' (' + n + ')</button>';
   const offNow = mhShopOffNow(s), offVisible = s.shops.filter(n => !offNow.includes(n)).length; if (cb.shop && offNow.some(n => n.toLowerCase() === String(cb.shop).toLowerCase())) cb.shop = '';
-  const shopsH = items.length ? '<div id="mhCbShops" style="margin:0 0 8px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Show what is bought at:</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + shopBtn('', 'All shops', items.length) + s.shops.filter(n => !offNow.includes(n)).map(n => shopBtn(n, n, items.filter(it => shopOf(it) === n.toLowerCase()).length) + (offVisible > 1 ? mhShopHideX(n) : '')).join('') + (nNoShop ? shopBtn('__none', 'No shop', nNoShop) : '') + '<button class="hist-filter-btn" data-cbshop-add="1" onclick="mhShopAddShop()">＋ Shop</button></div>' + mhShopHiddenHtml(s) + '</div>' : '';
+  const shopsH = items.length ? '<div id="mhCbShops" style="margin:0 0 8px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Show what is bought at:</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + shopBtn('', 'All shops', items.length) + s.shops.filter(n => !offNow.includes(n)).map(n => shopBtn(n, n, items.filter(it => shopOf(it) === n.toLowerCase()).length) + (offVisible > 1 ? mhShopHideX(n) : '')).join('') + (nNoShop ? shopBtn('__none', 'No shop', nNoShop) : '') + '<button class="hist-filter-btn" data-cbshop-add="1" onclick="mhShopAddShop()">＋ Shop</button></div>' + mhShopHiddenHtml(s) + mhStockRemovedHtml() + '</div>' : '';
   const shopOk = it => !cb.shop || (cb.shop === '__none' ? !it.shop : shopOf(it) === cb.shop.toLowerCase());
   const shownIt = items.filter(it => mhCbMatch(it, cb.tab, soonKeys) && shopOk(it) && (!cq || it.name.toLowerCase().includes(cq)));
   let rowsH = '';
@@ -29241,7 +29264,7 @@ function mhStkUndo() {
 }
 function mhStockUntrackAsk(key) {
   const it = mhStockLoad().items[key]; if (!it) return;
-  appConfirm('Remove ' + mhPlanEsc(it.name) + ' from my cupboards? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrack(key); _shopUi.stk = null; mhShopView('list'); }, null, true, { confirm: 'Remove' });
+  appConfirm('Remove ' + mhPlanEsc(it.name) + ' from my cupboards? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrackUndoable(key, it.name); _shopUi.stk = null; mhShopView('list'); }, null, true, { confirm: 'Remove' });
 }
 function mhStockSuggestTrack(key, base) { if (!MH_STOCK_BASES.includes(base)) return; const x = mhShopKnown().find(y => y.key === key); if (!x) return; mhStockTrack(x.name, { base, shop: mhShopLoad().shop }); mhShopRender(); }
 function mhShopQuickSrc(v) { const s = mhShopLoad(); s.qsrc = v === 'recent' ? 'recent' : 'top'; mhShopSave(s); mhShopRender(); }

@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1200
+- **Removing a food from My cupboards can be undone.** Both remove buttons now keep a copy of the food with its counts: an Undo on the message for 10 seconds, and a "Recently removed" line under the shop chips in My cupboards (the last 30). Tap a food there to put it back exactly as it was.
+
 ## v3.10.1199
 - **One set of scroll arrows on Library.** Library was showing its own ↑ ↓ buttons on top of the app-wide pair. Its old pair is switched off, so it has the same single pair as every other screen.
 
