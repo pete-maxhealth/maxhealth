@@ -6517,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1177'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1178'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27334,8 +27334,19 @@ function mhShopAddOwn() {
   const nonFood = _shopUi.addKind === 'nonfood';
   const amount = nonFood ? (document.getElementById('mhShopOwnAmount')?.value || '').trim() : '';
   const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== mhShopKey(v));
-  _shopUi.msg = mhShopSetAdd(s, v, 'own', '', null, { nonFood, amount }) ? 'Added' : 'Already on the list';
-  mhShopSave(s); mhShopRender();
+  const added = mhShopSetAdd(s, v, 'own', '', null, { nonFood, amount }), it = s.items.find(i => i.key === mhShopKey(v));
+  if (it && it.hidden) it.hidden = false;
+  mhShopSave(s);
+  // Say where it is, and open that aisle and scroll to it: aisles start closed, so a bare "Added" left it out of sight (v3.10.1178)
+  _shopUi.msg = it ? (added ? 'Added ' + it.name + ' to your ' + it.shop + ' list' : it.name + ' is already on your ' + it.shop + ' list' + (it.checked ? ' (ticked, in the basket)' : '')) : (added ? 'Added' : 'Already on the list');
+  if (it) mhShopRevealItem(s, it);
+  mhShopRender();
+  if (it) setTimeout(() => { const el = [...document.querySelectorAll('#mhShopPane [data-item]')].find(e => e.dataset.item === it.name); if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} const bg = el.style.background; el.style.transition = 'background .4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); } }, 150);
+}
+function mhShopRevealItem(s, it) {
+  if (it.checked) { _shopUi.basketOpen = true; return; }
+  const multi = new Set(s.items.map(i => i.shop)).size > 1, ix = Math.max(0, s.shops.indexOf(it.shop)), fk = (multi ? ix + '_' : '') + mhShopSection(it.cat);
+  _shopUi.fold = _shopUi.fold || {}; _shopUi.fold['m' + fk] = false; mhShopFoldSave();
 }
 function mhShopPickTo(v) { _shopUi.pickTo = v === 'usuals' ? 'usuals' : 'list'; mhShopRender(); }
 function mhShopPick(key) { if (_shopUi.pickTo === 'usuals') { const k0 = mhShopKnown().find(x => x.key === key); if (!k0) return; const s0 = mhShopLoad(); if (mhShopUsualFind(s0, key)) s0.usuals = s0.usuals.filter(u => mhShopKey(u) !== key); else s0.usuals.push(k0.name); mhShopSave(s0); mhShopRender(true); return; } const known = mhShopKnown().find(x => x.key === key); if (!known) return; const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); const ex = s.items.find(i => i.key === key); if (ex) ex.hidden = false; else mhShopSetAdd(s, known.name, 'pick', '', known.cat); mhShopSave(s); mhShopRender(); }
@@ -29128,7 +29139,7 @@ function mhShopSuggestNever(key) { const s = mhShopLoad(); if (!s.never.includes
 function mhShopSuggestRestore(key) { const s = mhShopLoad(); s.never = s.never.filter(k => k !== key); s.skip = s.skip.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
 function mhShopSuggestStar(key) { const s = mhShopLoad(), x = mhShopShortlist(s).find(y => y.key === key); if (!x) return; if (!mhShopUsualFind(s, key)) s.usuals.push(x.name); _shopUi.msg = x.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 // The Non-nutritional group starts folded (v3.10.1137); a fold you set yourself is remembered either way.
-function mhShopIsShut(fold, k, sec) { return (k in fold) ? !!fold[k] : (String(k).charAt(0) === 'm' && !String(_shopUi.q || '').trim()); }   // aisles start closed until you open one, then remembered (v3.10.1172)
+function mhShopIsShut(fold, k, sec) { return (k in fold) ? !!fold[k] : (String(k).charAt(0) === 'm' && !String(_shopUi.q || '').trim() && !String(_shopUi.lq || '').trim()); }   // aisles start closed until you open one, then remembered (v3.10.1172)
 function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; const sec = +String(k).split('_').pop().replace(/^m/, ''); _shopUi.fold[k] = !mhShopIsShut(_shopUi.fold, k, sec); mhShopFoldSave(); mhShopRender(); }
 // Tick everything still to get in one aisle (the visible items only, so a search filter is respected).
 function mhShopTickSection(sec) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.checked && mhShopSection(i.cat) === sec).map(i => i.id)); let n = 0; s.items.forEach(i => { if (ids.has(i.id)) { i.checked = true; n++; } }); _shopUi.msg = n ? n + ' ticked into the basket' : ''; mhShopSave(s); mhShopRender(); }

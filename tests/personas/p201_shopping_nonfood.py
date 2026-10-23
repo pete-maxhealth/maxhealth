@@ -27,7 +27,7 @@ with fresh_server() as root, sync_playwright() as pw:
         f.add('BUG', f'non-food item not saved correctly: {item}')
 
     # the row shows the amount, and it sits in its own "Non-nutritional" section, not lumped into "Other"
-    ev("mhShopFold('m' + (MH_SHOP_WALK.length + 1))")   # the Non-nutritional group starts folded (v3.10.1137)
+    # adding the item opens its aisle (v3.10.1178), so there is nothing to unfold here
     row_txt = ev("document.querySelector('[data-item=\"Toilet roll\"]')?.textContent || ''")
     if '24 pack' not in row_txt: f.add('BUG', f'amount not shown on the row: {row_txt!r}')
     secs = ev("[...document.querySelectorAll('.mh-aisle span')].map(e=>e.textContent)")
