@@ -53,6 +53,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopComplete()"); page.wait_for_timeout(200); page.click('#appModalConfirm'); page.wait_for_timeout(400)
     if ev("mhStockLoad().enabled") is not False: f.add('BUG', '12: Shopping complete does not switch stock back on')
     if ev("Object.keys(mhStockLoad().items).join()") != 'zzqx tea': f.add('BUG', '13: and creates nothing on the shelf')
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles start closed (v3.10.1172); this step reads inside them
     ev("_shopUi.view='list'; mhShopRender()"); ev("(()=>{const s=mhShopLoad(); s.items=[{id:'q3',key:mhShopKey('Zzqx Tea'),name:'Zzqx Tea',cat:'other',checked:false,shop:s.shop,src:'own',from:''}]; mhShopSave(s);})()"); ev("mhShopRender()"); page.wait_for_timeout(300)
     if page.locator('#mhShopPane [data-stocknote]').count(): f.add('BUG', '14: with stock off the list rows show no stock amounts')
     ev("(()=>{const o=mhStockLoad(); o.enabled=true; mhStockSave(o);})()"); ev("mhShopRender()"); page.wait_for_timeout(300)

@@ -14,7 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('button:has-text("Tick all shown")'); page.wait_for_timeout(300)
     ev("document.getElementById('mhSlBulkMore').open=true")
     if page.is_visible('#mhSlBulkHave'): f.add('BUG', 'amount boxes are hidden while several foods are ticked')
-    page.click('button:has-text("Untick all")'); page.wait_for_timeout(200)
+    ev("mhSlPickAll(false)"); page.wait_for_timeout(200)
     ev("mhSlState().sel[mhShopKey('Zzqx Flatbread')]=1; mhSlBulkRefresh()"); page.wait_for_timeout(200)
     ev("document.getElementById('mhSlBulkMore').open=true")
     if not page.is_visible('#mhSlBulkHave'): f.add('BUG', 'amount boxes show for exactly one ticked food')

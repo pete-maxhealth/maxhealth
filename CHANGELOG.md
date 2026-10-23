@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1173
+- **A food leaves "Needs details" (and "No amount yet") the moment it is complete.** Fill in how much you have, when to reorder and one serving and the row fades off the list; the "N shown" and "Needs details (N)" counts update without redrawing the page, so you can work straight down the list. Test p278.
+- **The tick bar stays small.** Ticking foods now shows one slim strip (count, Untick all, and the three buttons Add to my cupboards / Put on the list / Both) instead of a panel that covers the list, so Tick all shown and ticking several foods is usable. The explanation, the shop and where-kept pickers, and the single-food amounts sit under a "More" line, closed by default. The buttons wrap rather than overflow on a large-text phone. Tests p278, p272, p273, p251.
+
 ## v3.10.1172
 - **My list and My cupboards open with every aisle closed.** Aisle sections (Fruit & veg, Meat & fish, Dairy & eggs, Cupboard and so on) start shut, so you see the headings and counts and open only the one you want; what you open is remembered (and Close all / Open all still work). Searching the cupboards shows its matches as before, "Use soon" stays open, and tapping a Use soon food opens just its aisle. A tap on a closed aisle now opens it (it would have closed it again on first tap, which the new test caught). Tests p277, and p197 and p225 now open the aisles they look inside.
 

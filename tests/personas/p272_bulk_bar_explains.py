@@ -13,6 +13,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("switchTabById('shop')"); ev("mhSlOpen()"); page.wait_for_timeout(500)
     page.click('[data-slshop="Heylo"]'); page.wait_for_timeout(300)
     page.click('button:has-text("Tick all shown")'); page.wait_for_timeout(300)
+    ev("document.getElementById('mhSlBulkMore').open=true"); page.wait_for_timeout(200)
     t = page.inner_text('#mhSlBarMsg')
     n = ev("Object.keys(mhSlState().sel).length")
     if str(n) not in t or 'Heylo' not in t: f.add('BUG', f'the bar names the count and the shop: {t!r}')
