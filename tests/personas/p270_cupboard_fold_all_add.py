@@ -10,6 +10,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     names = ['Apple','Banana','Carrot','Bread roll','Milk','Cheese','Chicken','Rice','Pasta','Eggs','Butter','Yoghurt','Salmon','Onion','Tomato','Beans']
     ev("""(ns)=>{ns.forEach((n,i)=>{ mhStockTrack('Zz '+n,{base:'g',store:i<10?'fridge':'cupboard'}); mhStockSetLevel(mhShopKey('Zz '+n),500); mhStockSetUseBy && 0; const o=mhStockLoad(); o.items[mhShopKey('Zz '+n)].useBy=todayStr?undefined:undefined; mhStockSave(o);}); }""", names)
     # Use soon needs use-by dates tomorrow

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1177
+- **The Shopping tab is two separate panes: 🛒 Shopping list and 🏠 My cupboards.** A two-button switch at the top shows one at a time (the list pane has My list and Add to the list; the cupboards pane has My cupboards), so nothing stacks into one long page. The one you were on is remembered after a reload and when you come back. Each pane keeps its own ▲ ▼ 👁 ▾ controls. Test p280. (Tests that look at both sections together set a test-only "both" mode.)
+
+## v3.10.1176
+- **＋ Shop on the Add foods screen.** A new shop can be added right where you pick the shop (next to Asda and Heylo); it is added and chosen at once, so what you add next goes to it. Test p279.
+
 ## v3.10.1175
 - **An X on every food in the Add foods lists removes it from My cupboards.** For foods you do not want tracked (a typo, something you no longer keep): ✕ on the row, then Remove to confirm. The row goes, the counts update, and your shopping list is not touched. Test p278.
 

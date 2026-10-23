@@ -9,6 +9,8 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles start closed (v3.10.1172)
     ev("saveLibrary([{id:'l1',name:'Zzqx Kimchi',kcal:60,protein:2,carbs:8,fat:1,portion:'100g',useCount:5},{id:'l2',name:'Zzqx Cheddar',kcal:410,protein:25,carbs:0.1,fat:34,portion:'100g',useCount:5}])")
     ev("""(()=>{ mhStockTrack('Zzqx Kimchi',{base:'g',pack:400,shop:'Asda'}); mhStockSetLevel(mhShopKey('Zzqx Kimchi'),400);
       mhStockTrack('Zzqx Cheddar',{base:'g',pack:400,shop:'Asda'}); mhStockSetLevel(mhShopKey('Zzqx Cheddar'),800);

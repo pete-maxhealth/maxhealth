@@ -14,6 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     vis = lambda sel: ev("(s)=>{const e=document.querySelector(s); return !!e && getComputedStyle(e).display!=='none'}", sel)
     order = lambda: ev("()=>[...document.querySelectorAll('#mhShopPane > .water-card')].map(c=>c.id)")
     ctl = lambda cid: ev("(i)=>document.querySelector('#'+i+' .mh-ctl')?.innerText.replace(/\\s+/g,' ').trim() || ''", cid)
@@ -27,7 +28,7 @@ with fresh_server() as root, sync_playwright() as pw:
         c = ctl(cid)
         if not c.startswith('▲ ▼ 👁 ▾') and cid != 'shopaddCard': f.add('BUG', f'{cid}: standard controls expected, got {c!r}')
     if '▲ ▼ 👁' not in ctl('shopaddCard'): f.add('BUG', f'the Add section has the standard controls: {ctl("shopaddCard")!r}')
-    if 'Shopping list' in ev("document.getElementById('mhShopPane').innerText.split('\\n')[0]"): f.add('BUG', 'the old duplicate page title is gone from the list view')
+    if 'Shopping list' in ev("document.getElementById('mhShopPane').innerText.replace(document.getElementById('mhShopSwitch') ? document.getElementById('mhShopSwitch').innerText : '', '').trim().split('\\n')[0]"): f.add('BUG', 'the old duplicate page title is gone from the list view')
     if not vis('#mhShopAddPanel'): f.add('BUG', 'an empty list starts with the Add section open')
 
     # 2. tiles: two to a row, none stretched

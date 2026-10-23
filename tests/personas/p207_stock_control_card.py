@@ -12,6 +12,9 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("mhShopOpen()"); page.wait_for_timeout(300)
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
+    ev("mhShopRender()")
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles start closed (v3.10.1172)
     def txt(sel): return ev("(s)=>document.querySelector(s)?.textContent || ''", sel)
     def vis(sel): return ev("(s)=>{const e=document.querySelector(s); return !!e && getComputedStyle(e).display!=='none'}", sel)
     def modal(which): ev("(i)=>document.getElementById(i)?.click()", which); page.wait_for_timeout(200)

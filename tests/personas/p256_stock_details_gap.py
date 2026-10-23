@@ -10,6 +10,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     ev("""(()=>{const l=loadLibrary(); l.push({name:'Zzqx Heylo Wrap',portion:'60 g',kcal:150,protein:5,fat:3,carbs:25},{name:'Zzqx Full Food',portion:'100 g',kcal:100,protein:1,fat:1,carbs:1}); localStorage.setItem(LIBRARY_KEY, JSON.stringify(l));
       mhStockTrack('Zzqx Full Food',{base:'g',serving:100}); mhStockSetLevel(mhShopKey('Zzqx Full Food'),500); mhStockSetReorder(mhShopKey('Zzqx Full Food'),100);
       mhStockTrack('Zzqx Loo Roll',{base:'each'}); const o=mhStockLoad(); o.items[mhShopKey('Zzqx Loo Roll')].nonFood=true; mhStockSave(o);})()""")

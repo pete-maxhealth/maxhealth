@@ -9,6 +9,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     ev("mhShopOpen()"); page.wait_for_timeout(300)
     ev("mhStockAddNonFood('Zzqx Toilet Roll', 'Asda')") if ev("typeof mhStockAddNonFood") == 'function' else None
     if not ev("!!mhStockLoad().items[mhShopKey('Zzqx Toilet Roll')]"):

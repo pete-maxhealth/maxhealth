@@ -6517,7 +6517,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1175'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1177'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28741,6 +28741,8 @@ function mhAddfBlock(id, inner) {
 }
 function mhSlShop() { const sh = mhShopLoad(), st = mhSlState(); return st.shop && sh.shops.includes(st.shop) ? st.shop : sh.shop; }
 function mhSlShopPick(n) { mhSlState().shop = n; mhShopRender(); }
+// ＋ Shop on the Add foods screen: name a new shop, and it becomes the shop everything below goes to (v3.10.1176)
+function mhSlAddShop() { appPrompt('Name of the shop (e.g. Butchers)', 'e.g. Butchers', n => { const v = String(n || '').trim().slice(0, 24); if (!v) return; mhShopAddShopNamed(v); const got = mhShopLoad().shops.find(x => x.toLowerCase() === v.toLowerCase()); mhSlState().shop = got || v; mhShopRender(); }); }
 function mhSlTickedRows() { const st = mhSlState(), all = mhSlRows(); return all.filter(r => st.sel[r.key]); }
 function mhSlDoCup(rows, shop, store) {
   let done = 0, skipped = 0;
@@ -28942,6 +28944,8 @@ function mhStockSweep() {
 // Layout of the Shopping tab: three sections (My list, Add to the list, My cupboards) in an order you choose, each with the same
 // ▲ ▼ 👁 ▾ controls as every other card. Stored in one key; the old two-area layout is read and upgraded.
 const MH_SHOP_SECS = ['list', 'add', 'stock'];
+function mhShopPane() { let v = null; try { v = localStorage.getItem('mh_shop_pane'); } catch (_) {} return v === 'stock' || v === 'both' ? v : 'list'; }   // 'both' is only for the test suite: the old single page
+function mhShopPaneSet(k) { try { localStorage.setItem('mh_shop_pane', k === 'stock' ? 'stock' : 'list'); } catch (_) {} mhShopRender(); try { window.scrollTo(0, 0); } catch (_) {} }
 const MH_SHOP_SEC_INFO = { list: ['🛒 My list', 'shoplist', 'Show my list'], add: ['➕ Add to the list', 'shopadd', 'Show Add to the list'], stock: ['🏠 My cupboards', 'stockctl', 'Show my cupboards'] };
 function mhStockLayout() {
   let o = null; try { o = JSON.parse(localStorage.getItem(MH_STOCK_LAYOUT_KEY) || 'null'); } catch (_) {}
@@ -29213,7 +29217,7 @@ function mhShopRender(keepFocus) {
     const st = mhSlState(), all = mhSlRows(), rows = mhSlFilter(all), shown = rows.slice(0, st.n), nT = all.filter(r => r.it).length;
     const tl0 = (label, fn) => '<button class="copy-btn mh-tile" onclick="' + fn + '">' + label + '</button>';
     if (mhSlTodo()) st.sel = {}; const dest = mhSlShop(), nTick = Object.keys(st.sel).length;
-    const shopChips = '<div id="mhSlShops" style="margin:0 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Everything below goes to this shop. Tap another to change it:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + s.shops.map(n => '<button class="copy-btn" data-slshop="' + esc(n) + '" onclick="mhSlShopPick(this.dataset.slshop)" style="font-size:14px;padding:9px 13px;' + (n === dest ? 'background:var(--accent);color:#fff;font-weight:700;' : '') + '">' + esc(n) + '</button>').join('') + '</div></div>';
+    const shopChips = '<div id="mhSlShops" style="margin:0 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Everything below goes to this shop. Tap another to change it:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + s.shops.map(n => '<button class="copy-btn" data-slshop="' + esc(n) + '" onclick="mhSlShopPick(this.dataset.slshop)" style="font-size:14px;padding:9px 13px;' + (n === dest ? 'background:var(--accent);color:#fff;font-weight:700;' : '') + '">' + esc(n) + '</button>').join('') + '<button class="copy-btn" data-slshop-add="1" onclick="mhSlAddShop()" style="font-size:14px;padding:9px 13px;">＋ Shop</button></div></div>';
     const chip = (k, t) => '<button class="copy-btn" data-f="' + k + '" onclick="mhSlF(this.dataset.f)" style="font-size:12px;padding:7px 10px;' + (st.f === k ? 'background:var(--accent);color:#fff;' : '') + '">' + t + '</button>';
     const find = '<div id="mhSlQBox" style="position:sticky;top:-16px;z-index:6;background:var(--bg);padding:22px 0 6px;margin:-16px 0 4px;"><input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Search your library and cupboards (any words, any order)" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;"></div>'
       + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
@@ -29319,7 +29323,10 @@ function mhShopRender(keepFocus) {
       list: () => mhShopSecCard('list', '', 'Your list in the order you walk the shop. Tap a row to tick it off; ✎ Edit shows the extras. Tick things as you go and press Shopping complete at the end: it empties the basket and, with stock switched on, adds what you bought to your cupboards.', '<div id="shoplistBody">' + chips + filt + count + rows + copyRow + done + '</div>'),
       add: () => mhShopSecCard('add', '', 'Type an item, or pull things in from your usuals, quick list, recipes, saved lists, foods or a CSV file.', addPanel),
       stock: () => mhStockCardHtml(s) };
-    body = lay.order.map(id => lay.hid[id] ? mhShopSecShowRow(id) : secs[id]()).join('');
+    // Two panes, one at a time: Shopping list (My list + Add to the list) or My cupboards. The choice is remembered (v3.10.1176).
+    const pane = mhShopPane(), swBtn = (k, t) => '<button class="copy-btn" data-pane="' + k + '" onclick="mhShopPaneSet(\'' + k + '\')" style="flex:1;font-size:14px;padding:11px 8px;' + (pane === k ? 'background:var(--accent);color:#fff;font-weight:700;' : '') + '">' + t + '</button>';
+    body = '<div id="mhShopSwitch" style="display:flex;gap:8px;margin:2px 0 0;">' + swBtn('list', '🛒 Shopping list') + swBtn('stock', '🏠 My cupboards') + '</div>'
+      + lay.order.filter(id => pane === 'both' || (pane === 'stock' ? id === 'stock' : id !== 'stock')).map(id => lay.hid[id] ? mhShopSecShowRow(id) : secs[id]()).join('');
   }
   m.innerHTML = (_isList ? '' : head) + msg + body;
   try { mhCardBodyApply(); } catch (_) {}

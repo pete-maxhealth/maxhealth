@@ -14,6 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("for (let i = 0; i <= MH_SHOP_WALK.length + 1; i++) mhCbState().fold['a' + i] = false")   # aisles now start closed (v3.10.1172); this test looks inside them
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     ev("l=>saveLibrary(l.concat(loadLibrary()))", [{'name': f'Library Food {i}', 'kcal': 100, 'protein': 5, 'fat': 3, 'carbs': 10, 'portion': '100g'} for i in range(300)] + [{'name': 'Smoked Mackerel', 'kcal': 300, 'protein': 20, 'fat': 25, 'carbs': 0, 'portion': '100g'}])
     held = [('Chicken Breast', 'g', 1000, 'fridge'), ('Beef Mince', 'g', 500, 'freezer'), ('Whole Milk', 'ml', 2000, 'fridge'), ('Cheddar', 'g', 400, 'fridge'), ('Butter', 'g', 250, 'fridge'), ('Eggs', 'each', 12, 'fridge'),
             ('Frozen Peas', 'g', 800, 'freezer'), ('Fish Fingers', 'each', 10, 'freezer'), ('Basmati Rice', 'g', 1000, ''), ('Pasta', 'g', 500, ''), ('Baked Beans', 'g', 400, ''), ('Porridge Oats', 'g', 1000, ''),

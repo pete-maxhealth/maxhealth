@@ -9,6 +9,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev(SEED)
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     ev("switchTabById('shop')"); page.wait_for_timeout(600)
     lst = "document.querySelectorAll('#mhShopPane [data-item]').length"; cup = "document.querySelectorAll('#stockctlCard [data-stock]').length"
     if ev(lst) != 0 or ev(cup) != 0: f.add('BUG', f'sections start closed: list rows {ev(lst)}, cupboard rows {ev(cup)}')

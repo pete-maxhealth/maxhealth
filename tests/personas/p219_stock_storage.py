@@ -12,6 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("localStorage.setItem('mh_shop_pane','both')")   # these tests look at the list and the cupboards together (v3.10.1177)
     ev("""saveLibrary([{id:'a',name:'Whole Milk',kcal:60,protein:3.4,carbs:4.7,fat:3.6,portion:'100ml'},{id:'b',name:'Sliced Mushrooms',kcal:22,protein:3,carbs:0.5,fat:0.3,portion:'100g'},{id:'c',name:'Rice',kcal:130,protein:2.7,carbs:28,fat:0.3,portion:'100g'}])""")
     ev("mhShopOpen()")
     K = lambda n: ev("n=>mhShopKey(n)", n); it = lambda n: ev("n=>mhStockLoad().items[mhShopKey(n)]", n)
