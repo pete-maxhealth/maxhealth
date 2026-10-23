@@ -7,7 +7,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
-    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("state.onboarded=true; saveState()"); ev("localStorage.setItem('mh_shop_pane','both')"); ev("document.getElementById('onboardingOverlay')?.remove()")
     ev("""(()=>{const s=mhShopLoad(); ['Heylo','Asda'].forEach(n=>{if(!s.shops.includes(n)) s.shops.push(n)}); mhShopSave(s);
       [['Zz Flatbread','Heylo'],['Zz Crackers','Heylo'],['Zz Beans','Asda'],['Zz Rice','Asda'],['Zz Salt','']].forEach(([n,sh])=>{mhStockTrack(n,{base:'g',shop:sh||undefined}); mhStockSetLevel(mhShopKey(n),100);});})()""")
     ev("switchTabById('shop')"); ev("mhShopView('list')"); page.wait_for_timeout(500)

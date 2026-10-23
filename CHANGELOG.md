@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1189
+- **Shopping and My cupboards now use the app's own controls instead of their own.** (1) All the filter and shop chips (All / Fridge / Freezer / Cupboard / Low / Use soon, the shop chips, ＋ Shop, the Shopping list / My cupboards switch, the Add foods filters) are the same rounded pills as This Week / Month / All, with the same selected look. (2) The ▲ ▼ 👁 ▾ hide controls on the My list, Add to the list and My cupboards cards sit on the title row like every other card. (3) The Import / My usuals / Quick list tiles are the standard button size and centred. (5) The shop ✕ is the same pill, tucked against its chip and no longer red. The aisle bars were left as they are (nothing else in the app groups the same way).
+- **On a Needs details row, how a food is counted stays a dropdown (g / ml / each) after you type an amount.** Before, it turned into plain "counted in g" and could only be changed in the full edit form. Changing it asks first, because that clears the food's amounts. Test p290 added.
+- Old tests p210, p211, p216, p239 and p274 set to the old single-page layout (they predate the separate panes).
+
 ## v3.10.1188
 - **The clear ✕ on every Shopping and My cupboards search/type box now matches the Log box**: the same bordered 22px square with a thin ✕, always shown, at the left inside the box, with the text indented. Before, mine sat on the right, only appeared once you typed, and the list search had a second one beside it. The phone's own built-in clear mark on search boxes is hidden so there is only one. Test p285 updated.
 

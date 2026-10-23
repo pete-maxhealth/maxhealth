@@ -12,7 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
-    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("state.onboarded=true; saveState()"); ev("localStorage.setItem('mh_shop_pane','both')"); ev("document.getElementById('onboardingOverlay')?.remove()")
     ev("""saveLibrary([
       {id:'l1',name:'Cheddar',kcal:410,protein:25,carbs:0.1,fat:34,portion:'100g',useCount:5},
       {id:'l2',name:'Gouda',kcal:356,protein:25,carbs:2,fat:27,portion:'100g',useCount:5},

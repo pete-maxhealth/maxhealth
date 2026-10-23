@@ -8,7 +8,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
-    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("mhShopOpen()")
+    ev("state.onboarded=true; saveState()"); ev("localStorage.setItem('mh_shop_pane','both')"); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("mhShopOpen()")
     nlib = ev("loadLibrary().length")
     import re
     chip = lambda: re.search(r'Non-nutritional \(\d+\)', ev("document.getElementById('mhShopPane').innerText"))
