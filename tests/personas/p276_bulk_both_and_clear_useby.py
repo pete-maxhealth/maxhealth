@@ -16,7 +16,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('#mhSlBulk button:has-text("Both")'); page.wait_for_timeout(500)
     onlist = ev("mhShopLoad().items.filter(i=>/Zzqx/.test(i.name)).length")
     if onlist != 2: f.add('BUG', f'Both puts the foods on the list: {onlist}')
-    if ev("mhSlTickedRows().length") != 2: f.add('BUG', 'ticks stay after Both')
+    if ev("mhSlState().f") != 'gaps': f.add('BUG', 'after adding to cupboards it jumps to Needs details to fill in amounts')
     # Use by can be cleared
     ev("mhStockSetUseBy(mhShopKey('Zzqx Flatbread'), '2026-10-23')")
     ev("mhStockEditView(mhShopKey('Zzqx Flatbread'), 'Zzqx Flatbread')"); page.wait_for_timeout(400)

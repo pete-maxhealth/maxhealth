@@ -22,7 +22,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('#mhSlBulk button:has-text("Add to my cupboards")'); page.wait_for_timeout(400)
     got = ev("['Zzqx Flatbread','Zzqx Crackers'].map(n=>{const i=mhStockLoad().items[mhShopKey(n)];return [i.level,i.reorder]})")
     if got[0] != [240, 80] or got[1][0] != 50: f.add('BUG', f'the one ticked food gets the amounts, the other is untouched: {got}')
-    if not ev("mhSlTickedRows().length"): f.add('BUG', 'ticks stay after an action')
+    ev("mhSlF('all')"); ev("mhSlState().sel[mhShopKey('Zzqx Flatbread')]=1; mhSlBulkRefresh()"); page.wait_for_timeout(300)
     # blank keeps
     page.click('#mhSlBulk button:has-text("Add to my cupboards")'); page.wait_for_timeout(400)
     got = ev("['Zzqx Flatbread'].map(n=>{const i=mhStockLoad().items[mhShopKey(n)];return [i.level,i.reorder]})")

@@ -38,7 +38,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if 'skipped' not in ev("document.getElementById('mhShopMsg')?.innerText||''"): f.add('BUG', '7: and the skipped count is said')
         if 'Zzqx Other Rice' in st: f.add('BUG', '8: unticked / non-matching foods are untouched')
         # 3) individually: tick one, put on the list under the chosen shop
-        ev("mhSlPickAll(false)"); page.wait_for_timeout(200)   # ticks now stay after an action (v3.10.1171)
+        ev("mhSlF('all')"); ev("mhSlPickAll(false)"); page.wait_for_timeout(200)   # after adding to cupboards the screen jumps to Needs details (v3.10.1174)
         page.click('[data-pick="%s"]' % ev("mhShopKey('Zzqx Heylo Yoghurt')")); page.click('[data-slshop="Heylo"]'); page.click('#mhSlBulk button:has-text("Put on the list")'); page.wait_for_timeout(300)
         on = ev("mhShopLoad().items.map(i=>[i.name,i.shop])")
         if on != [['Zzqx Heylo Yoghurt', 'Heylo']]: f.add('BUG', f'9: one ticked food goes on the list under Heylo: {on}')
