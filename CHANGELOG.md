@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1192
+- **Taking a group off the list can no longer lose something you need.** A food that is genuinely low (at or under its reorder level) comes straight back as "running low" after its group is taken off; only the ones that are not low go. The message says how many were kept.
+
 ## v3.10.1191
 - **"Why are these on my list?" says when each group was added** (e.g. "added 23 Oct 14:02 to 14:09"), so a batch added in one go shows up as one batch, and the group formerly called "Chosen as Shopping list / Both in Add foods" is now "Added from Add foods or My cupboards".
 
