@@ -2,8 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1196
+- **A shop's ✕ means the same thing in all three places.** On the shopping list, My cupboards and Add foods it now hides the shop for now (same ✕, same confirmation, same "Hidden shops (n)" line to bring it back). Before, the ✕ in My cupboards and Add foods deleted the shop for good while the one on the list only hid it. Deleting a shop for good is now only under "Hidden shops" ("delete for good", with its confirmation), out of the way. A hidden shop disappears from the chips in all three places and comes back everywhere together. Tests p279, p284 and p296 updated; p297 added.
+
 ## v3.10.1195
-- **The red "running low" tag on the list now only shows on entries that really came from running low.** Entries that were added by hand from Add foods or My cupboards said "running low" too, so foods with plenty in stock (jam at 200 g against a reorder of 100 g) looked low. They now say "from my cupboards".
+- **The red "running low" tag on the list now only shows on entries that really came from running low.** Entries that were added by hand from Add foods or My cupboards said "running low" too, so foods with plenty in stock (jam at 200 g against a reorder of 100 g) looked low. They now carry no tag (the "Why are these on my list?" line says how they got there).
 - **A shop can be hidden even when it has items on the list** (✕ beside any shop). It asks first, its items come off the list (nothing is deleted from your cupboards, and Put back works), and while it is hidden its low foods are not added. Bring it back from "Hidden shops" and anything low there returns to the list. Tests p289, p284 and p291 updated; p296 added.
 
 ## v3.10.1194

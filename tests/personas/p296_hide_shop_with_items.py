@@ -15,7 +15,6 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopSetShop('Asda')"); page.wait_for_timeout(300); ev("window.mhShopIsShut=()=>false; mhShopRender()"); page.wait_for_timeout(300)
     txt = ev("(()=>{const e=[...document.querySelectorAll('#mhShopPane [data-item]')].find(e=>e.dataset.item==='Zzqx Jam');return e?e.innerText:''})()")
     if 'running low' in txt: f.add('BUG', f'an entry added by hand does not say running low: {txt!r}')
-    if 'from my cupboards' not in txt: f.add('BUG', f'it says where it came from: {txt!r}')
     if not page.locator('#mhShopChips span[data-shop="Zzqx Heylo"]').count(): f.add('BUG', 'a shop with items has a hide ✕')
     else:
         page.click('#mhShopChips span[data-shop="Zzqx Heylo"]'); page.wait_for_timeout(300)
