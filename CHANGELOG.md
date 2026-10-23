@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1199
+- **One set of scroll arrows on Library.** Library was showing its own ↑ ↓ buttons on top of the app-wide pair. Its old pair is switched off, so it has the same single pair as every other screen.
+
 ## v3.10.1198
 - **Choose your default shop.** Once you have more than one shop, a "Default shop" dropdown under the shop chips lets you pick which one new things go to. Any shop can be the default, and if you delete the default shop the next one takes over (you can change it again at any time). Before this the first shop in the list was the default and could never be deleted.
 - Fixed: "Put back" in Why are these on my list? after a shop was deleted could create doubled entries; those items now go to the default shop.
