@@ -12,6 +12,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 3000}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
+    ev("for (let i = 0; i <= MH_SHOP_WALK.length + 1; i++) mhCbState().fold['a' + i] = false")   # aisles now start closed (v3.10.1172); this test looks inside them
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
     ev("l=>saveLibrary(l.concat(loadLibrary()))", [{'name': f'Library Food {i}', 'kcal': 100, 'protein': 5, 'fat': 3, 'carbs': 10, 'portion': '100g'} for i in range(300)] + [{'name': 'Smoked Mackerel', 'kcal': 300, 'protein': 20, 'fat': 25, 'carbs': 0, 'portion': '100g'}])
     held = [('Chicken Breast', 'g', 1000, 'fridge'), ('Beef Mince', 'g', 500, 'freezer'), ('Whole Milk', 'ml', 2000, 'fridge'), ('Cheddar', 'g', 400, 'fridge'), ('Butter', 'g', 250, 'fridge'), ('Eggs', 'each', 12, 'fridge'),

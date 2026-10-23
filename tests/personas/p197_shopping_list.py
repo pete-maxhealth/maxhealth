@@ -10,6 +10,7 @@ with fresh_server() as root, sync_playwright() as pw:
     old = ev("[...DEFAULT_DASHBOARD_ORDER, 'shopping'].reverse()")
     ev("o=>localStorage.setItem('mh_dashboard_order', JSON.stringify(o))", old)
     ev("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles now start closed (v3.10.1172); this test looks inside them
     if 'shopping' in ev("getDashboardOrder()"): f.add('BUG', 'shopping is a tab now: the old card key should be dropped from a saved order')
     if ev("!!document.getElementById('dashSection-shopping')"): f.add('BUG', 'shopping card should not be on the Dashboard')
     ev("localStorage.removeItem('mh_dashboard_order')")
@@ -88,6 +89,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopView('list')")
     # persistence + shopping complete
     ev("mhShopToggle('a1'); mhShopToggle('a2')"); page.reload(); page.wait_for_timeout(1500)
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles now start closed (v3.10.1172); this test looks inside them
     if ev("mhShopLoad().items.filter(i=>i.checked).length") != 2 or len(ev("mhShopLoad().usuals")) != 1: f.add('BUG', 'ticks or usuals lost across reload')
     n1 = ev("mhShopLoad().items.length"); ev("mhShopComplete()"); page.click("#appModalConfirm")
     if ev("mhShopLoad().items.length") != n1 - 2: f.add('BUG', 'shop complete should remove only the ticked items')
@@ -108,6 +110,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if ev("k=>getComputedStyle(document.getElementById(k+'Detail')).display", k) == 'none': f.add('BUG', f'{k}: details did not open')
         ev("k=>mhCardInfo(k)", k)
     page.reload(); page.wait_for_timeout(1200); ev("mhCardBody('water')"); page.reload(); page.wait_for_timeout(1200)
+    ev("window.mhShopIsShut = (f, k) => (f && k in f) ? !!f[k] : false")   # list aisles now start closed (v3.10.1172); this test looks inside them
     if ev("getComputedStyle(document.getElementById('waterBody')).display") != 'none': f.add('BUG', 'fold not remembered across reload')
     ev("mhCardBody('water')")
     # quick list: a live shortlist of what you eat most (5, 10, 15 or 20), never usuals, nothing on the list until tapped
