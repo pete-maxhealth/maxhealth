@@ -21,3 +21,9 @@
 - Never guess nutrition values or portions; a missing figure stays missing until he adds it.
 - No ad or public page may link to the Premium page until it is live: Premium is "coming soon" with the Tally register-interest link.
 - Keep personal health details out of the public repo and the app.
+
+## How every change is checked (Pete's standard, 24/10/2026)
+- Before building: think the whole process through, including what it means retrospectively (past days, older data, other screens that show the same thing). List every place the same thing appears (Today, History, edit forms, calendar, copy/duplicate paths) and do all of them, not just the one he pointed at.
+- Uniformity: a new button, chip, control or message must look and act like the existing ones that do the same job (same class, size, icon, position, wording, confirm/undo behaviour). Find the existing one first and reuse it; compare them side by side in a rendered screenshot, not from the code alone.
+- Persona tests are part of building, not a later step: write a test that walks the whole process (set up, do it, undo it, reload, the neighbouring screens it touches) and run the targeted tests for everything it can affect. The full regression sweep is still only run when Pete asks.
+- Say what was checked and what was not. Never tell Pete a change "landed" without having seen it render.
