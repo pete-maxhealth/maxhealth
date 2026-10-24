@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1203
+- **Typing in Add to the list no longer opens every shut aisle.** The "Search ingredients" box (and the other add boxes) were opening all of your closed aisles on the list while you typed. Now only searching the list itself ("Search your list") opens them; your open and shut aisles stay as you left them.
+
 ## v3.10.1202
 - **Aisles keep their open/shut state when another shop's items appear.** Open aisles were shutting by themselves the moment a second shop had something on the list, because the remembered state was filed under a different name once there was more than one shop. Aisles are now always remembered per shop, and what you had open before is kept.
 

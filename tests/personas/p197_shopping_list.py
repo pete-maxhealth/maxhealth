@@ -147,9 +147,9 @@ with fresh_server() as root, sync_playwright() as pw:
     # aisle headings fold, and "all" ticks a whole aisle into the basket
     ev("(()=>{const s=mhShopLoad(); s.items=[{id:'z1',key:'z1',name:'Spinach',cat:'vegetable',checked:false},{id:'z2',key:'z2',name:'Broccoli',cat:'vegetable',checked:false},{id:'z3',key:'z3',name:'Butter',cat:'dairy',checked:false}]; mhShopSave(s); mhShopRender()})()")
     ROWS2 = "[...document.querySelectorAll('#mhShopPane [data-item]')].map(e=>e.dataset.item)"
-    ev("mhShopFold('m0')")
+    ev("mhShopFold('m0_0')")
     if ev(ROWS2) != ['Butter']: f.add('BUG', f'folding Fruit & veg should hide its rows: {ev(ROWS2)}')
-    ev("mhShopFold('m0')")
+    ev("mhShopFold('m0_0')")
     ev("mhShopTickSection(0)")
     if ev("mhShopLoad().items.filter(i=>i.checked).map(i=>i.name).sort()") != ['Broccoli', 'Spinach']: f.add('BUG', 'tick all in an aisle should tick only that aisle')
     ev("mhShopView('list')")
