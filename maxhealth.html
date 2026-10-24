@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1212'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1213'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28176,7 +28176,9 @@ function mhDefaultNeed(cats, st) {
   const r = mhRulesLoad(), c = (cats || []).find(x => r.portion[x]), p = c ? r.portion[c] : r.fallback;
   return p.n + ' ' + (st && st.base === 'ml' ? 'ml' : p.u);
 }
-function mhCatsOfName(name) { try { return getItemCategories({ name }) || []; } catch (_) { return []; } }
+function mhCatsOfName(name) {
+  try { const k = mhShopKey(name); const li = (loadLibrary() || []).find(x => x && x.name && Array.isArray(x.categories) && x.categories.length && mhShopKey(x.name) === k); if (li) return li.categories; } catch (_) {}   // the categories you gave the food in the Library win (v3.10.1213)
+  try { return getItemCategories({ name }) || []; } catch (_) { return []; } }
 // Is there enough of this food? needText is what one go uses ('30 g', '1 serving', or '' when unknown, which only needs some in stock).
 function mhHaveCheck(name, needText, cats, o, mode) {
   const st = o.items[mhShopKey(name)]; cats = cats || mhCatsOfName(name);
@@ -28921,7 +28923,8 @@ function mhOrdViewHtml(s, esc, btn) {
 // reorder). Nothing to submit. An ingredient becomes tracked the moment you give it an amount; it needs to know how it is counted
 // (g, ml or each) from the unit box or from the unit you type ("500 g"), and it never guesses that.
 // What the shopping system needs to know about a food before it can warn you it is running out (v3.10.1152). Hand-marked non-nutritional items need nothing.
-function mhStockGaps(it) { if (!it || it.nonFood) return []; const g = []; if (it.level == null) g.push('how much you have'); if (it.reorder == null) g.push('when to reorder'); if (!(it.serving > 0)) g.push('one serving'); return g; }
+function mhStockGaps(it) { if (!it || it.nonFood) return []; try { if (mhIsNever(it.name, null, it)) return []; } catch (_) {}   // herbs, spices, salt: never counted, so never 'need details' (v3.10.1213)
+   const g = []; if (it.level == null) g.push('how much you have'); if (it.reorder == null) g.push('when to reorder'); if (!(it.serving > 0)) g.push('one serving'); return g; }
 function mhStockGapCount() { try { return Object.values(mhStockLoad().items).filter(it => mhStockGaps(it).length).length; } catch (_) { return 0; } }
 function mhSlGaps() { const st = mhSlState(); st.f = 'gaps'; st.q = ''; st.n = 60; mhShopView('stocklist'); }
 function mhSlState() { _shopUi.sl = _shopUi.sl || { q: '', f: 'all', n: 60 }; if (!_shopUi.sl.sel) _shopUi.sl.sel = {}; return _shopUi.sl; }
@@ -28937,6 +28940,7 @@ function mhSlRows() {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 function mhSlTwinHides(r, st) { return !!r.twin && !st.twins && String(r.name).toLowerCase() !== String(st.q || '').trim().toLowerCase(); }
+function mhSlNever(on) { mhSlState().showNever = !!on; mhShopRender(); }
 function mhSlTwins(on) { mhSlState().twins = !!on; mhShopRender(); }
 // Words in any order: every word must be in the name; if none fits, the names sharing most of the words come first (v3.10.1151).
 function mhSlWords(q) { return String(q || '').toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean); }
@@ -28946,9 +28950,10 @@ function mhSlMatch(rows, q) {
   const all = rows.filter(r => hit(r) === w.length); if (all.length || w.length < 2) return all;
   return rows.filter(r => hit(r) > 0).sort((a, b) => hit(b) - hit(a));
 }
+function mhSlNeverHides(st) { return st.f === 'not' || st.f === 'gaps' || st.f === 'noamt'; }
 function mhSlFilter(rows) {
   const st = mhSlState();
-  return mhSlMatch(rows, st.q).filter(r => !mhSlTwinHides(r, st)).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || (st.f === 'noamt' && (!r.it || r.it.level == null)) || (st.f === 'gaps' && r.it && mhStockGaps(r.it).length) || (st.f === 'nonfood' && r.it && r.it.nonFood)));
+  return mhSlMatch(rows, st.q).filter(r => !mhSlTwinHides(r, st)).filter(r => (st.f === 'all' || (st.f === 'tracked' && r.it) || (st.f === 'not' && !r.it) || (st.f === 'low' && mhStockIsLow(r.it)) || ((st.f === 'noamt' || st.f === 'gaps') && r.it && mhStockGaps(r.it).length) || (st.f === 'nonfood' && r.it && r.it.nonFood))).filter(r => st.showNever || !mhSlNeverHides(st) || !mhIsNever(r.name, null, r.it));
 }
 // Several at once (v3.10.1147): tick rows (or Tick all shown), then set where they are bought and kept, or put them on the list. Rows the app does not know how to
 // count (no g/ml/each from your library) are skipped and counted, never guessed.
@@ -29538,7 +29543,9 @@ function mhShopRender(keepFocus) {
     const chip = (k, t) => '<button class="hist-filter-btn' + (st.f === k ? ' active' : '') + '" data-f="' + k + '" onclick="mhSlF(this.dataset.f)">' + t + '</button>';
     const find = '<div id="mhSlQBox" style="position:sticky;top:-16px;z-index:6;background:var(--bg);padding:22px 0 6px;margin:-16px 0 4px;"><input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Search your library and cupboards (any words, any order)" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;"></div>'
       + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
-      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (mhStockGapCount() ? chip('gaps', 'Needs details (' + mhStockGapCount() + ')') : '') + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('noamt', 'No amount yet') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (mhStockGapCount() ? chip('gaps', 'Needs details (' + mhStockGapCount() + ')') : '') + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
+      + (() => { if (!mhSlNeverHides(st)) return ''; const hid = mhSlRows().filter(r => !(r.twin && !st.twins) && ((st.f === 'not' && !r.it) || ((st.f === 'gaps' || st.f === 'noamt') && r.it && (!(r.it.level != null)) ) ) && mhIsNever(r.name, null, r.it)).length;
+        if (!hid && !st.showNever) return ''; return '<div id="mhSlNeverNote" style="font-size:12px;color:var(--text3);margin:2px 0 6px;line-height:1.5;">' + (st.showNever ? 'Showing herbs, spices and other never-run-out foods. ' + btn('Hide them', 'mhSlNever(false)', 'font-size:12px;padding:5px 9px;') : hid + ' herb' + (hid === 1 ? '' : 's') + ', spice' + (hid === 1 ? '' : 's') + ' and other never-run-out foods hidden (set in Stock rules). ' + btn('Show them', 'mhSlNever(true)', 'font-size:12px;padding:5px 9px;')) + '</div>'; })()
       + (st.q.trim() && rows.length && mhSlWords(st.q).length > 1 && !all.filter(r => mhSlWords(st.q).every(x => r.name.toLowerCase().includes(x))).length ? '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">No exact match, so these are the closest:</div>' : '')
       + (() => { const tw = mhSlMatch(all, st.q).filter(r => r.twin && String(r.name).toLowerCase() !== String(st.q || '').trim().toLowerCase()); if (!tw.length) return ''; return '<div id="mhSlTwinNote" style="font-size:12px;color:var(--text3);margin:2px 0 6px;line-height:1.5;">' + (st.twins ? 'Showing ' + tw.length + ' food' + (tw.length === 1 ? '' : 's') + ' that ' + (tw.length === 1 ? 'is' : 'are') + ' the same as something you already hold. ' + btn('Hide them', 'mhSlTwins(false)', 'font-size:12px;padding:5px 9px;') : tw.length + ' food' + (tw.length === 1 ? ' is' : 's are') + ' hidden because you already hold the same thing under another name (for example ' + esc(tw[0].twin) + '). ' + btn('Show them', 'mhSlTwins(true)', 'font-size:12px;padding:5px 9px;')) + '</div>'; })()
       + (mhSlTodo() ? '<div style="font-size:12px;color:var(--text3);margin:2px 0 6px;line-height:1.5;">Fill in each food below. It leaves this list when it is complete. Nothing to tick or submit.</div>' : '')

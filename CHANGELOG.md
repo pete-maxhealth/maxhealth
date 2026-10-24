@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1213
+- **Add foods: "Needs details" and "No amount yet" were the same list, so "No amount yet" is gone.** "Needs details" covers a food with no amount, reorder level or serving. Foods you have not put in My cupboards yet stay under "Not in my cupboards" and are no longer repeated under a second name.
+- **Herbs, spices and other never-run-out foods are left out of "Not in my cupboards" and "Needs details".** It uses your Stock rules > Never runs out list. A small line says how many are hidden, with a Show them button (and Hide them once shown). Count one yourself and it is treated like any other food.
+
 ## v3.10.1212
 - **Today's tiles say how much of the day is logged for later.** A meal already in today's log but timed for later (a bar logged for 19:00) is counted in the tile straight away; the small line under Calories, Protein, Carbs and Fat now adds "includes 162 kcal logged for 19:00". It sits beside the existing "+N planned" line when you have both. Same wording style, only for today.
 
