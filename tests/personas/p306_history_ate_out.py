@@ -15,6 +15,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if after >= 500: f.add('BUG', f'setup: the meal took stock off: {after}')
     ev("switchTabById('hist')"); page.wait_for_timeout(500); ev("renderHistory()"); ev("(()=>{const h=document.querySelector('.hist-day-header, .hist-day'); h&&h.click(); const b=document.querySelector('.hist-day-body'); if(b) b.style.display='block'})()"); page.wait_for_timeout(300)
     if not ev("!!document.querySelector('[data-hist-ateout=\"987654\"]')"): f.add('BUG', 'History shows the ate-out button')
+    glyphH = ev("[...document.querySelector('[data-hist-ateout=\"987654\"]').textContent].map(c=>c.codePointAt(0))"); glyphT = [0x1f37d]
+    if glyphH != glyphT: f.add('BUG', f'History uses the same plate character as Today ({glyphH})')
     ev("mhStockAteOutHist('20/10/26',987654)"); page.wait_for_timeout(200)
     if lv() != 500: f.add('BUG', f'ate out puts the stock back: {lv()}')
     if not ev("state.history[0].log[0].noStock"): f.add('BUG', 'the entry is marked ate out')

@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1209
+- **History's ate-out button now looks exactly like Today's.** It used a different version of the plate emoji (solid and colourful) from the outline plate on Today's log. Same character now.
+
 ## v3.10.1208
 - **Mark an earlier day's meal as eaten out.** The 🍽️ "ate out" button from Today's log is now on every entry in History too (when cupboards & stock is on). Tap it on a takeaway or restaurant meal and what it took off your stock is put back (only stock counted before that meal, as always); tap again to take it off after all.
 
