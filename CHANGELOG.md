@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1202
+- **Shelf rows: the name gets the whole line.** On the non-food "On your shelf" list the item name now has its own full-width line (long names like Coca-Cola Original Taste Cans no longer wrap a few letters at a time), with Regular and ON LIST / ＋ Add underneath in the same place on every row.
+
 ## v3.10.1201
 - **Non-food shelf rows line up.** On the "On your shelf" list, the Regular and Add buttons no longer stretch over the item name. Every row has the same layout: name, Regular, then either ON LIST or ＋ Add in a fixed-width spot.
 
