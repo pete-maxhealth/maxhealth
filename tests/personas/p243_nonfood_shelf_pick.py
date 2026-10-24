@@ -13,7 +13,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopOpen()"); page.wait_for_timeout(300)
     ev("mhStockTrack('Zzqx Cheese',{base:'g'})"); ev("mhStockSetLevel(mhShopKey('Zzqx Cheese'),200)")
     ev("_shopUi.addOpen=true; mhShopAddKind('nonfood')"); page.wait_for_timeout(300)
-    if 'Nothing non-nutritional on your shelf' not in ev("document.getElementById('mhNfShelf')?.innerText||''"): f.add('BUG', '1: empty shelf says so')
+    if ev("!!document.getElementById('mhNfShelf')") or 'On your shelf' not in ev("document.getElementById('mhShopAddPanel')?.innerText||''"): f.add('BUG', '1: empty shelf shows no fold and the Add card points at it')
     # tab is there even with nothing in it, and a typed search offers non-nutritional
     ev("mhCbTab('all'); mhShopRender()"); page.wait_for_timeout(200)
     if not page.locator('#mhCbTabs [data-cb="nonfood"]').count(): f.add('BUG', '2: the Non-nutritional tab shows even when empty')
@@ -24,14 +24,14 @@ with fresh_server() as root, sync_playwright() as pw:
     else:
         ev("mhStockAddNonFood('Zzqx Soap')"); page.wait_for_timeout(300)
     ev("mhStockAddNonFood('Zzqx Bin Bags')"); page.wait_for_timeout(200)
-    ev("_shopUi.view='list'; _shopUi.addOpen=true; mhShopAddKind('nonfood')"); page.wait_for_timeout(300)
+    ev("_shopUi.view='list'; _shopUi.nfShelfOpen=true; mhShopRender()"); page.wait_for_timeout(300)
     names = ev("[...document.querySelectorAll('[data-nfshelf]')].map(e=>e.dataset.nfshelf)")
     if sorted(names) != ['Zzqx Bin Bags', 'Zzqx Soap']: f.add('BUG', f'5: the shelf list shows the non-nutritional items and not the food: {names}')
     else:
-        page.click('[data-nfshelf="Zzqx Soap"] button'); page.wait_for_timeout(300)
+        page.click('[data-nfshelf="Zzqx Soap"] button >> nth=0'); page.wait_for_timeout(300)
         it = ev("mhShopLoad().items.find(i=>i.name==='Zzqx Soap')")
         if not it or not it.get('nonFood'): f.add('BUG', f'6: tapping it puts it on the list as non-food: {it}')
-        ev("mhShopAddKind('nonfood')"); page.wait_for_timeout(200)
-        if 'ON LIST' not in ev("document.querySelector('[data-nfshelf=\"Zzqx Soap\"]')?.innerText||''"): f.add('BUG', '7: it then shows ON LIST')
+        page.wait_for_timeout(200)
+        if ev("!!document.querySelector('[data-nfshelf=\"Zzqx Soap\"]')"): f.add('BUG', '7: once on the list it leaves the shelf fold')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)
