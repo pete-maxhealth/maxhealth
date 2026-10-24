@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1214
+- **A planned meal can no longer vanish.** With "Trust my plan: log it automatically at the time" ticked (or tapping Ate it), an overdue plan from an earlier day is logged into that day in History. If that day was not in History the plan was removed and nothing was logged, so the meal and its figures disappeared. Now the plan stays, says why, and is left for you to answer (Changed it / Skipped); auto-log skips it.
+
 ## v3.10.1213
 - **Add foods: "Needs details" and "No amount yet" were the same list, so "No amount yet" is gone.** "Needs details" covers a food with no amount, reorder level or serving. Foods you have not put in My cupboards yet stay under "Not in my cupboards" and are no longer repeated under a second name.
 - **Herbs, spices and other never-run-out foods are left out of "Not in my cupboards" and "Needs details".** It uses your Stock rules > Never runs out list. A small line says how many are hidden, with a Show them button (and Hide them once shown). Count one yourself and it is treated like any other food.

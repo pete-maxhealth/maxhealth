@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1213'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1214'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -23318,6 +23318,11 @@ function mhPlanAdd(foods, text, pp) {
 function mhPlanRemove(id) { mhPlanSave(mhPlanLoad().filter(p => p.id !== id)); mhPlanRender(); }
 function mhPlanEat(id) {
   const a = mhPlanLoad(); const p = a.find(x => x.id === id); if (!p) return;
+  // An overdue plan from an earlier day is logged into that day's History. If that day is not in History the meal would be lost, so the plan stays (v3.10.1214).
+  if (p.date && p.date < localISODate() && !state.history.some(h => h.date === mhPlanISOtoDMY(p.date))) {
+    if (!p.noAuto) { p.noAuto = true; mhPlanSave(a); showToast('Could not find ' + mhPlanISOtoDMY(p.date) + ' in History, so “' + String(p.text || 'your planned meal').replace(/</g, '&lt;') + '” stays on your plan. Tap Changed it or Skipped.', null, null, 7000); }
+    return;
+  }
   mhPlanSave(a.filter(x => x.id !== id));
   const foods = JSON.parse(JSON.stringify(p.foods || []));
   window._planPending = null;
@@ -23400,7 +23405,7 @@ function mhPlanRender() {
   const today = localISODate(), now = nowTime();
   const auto = localStorage.getItem('mh_plan_auto') === '1';
   const due = p => p.date < today || (p.date === today && p.time <= now);
-  if (auto) { const d = plans.find(due); if (d) { showToast('Logged from your plan: ' + d.text, null, null, 3500); mhPlanEat(d.id); return; } }
+  if (auto) { const d = plans.find(p => due(p) && !p.noAuto); if (d) { showToast('Logged from your plan: ' + d.text, null, null, 3500); mhPlanEat(d.id); return; } }
   const dueList = plans.filter(due);
   if (dueList.length && !window._planToasted) { window._planToasted = {}; }
   dueList.forEach(p => { if (window._planToasted && !window._planToasted[p.id]) { window._planToasted[p.id] = 1; showToast('Time for: ' + p.text + '. Did you eat it? See Today.', null, null, 4500); } });
