@@ -19,9 +19,9 @@ with fresh_server() as root, sync_playwright() as pw:
     # 1) the Add box has a way in, carrying what was typed
     ev("_shopUi.addOpen=true; mhShopAddKind('food')"); page.wait_for_timeout(200)
     page.fill('#mhShopOwn', 'Zzqx Heylo')
-    if not page.locator('button:has-text("Search my foods and pick several")').count(): f.add('BUG', '1: the Add box offers to search my foods and pick several')
-    else:
-        page.click('button:has-text("Search my foods and pick several")'); page.wait_for_timeout(300)
+    if page.locator('button:has-text("Search my foods and pick several")').count(): f.add('BUG', '1: the Add box no longer has a second way in; stocking lives in My cupboards > Add stock')
+    if True:
+        ev("mhSlOpen(); mhSlQ('Zzqx Heylo')"); page.wait_for_timeout(300)
         if ev("mhSlState().q") != 'Zzqx Heylo': f.add('BUG', '2: what you typed becomes the filter')
         names = ev("[...document.querySelectorAll('#mhSlRows [data-sl]')].map(e=>e.dataset.n).sort()")
         if names != ['Zzqx Heylo Mystery', 'Zzqx Heylo Soup', 'Zzqx Heylo Yoghurt']: f.add('BUG', f'3: only the matching foods are listed: {names}')

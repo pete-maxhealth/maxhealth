@@ -21,9 +21,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhShopWhyToggle()"); page.wait_for_timeout(300)
     txt = lambda: ev("document.getElementById('mhShopWhy').innerText")
     t = txt()
-    for want in ['Running low in my cupboards (3)', 'Added from Add foods or My cupboards (3)', 'Typed in by hand (1)']:
+    for want in ['Running low in my cupboards (3)', 'Added from Add stock or My cupboards (3)', 'Typed in by hand (1)']:
         if want not in t: f.add('BUG', f'the reasons list shows "{want}": {t!r}')
-    page.click('[data-why="Added from Add foods or My cupboards"]'); page.wait_for_timeout(300); page.click('#appModalConfirm'); page.wait_for_timeout(500)
+    page.click('[data-why="Added from Add stock or My cupboards"]'); page.wait_for_timeout(300); page.click('#appModalConfirm'); page.wait_for_timeout(500)
     if ev("mhShopLoad().items.filter(i=>/Zzqx Hand/.test(i.name)).length") != 0: f.add('BUG', 'foods that are not low come off')
     nd = ev("mhShopLoad().items.filter(i=>i.key===mhShopKey('Zzqx Needs')).map(i=>i.from)")
     if nd != ['running low']: f.add('BUG', f'a food that really is low stays on the list as running low: {nd}')
