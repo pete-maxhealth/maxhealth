@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1208
+- **Mark an earlier day's meal as eaten out.** The 🍽️ "ate out" button from Today's log is now on every entry in History too (when cupboards & stock is on). Tap it on a takeaway or restaurant meal and what it took off your stock is put back (only stock counted before that meal, as always); tap again to take it off after all.
+
 ## v3.10.1207
 - **New foods are checked against My cupboards the moment they reach the Library.** Whenever a save adds a food that My cupboards does not know (Add Food, logging a new food, a recipe's new ingredients, imports, voice batches), you are asked once for the whole batch: complete the stock details now, or later. Later (and now, until you finish) puts them in Filtered with 0 stock, so they cannot reach your shopping list. In Filtered each shows what it still needs (how it is counted, reorder level, shop) with a Complete button, and Put back on shelf only releases a food once those are filled in (where it lives is Cupboard unless you change it, so it can never be missing). Never triggered by starter foods, a restore, a rename, a demo, or more than 50 at once (use Library Tools: Library foods → cupboards).
 
