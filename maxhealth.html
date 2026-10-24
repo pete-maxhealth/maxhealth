@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1211'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1212'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -23376,11 +23376,16 @@ function mhPlanTileNotes() {
   const set = (k, txt) => { const e = document.getElementById(ids[k]); if (!e) return; e.textContent = txt || ''; e.style.display = txt ? '' : 'none'; };
   try {
     const today = localISODate(), foods = [].concat(...mhPlanLoad().filter(p => p.date <= today).map(p => p.foods || []));
-    if (!foods.length) { Object.keys(ids).forEach(k => set(k, '')); return; }
-    const eat = calcTotals(state.todayLog), pl = calcTotals(foods), all = calcTotals(state.todayLog.concat(foods));
-    const row = (k, pv, av, unit) => set(k, Math.round(pv) > 0 ? '+' + Math.round(pv) + unit + ' planned \u00B7 ' + Math.round(av).toLocaleString('en-GB') + unit + ' total' : '');
-    row('cal', pl.kcal, all.kcal, ' kcal'); row('prot', pl.protein, all.protein, 'g');
-    row('carb', getEffectiveCarbs(pl), getEffectiveCarbs(all), 'g'); row('fat', pl.fat || 0, all.fat || 0, 'g');
+    // Meals already in today's log but timed for later (say a bar logged for 19:00) are counted in the tile now; say how much of it is still to come (v3.10.1212).
+    const nowT = nowTime(), later = (state.todayLog || []).filter(e => e && !e.timeApprox && /^\d{1,2}:\d{2}$/.test(String(e.time || '')) && String(e.time).padStart(5, '0') > nowT), lt = later.length ? later.map(e => String(e.time).padStart(5, '0')).sort()[0] : '';
+    if (!foods.length && !later.length) { Object.keys(ids).forEach(k => set(k, '')); return; }
+    const pl = calcTotals(foods), all = calcTotals(state.todayLog.concat(foods)), lat = calcTotals(later);
+    const row = (k, pv, av, lv, unit) => { const parts = [];
+      if (Math.round(pv) > 0) parts.push('+' + Math.round(pv) + unit + ' planned \u00B7 ' + Math.round(av).toLocaleString('en-GB') + unit + ' total');
+      if (Math.round(lv) > 0) parts.push((parts.length ? 'and ' : 'includes ') + Math.round(lv) + unit + ' logged for ' + lt);
+      set(k, parts.join(' \u00B7 ')); };
+    row('cal', pl.kcal, all.kcal, lat.kcal, ' kcal'); row('prot', pl.protein, all.protein, lat.protein, 'g');
+    row('carb', getEffectiveCarbs(pl), getEffectiveCarbs(all), getEffectiveCarbs(lat), 'g'); row('fat', pl.fat || 0, all.fat || 0, lat.fat || 0, 'g');
   } catch (_) {}
 }
 function mhPlanRender() {

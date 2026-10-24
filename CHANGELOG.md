@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1212
+- **Today's tiles say how much of the day is logged for later.** A meal already in today's log but timed for later (a bar logged for 19:00) is counted in the tile straight away; the small line under Calories, Protein, Carbs and Fat now adds "includes 162 kcal logged for 19:00". It sits beside the existing "+N planned" line when you have both. Same wording style, only for today.
+
 ## v3.10.1211
 - **"On your shelf" (Add to the list, Non-nutritional) now only shows what is NOT already on your list.** Items already on the list (and any in Filtered) no longer appear there with an ON LIST tag; if everything is already on the list it says so.
 
