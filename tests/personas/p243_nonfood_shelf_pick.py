@@ -32,6 +32,6 @@ with fresh_server() as root, sync_playwright() as pw:
         it = ev("mhShopLoad().items.find(i=>i.name==='Zzqx Soap')")
         if not it or not it.get('nonFood'): f.add('BUG', f'6: tapping it puts it on the list as non-food: {it}')
         ev("mhShopAddKind('nonfood')"); page.wait_for_timeout(200)
-        if 'ON LIST' not in ev("document.querySelector('[data-nfshelf=\"Zzqx Soap\"]')?.innerText||''"): f.add('BUG', '7: it then shows ON LIST')
+        if ev("!!document.querySelector('[data-nfshelf=\"Zzqx Soap\"]')"): f.add('BUG', '7: once on the list it leaves the shelf (v3.10.1211)')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)

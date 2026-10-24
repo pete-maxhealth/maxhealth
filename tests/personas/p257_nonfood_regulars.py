@@ -14,7 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('[data-regk="%s"]' % ev("mhShopKey('Zzqx Loo Roll')")); page.wait_for_timeout(300)
     s = ev("mhShopLoad()")
     if not any(i['name'] == 'Zzqx Loo Roll' for i in s['items']) or 'Zzqx Loo Roll' not in s['usuals']: f.add('BUG', f'1: marking a regular puts it on the list: {s["items"]} {s["usuals"]}')
-    if 'Regular' not in page.inner_text('[data-nfshelf="Zzqx Loo Roll"]'): f.add('BUG', '2: the shelf row shows the regular toggle')
+    if ev("!!document.querySelector('[data-nfshelf=\"Zzqx Loo Roll\"]')"): f.add('BUG', '2: once it is on the list it leaves the shelf (v3.10.1211)')
     ev("(()=>{const s=mhShopLoad(); mhShopSetAdd(s,'Zzqx Hairspray','own','',null,{nonFood:true}); mhShopSetAdd(s,'Zzqx Milk','own','',null); s.usuals.push('Zzqx Milk'); s.items.forEach(i=>i.checked=true); mhShopSave(s);})()")
     ev("mhShopComplete()"); page.click("#appModalConfirm"); page.wait_for_timeout(400)
     left = ev("mhShopLoad().items.map(i=>[i.name,i.checked])")
