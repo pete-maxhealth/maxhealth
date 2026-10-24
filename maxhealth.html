@@ -3437,6 +3437,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
            the other maintenance-style actions in this row - rather than
            looking like Food Library's one headline action. -->
       <button class="copy-btn" style="font-size:12px;padding:8px 12px;" onclick="openAddFoodModal()">+ Add Food Manually</button>
+      <button class="copy-btn" id="libToFiltered" style="font-size:12px;padding:8px 12px;" onclick="mhLibToFiltered()" title="Puts every Library food that is not in My cupboards into them as filtered, with 0 stock">📦 Library foods → cupboards (filtered)</button>
       <!-- Kept, not deleted - a genuinely different workflow from the new
            single-item mic inside Add Food (talk through several new foods
            in one sitting rather than opening + Add Food repeatedly).
@@ -6521,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1205'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1206'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27691,6 +27692,29 @@ function mhStockRemovedHtml() {
   const open = !!_shopUi.cbRemOpen;
   return '<div id="mhCbRemoved" style="margin-top:6px;"><span onclick="mhStockRemovedToggle()" style="cursor:pointer;font-size:12px;color:var(--text3);">' + (open ? '▾' : '▸') + ' Recently removed (' + l.length + ')</span>'
     + (open ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text3);width:100%;">Tap a food to put it back with its counts.</span>' + l.map(x => '<button class="hist-filter-btn" data-restore="' + mhPlanEsc(x.it.key) + '" onclick="mhStockRestoreRemoved(this.dataset.restore)">' + mhPlanEsc(x.it.name) + '</button>').join('') + '</div>' : '') + '</div>';
+}
+// One-off: put every Library food that is not in My cupboards into them as FILTERED with 0 stock, so nothing reaches the shopping list on its own
+// and you release them (Filtered > Put back on shelf) as you set each one up (v3.10.1206). A food whose Library portion has no g or ml is left out:
+// how it is counted is never guessed. Shop, reorder level and where it lives are left empty. Undo removes exactly what this added.
+function mhLibToFilteredPlan() {
+  const rows = mhSlRows().filter(r => !r.it && !r.twin), ok = [], noUnit = [];
+  rows.forEach(r => { const b = (mhSlLibUnit(r.name) || {}).base; if (b) ok.push({ name: r.name, key: r.key, base: b }); else noUnit.push(r.name); });
+  return { ok, noUnit };
+}
+function mhLibToFiltered() {
+  const plan = mhLibToFilteredPlan(); if (!plan.ok.length) { showToast(plan.noUnit.length ? 'None can be added: ' + plan.noUnit.length + ' have no g or ml portion' : 'Every Library food is already in My cupboards'); return; }
+  appConfirm('Add ' + plan.ok.length + ' Library food' + (plan.ok.length === 1 ? '' : 's') + ' to My cupboards as filtered, with 0 stock? They stay off your shopping list until you put them back from Filtered.' + (plan.noUnit.length ? ' ' + plan.noUnit.length + ' with no g or ml portion are left out.' : '') + ' You can undo it straight afterwards.', () => {
+    const keys = []; plan.ok.forEach(x => { if (mhStockTrack(x.name, { base: x.base, shop: '' })) keys.push(x.key); });
+    const o = mhStockLoad(), now = Date.now(); keys.forEach(k => { const it = o.items[k]; if (it) { it.level = 0; it.since = now; it.held = true; it.lowFlag = false; } }); mhStockSave(o);
+    try { localStorage.setItem('mh_libfilt_undo', JSON.stringify({ at: now, keys })); } catch (_) {}
+    try { mhShopRender(); } catch (_) {}
+    showToast(keys.length + ' foods added to My cupboards as filtered', 'Undo', mhLibToFilteredUndo, 12000);
+  }, null, true, { confirm: 'Add them' });
+}
+function mhLibToFilteredUndo() {
+  let u = null; try { u = JSON.parse(localStorage.getItem('mh_libfilt_undo') || 'null'); } catch (_) {} if (!u || !Array.isArray(u.keys)) return;
+  const o = mhStockLoad(); let n = 0; u.keys.forEach(k => { const it = o.items[k]; if (it && it.held && it.level === 0 && it.reorder == null && !o.ledger.some(l => l.k === k)) { delete o.items[k]; n++; } }); mhStockSave(o);
+  try { localStorage.removeItem('mh_libfilt_undo'); } catch (_) {} try { mhShopRender(); } catch (_) {} showToast('Took ' + n + ' back out of My cupboards');
 }
 function mhStockUntrack(key) { const o = mhStockLoad(); if (!o.items[key]) return false; delete o.items[key]; mhStockSave(o); return true; }
 // A stock-take: you counted it, so this is the number. Everything logged before this moment can no longer change it.

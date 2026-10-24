@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1206
+- **One-off: put every Library food that has no stock entry into My cupboards as filtered, with 0 stock.** New Library Tools button "📦 Library foods → cupboards (filtered)". It asks first with the count, adds them with 0 stock held back from your shopping list (they show under Filtered, grouped by aisle), and has an Undo. Foods whose Library portion has no g or ml are left out, because how they are counted is never guessed. Shop, reorder level and where it lives stay empty for you to fill in as you release each one.
+
 ## v3.10.1205
 - **Library Tools: "+ Add Food" is now "+ Add Food Manually".** Same button, clearer name next to the voice and import tools.
 
