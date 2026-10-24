@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1206'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1207'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -7407,7 +7407,9 @@ function saveLibrary(lib) {
   // here so it's applied automatically, not as a one-off cleanup (28/09/2026).
   lib.forEach(f => { if (f && f.name) f.name = normalizeFoodName(f.name); });
   const json = JSON.stringify(lib);
+  let _prevLib = null; try { _prevLib = localStorage.getItem(LIBRARY_KEY); } catch (_) {}
   localStorage.setItem(LIBRARY_KEY, json);
+  try { mhNewFoodsWatch(_prevLib, lib); } catch (_) {}
   localStorage.setItem('mh_library_backup', json);
   localStorage.setItem('mh_library_b2', json);
   // Always try to persist to server CSV — silent fail if unavailable
@@ -27397,9 +27399,9 @@ function mhShopHeldFold(sec) { const m = _shopUi.heldFold = _shopUi.heldFold || 
 // Put the chosen foods back on the shelf: they count again, and if one is still low it goes on the list as normal.
 function mhShopHeldRelease() {
   const sel = _shopUi.heldSel || {}, keys = Object.keys(sel).filter(k => sel[k]); if (!keys.length) { showToast('Tick the foods to put back first'); return; }
-  const o = mhStockLoad(); let n = 0; keys.forEach(k => { if (o.items[k] && o.items[k].held) { o.items[k].held = false; o.items[k].lowFlag = false; n++; } }); mhStockSave(o);
-  _shopUi.heldSel = {}; try { mhStockSweep(); } catch (_) {}
-  _shopUi.msg = 'Put ' + n + ' back on the shelf.'; mhShopRender();
+  const o = mhStockLoad(); let n = 0; const blocked = []; keys.forEach(k => { const it = o.items[k]; if (!it || !it.held) return; if (mhStockMissing(it).length) { blocked.push(k); return; } it.held = false; delete it.onboard; it.lowFlag = false; n++; }); mhStockSave(o);
+  _shopUi.heldSel = {}; blocked.forEach(k => { _shopUi.heldSel[k] = true; }); try { mhStockSweep(); } catch (_) {}
+  _shopUi.msg = (n ? 'Put ' + n + ' back on the shelf. ' : '') + (blocked.length ? blocked.length + ' still need details (shown under each one). Tap Complete.' : ''); mhShopRender();
 }
 function mhShopHeldHtml() {
   const f = mhShopHeldFoods(); if (!f.length) return '';
@@ -27414,7 +27416,7 @@ function mhShopHeldHtml() {
       if (sc !== last) { last = sc; const n = f.filter(y => mhShopSection(y.nonFood ? 'nonfood' : mhShopCat(y.name)) === sc).length;
         body += '<div data-heldsec="' + sc + '" onclick="mhShopHeldFold(' + sc + ')" style="display:flex;justify-content:space-between;padding:8px 4px;margin-top:8px;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;border-bottom:1px solid var(--border);"><span>' + (fold[sc] ? '▸' : '▾') + ' ' + mhPlanEsc(mhShopSectionName(sc)) + '</span><span style="color:var(--text3);">' + n + '</span></div>'; }
       if (fold[sc]) return;
-      body += '<div data-held="' + mhPlanEsc(x.name) + '" data-hk="' + mhPlanEsc(x.key) + '" onclick="mhShopHeldPick(this.dataset.hk)" style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-top:1px solid var(--border);cursor:pointer;"><input type="checkbox" ' + (sel[x.key] ? 'checked' : '') + ' style="width:24px;height:24px;flex:0 0 auto;pointer-events:none;" tabindex="-1"><div style="flex:1;min-width:0;font-size:16px;color:var(--text);overflow-wrap:anywhere;">' + mhPlanEsc(x.name) + (x.level != null && !x.nonFood ? ' <span style="font-size:12px;color:var(--text3);">· ' + mhPlanEsc(mhStockFmt(x, x.level)) + ' left</span>' : '') + '</div></div>'; });
+      body += '<div data-held="' + mhPlanEsc(x.name) + '" data-hk="' + mhPlanEsc(x.key) + '" onclick="mhShopHeldPick(this.dataset.hk)" style="display:flex;align-items:center;gap:12px;padding:12px 4px;border-top:1px solid var(--border);cursor:pointer;"><input type="checkbox" ' + (sel[x.key] ? 'checked' : '') + ' style="width:24px;height:24px;flex:0 0 auto;pointer-events:none;" tabindex="-1"><div style="flex:1;min-width:0;font-size:16px;color:var(--text);overflow-wrap:anywhere;">' + mhPlanEsc(x.name) + (x.level != null && !x.nonFood ? ' <span style="font-size:12px;color:var(--text3);">· ' + mhPlanEsc(mhStockFmt(x, x.level)) + ' left</span>' : '') + (mhStockMissing(x).length ? '<div style="font-size:11px;color:var(--text3);margin-top:2px;">needs: ' + mhPlanEsc(mhStockMissing(x).join(', ')) + '</div>' : '') + '</div>' + (mhStockMissing(x).length ? '<span class="hist-filter-btn" data-complete="' + mhPlanEsc(x.key) + '" onclick="event.stopPropagation();mhStockEditView(this.dataset.complete)">Complete</span>' : '') + '</div>'; });
   }
   return '<div id="mhShopHeld" style="margin:0 0 8px;"><span onclick="mhShopHeldToggle()" style="cursor:pointer;font-size:13px;color:var(--text2);font-weight:600;">' + (open ? '▾' : '▸') + ' Filtered (' + f.length + ')</span>' + (open ? '' : ' <span style="font-size:12px;color:var(--accent);">review before you shop</span>') + body + '</div>';
 }
@@ -27693,6 +27695,48 @@ function mhStockRemovedHtml() {
   return '<div id="mhCbRemoved" style="margin-top:6px;"><span onclick="mhStockRemovedToggle()" style="cursor:pointer;font-size:12px;color:var(--text3);">' + (open ? '▾' : '▸') + ' Recently removed (' + l.length + ')</span>'
     + (open ? '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;"><span style="font-size:11px;color:var(--text3);width:100%;">Tap a food to put it back with its counts.</span>' + l.map(x => '<button class="hist-filter-btn" data-restore="' + mhPlanEsc(x.it.key) + '" onclick="mhStockRestoreRemoved(this.dataset.restore)">' + mhPlanEsc(x.it.name) + '</button>').join('') + '</div>' : '') + '</div>';
 }
+// ── New foods are checked against My cupboards the moment they reach the Library (v3.10.1207) ──
+// Any save that adds a food the cupboards do not know asks once, for the whole batch: complete the stock now, or later. Later (and now, until you finish)
+// puts them in Filtered with 0 stock so nothing can reach the shopping list; they are released only once how they are counted, reorder level, shop and
+// where they live are all filled in. Never triggered by starter foods, a restore, a rename, a demo, or more than 50 at once (use the Library Tools button).
+let _mhNewFoodQ = [], _mhNewFoodT = null;
+function mhNewFoodsWatch(prevJson, lib) {
+  if (window._mhLibQuiet || !mhStockOn()) return;
+  let prev = null; try { prev = JSON.parse(prevJson || 'null'); } catch (_) {} if (!Array.isArray(prev) || !prev.length) return;
+  const nm = f => f && f.name ? mhShopKey(f.name) : '', pk = new Set(prev.map(nm).filter(Boolean)), nk = new Set(lib.map(nm).filter(Boolean));
+  const renamed = [...pk].filter(k => !nk.has(k)).length;
+  let added = lib.filter(f => f && f.name && !f.isMeal && !pk.has(nm(f)));
+  if (added.length && added.length === renamed) return;   // as many foods gone as arrived in one save: a rename, not new foods
+  const o = mhStockLoad(), held = new Map(Object.values(o.items).map(it => [mhStockLooseKey(it.key), 1]));
+  added = added.filter(f => { const k = nm(f); return k && !o.items[k] && !held.has(mhStockLooseKey(k)) && !_mhNewFoodQ.some(q => q.key === k); });
+  if (!added.length) return;
+  if (added.length > 50) { try { showToast(added.length + ' new foods are not in My cupboards. Use Library Tools: Library foods → cupboards.'); } catch (_) {} return; }
+  added.forEach(f => _mhNewFoodQ.push({ name: f.name, key: nm(f) }));
+  clearTimeout(_mhNewFoodT); _mhNewFoodT = setTimeout(mhNewFoodsAsk, 900);
+}
+function mhNewFoodsAsk() {
+  const q = _mhNewFoodQ.splice(0, _mhNewFoodQ.length).filter(x => !mhStockLoad().items[x.key]); if (!q.length) return;
+  const names = q.slice(0, 5).map(x => mhPlanEsc(x.name)).join(', ') + (q.length > 5 ? ' and ' + (q.length - 5) + ' more' : '');
+  const go = now => { const keys = mhStockAddPending(q); if (now && keys.length) mhStockCompleteNow(keys); else if (keys.length) { showToast(keys.length + ' new food' + (keys.length === 1 ? '' : 's') + ' in Filtered, waiting for details'); try { mhShopRender(); } catch (_) {} } };
+  appConfirm('New in your Library and not in My cupboards: ' + names + '. Complete the stock details now, or later? Either way ' + (q.length === 1 ? 'it waits' : 'they wait') + ' in Filtered with 0 stock, so ' + (q.length === 1 ? 'it' : 'they') + ' cannot reach your shopping list until released with the details filled in.', () => go(true), () => go(false), false, { confirm: 'Complete now', cancel: 'Later' });
+}
+// Creates the cupboard entries: held, 0 stock, shop / reorder level / where it lives empty. How it is counted comes from the Library portion (g or ml);
+// without one it is marked "not chosen" (shown as each until you choose) and has to be set before release.
+function mhStockAddPending(list) {
+  const keys = []; list.forEach(x => { const b = (mhSlLibUnit(x.name) || {}).base; if (mhStockTrack(x.name, { base: b || 'each', shop: '' })) keys.push({ key: mhShopKey(x.name), unitUnset: !b }); });
+  const o = mhStockLoad(), now = Date.now(); keys.forEach(k => { const it = o.items[k.key]; if (it) { it.level = 0; it.since = now; it.held = true; it.onboard = true; it.lowFlag = false; if (k.unitUnset) it.unitUnset = true; } }); mhStockSave(o);
+  return keys.map(k => k.key);
+}
+function mhStockMissing(it) {
+  if (!it || !it.onboard) return [];
+  const m = []; if (it.unitUnset) m.push('how it is counted'); if (it.reorder == null) m.push('reorder level'); if (!it.shop) m.push('shop');   // where it lives is never missing: Cupboard is the default and is stored as empty
+  return m;
+}
+function mhStockCompleteNow(keys) {
+  try { _shopUi.heldOpen = true; } catch (_) {}
+  try { switchTabById('shop'); } catch (_) {} try { mhShopPaneSet('list'); } catch (_) {}
+  const k = keys.find(x => mhStockMissing(mhStockLoad().items[x]).length) || keys[0]; if (k) { try { mhStockEditView(k); } catch (_) {} }
+}
 // One-off: put every Library food that is not in My cupboards into them as FILTERED with 0 stock, so nothing reaches the shopping list on its own
 // and you release them (Filtered > Put back on shelf) as you set each one up (v3.10.1206). A food whose Library portion has no g or ml is left out:
 // how it is counted is never guessed. Shop, reorder level and where it lives are left empty. Undo removes exactly what this added.
@@ -27705,7 +27749,7 @@ function mhLibToFiltered() {
   const plan = mhLibToFilteredPlan(); if (!plan.ok.length) { showToast(plan.noUnit.length ? 'None can be added: ' + plan.noUnit.length + ' have no g or ml portion' : 'Every Library food is already in My cupboards'); return; }
   appConfirm('Add ' + plan.ok.length + ' Library food' + (plan.ok.length === 1 ? '' : 's') + ' to My cupboards as filtered, with 0 stock? They stay off your shopping list until you put them back from Filtered.' + (plan.noUnit.length ? ' ' + plan.noUnit.length + ' with no g or ml portion are left out.' : '') + ' You can undo it straight afterwards.', () => {
     const keys = []; plan.ok.forEach(x => { if (mhStockTrack(x.name, { base: x.base, shop: '' })) keys.push(x.key); });
-    const o = mhStockLoad(), now = Date.now(); keys.forEach(k => { const it = o.items[k]; if (it) { it.level = 0; it.since = now; it.held = true; it.lowFlag = false; } }); mhStockSave(o);
+    const o = mhStockLoad(), now = Date.now(); keys.forEach(k => { const it = o.items[k]; if (it) { it.level = 0; it.since = now; it.held = true; it.onboard = true; it.lowFlag = false; } }); mhStockSave(o);
     try { localStorage.setItem('mh_libfilt_undo', JSON.stringify({ at: now, keys })); } catch (_) {}
     try { mhShopRender(); } catch (_) {}
     showToast(keys.length + ' foods added to My cupboards as filtered', 'Undo', mhLibToFilteredUndo, 12000);
@@ -29252,6 +29296,7 @@ function mhStockFormApply(f) {
   if (String(f.level).trim() !== '') { const r = mhStockParse(f.level + ' ' + word(f.levelU), draft); if (!r.ok) return fail('Stock now: ' + r.err); level = r.base; }
   if (String(f.reorder).trim() !== '') { const r = mhStockParse(f.reorder + ' ' + word(f.reorderU), draft); if (!r.ok) return fail('Reorder at: ' + r.err); reorder = r.base; }
   mhStockTrack(f.name, { base: f.base, pack, serving: serv, shop: f.shop });
+  { const o2 = mhStockLoad(), i2 = o2.items[f.key]; if (i2 && i2.unitUnset) { delete i2.unitUnset; mhStockSave(o2); } }
   if (level !== undefined) mhStockSetLevel(f.key, level);
   if (reorder !== undefined) mhStockSetReorder(f.key, reorder);
   { const lf = parseInt(f.life); mhStockSetStore(f.key, f.store || '', f.store ? (lf > 0 ? lf : 0) : undefined); }
@@ -49946,7 +49991,7 @@ function mhPoolApply(style) {
   const key = x => mhDedupeKey('library', x), rkey = x => mhDedupeKey('recipes', x);
   const lib = mhPackLoadCurrent('library').slice(), have = new Set(lib.map(key)); let nf = 0, nr = 0;
   mhPoolFoods(style).forEach(x => { if (!have.has(key(x))) { lib.push(x); have.add(key(x)); nf++; } });
-  saveLibrary(lib);
+  window._mhLibQuiet = true; try { saveLibrary(lib); } finally { window._mhLibQuiet = false; }
   const rec = mhPackLoadCurrent('recipes').slice(), haveR = new Set(rec.map(rkey)), ids = new Set(rec.map(r => r.id));
   mhPoolRecipes(style, 'pool_r').forEach(r => { if (!haveR.has(rkey(r))) { if (ids.has(r.id)) r.id = 'pool_r_' + Date.now().toString(36) + nr; rec.push(r); haveR.add(rkey(r)); ids.add(r.id); nr++; } });
   saveRecipes(rec);
