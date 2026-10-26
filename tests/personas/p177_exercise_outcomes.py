@@ -31,7 +31,7 @@ with fresh_server() as root, sync_playwright() as pw:
     r1 = ev(f"mhExerciseOutcomes({BUILD}('effect').slice(0,12))")
     check('too few days -> nothing reported', r1 == [], str(r1))
     ev("startDemoMode('alex')"); page.wait_for_timeout(2200)
-    ev("document.getElementById('maintab-insights').click()"); page.wait_for_timeout(300); ev("renderReports()"); page.wait_for_timeout(300)
+    ev("document.getElementById('maintab-insights').click()"); page.wait_for_timeout(300); ev("mhMoveSetRange('exercise',0)"); page.wait_for_timeout(300)
     txt = ev("document.getElementById('exercise-report-content').innerText")
     check('report carries the Early Stage block and the caution', 'EARLY STAGE' in txt and 'not proof of cause' in txt)
     check('no JS errors', not errs, str(errs[:2]))

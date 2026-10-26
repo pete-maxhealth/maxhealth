@@ -16,7 +16,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if hid(): f.add('BUG', f'All hides cards: {hid()}')
     page.evaluate("mhTrendsGroupSet('food')")
     h = hid()
-    if 'mcWeight' not in h or 'mcHR' not in h or 'patternsCard' not in h or 'bodyCompCard' not in h: f.add('BUG', f'Food did not hide other groups: {h}')
+    if 'mcWeight' not in h or 'mcHR' not in h or 'patternsCard' not in h: f.add('BUG', f'Food did not hide other groups: {h}')
     if 'mcCal' in h or 'topFoodsCard' in h or 'dayOfWeekCard' in h: f.add('BUG', f'Food hid its own cards: {h}')
     page.evaluate("mhTrendsGroupSet('body')")
     h = hid()

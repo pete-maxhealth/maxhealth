@@ -63,8 +63,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if ' lb' not in t or ' kg' in t.replace('kg.', ''): f.add('BUG', f'card not in lb: {t[:300]!r}')
     # appears on the Trends tab with reorder/hide controls
     page.evaluate("setGlobalWeightUnit('kg')")
-    page.evaluate("switchTabById('trends')"); page.wait_for_timeout(1200)
-    ttl = page.evaluate("document.getElementById('title-trends-bodycomp')?.innerText||''")
+    page.evaluate("switchTabById('move')"); page.wait_for_timeout(1200)
+    ttl = page.evaluate("document.querySelector('#moveBodycompCard .activity-card-title')?.innerText||''")
     if '▲' not in ttl and '👁' not in ttl: f.add('BUG', f'no reorder/hide controls on body comp card: {ttl!r}')
     if errs: f.add('BUG', f'page errors {errs[:3]}')
     b.close()

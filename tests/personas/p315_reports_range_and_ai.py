@@ -1,4 +1,4 @@
-"""Persona 315 (v3.10.1215): Reports date range and Include today redraw every card at once; Ask AI keeps its answer area on screen while thinking (no jump to the top); the AI context carries age, sex, height and latest weight; Your Journey has a Fat chip; the Add foods row says what Have now and One serving mean."""
+"""Persona 315 (v3.10.1215): Reports date range and Include today redraw every card that follows them at once (Exercise moved to Move in v3.10.1216 and has its own range, see p323); Ask AI keeps its answer area on screen while thinking (no jump to the top); the AI context carries age, sex, height and latest weight; Your Journey has a Fat chip; the Add foods row says what Have now and One serving mean."""
 import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -9,10 +9,6 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("startDemoMode('alex')"); page.wait_for_timeout(2500)
     ev("switchTabById('reports')"); page.wait_for_timeout(800)
-    card = lambda: ev("(document.getElementById('exercise-report-content')||{innerText:''}).innerText.replace(/\\s+/g,' ').slice(0,160)")
-    ev("setReportRange(7, document.getElementById('rpt-range-7'))"); page.wait_for_timeout(500); a = card()
-    ev("setReportRange(0, document.getElementById('rpt-range-all'))"); page.wait_for_timeout(500); b = card()
-    if not a or a == b: f.add('BUG', f'the Exercise card follows the date range without leaving the page: 7d="{a}" all="{b}"')
     sl = lambda: ev("(document.getElementById('sleep-report-content')||{innerText:''}).innerText.replace(/\\s+/g,' ').slice(0,120)")
     ev("setReportRange(7, document.getElementById('rpt-range-7'))"); page.wait_for_timeout(400); s7 = sl()
     ev("setReportRange(0, document.getElementById('rpt-range-all'))"); page.wait_for_timeout(400); sa = sl()
