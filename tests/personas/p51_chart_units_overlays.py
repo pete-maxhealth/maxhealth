@@ -38,7 +38,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("switchTabById('trends')"); page.wait_for_timeout(800)
     page.evaluate("renderJourneyCard()")
     n = page.evaluate("document.querySelectorAll('#journeyOverlayBar [data-jov]').length")
-    if n != 7: f.add('BUG', f'expected 7 journey chips, got {n}')
+    if n != 8: f.add("BUG", f"expected 8 journey chips, got {n}")
     page.evaluate("mhJourneyToggleOverlay('exercise'); mhJourneyToggleOverlay('water')")
     if sorted(page.evaluate("mhJourneyOverlayKeys()")) != ['exercise', 'water']: f.add('BUG', 'overlay choice not saved')
     page.reload(); page.wait_for_timeout(1500)

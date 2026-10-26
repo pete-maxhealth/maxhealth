@@ -6,3 +6,4 @@ Shipped with the app so it works with no internet. All MIT-licensed.
 - `jspdf.umd.min.js` - jsPDF 2.5.1, https://github.com/parallax/jsPDF
 - `jspdf.plugin.autotable.min.js` - jsPDF-AutoTable 3.8.2, https://github.com/simonbengtsson/jsPDF-AutoTable
 - `jszip.min.js` - JSZip 3.10.1, https://github.com/Stuk/jszip (MIT option of its dual MIT/GPLv3 licence)
+- `pdf.js`, `pdf.worker.js` - PDF.js 3.11.174, https://github.com/mozilla/pdf.js (Apache-2.0, see `pdfjs.LICENSE`). Loaded only when you choose a PDF receipt; runs on this device.

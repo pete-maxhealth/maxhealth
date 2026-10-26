@@ -4183,7 +4183,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         <div class="provider-btn"        id="rpt-range-custom" onclick="setReportRange(-1,this)">Custom</div>
       </div>
       <div id="rpt-include-today-row" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <input type="checkbox" id="rptIncludeToday" onchange="_rptIncludeToday=this.checked;renderReportSummary();runReportQuery();" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
+        <input type="checkbox" id="rptIncludeToday" onchange="_rptIncludeToday=this.checked;renderReportSummary();mhRptRefreshSections();runReportQuery();" style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;">
         <label for="rptIncludeToday" style="font-size:11px;color:var(--text3);cursor:pointer;">Include today (off by default — an incomplete day can skew averages)</label>
       </div>
       <div id="rpt-custom-dates" style="display:none;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
@@ -4197,7 +4197,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
           <input type="date" id="rptDateTo"
             style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;color-scheme:dark;width:160px;display:block;">
         </div>
-        <button class="run-btn" style="padding:10px 20px;width:auto;margin-top:4px;" onclick="try{_rptRange=-1;renderReportSummary();runReportQuery()}catch(e){showToast('Report err: '+e.message)}">Apply →</button>
+        <button class="run-btn" style="padding:10px 20px;width:auto;margin-top:4px;" onclick="try{_rptRange=-1;renderReportSummary();mhRptRefreshSections();runReportQuery()}catch(e){showToast('Report err: '+e.message)}">Apply →</button>
       </div>
     </div>
 
@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1214'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1215'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -27275,14 +27275,13 @@ function mhShopComplete() {
   const s = mhShopLoad(), n = s.items.filter(i => i.checked && i.shop === s.shop).length;
   if (!n) { _shopUi.msg = 'Nothing is in the basket yet'; mhShopRender(); return; }
   // The app's own confirm box, not the browser's: a browser can silently swallow its pop-ups (it answers "no"), and then this button seemed to do nothing (v3.10.1144).
-  // Two ways to finish, for everyone whether or not stock counting is on: empty the basket, or keep the whole list for the next shop (everything unticked again) (v3.10.1156).
+  // Finish by emptying the basket (Keep the whole list was removed in v3.10.1215: Saved lists does that job).
   if (document.getElementById('mhShopDoneAsk')) return;   // already asking: a second tap does not stack another (v3.10.1158)
   const on = mhStockOn(), ov = document.createElement('div'); ov.className = 'app-modal-overlay'; ov.id = 'mhShopDoneAsk';
   ov.innerHTML = '<div class="app-modal"><div class="app-modal-title">Shopping complete?</div><div class="app-modal-msg">The ' + n + ' ticked ' + mhPlanEsc(s.shop) + ' item' + (n === 1 ? '' : 's') + '. What should happen to them? Anything unticked, and your other shops, stay as they are.</div>'
-    + '<div class="app-modal-btns" style="flex-direction:column;"><button class="app-modal-btn confirm" id="appModalConfirm">Empty the basket' + (on ? ' (then I choose what to add to my cupboards)' : '') + '</button>' + (on ? '<button class="app-modal-btn" id="appModalClear" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Just clear them: leave my cupboards alone</button>' : '') + '<button class="app-modal-btn" id="appModalKeep" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Keep the whole list for next shop</button><button class="app-modal-btn cancel" id="appModalCancel">Not yet</button></div></div>';
+    + '<div class="app-modal-btns" style="flex-direction:column;"><button class="app-modal-btn confirm" id="appModalConfirm">Empty the basket' + (on ? ' (then I choose what to add to my cupboards)' : '') + '</button>' + (on ? '<button class="app-modal-btn" id="appModalClear" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">Just clear them: leave my cupboards alone</button>' : '') + '<button class="app-modal-btn cancel" id="appModalCancel">Cancel</button></div></div>';
   document.body.appendChild(ov);
   ov.querySelector('#appModalConfirm').onclick = () => { ov.remove(); mhShopCompleteGo(); };
-  ov.querySelector('#appModalKeep').onclick = () => { ov.remove(); mhShopCompleteGo(true); };
   const clr = ov.querySelector('#appModalClear'); if (clr) clr.onclick = () => { ov.remove(); mhShopCompleteGo(false, true); };   // clear the ticked items, touch nothing in the cupboards (v3.10.1194)
   ov.querySelector('#appModalCancel').onclick = () => ov.remove();
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
@@ -28715,7 +28714,30 @@ function mhOrdOpen(kind) {
 function mhOrdDiscard() { const k = _shopUi.ordKind; mhOrdDraftClear(); mhOrdFresh(k); }
 function mhOrdKind(v) { _shopUi.ordKind = v === 'receipt' ? 'receipt' : v === 'list' ? 'list' : 'start'; const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhShopRender(); const e2 = document.getElementById('mhOrdText'); if (e2) e2.value = t; }
 function mhOrdRead() { const e = document.getElementById('mhOrdText'), t = e ? e.value : ''; mhOrdLoad(t, 'what you pasted'); }
-function mhOrdPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,.tsv,text/csv,text/plain'; i.onchange = async () => { const f = i.files && i.files[0]; if (f) mhOrdLoad(await f.text(), f.name); }; i.click(); }
+function mhOrdPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.csv,.txt,.tsv,.pdf,text/csv,text/plain,application/pdf'; i.onchange = async () => { const f = i.files && i.files[0]; if (!f) return; if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') { const t = await mhPdfText(f); if (t) mhOrdLoad(t, f.name); return; } mhOrdLoad(await f.text(), f.name); }; i.click(); }
+// A PDF receipt or order confirmation: read its text on this device (PDF.js from lib/, loaded only now), one line per row of the page, columns kept apart by a tab, then it goes through the same reader as pasted text (v3.10.1215).
+function mhPdfLoadLib() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'lib/pdf.js'; sc.onload = () => { try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.js'; res(window.pdfjsLib); } catch (e) { rej(e); } }; sc.onerror = () => rej(new Error('The PDF reader could not load. Open this once while online, or paste the text instead.')); document.head.appendChild(sc); });
+}
+async function mhPdfText(file) {
+  try {
+    showToast('Reading the PDF…');
+    const lib = await mhPdfLoadLib(), pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise, out = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const tc = await (await pdf.getPage(n)).getTextContent(), rows = [];
+      tc.items.forEach(it => { if (!String(it.str).trim()) return; const y = Math.round(it.transform[5]), x = it.transform[4], w = it.width || 0; let r = rows.find(q => Math.abs(q.y - y) <= 3); if (!r) { r = { y, cells: [] }; rows.push(r); } r.cells.push({ x, w, t: String(it.str) }); });
+      rows.sort((a, b) => b.y - a.y).forEach(r => { r.cells.sort((a, b) => a.x - b.x); let line = '', end = null; r.cells.forEach(c => { if (end != null) line += (c.x - end > 14) ? '\t' : (/^\s|\s$/.test(line.slice(-1) + c.t.slice(0, 1)) ? '' : ' '); line += c.t; end = c.x + c.w; }); out.push(line.replace(/[ ]+$/, '')); });
+    }
+    // A receipt is mostly one table. When most lines share one column layout, keep just those (plus any line with a date) so shop names, addresses and totals do not get read as items.
+    let lines = out.slice(); const cnt = {}; lines.forEach(l => { const t = (l.match(/\t/g) || []).length; cnt[t] = (cnt[t] || 0) + 1; });
+    const modal = Object.keys(cnt).map(Number).filter(t => t >= 1).sort((a, b) => cnt[b] - cnt[a])[0];
+    if (modal != null && cnt[modal] >= 3) lines = lines.filter(l => (l.match(/\t/g) || []).length === modal || /\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(l));
+    const text = lines.join('\n').trim();
+    if (!text) { _shopUi.msg = 'That PDF has no readable text (it may be a scan). Take a photo or paste the lines instead.'; mhShopRender(); return ''; }
+    return text;
+  } catch (e) { _shopUi.msg = 'Could not read that PDF: ' + (e && e.message ? e.message : e); mhShopRender(); return ''; }
+}
 // A photo of a paper receipt: shrunk, sent to the same AI the app already uses, which only copies out the text. It then goes through the same reader and the same check screen as pasted text.
 function mhOrdShrink(file) {
   return new Promise((res, rej) => { const u = URL.createObjectURL(file), im = new Image(); im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); res({ base64: c.toDataURL('image/jpeg', 0.82).split(',')[1], mimeType: 'image/jpeg' }); }; im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('image')); }; im.src = u; });
@@ -28739,7 +28761,7 @@ function mhOrdLoad(text, label, map) {
   const tb = map ? null : mhRcpTable(text);
   if (tb && !tb.sure) { _shopUi.ord = { stage: 'map', text, label: label || 'receipt', tb, roles: tb.roles.slice(), hasHead: tb.hasHead, kind }; mhShopView('orderimport'); return true; }
   const rows = mhOrdParse(text, shop, map);
-  if (!rows.length) { _shopUi.msg = 'I could not find any items in that. Paste lines like "2 x Cheddar 400g" or a till receipt, one item per line, or choose a CSV.'; mhShopRender(); return false; }
+  if (!rows.length) { _shopUi.msg = 'I could not find any items in that. Paste lines like "2 x Cheddar 400g" or a till receipt, one item per line, or choose a CSV or PDF.'; mhShopRender(); return false; }
   if (kind === 'receipt') rows.forEach(r => { if (r.existing) r.mode = 'add'; });
   if (kind === 'list') rows.forEach(r => { r.on = true; });   // a shopping list needs no amount: every line you listed starts ticked
   const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }, dm = String(text).match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})\b/i), dn = String(text).match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);
@@ -28889,7 +28911,7 @@ function mhOrdViewHtml(s, esc, btn) {
     + '<div id="mhOrdPurpose" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">' + [['receipt', '<b>I have just bought this</b>: a receipt or a shop I have just done. It is added on top of what is in my cupboards.'], ['start', '<b>Starting my cupboards</b> from a recent order: sets the counts.'], ['list', '<b>A list to shop for</b>: puts these on my shopping list. My cupboards are not touched.']].map(a => '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text);"><input type="radio" name="mhOrdKind" value="' + a[0] + '" ' + (kind === a[0] ? 'checked ' : '') + 'onchange="mhOrdKind(this.value)" style="margin-top:3px;"><span>' + a[1] + '</span></label>').join('') + '</div>'
     + '<div id="mhOrdHint" style="font-size:12px;color:var(--text3);line-height:1.55;margin-bottom:10px;background:var(--surface2);border-radius:8px;padding:10px 12px;"><b style="color:var(--text);">What can I import?</b><br><b>Works:</b> till receipts (prices, codes and tax letters are ignored), supermarket order pages copied as text, e-mailed receipts, plain lists, CSV or table files with or without headings (a shop column and a food or not column are understood), and a clear photo of a paper receipt.<br><b>Does not:</b> PDFs (copy the text out of them instead), handwriting, and photos when no AI is set up.<br><b>Always:</b> totals, card and loyalty lines are ignored; a missing amount is left blank for you, never guessed; nothing is saved until you press the button.</div>'
     + '<textarea id="mhOrdText" rows="8" placeholder="Paste your receipt, order or list here" style="' + inp + 'font-family:inherit;"></textarea>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button id="mhOrdRead" class="copy-btn" onclick="mhOrdRead()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Read it</button>' + btn('📄 Choose a file', 'mhOrdPick()', 'font-size:14px;padding:11px 14px;') + btn('📷 Photo of a receipt', 'mhOrdPhoto()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button id="mhOrdRead" class="copy-btn" onclick="mhOrdRead()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Read it</button>' + btn('📄 Choose a file (CSV, text or PDF)', 'mhOrdPick()', 'font-size:14px;padding:11px 14px;') + btn('📷 Photo of a receipt', 'mhOrdPhoto()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>'
     + '<div style="font-size:11px;color:var(--text3);margin-top:8px;">A photo is sent to the AI you have set up, only to copy out the text. Leave out any card details.</div>';
   if (d.stage === 'map') {
     const heads = { n: 'Name', q: 'Quantity', z: 'Pack size', s: 'Shop', t: 'Food or not', p: 'Price (ignored)', c: 'Item code (ignored)', x: 'Skip' }, show = d.tb.rows.slice(0, 6);
@@ -29084,8 +29106,8 @@ function mhSlRowHtml(r, s) {
   const f = (field, label, val, ph, mode) => '<div>' + lab(label) + '<input data-f="' + field + '" value="' + esc(val) + '" placeholder="' + esc(ph) + '" inputmode="' + (mode || 'text') + '" onchange="mhSlSet(this)" style="' + inp + '"></div>';
   return '<div data-sl="' + esc(r.key) + '" data-n="' + esc(r.name) + '" style="padding:12px 4px;border-top:1px solid var(--border);' + (low ? 'border-left:3px solid var(--red);padding-left:8px;' : '') + '">'
     + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">' + (mhSlTodo() ? '' : '<input type="checkbox" data-pick="' + esc(r.key) + '" ' + (mhSlState().sel[r.key] ? 'checked ' : '') + 'onchange="mhSlPick(this)" title="Tick to change several at once" style="width:24px;height:24px;flex:0 0 auto;">') + '<div style="flex:1;min-width:0;font-size:15px;color:var(--text);">' + esc(r.name) + ' <span style="font-size:11px;color:var(--text3);">' + esc(mhShopAisleName(r.cat)) + '</span></div>' + unit + '<span data-st style="font-size:12px;color:' + (low ? 'var(--red)' : 'var(--green)') + ';min-width:44px;text-align:right;">' + (low ? 'low' : '') + '</span>' + (it ? '<span title="Remove from my cupboards" aria-label="Remove from my cupboards" onclick="mhSlRemove(this)" style="cursor:pointer;color:var(--text3);font-size:22px;line-height:1;padding:2px 8px;">✕</span>' : '') + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + f('amt', 'Have now', it ? mhSlNumText(it, it.level) : '', 'e.g. 500 g', 'text') + f('thr', 'Reorder at', it ? mhSlNumText(it, it.reorder) : '', 'e.g. 125 g', 'text')
-    + f('serv', 'One serving', it ? (it.serving || '') : (lib ? lib.n : ''), 'if known', 'decimal') + '<div>' + lab('Bought at') + shopSel + '</div><div>' + lab('Kept in') + '<select data-f="store" onchange="mhSlSet(this)" style="' + inp + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((it && it.store || '') === x ? ' selected' : '') + '>' + mhStoreName(x) + '</option>').join('') + '</select></div></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + f('amt', 'Have now (how much is left)', it ? mhSlNumText(it, it.level) : '', 'e.g. 500 g', 'text') + f('thr', 'Reorder at', it ? mhSlNumText(it, it.reorder) : '', 'e.g. 125 g', 'text')
+    + f('serv', 'One serving (a portion, not the pack)', it ? (it.serving || '') : (lib ? lib.n : ''), 'if known', 'decimal') + '<div>' + lab('Bought at') + shopSel + '</div><div>' + lab('Kept in') + '<select data-f="store" onchange="mhSlSet(this)" style="' + inp + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((it && it.store || '') === x ? ' selected' : '') + '>' + mhStoreName(x) + '</option>').join('') + '</select></div></div>'
     + (it && mhStockGaps(it).length ? '<div data-gaps style="font-size:12px;color:var(--yellow);margin-top:6px;">Still to add: ' + esc(mhStockGaps(it).join(', ')) + '</div>' : '')
     + (mhSlTodo() ? '<div style="margin-top:8px;"><div style="font-size:11px;color:var(--text3);margin:0 0 3px 2px;">Where does it go? <span data-destreq style="color:var(--red);">required</span></div><div style="display:flex;gap:6px;">' + [['cup', 'Shelves'], ['list', 'Shopping list'], ['both', 'Both']].map(x => '<button class="copy-btn" data-dest="' + x[0] + '" onclick="mhSlDest(this)" style="flex:1 1 0;min-width:0;font-size:12px;padding:8px 4px;' + (((mhSlState().dest || {})[r.key]) === x[0] ? 'background:var(--accent);color:#fff;' : '') + '">' + x[1] + '</button>').join('') + '</div></div>' : '')
     + '<div data-err style="font-size:12px;color:var(--red);margin-top:4px;display:none;"></div></div>';
@@ -33042,7 +33064,14 @@ function editHistDayTotals(dayIdx, renderIdx) {
     <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
       <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;margin-bottom:6px;">OCCASION TAGS</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;" id="histTagPicker-${dayIdx}">
-        ${['Treatment','Hospital day','Illness','Rest day','Social event','Travel','Fasting','Exercise','Resistance bands','Walking','Birthday'].map(t => {
+        ${(() => {
+          // Live list (v3.10.1215): the fixed set plus every tag actually in use on any day (custom ones, renamed or merged ones from Manage tags), so this picker matches the Log tab instead of a frozen list.
+          const base = ['Treatment','Hospital day','Illness','Rest day','Social event','Travel','Fasting','Exercise','Resistance bands','Walking','Birthday'];
+          const have = new Set(base.map(x => x.toLowerCase())); have.add('chemotherapy');
+          let extra = [];
+          try { const td = mhTagDays(); extra = Object.keys(td).filter(k => !have.has(k) && !/^exercise:/i.test(td[k].name) && td[k].name.length <= 40).sort((x, y) => td[y].dates.size - td[x].dates.size || x.localeCompare(y)).slice(0, 14).map(k => td[k].name); } catch (_) {}
+          return base.concat(extra);
+        })().map(t => {
           const _legacyVals = ['standard','occasion','holiday','missed day entry','missed day'];
           const existingTags = (day.notes || '').split(',').map(x=>x.trim()).filter(x=>x && !_legacyVals.includes(x.toLowerCase()));
           // A logged routine/strength session already writes its own "Xmin Resistance"
@@ -33088,7 +33117,7 @@ function editHistDayTotals(dayIdx, renderIdx) {
           const noteIcon = isActive
             ? `<span onclick="event.stopPropagation();addHistTagNote(${dayIdx},'${t.replace(/'/g,"\\'")}',${rIdx})" title="${tagNote ? 'Edit note' : 'Add note'}" style="margin-left:4px;opacity:${tagNote ? '1' : '0.5'};cursor:pointer;">📝</span>`
             : '';
-          return `<span onclick="toggleHistTagOrNotify(${dayIdx},'${t}')" style="display:inline-flex;align-items:center;padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid ${_isTreatment?'rgba(168,85,247,0.4)':'var(--border)'};background:${isActive?(_isTreatment?'rgba(168,85,247,0.15)':'rgba(245,197,66,0.15)'):'var(--surface)'};color:${isActive?(_isTreatment?'#a855f7':'var(--yellow)'):'var(--text3)'};">${t}${(_autoSatisfied || _treatmentSessionSatisfied) ? ' ✓' : ''}${noteIcon}</span>`;
+          return `<span onclick="toggleHistTagOrNotify(${dayIdx},'${t.replace(/'/g,"\\'")}')" style="display:inline-flex;align-items:center;padding:4px 9px;border-radius:12px;font-size:11px;cursor:pointer;border:1px solid ${_isTreatment?'rgba(168,85,247,0.4)':'var(--border)'};background:${isActive?(_isTreatment?'rgba(168,85,247,0.15)':'rgba(245,197,66,0.15)'):'var(--surface)'};color:${isActive?(_isTreatment?'#a855f7':'var(--yellow)'):'var(--text3)'};">${t}${(_autoSatisfied || _treatmentSessionSatisfied) ? ' ✓' : ''}${noteIcon}</span>`;
         }).join('')}
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
@@ -39061,6 +39090,7 @@ function mhJourneyOverlayDefs() {
     { key: 'kcal',     label: 'Calories',        unit: 'kcal',  icon: '🔥', color: '#06b6d4', get: d => (d.totals?.kcal > 0 ? d.totals.kcal : null) },
     { key: 'protein',  label: 'Protein',         unit: 'g',     icon: '💪', color: '#2deb8f', get: d => (d.totals?.protein > 0 ? d.totals.protein : null) },
     { key: 'carbs',    label: 'Carbs',           unit: 'g',     icon: '🌾', color: '#a16207', get: d => (d.totals?.carbs != null && d.totals?.kcal > 0 ? getEffectiveCarbsForDay(d) : null) },
+    { key: 'fat',      label: 'Fat',             unit: 'g',     icon: '🥑', color: '#a855f7', get: d => { const v = d.totals?.kcal > 0 ? getEntryFat(d) : null; return v > 0 ? v : null; } },
     { key: 'water',    label: 'Water',           unit: 'ml',    icon: '💧', color: '#2563eb', get: d => (parseFloat(d.water_ml) > 0 ? parseFloat(d.water_ml) : null) },
     { key: 'exercise', label: 'Logged exercise', unit: 'kcal',  icon: '🏋️', color: '#f59e0b', get: d => { const v = (d.exercises || []).reduce((s, e) => s + (parseFloat(e.kcal) || 0), 0); return v > 0 ? v : null; } },
     { key: 'active',   label: 'Active calories', unit: 'kcal',  icon: '⚡', color: '#fb923c', get: d => (parseFloat(d.calories_active) > 0 ? parseFloat(d.calories_active) : null) },
@@ -45136,6 +45166,7 @@ function setReportRange(days, btn) {
     }
   }
   renderReportSummary();
+  mhRptRefreshSections();
   runReportQuery();
   if ((localStorage.getItem('mh_condition')||'general') === 'gbm') updateGBMStats();
   renderResearchDigestHistory();
@@ -48817,6 +48848,16 @@ const CONDITION_META = {
   },
 };
 
+// What the person has told the app about themselves, so a summary never says it does not know their height, age, sex or weight (v3.10.1215).
+function mhProfileLine() {
+  try {
+    const g = k => { try { return localStorage.getItem(k) || ''; } catch (_) { return ''; } };
+    const age = parseInt(g('mh_age')), sex = g('mh_sex'), h = parseFloat(g('mh_height_cm'));
+    let w = null; try { const hist = (typeof _historyIncludingToday === 'function' ? _historyIncludingToday() : state.history) || []; for (const e of hist) { if (e && e.weight) { w = e.weight; break; } } } catch (_) {}
+    const parts = []; if (age > 0) parts.push('Age ' + age); if (sex) parts.push('Sex ' + sex); if (h > 0) parts.push('Height ' + Math.round(h) + 'cm'); if (w) parts.push('Latest weight ' + w + 'kg');
+    return parts.length ? '\nPROFILE (entered in the app, use it for calculations; do not say it is missing): ' + parts.join(' | ') : '';
+  } catch (_) { return ''; }
+}
 function patientContextBlock(ctx) {
   const meta   = CONDITION_META[ctx.cond] || CONDITION_META.general;
   // A condition-filtered period with zero actually-logged days (switched to
@@ -48835,7 +48876,7 @@ function patientContextBlock(ctx) {
     ? `WEIGHT PHASE HISTORY (intentional — use this to interpret weight trends correctly):\n${phases.map(p => `  ${p.date}: switched to ${p.goal.toUpperCase()} phase`).join('\n')}\nWhen analysing any date range, identify which phase applied and frame weight trends accordingly. Do NOT treat intentional loss as a concern.`
     : '';
 
-  return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)\nPROTOCOL: ${meta.protocol}\nTARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ${ctx.t.standard.fat ? `~${ctx.t.standard.fat}g fat` : 'fat target not set - profile is missing weight/height/age/sex needed to calculate it, do not state a number for this'}${goalExtra}\n${phaseContext ? '\\n' + phaseContext : ''}\n${ctx.todayInProgress ? `\nTODAY IN PROGRESS (${ctx.todayInProgress.date}, as of right now - NOT a finished day, more may still be logged) — if the question is about "today" or "so far today", THIS is the answer, not the sections below:\n  ${ctx.todayInProgress.kcal} kcal | ${ctx.todayInProgress.protein}g protein | ${ctx.todayInProgress.carbs}g carbs | ${ctx.todayInProgress.fat}g fat so far today\n` : '\nTODAY: nothing logged yet today.\n'}${ctx.latestDay ? `\nMOST RECENT COMPLETED DAY (${ctx.latestDay.date}) — use this for "yesterday" or "my last logged day", NOT for "today" (see TODAY IN PROGRESS above for that). Also NOT the same as "NUTRITION AVERAGES" below, which spans the whole tracked period rather than one specific day.\n  ${ctx.latestDay.kcal} kcal | ${ctx.latestDay.protein}g protein | ${ctx.latestDay.carbs}g carbs | ${ctx.latestDay.fat}g fat\n` : ''}\nPERIOD: ${ctx.n} tracked days (days with <100 kcal logged excluded from all calculations)${ctx.gapDays > 0 ? ` — ${ctx.gapDays} day(s) in period had no nutrition logged (tracking gaps, not zero intake)` : ''}\nNUTRITION AVERAGES (period-wide, NOT today - see MOST RECENT LOGGED DAY above for that): ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat\nCARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against each day's actual ceiling
+  return `PATIENT: ${ctx.name} | Condition: ${meta.label} | Phase: ${goalLbl} (target ${ctx.wtLow}–${ctx.wtHigh}kg)${mhProfileLine()}\nPROTOCOL: ${meta.protocol}\nTARGETS: ${ctx.t.standard.kcal} kcal/day | ${ctx.t.standard.protein}g protein | ≤${ctx.t.standard.carbs}g carbs (standard) / ≤${ctx.t.holiday.carbs}g (holiday) / ≤${ctx.t.occasion.carbs}g (occasion) | ${ctx.t.standard.fat ? `~${ctx.t.standard.fat}g fat` : 'fat target not set - profile is missing weight/height/age/sex needed to calculate it, do not state a number for this'}${goalExtra}\n${phaseContext ? '\\n' + phaseContext : ''}\n${ctx.todayInProgress ? `\nTODAY IN PROGRESS (${ctx.todayInProgress.date}, as of right now - NOT a finished day, more may still be logged) — if the question is about "today" or "so far today", THIS is the answer, not the sections below:\n  ${ctx.todayInProgress.kcal} kcal | ${ctx.todayInProgress.protein}g protein | ${ctx.todayInProgress.carbs}g carbs | ${ctx.todayInProgress.fat}g fat so far today\n` : '\nTODAY: nothing logged yet today.\n'}${ctx.latestDay ? `\nMOST RECENT COMPLETED DAY (${ctx.latestDay.date}) — use this for "yesterday" or "my last logged day", NOT for "today" (see TODAY IN PROGRESS above for that). Also NOT the same as "NUTRITION AVERAGES" below, which spans the whole tracked period rather than one specific day.\n  ${ctx.latestDay.kcal} kcal | ${ctx.latestDay.protein}g protein | ${ctx.latestDay.carbs}g carbs | ${ctx.latestDay.fat}g fat\n` : ''}\nPERIOD: ${ctx.n} tracked days (days with <100 kcal logged excluded from all calculations)${ctx.gapDays > 0 ? ` — ${ctx.gapDays} day(s) in period had no nutrition logged (tracking gaps, not zero intake)` : ''}\nNUTRITION AVERAGES (period-wide, NOT today - see MOST RECENT LOGGED DAY above for that): ${ctx.avKcal} kcal | ${ctx.avProtein}g protein | ${ctx.avCarbs}g carbs | ${ctx.avFat}g fat\nCARB COMPLIANCE: ${ctx.on}/${ctx.n} days (${ctx.pct}%) — evaluated against each day's actual ceiling
 ${ctx.nonCompliantDetail ? `NON-COMPLIANT DAY DETAIL (use this, not guesswork, to judge each overage):\n${ctx.nonCompliantDetail}\n` : ''}DAY TYPE BREAKDOWN: ${ctx.dayTypeSummary}
 CURRENT STREAK: ${ctx.streak} days within ceiling
 LOGGING STREAK (distinct from the above — days with anything logged at all, regardless of whether it stayed within the carb ceiling): ${ctx.loggingStreak != null ? `${ctx.loggingStreak} day(s)` : 'not available'}
@@ -49023,7 +49064,8 @@ async function askReportsAI(overrideQuestion, isFullSummary) {
   const out = document.getElementById('rpt-ask-output');
   const txt = document.getElementById('rpt-ask-text');
   btn.textContent = 'Thinking…'; btn.disabled = true;
-  out.style.display = 'none';
+  // Keep the answer area on screen while it thinks: hiding it made the page shorter and threw you back to the top (v3.10.1215).
+  if (out.style.display === 'none') { out.style.display = 'block'; } txt.style.opacity = '.45'; txt.textContent = 'Thinking…';
 
   const rows   = h.filter(e => (e.totals?.kcal || 0) >= 100).slice(0, 365);
   const ctx    = buildPatientContext(h);
@@ -49084,6 +49126,7 @@ Answer the question directly using the actual data. Reference specific dates or 
     out.style.display = 'block';
     setTimeout(() => out.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   } finally {
+    try { txt.style.opacity = ''; } catch (_) {}
     btn.textContent = 'Ask AI →';
     btn.disabled = false;
   }
@@ -49169,6 +49212,15 @@ function sendToAssistant(query) {
   },300);
 }
 
+// The date range and Include today change every Reports card, not just the summary, so redraw them all straight away (v3.10.1215).
+function mhRptRefreshSections() {
+  try { renderSleepKetosisCorrelation(); } catch (e) {}
+  try { renderFastingReport(); } catch (e) { console.warn('[fasting report]', e); }
+  try { renderExerciseReport(); } catch (e) { console.warn('[exercise report]', e); }
+  try { renderSleepReport(); } catch (e) { console.warn('[sleep report]', e); }
+  try { renderOutcomesReport(); } catch (e) { console.warn('[outcomes report]', e); }
+  try { renderWeightProtocol(); } catch (e) {} try { renderTreatmentAnalysis(); } catch (e) {}
+}
 function renderReports() {
   renderSleepKetosisCorrelation();
   try { renderFastingReport(); } catch (e) { console.warn('[fasting report]', e); }

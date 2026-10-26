@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1215
+- **Shopping complete dialog tidied.** "Keep list" is gone (Saved lists already do that) and the cancel button now reads Back like every other dialog.
+- **PDF receipts are accepted** in the receipt import (PDF.js 3.11.174, Apache-2.0, bundled under lib/). Text-based PDFs only; scanned ones still need a photo.
+- **Pack-size wording clarified** so it is clear whether a figure is the size of one pack, a portion or what is left.
+- **Reports date range applies straight away** to the Exercise and Sleep cards instead of waiting until you leave and come back.
+- **GBM monthly summary and Ask AI now know your age, sex, height and weight** (one profile line in the AI context).
+- **Your Journey has a Fat chip** for the fuller picture.
+- **History edit: occasion tags are live.** The picker was a frozen list; it now also shows every tag in use on any day (custom ones, renames and merges from Manage tags) and drops deleted ones, matching the Log tab.
+- **Ask AI keeps the answer area on screen while it thinks**, so the page no longer jumps to the top.
+
 ## v3.10.1214
 - **A planned meal can no longer vanish.** With "Trust my plan: log it automatically at the time" ticked (or tapping Ate it), an overdue plan from an earlier day is logged into that day in History. If that day was not in History the plan was removed and nothing was logged, so the meal and its figures disappeared. Now the plan stays, says why, and is left for you to answer (Changed it / Skipped); auto-log skips it.
 

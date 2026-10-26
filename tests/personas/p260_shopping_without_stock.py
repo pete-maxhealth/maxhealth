@@ -16,14 +16,10 @@ with fresh_server() as root, sync_playwright() as pw:
     names = lambda: sorted([i['name'], i['checked']] for i in ev("mhShopLoad().items"))
     # ---- stock OFF (never used) ----
     ev("mhShopOpen()"); ev(SETUP); ev("mhShopComplete()"); page.wait_for_timeout(300)
-    if not page.locator('#appModalKeep').count() or not page.locator('#appModalConfirm').count(): f.add('BUG', '1: Shopping complete offers both ways to finish')
+    if page.locator('#appModalKeep').count() or not page.locator('#appModalConfirm').count() or page.inner_text('#appModalCancel') != 'Cancel': f.add('BUG', '1: Shopping complete: empty the basket or Cancel (no Keep whole list, v3.10.1215)')
     page.click('#appModalConfirm'); page.wait_for_timeout(400)
     got = names()
     if got != [['Zzqx Reg Loo Roll', False], ['Zzqx Reg Milk', False]]: f.add('BUG', f'2: stock off: only the regulars (food too) stay, unticked: {got}')
-    ev(SETUP); ev("mhShopComplete()"); page.click('#appModalKeep'); page.wait_for_timeout(400)
-    got = names()
-    if got != [['Zzqx Hairspray', False], ['Zzqx One Off', False], ['Zzqx Reg Loo Roll', False], ['Zzqx Reg Milk', False]]: f.add('BUG', f'3: keep the whole list: everything stays, unticked: {got}')
-    if 'ready for next shop' not in page.inner_text('body'): f.add('BUG', '4: it says so')
     # ---- stock switched OFF but items still tracked: no stock review ----
     ev("mhStockTrack('Zzqx Reg Milk',{base:'ml'}); mhStockTrack('Zzqx One Off',{base:'g'}); (()=>{const o=mhStockLoad(); o.enabled=false; mhStockSave(o);})()")
     ev(SETUP); ev("mhShopComplete()"); page.click('#appModalConfirm'); page.wait_for_timeout(400)
@@ -34,8 +30,7 @@ with fresh_server() as root, sync_playwright() as pw:
     got = names()
     if got != [['Zzqx Reg Loo Roll', False]]: f.add('BUG', f'6: stock on: a non-food regular stays, food goes: {got}')
     ev("_shopUi.view='list'; (()=>{const o=mhStockLoad(); o.review=[]; mhStockSave(o);})()")
-    ev(SETUP); ev("mhShopComplete()"); page.click('#appModalKeep'); page.wait_for_timeout(400)
-    if len(names()) != 4: f.add('BUG', f'7: stock on, keep the whole list: {names()}')
+    ev(SETUP); ev("mhShopComplete()"); page.click('#appModalConfirm'); page.wait_for_timeout(400)
     if ev("_shopUi.view") != 'stockbought': f.add('BUG', '8: stock on: bought food still goes to the stock review')
     # ---- saved lists with stock off ----
     ev("(()=>{const o=mhStockLoad(); o.enabled=false; mhStockSave(o);})()"); ev("_shopUi.view='list'")
