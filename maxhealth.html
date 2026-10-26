@@ -6522,7 +6522,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1216'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1217'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -28395,10 +28395,22 @@ function mhStockExport(label) {
   showToast('Stock file ready: ' + n + ' tracked');
   return pack;
 }
-function mhStockImportPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,application/json'; i.id = 'mhStockImportInput'; i.onchange = () => mhStockImportFile(i); i.click(); }
+function mhStockImportPick() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,.zip,application/json,application/zip'; i.id = 'mhStockImportInput'; i.onchange = () => mhStockImportFile(i); i.click(); }
 async function mhStockImportFile(input) {
   const f = input.files && input.files[0]; if (!f) return;
-  let pack; try { pack = JSON.parse(await f.text()); } catch (_) { showToast("Couldn't read that file"); return; }
+  let pack;
+  try {
+    let text;
+    if (/\.zip$/i.test(f.name) && window.JSZip) { const z = await JSZip.loadAsync(f); const nm = Object.keys(z.files).find(n => /backup.*\.json$/i.test(n)); if (!nm) { showToast('No backup file found inside that zip'); return; } text = await z.files[nm].async('string'); }
+    else text = await f.text();
+    pack = JSON.parse(text);
+  } catch (_) { showToast("Couldn't read that file"); return; }
+  // A full backup works too (v3.10.1216): only the stock inside it is taken, nothing else on this device is touched.
+  if (pack && pack.type !== 'mh-stock-transfer' && pack.state && pack.settings && typeof pack.settings.mh_shopping_stock_v1 === 'string') {
+    let so = null; try { so = JSON.parse(pack.settings.mh_shopping_stock_v1); } catch (_) {}
+    if (!so || !so.items || !Object.keys(so.items).length) { showToast('That backup has no stock in it'); return; }
+    pack = { type: 'mh-stock-transfer', v: 1, exportedAt: so.at || f.lastModified || null, device: 'the backup ' + f.name, tracked: Object.keys(so.items).length, items: so.items, cooked: so.cooked || {}, cookedBy: so.cookedBy || {}, cookedFrozen: so.cookedFrozen || {} };
+  }
   return mhStockImportStart(pack);
 }
 // 1) is it a stock file  2) does a backup of THIS device exist  3) say which way it goes and ask  4) replace

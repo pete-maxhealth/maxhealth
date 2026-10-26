@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1217
+- **Put stock back from a backup.** My cupboards > Import stock now also accepts a full backup file (.json or .zip). Only the stock is taken from it; your history, list and everything else stay as they are. It asks first and warns if the backup is older than your current stock.
+
 ## v3.10.1216
 - **"The ones I use most" box removed** from My cupboards (it counted ingredients inside saved meals, so it listed things like Fried Egg); Add foods already does that job.
 - **Birthday tag retired** (it is a Social event). Days already tagged Birthday keep it and still show in History; Manage tags > rename it to Social event to merge.
