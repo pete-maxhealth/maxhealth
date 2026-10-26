@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1221
+- **Read aloud reads everything.** A failed or silent chunk used to end the whole read (Ask AI stopped after one line). It now moves on to the next chunk. Applies to every read-aloud button.
+- **One date range everywhere.** Reports, Trends, Move, Compare Metrics (and the Treatment and Statistics pickers) use the same chips (7 Days / 30 Days / 90 Days / All / Custom) and the same From / To boxes, always filled in (default last 12 months), applied as soon as you pick a date. Chip text no longer wraps. 90 Days added to Reports, Trends and Compare Metrics.
+- **Fasting, Sleep-ketosis, Weight protocol and Treatment cards follow the Reports date range** like the rest.
+- **Long explanations sit behind a ?** On the report cards any text over about three lines is hidden behind "More detail ?"; short lines stay in view.
+
 ## v3.10.1220
 - **History tags: only real ones.** The edit-day tag picker no longer offers tags written by the watch/phone import ("device data", "Steps 8000", "8123 steps", sleep, HRV, SpO2).
 - **Custom date range on Exercise, Body composition and Your Journey (Move).** A Custom chip shows From / To dates, remembered per card.
