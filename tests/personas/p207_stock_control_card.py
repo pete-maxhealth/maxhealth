@@ -81,14 +81,10 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'running low' not in ev("document.querySelector('#mhShopPane [data-item=\"Whey protein\"]')?.innerText || ''"): f.add('BUG', 'the list row should say running low')
     if '1 low' not in txt('#stockctlCard'): f.add('BUG', 'the card summary should count the low items')
 
-    # D. the picker of what you use most: one choice starts tracking
+    # D. "The ones I use most" box is gone (v3.10.1215): Add foods covers it
     ev("saveLibrary([{name:'Greek Yoghurt',kcal:97,protein:9,carbs:4,fat:5,portion:'150g',category:'dairy',useCount:9}])")
-    ev("mhShopView('stocksuggest')"); page.wait_for_timeout(200)
-    if not vis('[data-n="Greek Yoghurt"]'): f.add('BUG', 'the picker should offer what you use most')
-    else:
-        page.select_option('[data-n="Greek Yoghurt"] select', 'g'); page.wait_for_timeout(200)
-        if ev("!!document.querySelector('[data-n=\"Greek Yoghurt\"]')"): f.add('BUG', 'once chosen it should leave the picker')
-        if not ev("Object.values(mhStockLoad().items).some(i=>i.name==='Greek Yoghurt' && i.base==='g' && i.level===null)"): f.add('BUG', 'choosing a unit should start tracking with no amounts guessed')
+    ev("mhShopView('list')"); page.wait_for_timeout(300)
+    if 'use most' in ev("document.body.innerText"): f.add('BUG', 'the use-most box should be gone from the cupboards screen')
 
     # E. stop tracking asks first
     ev("(k)=>mhStockEditView(k)", it['key']); page.wait_for_timeout(150)
