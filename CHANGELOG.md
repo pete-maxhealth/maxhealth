@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1224
+- **Read aloud no longer cuts off mid-sentence on Android.** The speech "keep-alive" (a pause then resume every 8 seconds, a desktop Chrome workaround) ends the speech on Android phones, so Ask AI stopped after a few words ("...your HRV has been quite"). The read-aloud buttons no longer use it, and read in shorter pieces. Cook Mode narration keeps it unchanged. Test p331 models an engine that dies on pause, which the earlier test did not.
+
 ## v3.10.1223
 - **Weight chart fix.** On the Trends weight chart the lowest point of the axis could never go below 80 kg, so anyone weighing under about 80 kg saw an empty chart (the line was off the bottom). The axis now follows your readings. Found while recording the charts video.
 
