@@ -6539,7 +6539,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1218'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1219'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -29317,7 +29317,7 @@ function mhStockSweep() {
     if (mhShopOffLoad().includes(shop)) return;   // not shopping there for now: its low foods wait until the shop is brought back (v3.10.1195)
     const ex = s.items.find(i => i.key === it.key);
     if (ex) { if (ex.hidden) { ex.hidden = false; sChanged = true; } }
-    else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: it.nonFood ? 'nonfood' : mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: !!it.nonFood, amount: '' }); added++; sChanged = true; }
+    else { s.pantry = s.pantry.filter(p => p !== it.key); s.items.push({ id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), key: it.key, name: it.name, cat: it.nonFood ? 'nonfood' : mhShopCat(it.name), checked: false, hidden: false, src: 'stock', from: 'running low', shop, nonFood: !!it.nonFood, amount: '', qty: it.buyQty > 1 ? it.buyQty : undefined, qManual: it.buyQty > 1 ? true : undefined }); added++; sChanged = true; }
     it.lowFlag = true; oChanged = true;
   });
   if (sChanged) mhShopSave(s); if (oChanged) mhStockSave(o); return added;
@@ -29396,7 +29396,7 @@ function mhStockToList(key) {
 // shelf, and Shopping complete leaves it there (v3.10.1137).
 function mhStockLowNow(key) {
   const it = mhStockLoad().items[key]; if (!it) return; const s = mhShopLoad(), shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : '';
-  const ok = mhShopSetAdd(s, it.name, 'stock', 'running low', null, { nonFood: !!it.nonFood }); if (ok && shop) s.items[s.items.length - 1].shop = shop;
+  const ok = mhShopSetAdd(s, it.name, 'stock', 'running low', null, { nonFood: !!it.nonFood, qty: it.buyQty }); if (ok && shop) s.items[s.items.length - 1].shop = shop;
   mhShopSave(s); _shopUi.msg = it.name + (ok ? ' is on your list' : ' is already on your list'); mhShopRender();
 }
 function mhStockCardHtml(s) {
@@ -29451,7 +29451,7 @@ function mhStockAddNonFood(name) {
 }
 function mhStockEditView(key, nameIn) {
   const o = mhStockLoad(), it = o.items[key], s = mhShopLoad(), name = it ? it.name : String(nameIn || key);
-  _shopUi.stk = { useBy: it && it.useBy ? it.useBy : '', useBy0: it && it.useBy ? it.useBy : '', store: it && it.store ? it.store : '', life: it && it.store && it.life && it.life[it.store] ? String(it.life[it.store]) : '', key: mhShopKey(name), name, isNew: !it, base: it ? it.base : '', pack: it && it.pack ? String(it.pack) : '', serv: it && it.serving ? String(it.serving) : '', shop: it && it.shop ? it.shop : s.shop, level: it && it.level != null ? String(it.level) : '', levelU: it ? it.base : '', reorder: it && it.reorder != null ? String(it.reorder) : '', reorderU: it ? it.base : '', err: '' };
+  _shopUi.stk = { useBy: it && it.useBy ? it.useBy : '', useBy0: it && it.useBy ? it.useBy : '', store: it && it.store ? it.store : '', life: it && it.store && it.life && it.life[it.store] ? String(it.life[it.store]) : '', key: mhShopKey(name), name, isNew: !it, base: it ? it.base : '', pack: it && it.pack ? String(it.pack) : '', serv: it && it.serving ? String(it.serving) : '', shop: it && it.shop ? it.shop : s.shop, level: it && it.level != null ? String(it.level) : '', levelU: it ? it.base : '', reorder: it && it.reorder != null ? String(it.reorder) : '', reorderU: it ? it.base : '', buy: it && it.buyQty > 1 ? String(it.buyQty) : '', err: '' };
   _shopUi.stk.undo = []; _shopUi.stk.saved = ''; _shopUi.stk.note = '';
   mhShopView('stockedit');
 }
@@ -29473,6 +29473,7 @@ function mhStockFormApply(f) {
   { const o2 = mhStockLoad(), i2 = o2.items[f.key]; if (i2 && i2.unitUnset) { delete i2.unitUnset; mhStockSave(o2); } }
   if (level !== undefined) mhStockSetLevel(f.key, level);
   if (reorder !== undefined) mhStockSetReorder(f.key, reorder);
+  { const o3 = mhStockLoad(), i3 = o3.items[f.key], bq = parseInt(f.buy); if (i3) { const nv = bq > 1 ? Math.min(bq, 99) : 0; if ((i3.buyQty || 0) !== nv) { if (nv) i3.buyQty = nv; else delete i3.buyQty; mhStockSave(o3); } } }   // how many to buy when it runs low (v3.10.1219)
   { const lf = parseInt(f.life); mhStockSetStore(f.key, f.store || '', f.store ? (lf > 0 ? lf : 0) : undefined); }
   if ((f.useBy || '') !== (f.useBy0 || '')) { mhStockSetUseBy(f.key, f.useBy || null); f.useBy0 = f.useBy || ''; }   // remember what is saved, so clearing and then picking the same date again still counts (v3.10.1171)
   return { ok: true, added: mhStockSweep() };
@@ -29483,9 +29484,10 @@ function mhStockFormSave() {
   _shopUi.stk = null; _shopUi.msg = f.name + (f.isNew ? ' added' : ' saved') + (r.added ? ' and put on your list (running low)' : ''); if (f.ret) { showToast(_shopUi.msg); _shopUi.view = 'list'; f.ret(); } else { mhShopView('list'); if (mhStockLoad().items[f.key]) mhSoonGo(f.key); } return true;
 }
 // Existing items save as you change them (v3.10.1145). Each change keeps a copy of how the item was, so the Undo button on the screen puts it back; nothing to submit.
-const MH_STK_FIELDS = { level: 'Stock now', reorder: 'Reorder at', pack: 'One pack holds', serv: 'One serving is', base: 'Counted in', shop: 'Bought at', store: 'Kept in', life: 'Lasts (days)', useBy: 'Use by' };
+const MH_STK_FIELDS = { level: 'Stock now', reorder: 'Reorder at', pack: 'One pack holds', serv: 'One serving is', base: 'Counted in', shop: 'Bought at', store: 'Kept in', life: 'Lasts (days)', useBy: 'Use by', buy: 'Buy each time' };
 function mhStkShow(it, field) {
   if (!it) return 'nothing';
+  if (field === 'buy') return it.buyQty > 1 ? String(it.buyQty) : '1';
   const v = { level: it.level, reorder: it.reorder }[field]; if (field === 'level' || field === 'reorder') return v == null ? 'not set' : mhStockFmt(it, v);
   const m = { pack: it.pack, serv: it.serving, base: it.base, shop: it.shop, store: it.store ? mhStoreName(it.store) : 'not set', life: it.store && it.life && it.life[it.store] ? it.life[it.store] : 'suggested', useBy: it.useBy || 'not set' };
   return m[field] == null || m[field] === '' ? 'not set' : String(m[field]);
@@ -29663,6 +29665,7 @@ function mhShopRender(keepFocus) {
       + lab('Bought at') + '<select id="mhStkShop" onchange="mhStkShopPick(this.value)" style="' + inp + '">' + shopOpts + '</select>'
       + lab('In stock now') + '<div style="display:flex;gap:6px;"><input id="mhStkLevel" inputmode="decimal" value="' + esc(f.level) + '" oninput="mhStkSet(\'level\',this.value)" onchange="mhStkCommit(\'level\')" placeholder="count it, then type it" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkLevelU" onchange="mhStkSet(\'levelU\',this.value);mhStkCommit(\'level\')" style="' + inp + 'width:auto;">' + uopts(f.levelU) + '</select></div>'
       + lab('Reorder when it drops to') + '<div style="display:flex;gap:6px;"><input id="mhStkReorder" inputmode="decimal" value="' + esc(f.reorder) + '" oninput="mhStkSet(\'reorder\',this.value)" onchange="mhStkCommit(\'reorder\')" placeholder="e.g. 5" style="' + inp + 'flex:1;min-width:0;"><select id="mhStkReorderU" onchange="mhStkSet(\'reorderU\',this.value);mhStkCommit(\'reorder\')" style="' + inp + 'width:auto;">' + uopts(f.reorderU) + '</select></div>'
+      + lab('How many packs to buy each time it runs low') + '<input id="mhStkBuy" inputmode="numeric" value="' + esc(f.buy) + '" oninput="mhStkSet(\'buy\',this.value)" onchange="mhStkCommit(\'buy\')" placeholder="1" style="' + inp + '">' + hint('Packs, bottles or loaves: 3 for milk, 2 for bread, say. The list then shows "3 × Milk" when it is put on for you, and finishing the shop offers 3 packs as the amount bought. Leave empty for one.')
       + lab('Kept in') + '<select id="mhStkStore" onchange="mhStkSet(\'store\',this.value);mhStkCommit(\'store\');" style="' + inp + '">' + MH_STORES.map(x => '<option value="' + x + '"' + ((f.store || '') === x ? ' selected' : '') + '>' + mhStoreIcon(x) + ' ' + mhStoreName(x) + '</option>').join('') + '</select>'
       + (f.store ? lab('Lasts (days)') + '<input id="mhStkLife" inputmode="numeric" value="' + esc(f.life) + '" oninput="mhStkSet(\'life\',this.value)" onchange="mhStkCommit(\'life\')" placeholder="suggested ' + mhItemLife({}, f.store) + ' days" style="' + inp + '">' + hint('Your own figure is remembered for this food in the ' + f.store + ' (milk 5 days, say). Leave empty to use the suggested length, which you can change in Stock rules. It sets the use-by date each time you buy it.') : '')
       + lab('Use by (optional)') + '<input id="mhStkUseBy" type="date" value="' + esc(f.useBy || '') + '" oninput="mhStkSet(\'useBy\',this.value)" onchange="mhStkCommit(\'useBy\')" style="' + inp + '">' + (f.useBy ? '<div style="margin-top:6px;">' + btn('Clear the date', "mhStkSet('useBy','');mhStkCommit('useBy')", 'font-size:12px;padding:6px 10px;') + '</div>' : '') + hint('Past this date it stops being suggested and shows as past its use-by. Buying more of it clears the date.')

@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1219
+- **How many to buy each time it runs low.** Each cupboard item has "How many packs to buy each time it runs low" (3 for milk, 2 for bread). When it goes low the list says "3 × Milk" on its own, and finishing the shop offers 3 packs as the amount bought. It autosaves with Undo like the other fields.
+
 ## v3.10.1218
 - **Exercise, Body composition and Your Journey now live on Move**, each with its own 7 / 30 / 90 days / All chips, ▲ ▼ 👁 like the other Move cards, and a note saying why when there is nothing to show (a card never just vanishes). They are gone from Reports and Trends, which are lighter for it. Body composition also draws muscle and fat over the range you choose. Cards redraw as soon as you change the range or log something, and a saved Move order keeps its place with the new cards at the end.
 - **Shopping list quantities: "2 × double cream".** Each row has a count: type "2 x double cream", use the − / + in Edit, or let two planned meals needing the same ingredient count it twice (refreshing never double counts). Saved lists and list imports keep the count, and finishing a shop offers 2 packs as the bought amount.
