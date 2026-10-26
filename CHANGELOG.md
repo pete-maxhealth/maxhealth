@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1223
+- **Weight chart fix.** On the Trends weight chart the lowest point of the axis could never go below 80 kg, so anyone weighing under about 80 kg saw an empty chart (the line was off the bottom). The axis now follows your readings. Found while recording the charts video.
+
 ## v3.10.1222
 - **Regular on the shopping list too.** In Edit mode every list row has the same "☆ Regular / ⭐ Regular" button as the cupboard shelf, with the same effect (a regular stays on your list after every shop). The row's controls now sit together on a line under the name so a name is never squeezed.
 - **Long names on the shelf** stop at two lines (full name on hold) so the buttons stay in place.
