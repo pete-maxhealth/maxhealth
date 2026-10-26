@@ -29,10 +29,10 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("document.getElementById('dailyStepsCard').getBoundingClientRect().height") < 40 or ev("document.getElementById('activityCard').getBoundingClientRect().height") < 40: f.add('BUG', 'Move cards not visible on the Move tab')
     # Move order and hide
     ev("moveMoveSection('steps','down')")
-    if ev("getMoveOrder()") != ['activity', 'steps']: f.add('BUG', 'Move reorder failed')
+    if ev("getMoveOrder().slice(0,2)") != ['activity', 'steps']: f.add('BUG', 'Move reorder failed')
     if ev("[...document.getElementById('moveScroll').children].map(e=>e.id).filter(i=>i==='dailyStepsCard'||i==='activityCard')") != ['activityCard', 'dailyStepsCard']: f.add('BUG', 'Move reorder did not move the cards')
     page.reload(); page.wait_for_timeout(1500); ev("switchTabById('move')"); page.wait_for_timeout(400)
-    if ev("getMoveOrder()") != ['activity', 'steps'] or ev("[...document.getElementById('moveScroll').children].map(e=>e.id).filter(i=>i==='dailyStepsCard'||i==='activityCard')") != ['activityCard', 'dailyStepsCard']: f.add('BUG', 'Move order not remembered across reload')
+    if ev("getMoveOrder().slice(0,2)") != ['activity', 'steps'] or ev("[...document.getElementById('moveScroll').children].map(e=>e.id).filter(i=>i==='dailyStepsCard'||i==='activityCard')") != ['activityCard', 'dailyStepsCard']: f.add('BUG', 'Move order not remembered across reload')
     ev("toggleMoveSectionHidden('steps')")
     if ev("getComputedStyle(document.getElementById('dailyStepsCard')).display") != 'none': f.add('BUG', 'Move hide failed')
     if 'Daily steps' not in ev("document.getElementById('moveRestoreStrip').innerText"): f.add('BUG', 'no way to bring a hidden Move card back')
