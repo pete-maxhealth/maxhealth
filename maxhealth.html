@@ -1625,7 +1625,7 @@
   .trends-filter { display: flex; gap: 6px; margin-bottom: 16px; }
   .trends-filter-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text3); border-radius: 20px; padding: 4px 11px; font-size: calc(var(--mh-pill-fs) + 0.5px); cursor: pointer; font-family:'Syne',sans-serif; font-weight:700; letter-spacing:0.04em; }
   .trends-filter-btn.active { background: var(--accent-dim); border-color: var(--accent-glow); color: var(--accent); }
-  /* One range picker everywhere (v3.10.1221): same chips, same From/To boxes. Chips never wrap their text; the row wraps instead. */
+  /* One range picker everywhere (v3.10.1222): same chips, same From/To boxes. Chips never wrap their text; the row wraps instead. */
   .trends-filter { flex-wrap: wrap; } .trends-filter-btn { white-space: nowrap; }
   .mh-range-dates { display: flex; gap: 8px; align-items: flex-end; margin: 0 0 12px; }
   .mh-range-dates label { flex: 1; min-width: 0; display: block; font-size: 11px; color: var(--text3); font-family: 'Syne',sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
@@ -6537,7 +6537,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1221'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1222'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -23397,6 +23397,9 @@ function mhPlanTileNotes() {
     const today = localISODate(), foods = [].concat(...mhPlanLoad().filter(p => p.date <= today).map(p => p.foods || []));
     // Meals already in today's log but timed for later (say a bar logged for 19:00) are counted in the tile now; say how much of it is still to come (v3.10.1212).
     const nowT = nowTime(), later = (state.todayLog || []).filter(e => e && !e.timeApprox && /^\d{1,2}:\d{2}$/.test(String(e.time || '')) && String(e.time).padStart(5, '0') > nowT), lt = later.length ? later.map(e => String(e.time).padStart(5, '0')).sort()[0] : '';
+    // The "logged for 19:00" line must go once that time passes, so refresh the tiles just after it (v3.10.1222).
+    clearTimeout(window._mhLaterTimer);
+    if (lt) { const [h, m] = lt.split(':').map(Number), at = new Date(); at.setHours(h, m, 30, 0); const ms = at - Date.now(); if (ms > 0 && ms < 864e5) window._mhLaterTimer = setTimeout(mhPlanTileNotes, ms); }
     if (!foods.length && !later.length) { Object.keys(ids).forEach(k => set(k, '')); return; }
     const pl = calcTotals(foods), all = calcTotals(state.todayLog.concat(foods)), lat = calcTotals(later);
     const row = (k, pv, av, lv, unit) => { const parts = [];
@@ -25362,6 +25365,20 @@ const MOVE_SECTION_LABELS = { steps: 'Daily steps', activity: "Today's activity"
 // Anyone with a saved Dashboard order or hidden list from before the Move tab keeps it: 'steps' becomes the Move summary
 // card in the same place, 'activity' leaves the list, and a card they had hidden stays hidden on Move.
 function mhMoveMigrate() {
+  // Journey and Body composition moved from Trends to Move (v3.10.1216): carry over a hidden or folded state once (v3.10.1222).
+  try {
+    if (!localStorage.getItem('mh_move_mig2')) {
+      localStorage.setItem('mh_move_mig2', '1');
+      const th = JSON.parse(localStorage.getItem('mh_reorder_hidden_trends') || 'null');
+      if (Array.isArray(th)) {
+        const mh = (() => { try { const a = JSON.parse(localStorage.getItem(MOVE_HIDDEN_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } })();
+        [['trends-journey', 'journey'], ['trends-bodycomp', 'bodycomp']].forEach(([o, n]) => { if (th.includes(o) && !mh.includes(n)) mh.push(n); });
+        localStorage.setItem(MOVE_HIDDEN_KEY, JSON.stringify(mh));
+        localStorage.setItem('mh_reorder_hidden_trends', JSON.stringify(th.filter(k => k !== 'trends-journey' && k !== 'trends-bodycomp')));
+      }
+      [['trends-journey', 'move-journey'], ['trends-bodycomp', 'move-bodycomp']].forEach(([o, n]) => { const v = localStorage.getItem('mh_collapse_' + o); if (v && !localStorage.getItem('mh_collapse_' + n)) localStorage.setItem('mh_collapse_' + n, v); });
+    }
+  } catch (_) {}
   try {
     const o = JSON.parse(localStorage.getItem(DASHBOARD_SECTIONS_KEY) || 'null');
     if (Array.isArray(o) && ['steps', 'activity', 'movesum', 'shopping', 'stats'].some(k => o.includes(k))) {
@@ -29488,7 +29505,7 @@ function mhStockFormApply(f) {
   { const o2 = mhStockLoad(), i2 = o2.items[f.key]; if (i2 && i2.unitUnset) { delete i2.unitUnset; mhStockSave(o2); } }
   if (level !== undefined) mhStockSetLevel(f.key, level);
   if (reorder !== undefined) mhStockSetReorder(f.key, reorder);
-  { const o3 = mhStockLoad(), i3 = o3.items[f.key], bq = parseInt(f.buy); if (i3) { const nv = bq > 1 ? Math.min(bq, 99) : 0; if ((i3.buyQty || 0) !== nv) { if (nv) i3.buyQty = nv; else delete i3.buyQty; mhStockSave(o3); } } }   // how many to buy when it runs low (v3.10.1221)
+  { const o3 = mhStockLoad(), i3 = o3.items[f.key], bq = parseInt(f.buy); if (i3) { const nv = bq > 1 ? Math.min(bq, 99) : 0; if ((i3.buyQty || 0) !== nv) { if (nv) i3.buyQty = nv; else delete i3.buyQty; mhStockSave(o3); } } }   // how many to buy when it runs low (v3.10.1222)
   { const lf = parseInt(f.life); mhStockSetStore(f.key, f.store || '', f.store ? (lf > 0 ? lf : 0) : undefined); }
   if ((f.useBy || '') !== (f.useBy0 || '')) { mhStockSetUseBy(f.key, f.useBy || null); f.useBy0 = f.useBy || ''; }   // remember what is saved, so clearing and then picking the same date again still counts (v3.10.1171)
   return { ok: true, added: mhStockSweep() };
@@ -29526,7 +29543,6 @@ function mhStockUntrackAsk(key) {
   const it = mhStockLoad().items[key]; if (!it) return;
   appConfirm('Remove ' + mhPlanEsc(it.name) + ' from my cupboards? Its stock figures are forgotten. Your shopping list is not touched.', () => { mhStockUntrackUndoable(key, it.name); _shopUi.stk = null; mhShopView('list'); }, null, true, { confirm: 'Remove' });
 }
-function mhStockSuggestTrack(key, base) { if (!MH_STOCK_BASES.includes(base)) return; const x = mhShopKnown().find(y => y.key === key); if (!x) return; mhStockTrack(x.name, { base, shop: mhShopLoad().shop }); mhShopRender(); }
 function mhShopQuickSrc(v) { const s = mhShopLoad(); s.qsrc = v === 'recent' ? 'recent' : 'top'; mhShopSave(s); mhShopRender(); }
 function mhShopShortlist(s) {
   s = s || mhShopLoad(); const n = [5, 10, 15, 20].includes(parseInt(s.topN)) ? parseInt(s.topN) : 10;
@@ -29554,6 +29570,8 @@ function mhNfRegular(key) {
   else { s.usuals.push(it.name); if (mhShopSetAdd(s, it.name, 'usual', 'regular', null, { nonFood: true })) s.items[s.items.length - 1].shop = it.shop || s.shop; _shopUi.msg = it.name + ' is a regular: it stays on your list after every shop'; }
   mhShopSave(s); mhShopRender();
 }
+// The same Regular on/off as the shelf's button, for an item already on the list (v3.10.1222).
+function mhShopRegularRow(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; const u = mhShopUsualFind(s, i.key); if (u) { s.usuals = s.usuals.filter(x => mhShopKey(x) !== i.key); _shopUi.msg = i.name + ' is no longer a regular'; } else { s.usuals.push(i.name); _shopUi.msg = i.name + ' is a regular: it stays on your list after every shop'; } mhShopSave(s); mhShopRender(); }
 function mhShopUsualFromItem(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; if (!mhShopUsualFind(s, i.key)) s.usuals.push(i.name); _shopUi.msg = i.name + ' is in My usuals'; mhShopSave(s); mhShopRender(); }
 function mhShopUnpantry(key) { const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== key); mhShopSave(s); mhShopRender(); }
 // A food's list entry belongs to the shop the food is bought at (v3.10.1190). Entries put on the list by "running low" or by hand from the stock
@@ -29738,11 +29756,6 @@ function mhShopRender(keepFocus) {
     const nS = Object.keys(mhStockLoad().items).length, nL = s.items.length;
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🔄 Keep another phone in step</div><div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:12px;">One phone is the main one (the master). <b>Send</b> on that phone makes one file with your stock (' + nS + ' tracked) and your shopping list (' + nL + ' item' + (nL === 1 ? '' : 's') + ') and offers to share it, for example by WhatsApp or email. <b>Receive</b> on the other phone picks that file up and replaces its stock and list with it, after asking and checking a backup exists. Send again whenever you want them level; nothing is sent back.</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + btn('📤 Send from this phone', 'mhStockExportAsk()', 'font-size:14px;padding:11px 14px;background:var(--accent);color:#fff;') + btn('📥 Receive on this phone', 'mhStockImportPick()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
-  } else if (_shopUi.view === 'stocksuggest') {
-    const tr = mhStockLoad().items, list = mhShopRanked().filter(x => !tr[x.key]).slice(0, 15);
-    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">⚡ The ones I use most</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">What you eat most that is not in your cupboards yet. Choose how each is counted to add it; you can add pack size and amounts later with ✎.</div>'
-      + (list.map(x => '<div data-n="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;padding:10px 4px;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;font-size:15px;color:var(--text);">' + esc(x.name) + '</div><select data-k="' + esc(x.key) + '" onchange="mhStockSuggestTrack(this.dataset.k,this.value)" style="padding:9px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;"><option value="">Add as…</option><option value="g">g</option><option value="ml">ml</option><option value="each">each</option></select></div>').join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to suggest yet. Log a few meals and it fills in.</div>')
-      + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'lists') {
     const lo = mhShopListsLoad().lists, nShop = s.items.filter(i => !i.hidden && i.shop === s.shop).length, nAll = s.items.filter(i => !i.hidden).length, multiShop = s.shops.length > 1;
     const lrow = l => {
@@ -29762,12 +29775,13 @@ function mhShopRender(keepFocus) {
     const vis = mhShopVisible(s), edit = !!_shopUi.edit, srcIcon = {};
     const stkOn = mhStockOn(), stkO = mhStockLoad().items, stkNote = i => { const t = stkOn && stkO[i.key]; if (!t || t.level == null) return ''; return ' <span data-stocknote="1" style="font-size:13px;color:var(--text3);">· ' + (i.src === 'stock' ? '' : 'in stock: ') + esc(mhStockFmt(t, t.level)) + (i.src === 'stock' ? ' left' : '') + (t.reorder != null ? ' (reorder at ' + esc(mhStockFmt(t, t.reorder)) + ')' : '') + '</span>'; };
     // Built for the shop floor: big rows, tap anywhere to tick, grouped in the order you walk the shop. No controls on the rows unless Edit is on.
-    const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;align-items:center;gap:12px;padding:14px 4px;border-top:1px solid var(--border);">'
-      + '<div onclick="mhShopToggle(\'' + i.id + '\')" style="flex:1;min-width:0;display:flex;align-items:center;gap:14px;cursor:pointer;">'
+    const rowHtml = (i) => '<div data-item="' + esc(i.name) + '" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:14px 4px;border-top:1px solid var(--border);">'
+      + '<div onclick="mhShopToggle(\'' + i.id + '\')" style="flex:1 1 190px;min-width:0;display:flex;align-items:center;gap:14px;cursor:pointer;">'
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
       + '<div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + (i.qty > 1 ? '<span data-qty="1" style="font-weight:700;">' + i.qty + ' × </span>' : '') + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' && i.from === 'running low' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
+      + '<span style="display:flex;align-items:center;gap:6px;margin-left:auto;flex:0 0 auto;">'
       + (edit ? '<span data-qtyctl="1" style="display:inline-flex;align-items:center;gap:2px;font-size:16px;color:var(--text2);"><span title="One fewer" onclick="mhShopQty(\'' + i.id + '\',-1)" style="cursor:pointer;padding:6px 8px;">−</span><span style="min-width:14px;text-align:center;">' + (i.qty || 1) + '</span><span title="One more" onclick="mhShopQty(\'' + i.id + '\',1)" style="cursor:pointer;padding:6px 8px;">+</span></span>' : '')
-      + (edit ? '<span title="Add to My usuals" onclick="mhShopUsualFromItem(\'' + i.id + '\')" style="cursor:pointer;padding:6px;font-size:18px;">⭐</span>' : '') + '<span title="Remove from the list" data-rm="' + i.id + '" onclick="mhShopRemove(this.dataset.rm)" style="cursor:pointer;color:var(--text3);padding:10px 12px;font-size:18px;flex:0 0 auto;">✕</span></div>';
+      + (edit ? '<button class="copy-btn" data-regid="' + i.id + '" onclick="mhShopRegularRow(this.dataset.regid)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, i.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, i.key) ? '⭐ Regular' : '☆ Regular') + '</button>' : '') + '<span title="Remove from the list" data-rm="' + i.id + '" onclick="mhShopRemove(this.dataset.rm)" style="cursor:pointer;color:var(--text3);padding:10px 12px;font-size:18px;flex:0 0 auto;">✕</span></span></div>';
     const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
     const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
     const basketVis = vis.filter(i => i.checked), basketOpen = !!_shopUi.basketOpen;
@@ -29787,7 +29801,7 @@ function mhShopRender(keepFocus) {
       + (addKind === 'nonfood' ? (() => {
         const nfAll = Object.values(mhStockLoad().items).filter(x => x.nonFood), nf = nfAll.filter(x => !x.held && !s.items.some(i => i.key === x.key)).sort((x, y) => x.name.localeCompare(y.name));   // only what is not already on the list (v3.10.1211)
         return nf.length ? '<div id="mhNfShelf" style="margin:2px 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">On your shelf: tap to put one on the list</div>' + nf.map(x => { const on = s.items.some(i => i.key === x.key);
-          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span style="font-size:15px;color:var(--text);min-width:0;flex:1 1 auto;overflow-wrap:anywhere;">' + esc(x.name) + '</span>' + '<span style="display:flex;align-items:center;gap:6px;flex:0 0 auto;"><button class="copy-btn" data-regk="' + esc(x.key) + '" onclick="mhNfRegular(this.dataset.regk)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, x.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, x.key) ? '⭐ Regular' : '☆ Regular') + '</button>' + '<span style="display:flex;justify-content:center;flex:0 0 auto;min-width:104px;">' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k)" style="width:auto;font-size:13px;padding:8px 10px;white-space:nowrap;">＋ Add</button>') + '</span>' + '</span></div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
+          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span title="' + esc(x.name) + '" style="font-size:15px;color:var(--text);min-width:0;flex:1 1 auto;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + esc(x.name) + '</span>' + '<span style="display:flex;align-items:center;gap:6px;flex:0 0 auto;"><button class="copy-btn" data-regk="' + esc(x.key) + '" onclick="mhNfRegular(this.dataset.regk)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, x.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, x.key) ? '⭐ Regular' : '☆ Regular') + '</button>' + '<span style="display:flex;justify-content:center;flex:0 0 auto;min-width:104px;">' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k)" style="width:auto;font-size:13px;padding:8px 10px;white-space:nowrap;">＋ Add</button>') + '</span>' + '</span></div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
           : '<div id="mhNfShelf" style="font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.5;">' + (nfAll.length ? 'Everything non-nutritional on your shelf is already on the list or in Filtered. Type a new one below.' : 'Nothing non-nutritional on your shelf yet. Type one below, or add them to My cupboards (Add a food, then Add as non-nutritional) and they will be listed here.') + '</div>'; })() : '')
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="' + (addKind === 'nonfood' ? 'What do you need? e.g. Toilet roll' : 'Search or type a food') + '" oninput="mhShopSug()" autocomplete="off" onkeydown="if(event.key===\'Enter\')' + (addKind === 'nonfood' ? 'document.getElementById(\'mhShopOwnAmount\').focus()' : 'mhShopAddOwn()') + '" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + (addKind === 'food' ? btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') : '') + '</div>'
       + (addKind === 'food' ? '<div id="mhShopSug"></div>' : '')
@@ -43877,7 +43891,7 @@ function renderDailyView(data) {
 }
 
 
-// Standard defaults for any Custom date range: the last 12 months to today, so the boxes are never blank (v3.10.1221).
+// Standard defaults for any Custom date range: the last 12 months to today, so the boxes are never blank (v3.10.1222).
 function mhRangeDefaults() { const t = new Date(), f = new Date(t); f.setFullYear(f.getFullYear() - 1); f.setDate(f.getDate() + 1); return { from: localISODate(f), to: localISODate(t) }; }
 function setTrendsFilter(days, btn) {
   document.querySelectorAll('.trends-filter-btn').forEach(b => b.classList.remove('active'));
@@ -46738,7 +46752,7 @@ function renderFastingReport() {
   const all = mhFastingStats(0);
   if (all.nFasts < 7) { section.style.display = 'none'; return; }
   section.style.display = 'block';
-  // Follows the Reports date range like every other card (v3.10.1221): the first tile is the chosen range, the second is all time (or the last 30 days when the range is already All).
+  // Follows the Reports date range like every other card (v3.10.1222): the first tile is the chosen range, the second is all time (or the last 30 days when the range is already All).
   const rngDays = getReportHistory(), rngSet = new Set(rngDays.map(d => d.date));
   const m30 = _rptRange === 0 ? mhFastingStats(30) : mhFastingStats(0, rngSet), goal = mhFastGoalH();
   const t1Label = _rptRange === 0 ? 'LAST 30 DAYS' : _rptRange === -1 ? 'YOUR DATES' : 'LAST ' + _rptRange + ' DAYS', t2Label = _rptRange === 0 ? 'ALL TIME' : 'ALL TIME';
@@ -46784,7 +46798,7 @@ function renderSleepKetosisCorrelation() {
   const el = document.getElementById('sleep-ketosis-content');
   if (!section || !el) return;
 
-  const h = getReportHistory(); // follows the Reports date range (v3.10.1221)
+  const h = getReportHistory(); // follows the Reports date range (v3.10.1222)
   const t = getTargets().standard;
   const targetsAll = getTargets();
   // Same fix as everywhere else tonight — judge each day against its OWN
@@ -46844,7 +46858,7 @@ function renderWeightProtocol() {
   const el = document.getElementById('weight-protocol-content');
   if (!section || !el) return;
 
-  const h = getReportHistory(); // follows the Reports date range (v3.10.1221)
+  const h = getReportHistory(); // follows the Reports date range (v3.10.1222)
   const weightDaysManual = h.filter(d => d.weight > 0).sort((a,b) => {
     const [ad,am,ay]=a.date.split('/'); const [bd,bm,by]=b.date.split('/');
     return new Date(`20${ay}-${am}-${ad}`) - new Date(`20${by}-${bm}-${bd}`);
@@ -46862,7 +46876,7 @@ function renderWeightProtocol() {
 
   if (weightDaysAll.length < 7) { section.style.display = 'none'; return; }
   section.style.display = 'block';
-  // Follows the Reports date range (v3.10.1221)
+  // Follows the Reports date range (v3.10.1222)
   const weightDays = weightDaysAll.filter(d => mhRptDateOk(d.date));
   if (weightDays.length < 2) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);">Fewer than two weight readings in this date range. Choose a longer range to see the trend.</div>'; return; }
 
@@ -47477,7 +47491,7 @@ function renderTreatmentAnalysis() {
   const section = document.getElementById('treatment-analysis-section');
   if (!section) return;
 
-  const h = getReportHistory(); // follows the Reports date range (v3.10.1221)
+  const h = getReportHistory(); // follows the Reports date range (v3.10.1222)
   const treatmentKeywords = ['chemotherapy','chemo','radiotherapy','radiation','immunotherapy','treatment','hospital day','infusion'];
 
   // Include today's data
@@ -48383,7 +48397,7 @@ function renderSleepReport() {
   h += '<div style="font-size:10px;color:var(--text3);margin-top:10px;">Times and stages come from your wearable or manual entries. Stage ranges are general adult norms.</div>';
   el.innerHTML = h;
 }
-// Long explanatory text on report cards goes behind a "?" (v3.10.1221). Any plain-text block of more than ~3 lines (100+ characters)
+// Long explanatory text on report cards goes behind a "?" (v3.10.1222). Any plain-text block of more than ~3 lines (100+ characters)
 // is hidden behind the same small "?" the cards use elsewhere; short lines stay in view. Consecutive long blocks share one "?".
 const MH_FOLD_OPEN = new Set();
 function mhFoldToggle(key) { if (MH_FOLD_OPEN.has(key)) MH_FOLD_OPEN.delete(key); else MH_FOLD_OPEN.add(key); const b = document.getElementById('mhFold-' + key); const q = document.getElementById('mhFoldQ-' + key); if (b) b.style.display = MH_FOLD_OPEN.has(key) ? 'block' : 'none'; if (q) q.classList.toggle('on', MH_FOLD_OPEN.has(key)); }

@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1222
+- **Regular on the shopping list too.** In Edit mode every list row has the same "☆ Regular / ⭐ Regular" button as the cupboard shelf, with the same effect (a regular stays on your list after every shop). The row's controls now sit together on a line under the name so a name is never squeezed.
+- **Long names on the shelf** stop at two lines (full name on hold) so the buttons stay in place.
+- **The "logged for 19:00" line on the tiles clears itself** as soon as that time passes.
+- **Journey and Body composition** keep a hidden or folded state when moving from Trends to Move (once).
+- Removed the unused "The ones I use most" view and its code.
+
 ## v3.10.1221
 - **Read aloud reads everything.** A failed or silent chunk used to end the whole read (Ask AI stopped after one line). It now moves on to the next chunk. Applies to every read-aloud button.
 - **One date range everywhere.** Reports, Trends, Move, Compare Metrics (and the Treatment and Statistics pickers) use the same chips (7 Days / 30 Days / 90 Days / All / Custom) and the same From / To boxes, always filled in (default last 12 months), applied as soon as you pick a date. Chip text no longer wraps. 90 Days added to Reports, Trends and Compare Metrics.
