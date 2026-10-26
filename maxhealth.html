@@ -6537,7 +6537,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1224'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1225'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -19140,7 +19140,9 @@ function logSuggestedCombo(comboIndex) {
   // useful later reading back through history to see why a day's log doesn't
   // match what was originally suggested.
   const mealName = items.map(f => f._substitutedFrom ? `${f.name} (swapped for ${f._substitutedFrom})` : f.name).join(' + ');
+  window._stockRecipe = pending.recipe || null;   // set when this came from the custom-servings recipe review (v3.10.1225)
   logFoods(foods, mealName);
+  window._stockRecipe = null;
   // "Most Used" sort reads this - was never incremented on this path either.
   // These items don't carry a stored library index (built from a suggestion,
   // not a direct library lookup), so re-matching by exact name here rather
@@ -28048,14 +28050,14 @@ const MH_ATEOUT_RE = new RegExp('(^|[^a-z])(takeaway|take-away|take away|restaur
 function mhAteOutText(text, foods) { try { return MH_ATEOUT_RE.test(String(text || '') + ' ' + (foods || []).map(f => f && f.name || '').join(' ')); } catch (_) { return false; } }
 function mhStockAteOutToggle(id) {
   const e = (state.todayLog || []).find(x => x.id == id); if (!e) return;
-  if (e.noStock) { delete e.noStock; mhStockOnLog(e, todayStr()); showToast('Stock taken off again'); }
+  if (e.noStock) { delete e.noStock; mhStockOnLog(e, todayStr(), { noAsk: true }); showToast('Stock taken off again'); }
   else { const n = mhStockReverse(e.id); e.noStock = true; showToast('Ate out: stock left alone' + (n ? ', and ' + n + ' item' + (n === 1 ? '' : 's') + ' put back' : '')); }
   saveState(); try { updateDashboard(); } catch (_) {}
 }
 // The same "ate out" control as Today's log, for an entry on an earlier day (v3.10.1208): marked, it puts back what the meal took off your stock (only counts made before it, as ever); unmarked, it takes it off again.
 function mhStockAteOutHist(date, id) {
   const day = (state.history || []).find(d => d.date === date), e = day && day.log && day.log.find(x => x && x.id == id); if (!e) return;
-  if (e.noStock) { delete e.noStock; try { mhStockOnLog(e, date); } catch (_) {} showToast('Stock taken off again'); }
+  if (e.noStock) { delete e.noStock; try { mhStockOnLog(e, date, { noAsk: true }); } catch (_) {} showToast('Stock taken off again'); }
   else { const n = mhStockReverse(e.id); e.noStock = true; showToast('Ate out: stock left alone' + (n ? ', and ' + n + ' item' + (n === 1 ? '' : 's') + ' put back' : '')); }
   saveState(); try { renderHistory(); } catch (_) {}
 }
@@ -28137,21 +28139,32 @@ function mhStockAskLink(entry, f, k, sg, b) {
   }, () => { const o = mhStockLoad(); o.nolink = o.nolink || {}; o.nolink[k + '|' + sg] = 1; mhStockSave(o); }, false, { confirm: 'Yes, that one', cancel: 'No' }), 400);
 }
 // dateStr: the day the food was eaten (past days that fall before the last stock-take are ignored: that count already covers them).
-function mhStockOnLog(entry, dateStr) {
+function mhStockOnLog(entry, dateStr, opts) {
   try {
     const _ao = window._ateOut && Date.now() - window._ateOut < 5000; window._ateOut = null; window._stockTook = [];
     if (!entry || !entry.id || !Array.isArray(entry.items)) return;
     const o = mhStockLoad(); if (o.enabled === false || !Object.keys(o.items).length) return;
     if (_ao || entry.noStock) { if (!entry.noStock) { entry.noStock = true; showToast('🍽 Ate out: your stock was left alone'); } return; }
     const eaten = dateStr && dateStr !== todayStr() ? new Date(dateStr + 'T23:59:59').getTime() : Date.now();
-    let skipped = [], took = 0, frac = 1; const needDensity = [];
+    let skipped = [], took = 0, frac = 1, batchUsed = false; const needDensity = [];
     // A batch already cooked (and taken off stock then) is eaten from first, so logging its servings does not take the same food twice.
     const sr = window._stockRecipe; window._stockRecipe = null;
     if (sr && sr.id && sr.servings > 0 && o.cooked && o.cooked[sr.id] > 0) {
-      const use = Math.min(o.cooked[sr.id], sr.servings); frac = 1 - use / sr.servings;
+      const use = Math.min(o.cooked[sr.id], sr.servings); frac = 1 - use / sr.servings; batchUsed = true;
       o.cooked[sr.id] = Math.round((o.cooked[sr.id] - use) * 1000) / 1000; if (o.cooked[sr.id] <= 0) { delete o.cooked[sr.id]; mhCookedClear(o, sr.id); }
       o.cookedUse = o.cookedUse || {}; o.cookedUse[String(entry.id)] = { r: sr.id, n: use }; mhStockSave(o);
       if (frac <= 0) return;
+    }
+    // v3.10.1225: a recipe that makes more than one serving, logged with no batch cooked yet, asks how many were cooked, so the stock
+    // matches the pot and not just the plate. The rest are kept as leftovers (a later serving takes nothing more). Cancel keeps the old
+    // behaviour: only what was eaten comes off. Past days, edits and "ate out" undo never ask.
+    if (sr && sr.id && !batchUsed && !(opts && opts.noAsk) && (!dateStr || dateStr === todayStr())) {
+      const rcp = (loadRecipes() || []).find(x => x.id === sr.id);
+      if (rcp && (rcp.servings || 1) > 1 && sr.servings > 0 && mhStockRecipeLines(rcp).length) {
+        const again = () => { window._stockRecipe = sr; mhStockOnLog(entry, dateStr, { noAsk: true }); };
+        setTimeout(() => appPrompt('How many servings of ' + mhPlanEsc(rcp.name) + ' did you cook?<div style="font-size:12px;font-weight:400;margin-top:6px;opacity:.8;">The recipe makes ' + rcp.servings + '. OK takes all you cooked off stock and keeps the rest as leftovers. Cancel takes off only what you ate.</div>', 'Servings', v => { const n = parseFloat(v); if (n > 0) mhStockCookRun(sr.id, n, again); else again(); }, String(rcp.servings), again), 400);
+        return;
+      }
     }
     entry.items.forEach(f => {
       let k = mhShopKey(f && f.name || ''), it = o.items[k];
@@ -28179,7 +28192,7 @@ function mhStockLeftLine() {
   }).join('<br>');
 }
 // An edit changes what was eaten: put back what the old version took, then take what the new one does.
-function mhStockResync(entry, dateStr) { if (!entry || !entry.id) return; mhStockReverse(entry.id); mhStockOnLog(entry, dateStr); }
+function mhStockResync(entry, dateStr) { if (!entry || !entry.id) return; mhStockReverse(entry.id); mhStockOnLog(entry, dateStr, { noAsk: true }); }
 // Cooking a batch takes the whole recipe off stock once; eating its servings later then takes nothing more (see mhStockOnLog).
 function mhStockRecipeLines(r) {
   const o = mhStockLoad(), out = [];
@@ -28425,11 +28438,14 @@ function mhSuggestFooterHtml(sf) {
 }
 function mhStockCookedAsk(id) {
   const r = loadRecipes().find(x => x.id === id); if (!r) return;
-  appPrompt('Servings cooked of "' + r.name + '"?', 'Recipe makes ' + (r.servings || 1), v => {
-    const n = parseFloat(v), sw = n > 0 ? mhStockCookSwaps(r, n) : [];
-    if (!sw.length) { mhStockCooked(id, n); return; }
-    appConfirm(sw.map(x => mhPlanEsc(x.from) + ' is out or short, and you have ' + mhPlanEsc(x.to)).join('. ') + '. Take ' + (sw.length === 1 ? 'that' : 'those') + ' off stock instead?', () => mhStockCooked(id, n, { swap: true }), () => mhStockCooked(id, n), false, { confirm: 'Yes, I used ' + (sw.length === 1 ? 'it' : 'them'), cancel: 'No, leave those alone' });
-  });
+  appPrompt('Servings cooked of "' + r.name + '"?', 'Recipe makes ' + (r.servings || 1), v => mhStockCookRun(id, parseFloat(v)));
+}
+// Take a cooked batch off stock, offering a like-for-like swap for anything out or short. after() runs once it is done (v3.10.1225).
+function mhStockCookRun(id, n, after) {
+  const r = loadRecipes().find(x => x.id === id); if (!r) return;
+  const sw = n > 0 ? mhStockCookSwaps(r, n) : [], done = (opts) => { mhStockCooked(id, n, opts); if (after) after(); };
+  if (!sw.length) { done(); return; }
+  appConfirm(sw.map(x => mhPlanEsc(x.from) + ' is out or short, and you have ' + mhPlanEsc(x.to)).join('. ') + '. Take ' + (sw.length === 1 ? 'that' : 'those') + ' off stock instead?', () => done({ swap: true }), () => done(), false, { confirm: 'Yes, I used ' + (sw.length === 1 ? 'it' : 'them'), cancel: 'No, leave those alone' });
 }
 // What a recipe line takes off an item, in that item's own unit, or null when it cannot be worked out without guessing. Recipe amounts are grams unless they say otherwise;
 // grams to millilitres only with a density you gave for that item (v3.10.1157).
@@ -36133,7 +36149,7 @@ function reviewRecipeBeforeLogging(id, servings) {
   });
   if (!window._pendingLibraryCombos) window._pendingLibraryCombos = [];
   const comboIndex = window._pendingLibraryCombos.length;
-  window._pendingLibraryCombos.push({ type: 'items', items, note: `${recipe.name} — ${servings} serving${servings > 1 ? 's' : ''}`, anyMissing: false });
+  window._pendingLibraryCombos.push({ type: 'items', items, note: `${recipe.name} — ${servings} serving${servings > 1 ? 's' : ''}`, anyMissing: false, recipe: { id: recipe.id, servings } });  // recipe: so stock can ask how many were cooked (v3.10.1225)
   switchTabById('chat');
   const bubble = addBubble(`Review "${recipe.name}" before logging — add, remove, or swap anything, then confirm:`, 'system');
   bubble.innerHTML += `<div id="combo-card-${comboIndex}">${_buildComboItemsCardHTML(comboIndex)}</div>`;
@@ -38076,7 +38092,7 @@ function appConfirm(message, onConfirm, onCancel, dangerMode=false, labels=null)
   overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); if (onCancel) onCancel(); } };
 }
 
-function appPrompt(message, placeholder, onConfirm, defaultVal='') {
+function appPrompt(message, placeholder, onConfirm, defaultVal='', onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'app-modal-overlay';
   overlay.innerHTML = `
@@ -38093,7 +38109,7 @@ function appPrompt(message, placeholder, onConfirm, defaultVal='') {
   setTimeout(() => input.focus(), 100);
   const doConfirm = () => { const v = input.value.trim(); overlay.remove(); if (onConfirm && v) onConfirm(v); };
   overlay.querySelector('#appModalConfirm').onclick = doConfirm;
-  overlay.querySelector('#appModalCancel').onclick = () => overlay.remove();
+  overlay.querySelector('#appModalCancel').onclick = () => { overlay.remove(); if (onCancel) onCancel(); };
   input.onkeydown = e => { if (e.key === 'Enter') doConfirm(); };
 }
 

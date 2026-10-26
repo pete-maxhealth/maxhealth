@@ -118,7 +118,7 @@ with fresh_server() as root, sync_playwright() as pw:
     qid = ev("state.todayLog[state.todayLog.length-1].id")
     ev("_selectedFoodItem={name:'Zz Matrix',brand:'',kcal:100,prot:1,carb:1,fat:1}; document.getElementById('foodAmountGrams').value=30; logFoodFromDatabase()"); page.wait_for_timeout(400); total -= 30; check('database / barcode log', total)
     recipe('r5', 'Matrix dish', 2, [ing('Zz Matrix', 200)])
-    ev("()=>logRecipe('r5',1)"); page.wait_for_timeout(300); total -= 100; check('recipe log (1 of 2 servings, none cooked)', total)
+    ev("()=>logRecipe('r5',1)"); page.wait_for_timeout(800); page.click('#appModalCancel'); page.wait_for_timeout(300); total -= 100; check('recipe log (1 of 2 servings, none cooked)', total)
     ev("()=>mhStockCooked('r5',2)"); total -= 200; check('cooked batch', total)
     ev("k=>mhStockWaste(k,20)", K('Zz Matrix')); total -= 20; check('used or binned', total)
     ev("(k)=>{mhStockAdjust(k,500,'bought','shop')}", K('Zz Matrix')); total += 500; check('bought (+500)', total)

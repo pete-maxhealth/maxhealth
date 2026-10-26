@@ -42,10 +42,12 @@ with fresh_server() as root, sync_playwright() as pw:
     if lv(mk) != 600: f.add('BUG', f'6 servings with 4 cooked: only the 2 extra (400 g) comes off: {lv(mk)}')
     if cooked() != 0: f.add('BUG', 'all cooked credit should be used')
     # never cooked: logging takes stock
-    ev("()=>{state.todayLog=[];}"); ev("([a])=>mhStockSetLevel(a,1000)", [mk]); ev("()=>logRecipe('r1',1)"); page.wait_for_timeout(200)
-    if lv(mk) != 800: f.add('BUG', f'a recipe never cooked takes its share when logged: {lv(mk)}')
+    ev("()=>{state.todayLog=[];}"); ev("([a])=>mhStockSetLevel(a,1000)", [mk]); ev("()=>logRecipe('r1',1)"); page.wait_for_timeout(700); page.locator('#appModalCancel').last.click(); page.wait_for_timeout(300)   # v3.10.1225: asks how many were cooked; Cancel = only what was eaten
+    if lv(mk) != 800: f.add('BUG', f'a recipe never cooked takes its share when logged (Cancel on the cooked question): {lv(mk)}')
+    page.evaluate("document.querySelectorAll('.app-modal-overlay').forEach(e=>e.remove())")   # the cream-in-ml question this recipe also raises
     # suggested-recipe doorway
-    ev("([a])=>mhStockSetLevel(a,1000)", [mk]); ev("()=>{window._pendingLibraryCombos=[{type:'recipe',recipe:loadRecipes()[0],servings:2}];logSuggestedCombo(0)}"); page.wait_for_timeout(200)
+    ev("([a])=>mhStockSetLevel(a,1000)", [mk]); ev("()=>{window._pendingLibraryCombos=[{type:'recipe',recipe:loadRecipes()[0],servings:2}];logSuggestedCombo(0)}"); page.wait_for_timeout(700); page.locator('#appModalCancel').last.click(); page.wait_for_timeout(300)
+    page.evaluate("document.querySelectorAll('.app-modal-overlay').forEach(e=>e.remove())")
     if lv(mk) != 600: f.add('BUG', f'the suggested-recipe doorway must take stock too: {lv(mk)}')
     if errs: f.add('BUG', f'page errors {errs[:3]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
