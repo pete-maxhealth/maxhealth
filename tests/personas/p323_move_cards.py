@@ -13,7 +13,7 @@ with fresh_server() as root, sync_playwright() as pw:
     order = ev("[...document.querySelectorAll('#moveScroll > .activity-card')].map(e=>e.id)")
     if order[:2] != ['activityCard','dailyStepsCard'] or order[2:] != ['moveExerciseCard','moveBodycompCard','moveJourneyCard']: f.add('BUG', f'saved order kept, new cards join the end: {order}')
     for k in ['exercise','bodycomp','journey']:
-        if not ev(f"!!document.getElementById('moveRange-{k}') && document.querySelectorAll('#moveRange-{k} .trends-filter-btn').length === 4"): f.add('BUG', f'{k} has its 4 range chips')
+        if not ev(f"!!document.getElementById('moveRange-{k}') && document.querySelectorAll('#moveRange-{k} .trends-filter-btn').length === 5"): f.add('BUG', f'{k} has its 5 range chips incl. Custom')
         for sel in ['▲','▼','👁']:
             if not ev(f"document.getElementById('move{k.capitalize()}Card').innerText.includes('{sel}')"): f.add('BUG', f'{k} has {sel} control')
     if ev("!!document.getElementById('exercise-report-section') && !document.getElementById('moveExerciseCard').contains(document.getElementById('exercise-report-section'))"): f.add('BUG', 'exercise section is inside the Move card')
@@ -34,6 +34,12 @@ with fresh_server() as root, sync_playwright() as pw:
     print('exercise 7d:', a[0][:90]); print('exercise all:', b[0][:90]); print('body all:', b[2][-200:])
     # chip highlights follow the choice
     if ev("document.querySelector('#moveRange-journey .active').innerText") != 'All': f.add('BUG', 'the chosen range is highlighted')
+    ev("mhMoveSetRange('journey',-1)"); page.wait_for_timeout(300)
+    if not ev("document.getElementById('moveDates-journey').style.display === 'flex' && !!document.getElementById('moveFrom-journey')"): f.add('BUG', 'Custom shows From/To date boxes')
+    sa = sig(); ev("mhMoveSetCustom('journey','from','2099-01-01')"); page.wait_for_timeout(300); sb = sig()
+    if sa == sb: f.add('BUG', 'a custom range that excludes all data changes the card')
+    ev("mhMoveSetCustom('journey','from','')"); ev("mhMoveSetRange('journey',0)")
+    if ev("document.getElementById('moveDates-journey').style.display") != 'none': f.add('BUG', 'date boxes hide again on other ranges')
     ev("mhMoveSetRange('exercise',30)")
     # hide / show
     ev("toggleMoveSectionHidden('journey')"); page.wait_for_timeout(200)

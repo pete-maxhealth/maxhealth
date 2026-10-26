@@ -16,6 +16,9 @@ with fresh_server() as root, sync_playwright() as pw:
     elif 'Zzqx Dentist' not in c: f.add('BUG', f'a custom tag used on another day appears in the History tag picker: {c}')
     ev("mhTagRename('zzqx dentist','Zzqx Optician')"); c = chips()
     if 'Zzqx Optician' not in c or 'Zzqx Dentist' in c: f.add('BUG', f'a renamed tag shows its new name only: {c}')
+    ev("state.history[1].notes = state.history[1].notes + ', device data, Steps 8000, 8123 steps, 7.5h sleep, HRV 55'; saveState()"); c = chips()
+    for bad in ['device data', 'Steps 8000', '8123', 'sleep', 'HRV']:
+        if bad in c: f.add('BUG', f'device-written notes are not offered as tags: {bad!r} in {c}')
     ev("mhTagDelete('zzqx optician')"); c = chips()
     if 'Zzqx' in c: f.add('BUG', f'a deleted tag is gone from the picker: {c}')
     if 'Hospital day' not in c: f.add('BUG', 'the standard chips are still there')
