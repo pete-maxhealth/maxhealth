@@ -5838,7 +5838,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     <div class="import-card card-unit" style="background:var(--accent-dim);border-color:var(--accent-glow);">
       <div class="import-label" id="title-imp-qr" style="cursor:pointer;color:var(--accent);" onclick="toggleSection('imp-qr','imp-qr-wrap','imp-qr-icon')">Phone to phone (QR) <span id="imp-qr-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▸ show</span></div>
       <div id="imp-qr-wrap" style="display:none;">
-        <div style="font-size:12px;color:var(--text3);margin:10px 0 12px;line-height:1.6;">Share stock, list, recipes and foods with another phone by scanning codes. Free, no internet. <span class="help-slot" data-id="impqr" data-text="Share your stock, shopping list, recipes and food library with another phone. One phone shows a loop of codes and the other scans them. What arrives is added to what is already there after a preview, and you can undo it. Doing it both ways leaves the two phones matching. It is not a backup: for a safety copy keep using the backup file above."></span></div>
+        <div style="font-size:12px;color:var(--text3);margin:10px 0 12px;line-height:1.6;">Share stock, list, recipes and foods with another phone by scanning codes. Free, no internet. <span class="help-slot" data-id="impqr" data-text="Share anything you have built or logged with another phone (everything except wearable and other third-party data, which is too big for codes): stock, shopping list, recipes, food library, history, routines, supplements, symptoms, treatments, lab results, and, only if you tick it, your settings. One phone shows a loop of codes and the other scans them. What arrives is added to what is already there after a preview, and you can undo it. Doing it both ways leaves the two phones matching. It is not a backup: for a safety copy keep using the backup file above."></span></div>
         <button class="copy-btn" style="width:100%;" onclick="mhxOpen()">📲 Share with another phone</button>
       </div>
     </div>
@@ -19238,7 +19238,7 @@ const SITE_SEARCH_SETTINGS = [
   // Previously missing from this index entirely - integrated into the
   // standard toggle system a while ago (v3.10.512) but never added here,
   // so it was findable by scrolling but not by search at all.
-  { label: 'Phone to phone (QR)', key: 'imp-qr', subtab: 'import', keywords: 'qr phone transfer share send receive scan stock recipes library shopping list household another phone' },
+  { label: 'Phone to phone (QR)', key: 'imp-qr', subtab: 'import', keywords: 'qr phone transfer share send receive scan stock recipes library shopping list household another phone history routines supplements symptoms treatments labs settings new phone move' },
   { label: 'Restore from backup', key: 'imp-restore', subtab: 'import', keywords: 'restore replace backup file server daily' },
   // Reports (Insights tab) was entirely absent from this index before now -
   // not just "Ask AI" specifically, the whole tab and all its sections
@@ -28771,7 +28771,12 @@ function mhStockImportApply(pack) {
 // doing it both ways leaves both phones the same). Recipes, the food library and the shopping list: only what is missing is added;
 // a food that differs is listed and left alone unless you tick it (a value locked from a label is never changed).
 const MHX_MAGIC = 'MHX1', MHX_CHUNK = 450;
-const MHX_SCOPES = [['stock', '🥫 Cupboards & stock'], ['list', '🛒 Shopping list'], ['recipes', '🍲 Recipes'], ['library', '📚 Food library']];
+// Everything the app keeps EXCEPT wearable / third-party data (too big for codes). Settings is off unless ticked: it is about the person, not their lists.
+const MHX_GROUPS = [['history', '📅', 'Meals, weight & exercise history'], ['routines', '🏋️', 'Routines'], ['supplements', '💊', 'Supplements'], ['symptoms', '🩺', 'Symptoms'], ['treatments', '🧴', 'Treatments & sessions'], ['labs', '🧪', 'Lab results'], ['settings', '⚙️', 'Settings & profile']];
+const MHX_SCOPES = [['stock', '🥫 Cupboards & stock'], ['list', '🛒 Shopping list'], ['recipes', '🍲 Recipes'], ['library', '📚 Food library']].concat(MHX_GROUPS.map(g => [g[0], g[1] + ' ' + g[2]]));
+// Settings travel by an allow-list of real preference and profile keys, so debug logs, caches, licence/keys, screen-state and anything wearable / third-party can never ride along,
+// and a damaged or hostile transfer cannot write any other key.
+const MHX_SET_OK = /^mh_(activity_level(_history)?|age|autoswitch_days|bmr_formula|body_fat_pct|carb_method|ceil_[a-z_]+|color_scheme|condition(s|_history)?|custom_accent|custom_tag_parents|distance_unit|ex_energy_basis|exercise_offset_(enabled|pct)|goal|height_cm|icon_pack|idle_timeout_(enabled|minutes)|keto_opt|lang|lifestyle(_custom)?|name|notif_(prefs|autoswitch|activity_autoswitch)|phase_history|plan_auto|report_profiles|saved_prompts|saved_queries|sex|tableware|target_[a-z_]+|tdee|text_size|theme|visual_theme|weight_target_(high|low)|weight_unit|reorder_[a-z0-9_]*|reorder_hidden_[a-z0-9_]*)$/i;
 const MHX_UNDO_KEY = 'mh_xfer_undo_v1';
 function mhxCrc(bytes) {
   let c, crc = 0xFFFFFFFF;
@@ -28818,7 +28823,9 @@ function mhxDevice() { return (mhStockDeviceLabel() || '').trim() || 'This phone
 function mhxStamp(o, k) { const it = o.items[k]; let t = (it && it.since) || 0; (o.ledger || []).forEach(l => { if (l.k === k && l.t > t) t = l.t; }); return t; }
 function mhxCounts() {
   let st = 0, li = 0, rc = 0, lb = 0; try { st = Object.keys(mhStockLoad().items).length; li = mhShopLoad().items.length; rc = loadRecipes().length; lb = loadLibrary().length; } catch (_) {}
-  return { stock: st, list: li, recipes: rc, library: lb };
+  const o = { stock: st, list: li, recipes: rc, library: lb }, n = k => mhxArr(k).length;
+  try { o.history = (state.history || []).length + ((state.history || []).length === 1 ? ' day' : ' days'); o.routines = n('mh_routines'); o.supplements = n('mh_supplement_defs'); o.symptoms = n('mh_symptom_defs'); o.treatments = n('mh_treatment_defs'); o.labs = n('mh_lab_results'); o.settings = Object.keys(mhxSettingsOut()).length; } catch (_) {}
+  return o;
 }
 function mhxCollect(sel) {
   const out = { v: 1, from: mhxDevice(), at: Date.now(), scopes: {} };
@@ -28826,15 +28833,24 @@ function mhxCollect(sel) {
   if (sel.list) { const s = mhShopLoad(); out.scopes.list = { items: s.items, shops: s.shops }; }
   if (sel.recipes) out.scopes.recipes = loadRecipes();
   if (sel.library) out.scopes.library = loadLibrary();
+  if (sel.history) out.scopes.history = { days: state.history || [], strength: state.strengthLog || [] };
+  if (sel.routines) out.scopes.routines = mhxArr('mh_routines');
+  if (sel.supplements) out.scopes.supplements = mhxArr('mh_supplement_defs');
+  if (sel.symptoms) out.scopes.symptoms = mhxArr('mh_symptom_defs');
+  if (sel.treatments) out.scopes.treatments = { defs: mhxArr('mh_treatment_defs'), log: mhxArr('mh_treatment_log') };
+  if (sel.labs) out.scopes.labs = mhxArr('mh_lab_results');
+  if (sel.settings) out.scopes.settings = mhxSettingsOut();
   return out;
 }
+const mhxArr = k => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return Array.isArray(v) ? v : []; } catch (_) { return []; } };
+function mhxSettingsOut() { const all = _collectBackupSettings(), o = {}; Object.keys(all).forEach(k => { if (!MHX_SET_OK.test(k) || all[k].length > 20000) return; o[k] = all[k]; }); return o; }
 const mhxLow = s => String(s || '').toLowerCase().trim();
 const mhxRecipeSig = r => (r.servings || 1) + '|' + (r.ingredients || []).map(i => mhxLow(i && i.name) + ':' + (i && i.amount != null ? i.amount : '')).join(';');
 const mhxMacroSame = (a, b) => ['kcal', 'protein', 'carbs', 'fat'].every(k => Math.round((+a[k] || 0) * 10) === Math.round((+b[k] || 0) * 10)) && String(a.portion || '') === String(b.portion || '');
 // Works out what would change. Saves nothing.
 function mhxPlan(data) {
   if (!data || data.v !== 1 || typeof data.scopes !== 'object' || !data.scopes) return null;
-  const from = String(data.from || 'the other phone').slice(0, 40), sc = data.scopes, plan = { from, at: +data.at || 0, stock: null, list: null, recipes: null, library: null };
+  const from = String(data.from || 'the other phone').slice(0, 40), sc = data.scopes, plan = { from, at: +data.at || 0, stock: null, list: null, recipes: null, library: null, history: null, routines: null, supplements: null, symptoms: null, treatments: null, labs: null, settings: null };
   if (sc.stock && sc.stock.items && typeof sc.stock.items === 'object') {
     const o = mhStockLoad(), last = sc.stock.last || {}, r = { add: [], take: [], keep: [], same: 0, off: !mhStockOn() };
     Object.values(sc.stock.items).slice(0, 3000).forEach(raw => {
@@ -28873,17 +28889,60 @@ function mhxPlan(data) {
     });
     plan.library = r;
   }
+  mhxPlanMore(sc, plan);
   return plan;
 }
-function mhxSnapshot() {
-  const snap = { at: Date.now(), stock: null, shop: null, recipes: null, library: null };
-  try { snap.stock = localStorage.getItem(MH_STOCK_KEY); snap.shop = localStorage.getItem(MH_SHOP_KEY); snap.recipes = localStorage.getItem('mh_recipes'); snap.library = localStorage.getItem(LIBRARY_KEY); localStorage.setItem(MHX_UNDO_KEY, JSON.stringify(snap)); } catch (_) {}
-  return snap;
+// The rest of the person's data. Same rule as everything else: only what is missing is added, nothing of yours is changed or removed.
+function mhxPlanMore(sc, plan) {
+  const lst = (arr, mine, key, max) => { const have = new Set(mine.map(key)), r = { add: [], same: 0, clash: 0 }, ids = new Set(mine.map(x => x && x.id).filter(Boolean));
+    (Array.isArray(arr) ? arr : []).slice(0, max).forEach(raw => { const x = mhxClean(raw), k = x && key(x); if (!k) return; if (have.has(k)) { r.same++; return; } if (x.id && ids.has(x.id)) { r.clash++; return; } have.add(k); if (x.id) ids.add(x.id); r.add.push(x); }); return r; };
+  if (sc.history && Array.isArray(sc.history.days)) {
+    const have = new Set((state.history || []).map(h => h.date)), r = { add: [], same: 0, strength: [], strengthSame: 0 }, seen = new Set(), sids = new Set((state.strengthLog || []).map(x => x && x.id));
+    sc.history.days.slice(0, 6000).forEach(raw => { const d = mhxClean(raw); if (!d || !/^\d\d\/\d\d\/\d\d$/.test(String(d.date || '')) || !Array.isArray(d.log)) return; if (have.has(d.date) || seen.has(d.date)) { r.same++; return; } seen.add(d.date); r.add.push(d); });
+    (Array.isArray(sc.history.strength) ? sc.history.strength : []).slice(0, 20000).forEach(raw => { const x = mhxClean(raw); if (!x || !x.id || !x.exercise) return; if (sids.has(x.id)) { r.strengthSame++; return; } sids.add(x.id); r.strength.push(x); });
+    plan.history = r;
+  }
+  if (Array.isArray(sc.routines)) plan.routines = lst(sc.routines, mhxArr('mh_routines'), x => _pkKey(x), 500);
+  if (Array.isArray(sc.supplements)) plan.supplements = lst(sc.supplements, mhxArr('mh_supplement_defs'), x => _pkKey(x), 500);
+  if (Array.isArray(sc.symptoms)) plan.symptoms = lst(sc.symptoms, mhxArr('mh_symptom_defs'), x => _pkKey(x), 500);
+  if (sc.treatments && typeof sc.treatments === 'object') {
+    const myDefs = mhxArr('mh_treatment_defs'), r = lst(sc.treatments.defs, myDefs, x => _pkKey(x), 300), tids = new Set(myDefs.concat(r.add).map(x => x && x.id)), sig = e => [e.treatmentId, e.date, e.time || '', e.note || ''].join('|');
+    const haveL = new Set(mhxArr('mh_treatment_log').map(sig)); r.log = []; r.logSame = 0;
+    (Array.isArray(sc.treatments.log) ? sc.treatments.log : []).slice(0, 20000).forEach(raw => { const e = mhxClean(raw); if (!e || !e.treatmentId || !e.date || !tids.has(e.treatmentId)) return; if (haveL.has(sig(e))) { r.logSame++; return; } haveL.add(sig(e)); r.log.push(e); });
+    plan.treatments = r;
+  }
+  if (Array.isArray(sc.labs)) { plan.labs = lst(sc.labs, mhxArr('mh_lab_results'), x => (x.date || '') + '|' + JSON.stringify(x.values || {}), 2000); }
+  if (sc.settings && typeof sc.settings === 'object') {
+    const mine = mhxSettingsOut(), r = { add: [], differ: [], same: 0, replace: false };
+    Object.keys(sc.settings).slice(0, 600).forEach(k => { const v = sc.settings[k]; if (!/^mh_[a-z0-9_]+$/i.test(k) || typeof v !== 'string' || v.length > 20000 || !MHX_SET_OK.test(k) || _BACKUP_SETTINGS_SKIP.test(k)) return;
+      if (!(k in mine) && localStorage.getItem(k) == null) r.add.push({ k, v }); else if (localStorage.getItem(k) === v) r.same++; else r.differ.push({ k, v }); });
+    plan.settings = r;
+  }
 }
+// Every store a transfer can touch, copied (squeezed) before anything is changed. If the copy cannot be stored the transfer does not start.
+function mhxKeysFor(plan) {
+  const k = [MH_STOCK_KEY, MH_SHOP_KEY, 'mh_recipes', 'mh_recipes_backup', 'mh_recipes_b2', LIBRARY_KEY, 'mh_library_backup', 'mh_library_b2', 'maxhealth_v1', 'maxhealth_v1_backup',
+    'mh_routines', 'mh_routines_backup', 'mh_routines_b2', 'mh_supplement_defs', 'mh_symptom_defs', 'mh_treatment_defs', 'mh_treatment_log', 'mh_lab_results'];
+  if (plan && plan.settings) plan.settings.add.concat(plan.settings.differ).forEach(x => k.push(x.k));
+  return k;
+}
+async function mhxSnapshot(plan) {
+  const m = {}; mhxKeysFor(plan).forEach(k => { m[k] = localStorage.getItem(k); });
+  const snap = { at: Date.now() };
+  if (typeof CompressionStream !== 'undefined') snap.z = mhxB64(await mhxStream(new TextEncoder().encode(JSON.stringify(m)), CompressionStream)); else snap.raw = m;
+  localStorage.setItem(MHX_UNDO_KEY, JSON.stringify(snap));   // throws when there is no room: the caller then stops before changing anything
+  return m;
+}
+function mhxRestoreMap(m) { Object.keys(m).forEach(k => { if (m[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, m[k]); }); try { state = loadState(); } catch (_) {} }
 function mhxUndoInfo() { try { const s = JSON.parse(localStorage.getItem(MHX_UNDO_KEY) || 'null'); return s && s.at ? s : null; } catch (_) { return null; } }
-function mhxApply(plan) {
+async function mhxApply(plan) {
   if (typeof _demoMode !== 'undefined' && _demoMode) return { demo: true };
-  mhxSnapshot(); const res = { stock: 0, stockNew: 0, list: 0, recipes: 0, library: 0, libraryChanged: 0 };
+  let m; try { m = await mhxSnapshot(plan); } catch (e) { return { failed: 'There is not enough room on this phone to keep an undo copy, so nothing was added.' }; }
+  try { return mhxApplyCore(plan); }
+  catch (e) { try { mhxRestoreMap(m); localStorage.removeItem(MHX_UNDO_KEY); } catch (_) {} return { failed: 'Something went wrong part way, so everything was put back as it was. Nothing was added.' }; }
+}
+function mhxApplyCore(plan) {
+  const res = { stock: 0, stockNew: 0, list: 0, recipes: 0, library: 0, libraryChanged: 0, history: 0, strength: 0, routines: 0, supplements: 0, symptoms: 0, treatments: 0, sessions: 0, labs: 0, settings: 0, settingsChanged: 0 };
   if (plan.stock && (plan.stock.add.length || plan.stock.take.length)) {
     const o = mhStockLoad();
     plan.stock.add.concat(plan.stock.take).forEach(x => { o.items[x.key] = Object.assign({}, x.it, { key: x.key, since: x.t, lowFlag: false }); });
@@ -28906,17 +28965,40 @@ function mhxApply(plan) {
     const _q = window._mhLibQuiet; window._mhLibQuiet = true;   // arriving foods are not "new foods to complete in My cupboards": the stock that came with them is already tracked
     try { saveLibrary(lib); } finally { window._mhLibQuiet = _q; }
   }
+  const newId = pre => pre + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  if (plan.history && (plan.history.add.length || plan.history.strength.length)) {
+    if (plan.history.add.length) {
+      state.history = (state.history || []).concat(plan.history.add);
+      const parse = d => { const q = String(d.date).split('/'); return q.length === 3 ? new Date('20' + q[2] + '-' + q[1] + '-' + q[0]) : new Date(0); };
+      state.history.sort((a, b) => parse(b) - parse(a)); res.history = plan.history.add.length;
+    }
+    if (plan.history.strength.length) { state.strengthLog = (state.strengthLog || []).concat(plan.history.strength); res.strength = plan.history.strength.length; }
+    saveState();
+  }
+  if (plan.routines && plan.routines.add.length) { const rs = loadRoutines(), ids = new Set(rs.map(r => r.id)); plan.routines.add.forEach(x => { if (!x.id || ids.has(x.id)) x.id = newId('xro'); ids.add(x.id); rs.push(x); }); saveRoutines(rs); res.routines = plan.routines.add.length; }
+  const defs = (k, g, loader, saver) => { if (g && g.add.length) { saver(loader().concat(g.add)); res[k] = g.add.length; } };
+  defs('supplements', plan.supplements, () => mhxArr('mh_supplement_defs'), a => localStorage.setItem('mh_supplement_defs', JSON.stringify(a)));
+  defs('symptoms', plan.symptoms, () => loadSymptomDefs(), a => localStorage.setItem('mh_symptom_defs', JSON.stringify(a)));
+  if (plan.treatments) {
+    defs('treatments', plan.treatments, () => loadTreatmentDefs(), a => localStorage.setItem('mh_treatment_defs', JSON.stringify(a)));
+    if (plan.treatments.log.length) { localStorage.setItem('mh_treatment_log', JSON.stringify(loadTreatmentLog().concat(plan.treatments.log))); res.sessions = plan.treatments.log.length; }
+  }
+  if (plan.labs && plan.labs.add.length) {
+    const es = loadLabResults().concat(plan.labs.add); es.sort((a, b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? 1 : -1); localStorage.setItem('mh_lab_results', JSON.stringify(es)); res.labs = plan.labs.add.length;
+  }
+  if (plan.settings) {
+    plan.settings.add.forEach(x => { localStorage.setItem(x.k, x.v); res.settings++; });
+    if (plan.settings.replace) plan.settings.differ.forEach(x => { localStorage.setItem(x.k, x.v); res.settingsChanged++; });
+  }
   try { updateDashboard(true); } catch (_) {}
   return res;
 }
-function mhxUndo() {
-  const s = mhxUndoInfo(); if (!s) { showToast('Nothing to undo'); return false; }
+async function mhxUndo() {
+  const info = mhxUndoInfo(); if (!info) { showToast('Nothing to undo'); return false; }
   try {
-    // a store that did not exist before the transfer goes back to not existing
-    if (s.stock != null) localStorage.setItem(MH_STOCK_KEY, s.stock); else localStorage.removeItem(MH_STOCK_KEY);
-    if (s.shop != null) localStorage.setItem(MH_SHOP_KEY, s.shop); else localStorage.removeItem(MH_SHOP_KEY);
-    saveRecipes(s.recipes != null ? JSON.parse(s.recipes) : []);
-    { const _q = window._mhLibQuiet; window._mhLibQuiet = true; try { saveLibrary(s.library != null ? JSON.parse(s.library) : []); } finally { window._mhLibQuiet = _q; } }
+    const snap = JSON.parse(localStorage.getItem(MHX_UNDO_KEY)), m = snap.z ? JSON.parse(new TextDecoder().decode(await mhxStream(mhxUnb64(snap.z), DecompressionStream))) : snap.raw;
+    if (!m || typeof m !== 'object') throw new Error('bad copy');
+    mhxRestoreMap(m);   // a store that did not exist before the transfer goes back to not existing
     localStorage.removeItem(MHX_UNDO_KEY);
   } catch (_) { showToast('Could not undo that'); return false; }
   try { updateDashboard(true); } catch (_) {}
@@ -28925,7 +29007,7 @@ function mhxUndo() {
   return true;
 }
 // ── the screen ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
-let _mhx = { view: 'home', sel: { stock: true, list: true, recipes: true, library: true }, msg: '', plan: null, res: null }, _mhxTimer = null, _mhxStream = null, _mhxRx = null;
+let _mhx = { view: 'home', sel: { stock: true, list: true, recipes: true, library: true, history: true, routines: true, supplements: true, symptoms: true, treatments: true, labs: true, settings: false }, msg: '', plan: null, res: null }, _mhxTimer = null, _mhxStream = null, _mhxRx = null;
 function mhxStop() { clearInterval(_mhxTimer); _mhxTimer = null; if (_mhxStream) { try { _mhxStream.getTracks().forEach(t => t.stop()); } catch (_) {} _mhxStream = null; } _mhxRx = null; }
 function mhxOpen() {
   let el = document.getElementById('mhXferOverlay');
@@ -28945,7 +29027,7 @@ function mhxRender() {
   let h = '';
   if (v === 'home') {
     const c = mhxCounts(), u = mhxUndoInfo(), any = MHX_SCOPES.some(s => _mhx.sel[s[0]]);
-    h = head + '<div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:10px;">Free. One phone shows codes, the other scans them. You see a preview first. <span class="help-slot" data-id="xfer" data-text="No internet and no file. What arrives is added to what you already have, never swapped in, and you can undo it. Choose what to share. On one phone tap Show codes, on the other tap Scan codes and hold it steady about 20 cm from the screen. Stock counts: the newer count wins, so do it both ways and the two phones match. Recipes, food library and shopping list: only what is missing is added. A food that differs is shown and left alone unless you tick it, and a value you locked from a label is never changed. Nothing is removed from either phone."></span></div>'
+    h = head + '<div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:10px;">Free. One phone shows codes, the other scans them. You see a preview first. <span class="help-slot" data-id="xfer" data-text="No internet and no file. What arrives is added to what you already have, never swapped in, and you can undo it. Choose what to share. On one phone tap Show codes, on the other tap Scan codes and hold it steady about 20 cm from the screen. Stock counts: the newer count wins, so do it both ways and the two phones match. Everything else (recipes, food library, shopping list, history, routines, supplements, symptoms, treatments, lab results): only what is missing is added, and a day already in your history is left as it is. Settings are off unless you tick them, and ones you already have stay yours unless you tick that too. Wearable and third-party data is not included. A food that differs is shown and left alone unless you tick it, and a value you locked from a label is never changed. Nothing is removed from either phone."></span></div>'
       + (_mhx.msg ? '<div style="font-size:13px;color:var(--accent);margin-bottom:10px;">' + esc(_mhx.msg) + '</div>' : '')
       + '<div class="settings-card" style="padding:12px 14px;margin-bottom:10px;"><div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">THIS PHONE\'S NAME</div><input id="mhxName" value="' + esc(mhxNameVal()) + '" onchange="mhxName(this.value)" placeholder="e.g. Pete\'s phone" style="width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);margin-bottom:12px;">'
       + '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">WHAT TO SHARE</div>'
@@ -28960,19 +29042,30 @@ function mhxRender() {
   } else if (v === 'review') {
     const p = _mhx.plan, ln = (ic, t) => '<div style="font-size:14px;color:var(--text);padding:6px 0;">' + ic + ' ' + t + '</div>', n = (a, w) => '<b>' + a + '</b> ' + w;
     let body = '';
-    if (p.stock) { body += ln('🥫', 'Stock: ' + n(p.stock.add.length, 'new') + ', ' + n(p.stock.take.length, 'where the other phone\'s count is newer') + (p.stock.keep.length ? ', ' + n(p.stock.keep.length, 'where yours is newer (kept)') : '') + ', ' + p.stock.same + ' already the same.');
+    const any0 = g => g && ((g.add && g.add.length) || (g.take && g.take.length) || (g.keep && g.keep.length) || (g.differ && g.differ.length) || g.same);
+    if (any0(p.stock)) { body += ln('🥫', 'Stock: ' + n(p.stock.add.length, 'new') + ', ' + n(p.stock.take.length, 'where the other phone\'s count is newer') + (p.stock.keep.length ? ', ' + n(p.stock.keep.length, 'where yours is newer (kept)') : '') + ', ' + p.stock.same + ' already the same.');
       const diff = p.stock.take.concat(p.stock.keep).slice(0, 8); if (diff.length) body += '<div style="font-size:12px;color:var(--text3);padding:0 0 6px 24px;">' + diff.map(x => esc(x.name) + ': here ' + (x.mineLevel == null ? 'not counted' : x.mineLevel) + ', there ' + (x.theirLevel == null ? 'not counted' : x.theirLevel) + (p.stock.take.includes(x) ? ' → ' + (x.theirLevel == null ? 'not counted' : x.theirLevel) : ' → kept')).join('<br>') + (p.stock.take.length + p.stock.keep.length > 8 ? '<br>…' : '') + '</div>';
       if (p.stock.off) body += '<div style="font-size:12px;color:var(--yellow);padding:0 0 6px 24px;">Cupboards &amp; stock is switched off on this phone, so these counts are saved for when you turn it on.</div>'; }
-    if (p.list) body += ln('🛒', 'Shopping list: ' + n(p.list.add.length, 'to add') + ', ' + p.list.same + ' already there.');
-    if (p.recipes) body += ln('🍲', 'Recipes: ' + n(p.recipes.add.length, 'to add') + (p.recipes.renamed ? ' (' + p.recipes.renamed + ' share a name with one of yours, so are marked "from ' + esc(p.from) + '")' : '') + ', ' + p.recipes.same + ' already here.');
-    if (p.library) { body += ln('📚', 'Food library: ' + n(p.library.add.length, 'to add') + ', ' + p.library.same + ' already the same' + (p.library.differ.length ? ', ' + n(p.library.differ.length, 'with different numbers') : '') + '.');
+    if (any0(p.list)) body += ln('🛒', 'Shopping list: ' + n(p.list.add.length, 'to add') + ', ' + p.list.same + ' already there.');
+    if (any0(p.recipes)) body += ln('🍲', 'Recipes: ' + n(p.recipes.add.length, 'to add') + (p.recipes.renamed ? ' (' + p.recipes.renamed + ' share a name with one of yours, so are marked "from ' + esc(p.from) + '")' : '') + ', ' + p.recipes.same + ' already here.');
+    if (any0(p.library)) { body += ln('📚', 'Food library: ' + n(p.library.add.length, 'to add') + ', ' + p.library.same + ' already the same' + (p.library.differ.length ? ', ' + n(p.library.differ.length, 'with different numbers') : '') + '.');
       if (p.library.differ.length) body += '<div style="font-size:12px;color:var(--text3);margin:4px 0 6px 24px;">Left as you have them unless you tick one:</div>' + p.library.differ.slice(0, 40).map((d, i) => '<label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0 6px 24px;font-size:13px;color:var(--text);">' + (d.locked ? '<span style="width:20px;">🔒</span>' : '<input type="checkbox" ' + (d.take ? 'checked ' : '') + 'onchange="_mhx.plan.library.differ[' + i + '].take=this.checked" style="width:20px;height:20px;accent-color:var(--accent);margin-top:2px;">') + '<span style="flex:1;"><b>' + esc(d.name) + '</b><br><span style="color:var(--text3);">here ' + Math.round(+d.mine.kcal || 0) + ' kcal ' + esc(d.mine.portion || '') + ' · there ' + Math.round(+d.theirs.kcal || 0) + ' kcal ' + esc(d.theirs.portion || '') + (d.locked ? ' · yours is locked, so not changed' : '') + '</span></span></label>').join('') + (p.library.differ.length > 40 ? '<div style="font-size:12px;color:var(--text3);padding-left:24px;">…and ' + (p.library.differ.length - 40) + ' more, left as they are.</div>' : ''); }
-    const nothing = !(p.stock && (p.stock.add.length || p.stock.take.length)) && !(p.list && p.list.add.length) && !(p.recipes && p.recipes.add.length) && !(p.library && (p.library.add.length || p.library.differ.length));
+    const gl = { history: g => ln('📅', 'History: ' + n(g.add.length, g.add.length === 1 ? 'day to add' : 'days to add') + (g.strength.length ? ', ' + n(g.strength.length, 'exercise entries') : '') + ', ' + g.same + (g.same === 1 ? ' day' : ' days') + ' already here (yours kept).'),
+      routines: g => ln('🏋️', 'Routines: ' + n(g.add.length, 'to add') + ', ' + g.same + ' already here.'), supplements: g => ln('💊', 'Supplements: ' + n(g.add.length, 'to add') + ', ' + g.same + ' already here.'),
+      symptoms: g => ln('🩺', 'Symptoms: ' + n(g.add.length, 'to add') + ', ' + g.same + ' already here.'), treatments: g => ln('🧴', 'Treatments: ' + n(g.add.length, 'to add') + ', ' + n(g.log.length, 'sessions') + ', ' + g.same + ' already here.'),
+      labs: g => ln('🧪', 'Lab results: ' + n(g.add.length, 'to add') + ', ' + g.same + ' already here.') };
+    MHX_GROUPS.forEach(([k]) => { if (p[k] && gl[k] && (any0(p[k]) || (p[k].log && p[k].log.length) || (p[k].strength && p[k].strength.length))) body += gl[k](p[k]) + (p[k].clash ? '<div style="font-size:12px;color:var(--text3);padding:0 0 6px 24px;">' + p[k].clash + ' left out because they clash with one of yours.</div>' : ''); });
+    if (p.settings) { const g = p.settings; body += ln('⚙️', 'Settings: ' + n(g.add.length, 'you do not have yet') + ', ' + g.same + ' already the same' + (g.differ.length ? ', ' + n(g.differ.length, 'set differently') : '') + '.');
+      if (g.differ.length) body += '<label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0 6px 24px;font-size:13px;color:var(--text);"><input type="checkbox" ' + (g.replace ? 'checked ' : '') + 'onchange="_mhx.plan.settings.replace=this.checked" style="width:20px;height:20px;accent-color:var(--accent);margin-top:2px;"><span style="flex:1;">Also change the ' + g.differ.length + ' that differ to the other phone\'s. Left as yours unless you tick this.</span></label>'; }
+    const has = g => g && (g.add.length || (g.strength && g.strength.length) || (g.log && g.log.length) || (g.differ && g.differ.length));
+    const nothing = MHX_GROUPS.some(([k]) => has(p[k])) ? false : !(p.stock && (p.stock.add.length || p.stock.take.length)) && !(p.list && p.list.add.length) && !(p.recipes && p.recipes.add.length) && !(p.library && (p.library.add.length || p.library.differ.length));
     h = head + '<div style="font-size:13px;color:var(--text2);margin-bottom:10px;">From <b>' + esc(p.from) + '</b>' + (p.at ? ', made ' + esc(new Date(p.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : '') + '. Checksum matched. Nothing is saved yet.</div><div class="settings-card" style="padding:10px 14px;">' + body + '</div>'
       + rowBtns((nothing ? '' : btn('Add to this phone', 'mhxDoApply()', acc)) + btn(nothing ? 'Back' : 'Don\'t add', 'mhxBackHome()')) + (nothing ? '<div style="font-size:13px;color:var(--text2);margin-top:10px;">Both phones already match for what was sent.</div>' : '');
   } else if (v === 'done') {
     const r = _mhx.res || {}, bits = [];
     if (r.stockNew || r.stock) bits.push('stock: ' + (r.stockNew || 0) + ' new, ' + (r.stock || 0) + ' updated'); if (r.list) bits.push('shopping list: ' + r.list + ' added'); if (r.recipes) bits.push('recipes: ' + r.recipes + ' added'); if (r.library || r.libraryChanged) bits.push('food library: ' + (r.library || 0) + ' added, ' + (r.libraryChanged || 0) + ' changed');
+    if (r.history || r.strength) bits.push('history: ' + (r.history || 0) + ' days, ' + (r.strength || 0) + ' exercise entries'); [['routines', 'routines'], ['supplements', 'supplements'], ['symptoms', 'symptoms'], ['treatments', 'treatments'], ['sessions', 'treatment sessions'], ['labs', 'lab results']].forEach(([k, w]) => { if (r[k]) bits.push(w + ': ' + r[k] + ' added'); });
+    if (r.settings || r.settingsChanged) bits.push('settings: ' + (r.settings || 0) + ' added, ' + (r.settingsChanged || 0) + ' changed');
     h = head + '<div class="settings-card" style="padding:12px 14px;font-size:14px;color:var(--text);line-height:1.6;">✓ Added to this phone. ' + (bits.length ? esc(bits.join(' · ')) : '') + '</div><div style="font-size:13px;color:var(--text2);margin-top:10px;">To make the other phone match this one too, do it the other way round.</div>'
       + rowBtns(btn('↩ Undo this transfer', 'mhxUndo()') + btn('📤 Now send mine back', 'mhxStartSend()', acc) + btn('Done', 'mhxClose()'));
   }
@@ -28988,7 +29081,7 @@ async function mhxStartSend() {
   let r; try { r = await mhxPack(mhxCollect(_mhx.sel)); } catch (e) { _mhx.view = 'home'; _mhx.msg = 'Could not get the data ready: ' + e.message; mhxRender(); return; }
   let qrs; try { qrs = r.frames.map(f => MHQR.encodeText(f)); } catch (e) { _mhx.view = 'home'; _mhx.msg = 'That is too much to send in one go. Untick something and try again.'; mhxRender(); return; }
   let idx = 0; const cv = () => document.getElementById('mhxQr'); if (!cv()) return;
-  _mhx.tick = () => { const c = cv(); if (!c) { mhxStop(); return; } MHQR.draw(c, qrs[idx], 5); document.getElementById('mhxSbar').style.width = ((idx + 1) / qrs.length * 100) + '%'; document.getElementById('mhxSinfo').textContent = 'Frame ' + (idx + 1) + ' of ' + qrs.length + '. It loops until you tap Back, so the other phone can join at any point.'; idx = (idx + 1) % qrs.length; };
+  _mhx.tick = () => { const c = cv(); if (!c) { mhxStop(); return; } MHQR.draw(c, qrs[idx], 5); document.getElementById('mhxSbar').style.width = ((idx + 1) / qrs.length * 100) + '%'; document.getElementById('mhxSinfo').textContent = 'Frame ' + (idx + 1) + ' of ' + qrs.length + ' (about ' + Math.ceil(qrs.length / (+((document.getElementById('mhxSpd') || {}).value) || 4)) + ' seconds a loop). It loops until you tap Back, so the other phone can join at any point.'; idx = (idx + 1) % qrs.length; };
   _mhx.tick(); const s = document.getElementById('mhxSpd'); _mhxTimer = setInterval(_mhx.tick, 1000 / (s ? +s.value : 4));
 }
 async function mhxStartReceive() {
@@ -29010,9 +29103,11 @@ async function mhxStartReceive() {
     busy = false;
   }, 120);
 }
-function mhxDoApply() {
-  const p = _mhx.plan; if (!p) return; const r = mhxApply(p);
+let _mhxBusy = false;
+async function mhxDoApply() {
+  const p = _mhx.plan; if (!p || _mhxBusy) return; _mhxBusy = true; let r; try { r = await mhxApply(p); } finally { _mhxBusy = false; }
   if (r.demo) { showToast('Demo mode: nothing is saved'); return; }
+  if (r.failed) { _mhx.msg = r.failed; _mhx.view = 'home'; mhxRender(); return; }
   _mhx.res = r; _mhx.view = 'done'; mhxRender();
 }
 
