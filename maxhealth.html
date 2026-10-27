@@ -5834,6 +5834,15 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     </div>
     </div>
 
+    <!-- PHONE TO PHONE (QR): free way to share stock, list, recipes and food library between two phones in the same room -->
+    <div class="import-card card-unit" style="background:var(--accent-dim);border-color:var(--accent-glow);">
+      <div class="import-label" id="title-imp-qr" style="cursor:pointer;color:var(--accent);" onclick="toggleSection('imp-qr','imp-qr-wrap','imp-qr-icon')">Phone to phone (QR) <span id="imp-qr-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▸ show</span></div>
+      <div id="imp-qr-wrap" style="display:none;">
+        <div style="font-size:12px;color:var(--text3);margin:10px 0 12px;line-height:1.6;">Share stock, list, recipes and foods with another phone by scanning codes. Free, no internet. <span class="help-slot" data-id="impqr" data-text="Share your stock, shopping list, recipes and food library with another phone. One phone shows a loop of codes and the other scans them. What arrives is added to what is already there after a preview, and you can undo it. Doing it both ways leaves the two phones matching. It is not a backup: for a safety copy keep using the backup file above."></span></div>
+        <button class="copy-btn" style="width:100%;" onclick="mhxOpen()">📲 Share with another phone</button>
+      </div>
+    </div>
+
     <!-- RESTORE: its own card (v3.10.949). Replaces data, so it is kept apart from the everyday export/import card. -->
     <div class="import-card card-unit" style="background:rgba(168,85,247,0.04);border-color:rgba(168,85,247,0.2);">
       <div class="import-label" id="title-imp-restore" style="cursor:pointer;color:#a855f7;" onclick="toggleSection('imp-restore','imp-restore-wrap','imp-restore-icon')">Restore from backup <span id="imp-restore-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▸ show</span></div>
@@ -8416,6 +8425,7 @@ const GENERIC_SECTION_IDS = {
   },
   import: {
     'set-databackup': ['title-set-databackup', 'set-databackup-wrap'],
+    'imp-qr': ['title-imp-qr', 'imp-qr-wrap'],
     'imp-restore': ['title-imp-restore', 'imp-restore-wrap'],
     'imp-sync': ['title-imp-sync', 'imp-sync-wrap'],
     'imp-combined': ['title-imp-combined', 'imp-combined-wrap'],
@@ -8444,7 +8454,7 @@ const GENERIC_DEFAULT_ORDER = {
   trends: ['trends-routine', 'trends-patterns', 'trends-periodcmp', 'trends-wellness'],
   reports: ['rpt-summary', 'rpt-insights-box', 'activitycredit', 'rpt-askai', 'rpt-query', 'rpt-export', 'rpt-sleepketo', 'rpt-fasting', 'rpt-weightproto', 'rpt-treatment', 'rpt-sessions', 'rpt-gbm', 'rpt-research'],
   manage: ['set-aiprovider', 'set-language', 'set-profile', 'set-carbceilings', 'set-exoffset', 'set-deviceprec', 'set-formulas', 'set-carer', 'set-notifications', 'set-idletimeout', 'set-water', 'set-fibre', 'set-fasting', 'set-tableware', 'set-stepsbaseline', 'set-premium', 'set-about', 'set-setup', 'set-supplements', 'set-symptoms', 'set-treatments', 'set-labresults', 'set-reportprofiles'],
-  import: ['set-databackup', 'imp-restore', 'imp-sync', 'imp-combined', 'imp-adddevice', 'imp-manual', 'imp-gaps'],
+  import: ['set-databackup', 'imp-qr', 'imp-restore', 'imp-sync', 'imp-combined', 'imp-adddevice', 'imp-manual', 'imp-gaps'],
   dailyview: ['dv-activity', 'dv-sleep', 'dv-meals', 'dv-weight'],
 };
 
@@ -19228,6 +19238,7 @@ const SITE_SEARCH_SETTINGS = [
   // Previously missing from this index entirely - integrated into the
   // standard toggle system a while ago (v3.10.512) but never added here,
   // so it was findable by scrolling but not by search at all.
+  { label: 'Phone to phone (QR)', key: 'imp-qr', subtab: 'import', keywords: 'qr phone transfer share send receive scan stock recipes library shopping list household another phone' },
   { label: 'Restore from backup', key: 'imp-restore', subtab: 'import', keywords: 'restore replace backup file server daily' },
   // Reports (Insights tab) was entirely absent from this index before now -
   // not just "Ask AI" specifically, the whole tab and all its sections
@@ -28575,6 +28586,428 @@ function mhStockImportApply(pack) {
   const added = mhStockSweep(); window._stockXfer = null; let listN = null; if (pack.list && Array.isArray(pack.list.items)) { const sl = mhShopLoad(); sl.items = pack.list.items.filter(x => x && x.key && x.name); if (Array.isArray(pack.list.usuals)) sl.usuals = pack.list.usuals; (sl.items.map(x => x.shop).filter(Boolean)).forEach(n => { if (!(sl.shops || []).some(z => String(z).toLowerCase() === String(n).toLowerCase())) (sl.shops = sl.shops || []).push(n); }); mhShopSave(sl); listN = sl.items.length; } _shopUi.msg = 'Stock replaced from ' + (pack.device || 'the other device') + ': ' + Object.keys(items).length + ' tracked' + (listN != null ? ', ' + listN + ' on the list' : '') + (added ? ', ' + added + ' put on your list' : '');
   mhShopView('list'); return Object.keys(items).length;
 }
+// ── QR encoder (byte mode, level M, versions 1-40; no dependencies) ──
+/*QR*/// Minimal QR Code encoder: byte mode, error correction level M, versions 1-40.
+// Written for MaxedHealth phone-to-phone transfer. No dependencies.
+(function (root) {
+  'use strict';
+  // Level M tables (index = version).
+  const ECC_PER_BLOCK = [-1,10,16,26,18,24,16,18,22,22,26,30,22,22,24,24,28,28,26,26,26,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28];
+  const NUM_BLOCKS    = [-1,1,1,1,2,2,4,4,4,5,5,5,8,9,9,10,10,11,13,14,16,17,17,18,20,21,23,25,26,28,29,31,33,35,37,38,40,43,45,47,49];
+  const FORMAT_ECC_M = 0;
+
+  function rawModules(ver) {
+    let r = (16 * ver + 128) * ver + 64;
+    if (ver >= 2) { const n = Math.floor(ver / 7) + 2; r -= (25 * n - 10) * n - 55; if (ver >= 7) r -= 36; }
+    return r;
+  }
+  function dataCodewords(ver) {
+    return Math.floor(rawModules(ver) / 8) - ECC_PER_BLOCK[ver] * NUM_BLOCKS[ver];
+  }
+  function ccBits(ver) { return ver <= 9 ? 8 : 16; }
+
+  function gfMul(x, y) {
+    let z = 0;
+    for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; }
+    return z & 0xFF;
+  }
+  function rsDivisor(deg) {
+    const r = new Array(deg).fill(0); r[deg - 1] = 1;
+    let root = 1;
+    for (let i = 0; i < deg; i++) {
+      for (let j = 0; j < deg; j++) { r[j] = gfMul(r[j], root); if (j + 1 < deg) r[j] ^= r[j + 1]; }
+      root = gfMul(root, 0x02);
+    }
+    return r;
+  }
+  function rsRemainder(data, div) {
+    const r = div.map(() => 0);
+    for (const b of data) {
+      const f = b ^ r.shift(); r.push(0);
+      div.forEach((c, i) => { r[i] ^= gfMul(c, f); });
+    }
+    return r;
+  }
+  function addEccAndInterleave(data, ver) {
+    const nb = NUM_BLOCKS[ver], el = ECC_PER_BLOCK[ver];
+    const raw = Math.floor(rawModules(ver) / 8);
+    const nShort = nb - raw % nb, shortLen = Math.floor(raw / nb);
+    const blocks = [], div = rsDivisor(el);
+    for (let i = 0, k = 0; i < nb; i++) {
+      const len = shortLen - el + (i < nShort ? 0 : 1);
+      const dat = data.slice(k, k + len); k += len;
+      const ecc = rsRemainder(dat, div);
+      if (i < nShort) dat.push(0);
+      blocks.push(dat.concat(ecc));
+    }
+    const out = [];
+    for (let i = 0; i < blocks[0].length; i++)
+      blocks.forEach((b, j) => { if (i !== shortLen - el || j >= nShort) out.push(b[i]); });
+    return out;
+  }
+
+  function bit(x, i) { return ((x >>> i) & 1) !== 0; }
+
+  function encodeBytes(bytes, minVer) {
+    // pick version
+    let ver = minVer || 1;
+    for (; ver <= 40; ver++) {
+      if (4 + ccBits(ver) + 8 * bytes.length <= dataCodewords(ver) * 8) break;
+    }
+    if (ver > 40) throw new Error('Data too long for one QR code');
+    const bits = [];
+    const push = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >>> i) & 1); };
+    push(4, 4); push(bytes.length, ccBits(ver));
+    for (const b of bytes) push(b, 8);
+    const cap = dataCodewords(ver) * 8;
+    push(0, Math.min(4, cap - bits.length));
+    push(0, (8 - bits.length % 8) % 8);
+    for (let pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) push(pad, 8);
+    const data = [];
+    for (let i = 0; i < bits.length; i += 8) { let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; data.push(v); }
+    const all = addEccAndInterleave(data, ver);
+
+    const size = ver * 4 + 17;
+    const mod = Array.from({ length: size }, () => new Array(size).fill(false));
+    const fn = Array.from({ length: size }, () => new Array(size).fill(false));
+    const setF = (x, y, v) => { mod[y][x] = v; fn[y][x] = true; };
+
+    for (let i = 0; i < size; i++) { setF(6, i, i % 2 === 0); setF(i, 6, i % 2 === 0); }
+    const finder = (cx, cy) => {
+      for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy)), x = cx + dx, y = cy + dy;
+        if (x >= 0 && x < size && y >= 0 && y < size) setF(x, y, d !== 2 && d !== 4);
+      }
+    };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    // alignment
+    let align = [];
+    if (ver > 1) {
+      const n = Math.floor(ver / 7) + 2;
+      const step = ver === 32 ? 26 : Math.ceil((ver * 4 + 4) / (n * 2 - 2)) * 2;
+      align = [6];
+      for (let pos = size - 7; align.length < n; pos -= step) align.splice(1, 0, pos);
+    }
+    const na = align.length;
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+        setF(align[i] + dx, align[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    // reserve format + version areas
+    const drawFormat = (mask) => {
+      const d = (FORMAT_ECC_M << 3) | mask; let rem = d;
+      for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      const b = ((d << 10) | rem) ^ 0x5412;
+      for (let i = 0; i <= 5; i++) setF(8, i, bit(b, i));
+      setF(8, 7, bit(b, 6)); setF(8, 8, bit(b, 7)); setF(7, 8, bit(b, 8));
+      for (let i = 9; i < 15; i++) setF(14 - i, 8, bit(b, i));
+      for (let i = 0; i < 8; i++) setF(size - 1 - i, 8, bit(b, i));
+      for (let i = 8; i < 15; i++) setF(8, size - 15 + i, bit(b, i));
+      setF(8, size - 8, true);
+    };
+    drawFormat(0);
+    if (ver >= 7) {
+      let rem = ver;
+      for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+      const b = (ver << 12) | rem;
+      for (let i = 0; i < 18; i++) {
+        const c = bit(b, i), a = size - 11 + i % 3, d = Math.floor(i / 3);
+        setF(a, d, c); setF(d, a, c);
+      }
+    }
+    // data placement
+    let k = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+        if (!fn[y][x] && k < all.length * 8) { mod[y][x] = bit(all[k >>> 3], 7 - (k & 7)); k++; }
+      }
+    }
+    const MASKS = [
+      (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => x * y % 2 + x * y % 3 === 0,
+      (x, y) => (x * y % 2 + x * y % 3) % 2 === 0, (x, y) => ((x + y) % 2 + x * y % 3) % 2 === 0];
+    const applyMask = (m) => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && MASKS[m](x, y)) mod[y][x] = !mod[y][x]; };
+    const penalty = () => {
+      let p = 0;
+      for (let y = 0; y < size; y++) { let run = 1; for (let x = 1; x < size; x++) { if (mod[y][x] === mod[y][x - 1]) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } }
+      for (let x = 0; x < size; x++) { let run = 1; for (let y = 1; y < size; y++) { if (mod[y][x] === mod[y - 1][x]) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1; } }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) { const c = mod[y][x]; if (c === mod[y][x + 1] && c === mod[y + 1][x] && c === mod[y + 1][x + 1]) p += 3; }
+      let dark = 0; for (const r of mod) for (const c of r) if (c) dark++;
+      p += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+      return p;
+    };
+    let best = 0, bestP = Infinity;
+    for (let m = 0; m < 8; m++) { applyMask(m); drawFormat(m); const p = penalty(); if (p < bestP) { bestP = p; best = m; } applyMask(m); }
+    applyMask(best); drawFormat(best);
+    return { size, version: ver, modules: mod };
+  }
+
+  function encodeText(s) { return encodeBytes(Array.from(new TextEncoder().encode(s))); }
+
+  function draw(canvas, qr, px) {
+    px = px || 6; const q = 4, n = qr.size + q * 2;
+    canvas.width = canvas.height = n * px;
+    const g = canvas.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, n * px, n * px);
+    g.fillStyle = '#000';
+    for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) if (qr.modules[y][x]) g.fillRect((x + q) * px, (y + q) * px, px, px);
+  }
+
+  root.MHQR = { encodeBytes, encodeText, draw };
+  if (typeof module !== 'undefined') module.exports = root.MHQR;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+// ── Phone to phone by QR codes (free) ────────────────────────────────────────────────────────────────────────────────────────
+// One phone shows a loop of QR codes, the other scans them. No internet, no file, no server. What arrives is MERGED in, never
+// swapped for what is already there, after a preview, and the whole transfer can be undone. Stock counts: the newer count wins (so
+// doing it both ways leaves both phones the same). Recipes, the food library and the shopping list: only what is missing is added;
+// a food that differs is listed and left alone unless you tick it (a value locked from a label is never changed).
+const MHX_MAGIC = 'MHX1', MHX_CHUNK = 450;
+const MHX_SCOPES = [['stock', '🥫 Cupboards & stock'], ['list', '🛒 Shopping list'], ['recipes', '🍲 Recipes'], ['library', '📚 Food library']];
+const MHX_UNDO_KEY = 'mh_xfer_undo_v1';
+function mhxCrc(bytes) {
+  let c, crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) { c = (crc ^ bytes[i]) & 0xFF; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; crc = (crc >>> 8) ^ c; }
+  return ((crc ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
+}
+function mhxB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function mhxUnb64(s) { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+async function mhxStream(u8, Stream) { const cs = new Stream('gzip'), w = cs.writable.getWriter(); w.write(u8); w.close(); return new Uint8Array(await new Response(cs.readable).arrayBuffer()); }
+async function mhxPack(obj) {
+  const raw = new TextEncoder().encode(JSON.stringify(obj)), gz = await mhxStream(raw, CompressionStream), text = mhxB64(gz), crc = mhxCrc(gz);
+  const id = crc.slice(0, 4) + Math.floor(Math.random() * 65536).toString(16).padStart(4, '0'), n = Math.max(1, Math.ceil(text.length / MHX_CHUNK)), frames = [];
+  for (let i = 0; i < n; i++) frames.push([MHX_MAGIC, id, i, n, crc, text.slice(i * MHX_CHUNK, (i + 1) * MHX_CHUNK)].join('|'));
+  return { frames, rawBytes: raw.length, gzBytes: gz.length };
+}
+// Receiver: frames in any order, repeats allowed. A bad checksum throws the lot away and starts again rather than guessing.
+function mhxReceiver() {
+  let id = null, n = 0, crc = '', parts = {};
+  return {
+    async feed(frame) {
+      const p = String(frame).split('|'); if (p.length < 6 || p[0] !== MHX_MAGIC) return { ok: false, quiet: true };
+      const fid = p[1], i = parseInt(p[2]), tot = parseInt(p[3]), fcrc = p[4], data = p.slice(5).join('|');
+      if (!(tot > 0 && tot < 5000 && i >= 0 && i < tot)) return { ok: false, quiet: true };
+      if (id && fid !== id) { id = null; parts = {}; }   // a different transfer started: begin again with that one
+      id = fid; n = tot; crc = fcrc; parts[i] = data;
+      const have = Object.keys(parts).length; if (have < n) return { ok: true, have, n, complete: false };
+      let text = ''; for (let k = 0; k < n; k++) text += parts[k];
+      let gz; try { gz = mhxUnb64(text); } catch (_) { parts = {}; return { ok: false, reason: 'Those codes did not add up. Start again.' }; }
+      if (mhxCrc(gz) !== crc) { parts = {}; return { ok: false, reason: 'Checksum did not match, so nothing was kept. Start again.' }; }
+      let obj; try { obj = JSON.parse(new TextDecoder().decode(await mhxStream(gz, DecompressionStream))); } catch (_) { parts = {}; return { ok: false, reason: 'Could not read that transfer. Start again.' }; }
+      return { ok: true, have, n, complete: true, data: obj };
+    }
+  };
+}
+// Everything that arrives is untrusted: only plain values are kept, strings are capped, and nothing is ever run.
+function mhxClean(v, d) {
+  d = d || 0; if (v == null) return null; const t = typeof v;
+  if (t === 'number') return isFinite(v) ? v : null; if (t === 'boolean') return v; if (t === 'string') return v.slice(0, 2000); if (d > 4) return null;
+  if (Array.isArray(v)) return v.slice(0, 300).map(x => mhxClean(x, d + 1));
+  if (t === 'object') { const o = {}; Object.keys(v).slice(0, 80).forEach(k => { if (k === '__proto__' || k === 'constructor' || k === 'prototype') return; o[k.slice(0, 40)] = mhxClean(v[k], d + 1); }); return o; }
+  return null;
+}
+function mhxDevice() { return (mhStockDeviceLabel() || '').trim() || 'This phone'; }
+function mhxStamp(o, k) { const it = o.items[k]; let t = (it && it.since) || 0; (o.ledger || []).forEach(l => { if (l.k === k && l.t > t) t = l.t; }); return t; }
+function mhxCounts() {
+  let st = 0, li = 0, rc = 0, lb = 0; try { st = Object.keys(mhStockLoad().items).length; li = mhShopLoad().items.length; rc = loadRecipes().length; lb = loadLibrary().length; } catch (_) {}
+  return { stock: st, list: li, recipes: rc, library: lb };
+}
+function mhxCollect(sel) {
+  const out = { v: 1, from: mhxDevice(), at: Date.now(), scopes: {} };
+  if (sel.stock) { const o = mhStockLoad(), last = {}; Object.keys(o.items).forEach(k => { last[k] = mhxStamp(o, k); }); out.scopes.stock = { items: o.items, last }; }
+  if (sel.list) { const s = mhShopLoad(); out.scopes.list = { items: s.items, shops: s.shops }; }
+  if (sel.recipes) out.scopes.recipes = loadRecipes();
+  if (sel.library) out.scopes.library = loadLibrary();
+  return out;
+}
+const mhxLow = s => String(s || '').toLowerCase().trim();
+const mhxRecipeSig = r => (r.servings || 1) + '|' + (r.ingredients || []).map(i => mhxLow(i && i.name) + ':' + (i && i.amount != null ? i.amount : '')).join(';');
+const mhxMacroSame = (a, b) => ['kcal', 'protein', 'carbs', 'fat'].every(k => Math.round((+a[k] || 0) * 10) === Math.round((+b[k] || 0) * 10)) && String(a.portion || '') === String(b.portion || '');
+// Works out what would change. Saves nothing.
+function mhxPlan(data) {
+  if (!data || data.v !== 1 || typeof data.scopes !== 'object' || !data.scopes) return null;
+  const from = String(data.from || 'the other phone').slice(0, 40), sc = data.scopes, plan = { from, at: +data.at || 0, stock: null, list: null, recipes: null, library: null };
+  if (sc.stock && sc.stock.items && typeof sc.stock.items === 'object') {
+    const o = mhStockLoad(), last = sc.stock.last || {}, r = { add: [], take: [], keep: [], same: 0, off: !mhStockOn() };
+    Object.values(sc.stock.items).slice(0, 3000).forEach(raw => {
+      const it = mhxClean(raw); if (!it || !it.name || !MH_STOCK_BASES.includes(it.base)) return;
+      const key = mhShopKey(it.name); if (!key) return; it.key = key; const tt = +last[raw && raw.key] || +it.since || 0, mine = o.items[key];
+      if (!mine) { r.add.push({ key, name: it.name, it, t: tt }); return; }
+      if (mine.base === it.base && mine.level === it.level) { r.same++; return; }
+      const tm = mhxStamp(o, key), theirs = { key, name: it.name, it, t: tt, mineLevel: mine.level, theirLevel: it.level, base: it.base };
+      if (tt > tm || (tt === tm && (it.level == null ? -1 : it.level) < (mine.level == null ? -1 : mine.level))) r.take.push(theirs); else r.keep.push(theirs);
+    });
+    plan.stock = r;
+  }
+  if (sc.list && Array.isArray(sc.list.items)) {
+    const s = mhShopLoad(), have = new Set(s.items.map(i => i.key + '|' + mhxLow(i.shop))), r = { add: [], same: 0 };
+    sc.list.items.slice(0, 3000).forEach(raw => { const it = mhxClean(raw); if (!it || !it.name || !it.key) return; if (have.has(it.key + '|' + mhxLow(it.shop))) r.same++; else r.add.push(it); });
+    plan.list = r;
+  }
+  if (Array.isArray(sc.recipes)) {
+    const mine = loadRecipes(), sigs = new Set(mine.map(mhxRecipeSig)), names = new Set(mine.map(r => mhxLow(r.name))), r = { add: [], same: 0, renamed: 0 };
+    sc.recipes.slice(0, 2000).forEach(raw => {
+      const x = mhxClean(raw); if (!x || !x.name || !Array.isArray(x.ingredients)) return;
+      if (sigs.has(mhxRecipeSig(x))) { r.same++; return; }
+      if (names.has(mhxLow(x.name))) { x.name = String(x.name).slice(0, 60) + ' (from ' + from + ')'; r.renamed++; }
+      sigs.add(mhxRecipeSig(x)); names.add(mhxLow(x.name)); r.add.push(x);
+    });
+    plan.recipes = r;
+  }
+  if (Array.isArray(sc.library)) {
+    const mine = loadLibrary(), by = {}; mine.forEach(f => { if (f && f.name) by[mhxLow(normalizeFoodName(f.name))] = f; });
+    const r = { add: [], same: 0, differ: [] }, seen = new Set();
+    sc.library.slice(0, 20000).forEach(raw => {
+      const x = mhxClean(raw); if (!x || !x.name) return; const k = mhxLow(normalizeFoodName(x.name)); if (seen.has(k)) return; seen.add(k);
+      const m = by[k]; if (!m) { r.add.push(x); return; }
+      if (mhxMacroSame(m, x)) { r.same++; return; }
+      r.differ.push({ k, name: x.name, mine: m, theirs: x, locked: !!m.locked, take: false });
+    });
+    plan.library = r;
+  }
+  return plan;
+}
+function mhxSnapshot() {
+  const snap = { at: Date.now(), stock: null, shop: null, recipes: null, library: null };
+  try { snap.stock = localStorage.getItem(MH_STOCK_KEY); snap.shop = localStorage.getItem(MH_SHOP_KEY); snap.recipes = localStorage.getItem('mh_recipes'); snap.library = localStorage.getItem(LIBRARY_KEY); localStorage.setItem(MHX_UNDO_KEY, JSON.stringify(snap)); } catch (_) {}
+  return snap;
+}
+function mhxUndoInfo() { try { const s = JSON.parse(localStorage.getItem(MHX_UNDO_KEY) || 'null'); return s && s.at ? s : null; } catch (_) { return null; } }
+function mhxApply(plan) {
+  if (typeof _demoMode !== 'undefined' && _demoMode) return { demo: true };
+  mhxSnapshot(); const res = { stock: 0, stockNew: 0, list: 0, recipes: 0, library: 0, libraryChanged: 0 };
+  if (plan.stock && (plan.stock.add.length || plan.stock.take.length)) {
+    const o = mhStockLoad();
+    plan.stock.add.concat(plan.stock.take).forEach(x => { o.items[x.key] = Object.assign({}, x.it, { key: x.key, since: x.t, lowFlag: false }); });
+    mhStockSave(o); res.stockNew = plan.stock.add.length; res.stock = plan.stock.take.length; try { mhStockSweep(); } catch (_) {}
+  }
+  if (plan.list && plan.list.add.length) {
+    const s = mhShopLoad();
+    plan.list.add.forEach(it => { if (it.shop && !s.shops.some(n => mhxLow(n) === mhxLow(it.shop))) s.shops.push(it.shop); s.items.push(it); });
+    mhShopSave(s); res.list = plan.list.add.length;
+  }
+  if (plan.recipes && plan.recipes.add.length) {
+    const rs = loadRecipes(), ids = new Set(rs.map(r => r.id));
+    plan.recipes.add.forEach(x => { if (!x.id || ids.has(x.id)) x.id = 'xr' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); ids.add(x.id); rs.push(x); });
+    saveRecipes(rs); res.recipes = plan.recipes.add.length;
+  }
+  if (plan.library && (plan.library.add.length || plan.library.differ.some(d => d.take && !d.locked))) {
+    const lib = loadLibrary();
+    plan.library.add.forEach(x => lib.push(x)); res.library = plan.library.add.length;
+    plan.library.differ.filter(d => d.take && !d.locked).forEach(d => { const i = lib.findIndex(f => f && f.name && mhxLow(normalizeFoodName(f.name)) === d.k); if (i >= 0) { lib[i] = d.theirs; res.libraryChanged++; } });
+    const _q = window._mhLibQuiet; window._mhLibQuiet = true;   // arriving foods are not "new foods to complete in My cupboards": the stock that came with them is already tracked
+    try { saveLibrary(lib); } finally { window._mhLibQuiet = _q; }
+  }
+  try { updateDashboard(true); } catch (_) {}
+  return res;
+}
+function mhxUndo() {
+  const s = mhxUndoInfo(); if (!s) { showToast('Nothing to undo'); return false; }
+  try {
+    // a store that did not exist before the transfer goes back to not existing
+    if (s.stock != null) localStorage.setItem(MH_STOCK_KEY, s.stock); else localStorage.removeItem(MH_STOCK_KEY);
+    if (s.shop != null) localStorage.setItem(MH_SHOP_KEY, s.shop); else localStorage.removeItem(MH_SHOP_KEY);
+    saveRecipes(s.recipes != null ? JSON.parse(s.recipes) : []);
+    { const _q = window._mhLibQuiet; window._mhLibQuiet = true; try { saveLibrary(s.library != null ? JSON.parse(s.library) : []); } finally { window._mhLibQuiet = _q; } }
+    localStorage.removeItem(MHX_UNDO_KEY);
+  } catch (_) { showToast('Could not undo that'); return false; }
+  try { updateDashboard(true); } catch (_) {}
+  try { mhShopRender(); } catch (_) {}
+  _mhx.view = 'home'; _mhx.msg = 'Undone: this phone is back as it was before the transfer.'; mhxRender();
+  return true;
+}
+// ── the screen ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+let _mhx = { view: 'home', sel: { stock: true, list: true, recipes: true, library: true }, msg: '', plan: null, res: null }, _mhxTimer = null, _mhxStream = null, _mhxRx = null;
+function mhxStop() { clearInterval(_mhxTimer); _mhxTimer = null; if (_mhxStream) { try { _mhxStream.getTracks().forEach(t => t.stop()); } catch (_) {} _mhxStream = null; } _mhxRx = null; }
+function mhxOpen() {
+  let el = document.getElementById('mhXferOverlay');
+  if (!el) { el = document.createElement('div'); el.id = 'mhXferOverlay'; el.style.cssText = 'position:fixed;inset:0;z-index:9100;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 90px;'; document.body.appendChild(el); }
+  el.style.display = 'block'; mhxStop(); _mhx.view = 'home'; _mhx.msg = ''; _mhx.plan = null; mhxRender();
+}
+function mhxClose() { mhxStop(); const el = document.getElementById('mhXferOverlay'); if (el) el.style.display = 'none'; try { mhShopRender(); } catch (_) {} }
+function mhxSel(k, on) { _mhx.sel[k] = !!on; mhxRender(); }
+function mhxName(v) { try { localStorage.setItem('mh_stock_device_label', String(v || '').trim().slice(0, 30)); } catch (_) {} }
+function mhxRender() {
+  const el = document.getElementById('mhXferOverlay'); if (!el) return; const esc = mhPlanEsc, v = _mhx.view;
+  const btn = (t, f, st) => '<button class="copy-btn" onclick="' + f + '" style="font-size:14px;padding:11px 14px;' + (st || '') + '">' + t + '</button>';
+  const acc = 'background:var(--accent);color:#fff;', rowBtns = x => '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">' + x + '</div>';
+  const head = '<div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:6px;">📲 Phone to phone</div>';
+  let h = '';
+  if (v === 'home') {
+    const c = mhxCounts(), u = mhxUndoInfo(), any = MHX_SCOPES.some(s => _mhx.sel[s[0]]);
+    h = head + '<div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:10px;">Free. One phone shows codes, the other scans them. You see a preview first. <span class="help-slot" data-id="xfer" data-text="No internet and no file. What arrives is added to what you already have, never swapped in, and you can undo it. Choose what to share. On one phone tap Show codes, on the other tap Scan codes and hold it steady about 20 cm from the screen. Stock counts: the newer count wins, so do it both ways and the two phones match. Recipes, food library and shopping list: only what is missing is added. A food that differs is shown and left alone unless you tick it, and a value you locked from a label is never changed. Nothing is removed from either phone."></span></div>'
+      + (_mhx.msg ? '<div style="font-size:13px;color:var(--accent);margin-bottom:10px;">' + esc(_mhx.msg) + '</div>' : '')
+      + '<div class="settings-card" style="padding:12px 14px;margin-bottom:10px;"><div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">THIS PHONE\'S NAME</div><input id="mhxName" value="' + esc(mhxNameVal()) + '" onchange="mhxName(this.value)" placeholder="e.g. Pete\'s phone" style="width:100%;box-sizing:border-box;padding:10px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);margin-bottom:12px;">'
+      + '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">WHAT TO SHARE</div>'
+      + MHX_SCOPES.map(s => '<label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (_mhx.sel[s[0]] ? 'checked ' : '') + 'onchange="mhxSel(\'' + s[0] + '\',this.checked)" style="width:20px;height:20px;accent-color:var(--accent);"><span style="flex:1;">' + s[1] + '</span><span style="font-size:12px;color:var(--text3);">' + c[s[0]] + '</span></label>').join('') + '</div>'
+      + rowBtns(btn('📤 Show codes (send)', 'mhxStartSend()', acc + (any ? '' : 'opacity:.5;')) + btn('📷 Scan codes (receive)', 'mhxStartReceive()') + btn('Back', 'mhxClose()'))
+      + (u ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);">Last transfer on this phone: ' + esc(new Date(u.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '.</div>' + rowBtns(btn('↩ Undo last transfer', 'appConfirm(\'Undo the last transfer? This phone goes back to how it was just before it.\', mhxUndo, null, false, { confirm: \'Undo transfer\', cancel: \'Keep it\' })')) : '');
+  } else if (v === 'send') {
+    h = head + '<div class="settings-card" style="padding:12px 14px;"><canvas id="mhxQr" style="width:100%;max-width:440px;height:auto;display:block;margin:8px auto;background:#fff;image-rendering:pixelated;"></canvas><div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;"><i id="mhxSbar" style="display:block;height:100%;background:var(--accent);width:0;"></i></div><div id="mhxSinfo" style="font-size:13px;color:var(--text2);margin:8px 0;">Preparing…</div>'
+      + '<label style="font-size:13px;color:var(--text2);">Speed <input id="mhxSpd" type="range" min="2" max="10" value="4" oninput="mhxSpeed()"> <span id="mhxSpdv">4</span> frames a second</label></div>' + rowBtns(btn('Back', 'mhxBackHome()'));
+  } else if (v === 'recv') {
+    h = head + '<div class="settings-card" style="padding:12px 14px;"><video id="mhxCam" playsinline muted style="width:100%;border-radius:10px;background:#000;"></video><div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:8px;"><i id="mhxRbar" style="display:block;height:100%;background:var(--accent);width:0;"></i></div><div id="mhxRinfo" style="font-size:13px;color:var(--text2);margin-top:8px;">Starting the camera…</div></div>' + rowBtns(btn('Back', 'mhxBackHome()'));
+  } else if (v === 'review') {
+    const p = _mhx.plan, ln = (ic, t) => '<div style="font-size:14px;color:var(--text);padding:6px 0;">' + ic + ' ' + t + '</div>', n = (a, w) => '<b>' + a + '</b> ' + w;
+    let body = '';
+    if (p.stock) { body += ln('🥫', 'Stock: ' + n(p.stock.add.length, 'new') + ', ' + n(p.stock.take.length, 'where the other phone\'s count is newer') + (p.stock.keep.length ? ', ' + n(p.stock.keep.length, 'where yours is newer (kept)') : '') + ', ' + p.stock.same + ' already the same.');
+      const diff = p.stock.take.concat(p.stock.keep).slice(0, 8); if (diff.length) body += '<div style="font-size:12px;color:var(--text3);padding:0 0 6px 24px;">' + diff.map(x => esc(x.name) + ': here ' + (x.mineLevel == null ? 'not counted' : x.mineLevel) + ', there ' + (x.theirLevel == null ? 'not counted' : x.theirLevel) + (p.stock.take.includes(x) ? ' → ' + (x.theirLevel == null ? 'not counted' : x.theirLevel) : ' → kept')).join('<br>') + (p.stock.take.length + p.stock.keep.length > 8 ? '<br>…' : '') + '</div>';
+      if (p.stock.off) body += '<div style="font-size:12px;color:var(--yellow);padding:0 0 6px 24px;">Cupboards &amp; stock is switched off on this phone, so these counts are saved for when you turn it on.</div>'; }
+    if (p.list) body += ln('🛒', 'Shopping list: ' + n(p.list.add.length, 'to add') + ', ' + p.list.same + ' already there.');
+    if (p.recipes) body += ln('🍲', 'Recipes: ' + n(p.recipes.add.length, 'to add') + (p.recipes.renamed ? ' (' + p.recipes.renamed + ' share a name with one of yours, so are marked "from ' + esc(p.from) + '")' : '') + ', ' + p.recipes.same + ' already here.');
+    if (p.library) { body += ln('📚', 'Food library: ' + n(p.library.add.length, 'to add') + ', ' + p.library.same + ' already the same' + (p.library.differ.length ? ', ' + n(p.library.differ.length, 'with different numbers') : '') + '.');
+      if (p.library.differ.length) body += '<div style="font-size:12px;color:var(--text3);margin:4px 0 6px 24px;">Left as you have them unless you tick one:</div>' + p.library.differ.slice(0, 40).map((d, i) => '<label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0 6px 24px;font-size:13px;color:var(--text);">' + (d.locked ? '<span style="width:20px;">🔒</span>' : '<input type="checkbox" ' + (d.take ? 'checked ' : '') + 'onchange="_mhx.plan.library.differ[' + i + '].take=this.checked" style="width:20px;height:20px;accent-color:var(--accent);margin-top:2px;">') + '<span style="flex:1;"><b>' + esc(d.name) + '</b><br><span style="color:var(--text3);">here ' + Math.round(+d.mine.kcal || 0) + ' kcal ' + esc(d.mine.portion || '') + ' · there ' + Math.round(+d.theirs.kcal || 0) + ' kcal ' + esc(d.theirs.portion || '') + (d.locked ? ' · yours is locked, so not changed' : '') + '</span></span></label>').join('') + (p.library.differ.length > 40 ? '<div style="font-size:12px;color:var(--text3);padding-left:24px;">…and ' + (p.library.differ.length - 40) + ' more, left as they are.</div>' : ''); }
+    const nothing = !(p.stock && (p.stock.add.length || p.stock.take.length)) && !(p.list && p.list.add.length) && !(p.recipes && p.recipes.add.length) && !(p.library && (p.library.add.length || p.library.differ.length));
+    h = head + '<div style="font-size:13px;color:var(--text2);margin-bottom:10px;">From <b>' + esc(p.from) + '</b>' + (p.at ? ', made ' + esc(new Date(p.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) : '') + '. Checksum matched. Nothing is saved yet.</div><div class="settings-card" style="padding:10px 14px;">' + body + '</div>'
+      + rowBtns((nothing ? '' : btn('Add to this phone', 'mhxDoApply()', acc)) + btn(nothing ? 'Back' : 'Don\'t add', 'mhxBackHome()')) + (nothing ? '<div style="font-size:13px;color:var(--text2);margin-top:10px;">Both phones already match for what was sent.</div>' : '');
+  } else if (v === 'done') {
+    const r = _mhx.res || {}, bits = [];
+    if (r.stockNew || r.stock) bits.push('stock: ' + (r.stockNew || 0) + ' new, ' + (r.stock || 0) + ' updated'); if (r.list) bits.push('shopping list: ' + r.list + ' added'); if (r.recipes) bits.push('recipes: ' + r.recipes + ' added'); if (r.library || r.libraryChanged) bits.push('food library: ' + (r.library || 0) + ' added, ' + (r.libraryChanged || 0) + ' changed');
+    h = head + '<div class="settings-card" style="padding:12px 14px;font-size:14px;color:var(--text);line-height:1.6;">✓ Added to this phone. ' + (bits.length ? esc(bits.join(' · ')) : '') + '</div><div style="font-size:13px;color:var(--text2);margin-top:10px;">To make the other phone match this one too, do it the other way round.</div>'
+      + rowBtns(btn('↩ Undo this transfer', 'mhxUndo()') + btn('📤 Now send mine back', 'mhxStartSend()', acc) + btn('Done', 'mhxClose()'));
+  }
+  el.innerHTML = h; try { initHelpSlots(); } catch (_) {}
+}
+function mhxNameVal() { return (mhStockDeviceLabel() || '').trim(); }
+function mhxBackHome() { mhxStop(); _mhx.view = 'home'; _mhx.msg = ''; mhxRender(); }
+function mhxSpeed() { const s = document.getElementById('mhxSpd'); if (!s) return; document.getElementById('mhxSpdv').textContent = s.value; if (_mhx.tick) { clearInterval(_mhxTimer); _mhxTimer = setInterval(_mhx.tick, 1000 / +s.value); } }
+async function mhxStartSend() {
+  if (!MHX_SCOPES.some(s => _mhx.sel[s[0]])) { showToast('Tick at least one thing to share'); return; }
+  if (typeof CompressionStream === 'undefined') { _mhx.view = 'home'; _mhx.msg = 'This browser cannot squeeze the data for sending. Use Chrome on Android.'; mhxRender(); return; }
+  mhxStop(); _mhx.view = 'send'; mhxRender();
+  let r; try { r = await mhxPack(mhxCollect(_mhx.sel)); } catch (e) { _mhx.view = 'home'; _mhx.msg = 'Could not get the data ready: ' + e.message; mhxRender(); return; }
+  let qrs; try { qrs = r.frames.map(f => MHQR.encodeText(f)); } catch (e) { _mhx.view = 'home'; _mhx.msg = 'That is too much to send in one go. Untick something and try again.'; mhxRender(); return; }
+  let idx = 0; const cv = () => document.getElementById('mhxQr'); if (!cv()) return;
+  _mhx.tick = () => { const c = cv(); if (!c) { mhxStop(); return; } MHQR.draw(c, qrs[idx], 5); document.getElementById('mhxSbar').style.width = ((idx + 1) / qrs.length * 100) + '%'; document.getElementById('mhxSinfo').textContent = 'Frame ' + (idx + 1) + ' of ' + qrs.length + '. It loops until you tap Back, so the other phone can join at any point.'; idx = (idx + 1) % qrs.length; };
+  _mhx.tick(); const s = document.getElementById('mhxSpd'); _mhxTimer = setInterval(_mhx.tick, 1000 / (s ? +s.value : 4));
+}
+async function mhxStartReceive() {
+  mhxStop(); _mhx.view = 'recv'; mhxRender(); const info = t => { const e = document.getElementById('mhxRinfo'); if (e) e.innerHTML = t; };
+  if (!('BarcodeDetector' in window) || typeof DecompressionStream === 'undefined') { info('<span style="color:var(--yellow);">This browser cannot read QR codes. Use Chrome on Android.</span>'); return; }
+  try { _mhxStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }); }
+  catch (e) { info('<span style="color:var(--yellow);">The camera is not available: allow it for this app and try again.</span>'); return; }
+  const v = document.getElementById('mhxCam'); if (!v) { mhxStop(); return; } v.srcObject = _mhxStream; try { await v.play(); } catch (_) {}
+  const det = new BarcodeDetector({ formats: ['qr_code'] }); _mhxRx = mhxReceiver(); info('Point the camera at the other phone\'s codes.'); let busy = false;
+  _mhxTimer = setInterval(async () => {
+    if (busy || !_mhxStream) return; busy = true;
+    try {
+      for (const b of await det.detect(v)) {
+        const r = await _mhxRx.feed(b.rawValue); if (!r.ok) { if (!r.quiet) info('<span style="color:var(--yellow);">' + mhPlanEsc(r.reason) + '</span>'); continue; }
+        const bar = document.getElementById('mhxRbar'); if (bar) bar.style.width = (r.have / r.n * 100) + '%'; info('Got ' + r.have + ' of ' + r.n + ' frames');
+        if (r.complete) { const plan = mhxPlan(r.data); mhxStop(); if (!plan) { _mhx.view = 'home'; _mhx.msg = 'That was not a MaxedHealth transfer.'; } else { _mhx.plan = plan; _mhx.view = 'review'; } mhxRender(); break; }
+      }
+    } catch (_) {}
+    busy = false;
+  }, 120);
+}
+function mhxDoApply() {
+  const p = _mhx.plan; if (!p) return; const r = mhxApply(p);
+  if (r.demo) { showToast('Demo mode: nothing is saved'); return; }
+  _mhx.res = r; _mhx.view = 'done'; mhxRender();
+}
+
 function mhStockRestoreNoticeClear() { try { sessionStorage.removeItem('mh_stock_restored'); } catch (_) {} mhShopRender(); }
 // ── Matching a name to what the app already knows (v3.10.1120) ─────────────────────────────────────────────────────────────────
 // "Double Cream (Asda)" is ingredient "double cream" + shop "asda". Each shop's product is its own library entry with its own nutrition,
@@ -29516,7 +29949,7 @@ function mhStockCardHtml(s) {
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + cbHtml
     + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + '</div>'
-    + '<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3);"><span onclick="mhStockExportAsk()" style="cursor:pointer;text-decoration:underline;">📤 Send stock and list to another device</span><span onclick="mhStockImportPick()" style="cursor:pointer;text-decoration:underline;">📥 Receive stock and list</span><span onclick="mhStockOffAsk()" style="cursor:pointer;text-decoration:underline;">⏻ Turn off</span></div>'
+    + '<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3);"><span onclick="mhxOpen()" style="cursor:pointer;text-decoration:underline;">📲 Phone to phone (QR)</span><span onclick="mhStockExportAsk()" style="cursor:pointer;text-decoration:underline;">📤 Send stock and list to another device</span><span onclick="mhStockImportPick()" style="cursor:pointer;text-decoration:underline;">📥 Receive stock and list</span><span onclick="mhStockOffAsk()" style="cursor:pointer;text-decoration:underline;">⏻ Turn off</span></div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
@@ -29799,7 +30232,7 @@ function mhShopRender(keepFocus) {
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhBoughtDone" class="copy-btn" onclick="mhStockBoughtDone()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Update stock</button>' + btn('Leave stock as it was', 'mhStockBoughtSkipAll()') + '</div>';
   } else if (_shopUi.view === 'sync') {
     const nS = Object.keys(mhStockLoad().items).length, nL = s.items.length;
-    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🔄 Keep another phone in step</div><div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:12px;">One phone is the main one (the master). <b>Send</b> on that phone makes one file with your stock (' + nS + ' tracked) and your shopping list (' + nL + ' item' + (nL === 1 ? '' : 's') + ') and offers to share it, for example by WhatsApp or email. <b>Receive</b> on the other phone picks that file up and replaces its stock and list with it, after asking and checking a backup exists. Send again whenever you want them level; nothing is sent back.</div>'
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🔄 Keep another phone in step</div><div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:10px;">Show codes on one phone, scan them with the other. Free, and it adds instead of replacing.</div><div style="margin-bottom:14px;"><button class="copy-btn" onclick="mhxOpen()" style="font-size:14px;padding:11px 14px;background:var(--accent);color:#fff;">📲 Phone to phone (QR)</button></div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Or with a file (replaces the other phone\'s stock and list):</div><div style="font-size:13px;line-height:1.55;color:var(--text2);margin-bottom:12px;">One phone is the main one (the master). <b>Send</b> on that phone makes one file with your stock (' + nS + ' tracked) and your shopping list (' + nL + ' item' + (nL === 1 ? '' : 's') + ') and offers to share it, for example by WhatsApp or email. <b>Receive</b> on the other phone picks that file up and replaces its stock and list with it, after asking and checking a backup exists. Send again whenever you want them level; nothing is sent back.</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + btn('📤 Send from this phone', 'mhStockExportAsk()', 'font-size:14px;padding:11px 14px;background:var(--accent);color:#fff;') + btn('📥 Receive on this phone', 'mhStockImportPick()', 'font-size:14px;padding:11px 14px;') + btn('Back', "mhShopView('list')", 'font-size:14px;padding:11px 14px;') + '</div>';
   } else if (_shopUi.view === 'lists') {
     const lo = mhShopListsLoad().lists, nShop = s.items.filter(i => !i.hidden && i.shop === s.shop).length, nAll = s.items.filter(i => !i.hidden).length, multiShop = s.shops.length > 1;
@@ -53273,7 +53706,7 @@ const MH_TOPIC_SCOPES = {
   import: { view: 'view-import', groups: {
     connect:  { label: 'Connect devices',  keys: ['imp-sync', 'imp-adddevice'] },
     history:  { label: 'History & entry',  keys: ['imp-combined', 'imp-manual', 'imp-gaps'] },
-    backup:   { label: 'Backup & restore', keys: ['set-databackup', 'imp-restore'] },
+    backup:   { label: 'Backup & restore', keys: ['set-databackup', 'imp-qr', 'imp-restore'] },
   } },
 };
 function mhTopicGet(scope) { try { return localStorage.getItem('mh_topic_' + scope) || 'all'; } catch (_) { return 'all'; } }
