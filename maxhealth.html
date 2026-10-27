@@ -28192,7 +28192,23 @@ function mhStockLeftLine() {
   }).join('<br>');
 }
 // An edit changes what was eaten: put back what the old version took, then take what the new one does.
-function mhStockResync(entry, dateStr) { if (!entry || !entry.id) return; mhStockReverse(entry.id); mhStockOnLog(entry, dateStr, { noAsk: true }); }
+// A serving that was eaten from a cooked batch stays a serving of that batch after an edit: the new number of servings comes from the entry's
+// new calories against the recipe, so the leftovers follow the edit and the ingredients are not taken off stock a second time.
+function mhStockResync(entry, dateStr) {
+  if (!entry || !entry.id) return;
+  let sr = null;
+  try {
+    const c = (mhStockLoad().cookedUse || {})[String(entry.id)];
+    if (c) {
+      const r = (loadRecipes() || []).find(x => x.id === c.r), tot = r ? (r.ingredients || []).reduce((a, i) => a + (parseFloat(i.kcal) || 0), 0) : 0, k = parseFloat(entry.kcal);
+      let n = c.n; if (r && tot > 0 && k >= 0) n = Math.round(k / tot * (r.servings || 1) * 1000) / 1000;
+      if (n > 0) sr = { id: c.r, servings: n };
+    }
+  } catch (_) { sr = null; }
+  mhStockReverse(entry.id);
+  window._stockRecipe = sr;
+  mhStockOnLog(entry, dateStr, { noAsk: true });
+}
 // Cooking a batch takes the whole recipe off stock once; eating its servings later then takes nothing more (see mhStockOnLog).
 function mhStockRecipeLines(r) {
   const o = mhStockLoad(), out = [];
