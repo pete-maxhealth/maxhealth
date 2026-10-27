@@ -112,3 +112,8 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 - [ ] (v3.10.1125) Guide and README: mention that a recipe leaves off foods already in the cupboards.
 - [ ] The category sorter files Apple, Banana, Grape, Lemon as Other (and Pears as vegetable). It is global (aisles, nutrition groups), so extend CATEGORY_MAP deliberately and run the full sweep. Found 21 Oct 2026 while adding section rules for fridge life.
+
+## Data and Reports tidy-up (raised by Pete 27 Oct 2026; agreed plan, do after v3.10.1226)
+- [ ] Data tab: group by intent ("Bring data in", "Move or back up my data", "Check it's complete"). One "Move & back up" card with a "what do you want to do?" chooser holding QR, export/import, setup share, starter packs and restore. Fold the wearable cards (Sync, History, Advanced pipeline, Add device) into one.
+- [ ] Reports: merge Sleep into Sleep & Ketosis; merge Treatment Analysis with Sessions; one "Ask about this period" card (Ask AI + Query Builder); rename Export & Share to "Make a report to hand to someone" and point to Data for raw files.
+- [ ] Keep show/hide and reorder on every merged card, long text behind "?", rendered side-by-side screenshot check, targeted persona tests (no sweep unless asked).
