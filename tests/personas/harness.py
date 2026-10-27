@@ -20,6 +20,7 @@ def fresh_server(port=5757):
         yield root
     finally:
         p.terminate(); p.wait(5)
+        shutil.rmtree(root, ignore_errors=True)   # each run copies the app; without this the disk fills during a sweep
 
 class Findings(list):
     def add(self, sev, msg): self.append((sev, msg)); print(f'  [{sev}] {msg}')

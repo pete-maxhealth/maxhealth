@@ -15,5 +15,6 @@ for f in files:
     open(f'/tmp/claude-0/sweep_out/{n}.txt','w').write(txt)
     # clean up any stray server
     subprocess.run("ps -eo pid,args | grep 'server.py' | grep -v grep | awk '{print $1}' | xargs -r kill",shell=True)
+    subprocess.run("find /tmp -maxdepth 1 -name 'mh_*' -mmin +1 -exec rm -rf {} + 2>/dev/null",shell=True)   # leftover per-run app copies fill the disk
     open(out,'a').write(f"{'PASS' if rc==0 else 'FAIL'} {n} {time.time()-t:.0f}s\n")
 open(out,'a').write('DONE\n')
