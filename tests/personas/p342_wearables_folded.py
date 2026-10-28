@@ -1,4 +1,4 @@
-"""Persona 342 (v3.10.1227): Settings > Data: Wearable History and Add New Device sit inside the Sync Wearable Data card (no longer separate cards); they keep their own fold; an old saved card order (8 cards) still loads; hiding Sync hides them with it and they come back; topic chips still reach them. Invented data."""
+"""Persona 342 (v3.10.1227-1228): Settings > Data: Wearable History and Add New Device sit inside the Sync Wearable Data card and Phone to phone (QR) inside Export, import & backup (Restore stays separate) (no longer separate cards); they keep their own fold; an old saved card order (8 cards) still loads; hiding Sync hides them with it and they come back; topic chips still reach them. Invented data."""
 import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -18,9 +18,12 @@ with fresh_server() as root, sync_playwright() as pw:
         if not ev(f"!!document.querySelector('#imp-sync-wrap #{k}-wrap')"): f.add('BUG', f'{k} should sit inside Sync Wearable Data')
     cards = ev("[...document.querySelectorAll('#view-import .card-unit')].map(c => (c.querySelector('[id^=title-]')||{}).id)")
     if 'title-imp-combined' in cards or 'title-imp-adddevice' in cards: f.add('BUG', f'folded sections are still separate cards: {cards}')
-    if len(cards) != 6: f.add('BUG', f'expected 6 cards, got {cards}')
+    if len(cards) != 5: f.add('BUG', f'expected 5 cards, got {cards}')
+    if not ev("!!document.querySelector('#set-databackup-wrap #imp-qr-wrap')"): f.add('BUG', 'Phone to phone (QR) should sit inside Export, import & backup')
+    if 'title-imp-qr' in cards: f.add('BUG', 'QR is still a separate card')
+    if 'title-imp-restore' not in cards: f.add('BUG', 'Restore must stay its own card')
     # no leftover card-level move/hide controls on the folded sections
-    ctl = ev("(() => { let n = 0; for (const id of ['title-imp-combined','title-imp-adddevice']) { const t = document.getElementById(id); n += t.parentElement.querySelectorAll('[onclick*=\"Generic\"], .mh-reorder, [title=\"Hide\"]').length; } return n; })()")
+    ctl = ev("(() => { let n = 0; for (const id of ['title-imp-combined','title-imp-adddevice','title-imp-qr']) { const t = document.getElementById(id); n += t.parentElement.querySelectorAll('[onclick*=\"Generic\"], .mh-reorder, [title=\"Hide\"]').length; } return n; })()")
     if ctl: f.add('BUG', f'folded sections still carry {ctl} card controls')
     # the old saved order is honoured for the cards that remain (Manual Entry first), nothing crashed
     if cards[0] != 'title-imp-manual': f.add('BUG', f'saved order lost: {cards}')

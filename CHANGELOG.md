@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1228
+- **Settings > Data: Phone to phone (QR) now sits inside Export, import & backup**, so everything for moving data between phones and files is in one card. Restore from backup stays its own card because it replaces your data. The Data tab is now five cards: Export, import & backup; Restore; Sync Wearable Data; Manual Entry; Missing Data. Nothing is removed; the QR section keeps its own show/hide fold, and the Backup & restore topic chip still reaches it.
+
 ## v3.10.1227
 - **Settings > Data: Wearable History and Add New Device now sit inside the Sync Wearable Data card**, with the manual-pipeline section that was already there. One wearable card instead of four; Backup, QR, Restore, Manual Entry and Missing Data are unchanged (Restore stays its own card because it replaces data). Nothing is removed or renamed. If you had rearranged this screen, your order is kept; the two folded sections just stop being separate cards.
 
