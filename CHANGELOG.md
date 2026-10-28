@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1227
+- **Settings > Data: Wearable History and Add New Device now sit inside the Sync Wearable Data card**, with the manual-pipeline section that was already there. One wearable card instead of four; Backup, QR, Restore, Manual Entry and Missing Data are unchanged (Restore stays its own card because it replaces data). Nothing is removed or renamed. If you had rearranged this screen, your order is kept; the two folded sections just stop being separate cards.
+
 ## v3.10.1226
 - **Share by QR now carries all your own data.** Stock, shopping list, recipes, food library, history (days and strength log), routines, supplements, symptoms, treatments and their sessions, lab results, and (only if you tick it) settings, profile, layout, report profiles and tableware. Wearable and other third-party history is left out (too big for codes). The receiving phone shows a preview, only adds (existing days and values are kept unless you tick a changed setting), takes a compressed undo snapshot first, and rolls back if a write fails. Blocked in demo mode.
 - **Settings > Data lists Cupboards & stock and Shopping list** (one small .json each); importing that file opens the same preview as the QR codes.
