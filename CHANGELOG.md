@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1235
+- **One icon for everything that talks to an AI: the sparkle (✨).** Before, the same idea wore six different icons (robot, brain, wand, star, magnifier, camera) or none. Now every button, link and status line that sends something to an AI carries ✨: Try AI, Ask AI, Generate Full Summary, Generate Monthly Summary, Add AI summary, Verify across 3 AIs (Library, Log, History, Recipe, Paste meal), Interpret this with AI, Send to AI for interpretation, Estimate portion for me, Describe meals, Calculate with AI, Read the label with AI instead, Reading barcode with AI, Auto-classify prompts, Create Recipe from this, the AI estimate tag, and Where AI is used. Brain icons that mean a condition or protocol (GBM, migraine) are unchanged. Wording and behaviour are unchanged.
+- Test p348 guards the source and checks the buttons render with the sparkle on Reports, Food search and Missed day.
+
 ## v3.10.1234
 - **No more "Save to your library?" after logging a food that is already in your library.** The check compared the saved name with the name plus the amount ("Egg, boiled 120g"), so it never matched and every library food was offered again, with a box of kcal and macro numbers nobody should have to fill in. Foods that are genuinely new (a barcode, a search result) still offer to save. Test p347.
 
