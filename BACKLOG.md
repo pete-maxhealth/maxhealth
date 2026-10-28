@@ -120,5 +120,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 ## Pre-existing test failures found 28 Oct 2026 (identical on v3.10.1225, not caused by 1226)
 - [ ] p42 (Clear-Site-Data header): test server stops answering, test hangs.
-- [ ] p63, p70 (fasting): multi-day fast not recognised; 20:00 to 08:00 not exactly 12h. Suspect the UK clock change on 25 Oct.
-- [ ] p306, p307 (ate-out history): History day element not found (null). Suspect date-dependent.
+- [ ] p63, p70 (fasting; both PASSED in the 28 Oct 2026 full sweep, so maybe flaky or clock-dependent; watch the nightly runs): multi-day fast not recognised; 20:00 to 08:00 not exactly 12h. Suspect the UK clock change on 25 Oct.
+- [x] p306, p307 (ate-out history): fixed 28 Oct 2026. The tests hard-coded 20/10/26, which fell outside History's default period; they now use a day relative to today. No app bug.
