@@ -117,3 +117,8 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Data tab: group by intent ("Bring data in", "Move or back up my data", "Check it's complete"). One "Move & back up" card with a "what do you want to do?" chooser holding QR, export/import, setup share, starter packs and restore. Fold the wearable cards (Sync, History, Advanced pipeline, Add device) into one.
 - [ ] Reports: merge Sleep into Sleep & Ketosis; merge Treatment Analysis with Sessions; one "Ask about this period" card (Ask AI + Query Builder); rename Export & Share to "Make a report to hand to someone" and point to Data for raw files.
 - [ ] Keep show/hide and reorder on every merged card, long text behind "?", rendered side-by-side screenshot check, targeted persona tests (no sweep unless asked).
+
+## Pre-existing test failures found 28 Oct 2026 (identical on v3.10.1225, not caused by 1226)
+- [ ] p42 (Clear-Site-Data header): test server stops answering, test hangs.
+- [ ] p63, p70 (fasting): multi-day fast not recognised; 20:00 to 08:00 not exactly 12h. Suspect the UK clock change on 25 Oct.
+- [ ] p306, p307 (ate-out history): History day element not found (null). Suspect date-dependent.
