@@ -122,3 +122,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] p42 (Clear-Site-Data header guard): retired 28 Oct 2026 at Pete's call; it hung every run. The warning comment in server.py (around line 1801) stays. Do not add Clear-Site-Data back without testing on the phone.
 - [ ] p63, p70 (fasting; both PASSED in the 28 Oct 2026 full sweep, so maybe flaky or clock-dependent; watch the nightly runs): multi-day fast not recognised; 20:00 to 08:00 not exactly 12h. Suspect the UK clock change on 25 Oct.
 - [x] p306, p307 (ate-out history): fixed 28 Oct 2026. The tests hard-coded 20/10/26, which fell outside History's default period; they now use a day relative to today. No app bug.
+
+## Steps: plan vs actual in one box (Pete, 28 Oct 2026; build only after the videos, not needed for them)
+- [ ] One Daily Steps box that knows if the number is a plan (intention) or an actual. A plan is replaced by the first device figure even if lower; an actual stays a floor (today's rule). Plan ahead becomes how a plan is entered. Card says "planned, waiting for your watch". Steps become the one metric where a device beats a manual entry; everything else keeps manual wins. Whole-day test: plan, device lower, device higher, midnight, reload, History.
+- [ ] No in-app step counter (a web page cannot count in the background). Phone steps come from Health Connect via the launcher; fix the phone+watch double count there (needs the laptop).
