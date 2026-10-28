@@ -14,7 +14,7 @@
 ## Running the tests (hard-won)
 - All personas share ONE port (5757): never run two at once, and never run a single test while a sweep is running.
 - A leftover `server.py` from a killed run keeps serving the OLD page on 5757 and gives false failures. Before any run: `ps -eo pid,args | grep server.py | grep -v grep`, and kill strays by PID. Never `pkill -f` a pattern that also matches your own command line; it kills your shell.
-- Use `python3 -u tools/run_sweep.py <logfile>`: it logs each persona (PASS/FAIL, seconds) as it finishes and cleans up stray servers, whereas `run_all.py` prints only at the very end. A full sweep takes about an hour.
+- Full sweep: `python3 -u tools/run_sweep_par.py <logfile> [workers=3] [timeout=240]` (as root). Each test runs in its own network namespace, so all keep port 5757 and run 3 at a time: about 27 min instead of ~75 (28/10/2026). Logs PASS/FAIL per test and ends with DONE. The old serial `tools/run_sweep.py` still works if namespaces are unavailable.
 - Background jobs die when the workspace restarts; check the log is still growing.
 
 ## Standing rules from Pete
