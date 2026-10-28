@@ -27,6 +27,6 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("navigator.share=undefined; window.__t=[]; const st=window.showToast; window.showToast=m=>{__t.push(m); return st(m);}"); ev("mhExportSelected(true)"); page.wait_for_timeout(1200)
     if "can't open the share menu" not in ' '.join(str(x) for x in ev("window.__t")): f.add('BUG', 'no honest toast when share unsupported')
     src = open('maxhealth.html').read()
-    if 'Save to Downloads</button>' not in src or '📤 Share…</button>' not in src: f.add('BUG', 'buttons not relabelled')
+    if 'Save to Downloads</button>' not in src or '📤 Send to another app…</button>' not in src: f.add('BUG', 'buttons not relabelled')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

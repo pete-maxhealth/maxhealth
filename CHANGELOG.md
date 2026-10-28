@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1232
+- **Settings > Data is simpler.** Phone to phone (QR) is now the first thing in the card, open by default, with one short line (the long explanation is behind a "?"). Under Export there is one main button, Save to Downloads, and a smaller Send to another app; the One zip / Separate files choice and "Share my setup only" moved into a "More options" fold. The paragraph that explained Save and Share is behind a "?".
+- **You are told the file arrived.** After saving, a line stays in the card with the file name and "Find it in your Downloads folder" (and the time); sending names what was sent.
+- **Import button no longer looks like step one.** "Open a file to preview..." with a line saying nothing is added until you confirm.
+- **Starter packs moved to Manage > Setup**, next to Change my focus, where they belong.
+- Test p345.
+
 ## v3.10.1231
 - **Move: one steps box.** Walking is now logged inside Daily Steps (minutes, distance, effort), under your day total, instead of as a second box in Today's activity. It counts exactly as before: its steps are taken out of the day total so nothing is counted twice, and it still earns its calories and effort. Running, cycling and the others stay in Today's activity. If you hide Daily Steps, Walking goes back to the activity list so you can still log a walk, and returns when you show Daily Steps again.
 
