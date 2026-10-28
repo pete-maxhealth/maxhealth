@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1234
+- **No more "Save to your library?" after logging a food that is already in your library.** The check compared the saved name with the name plus the amount ("Egg, boiled 120g"), so it never matched and every library food was offered again, with a box of kcal and macro numbers nobody should have to fill in. Foods that are genuinely new (a barcode, a search result) still offer to save. Test p347.
+
 ## v3.10.1233
 - **App Health Check no longer reports a false "MISMATCH DETECTED".** It compared a placeholder version in the file's markup (an old v3.10.855) with the real version, which the page replaces at start-up, so it flagged a mismatch on every version. It now compares the version actually shown on screen with the file's constant and the running value; a real drift is still flagged. Test p346.
 
