@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1231
+- **Move: one steps box.** Walking is now logged inside Daily Steps (minutes, distance, effort), under your day total, instead of as a second box in Today's activity. It counts exactly as before: its steps are taken out of the day total so nothing is counted twice, and it still earns its calories and effort. Running, cycling and the others stay in Today's activity. If you hide Daily Steps, Walking goes back to the activity list so you can still log a walk, and returns when you show Daily Steps again.
+
 ## v3.10.1230
 - **Reports: fewer cards, nothing lost.** Sleep now lives inside Sleep & Ketosis (one card with a Sleep part and a Sleep and your food part; each part still appears only when it has data, and the card appears when either does). Treatment Analysis and Treatment Sessions are one card, Treatment Analysis & Sessions. Ask AI and Query Builder are one card, Ask about this period. Export & Share is now called "Make a report to hand to someone". Every merged card keeps show/hide and reorder; Query Builder, Treatment Sessions and Sleep keep their own fold. If you had rearranged or hidden these cards, your layout is kept for the cards that remain.
 
