@@ -26,7 +26,7 @@ What the suite covers, by area:
 | Screens, Filter toolbar, fold bars, reset | p49, p50, p71, p73, p78, p80, p88, p89, p90, p93, p98 |
 | Charts, trends, reports | p03, p13, p51, p82 |
 | Wearables, sync, data gaps | p04, p05, p07, p10, p20, p56, p57, p58, p66, p67, p84, p86, p87 |
-| Backup, offline, network failure | p25, p27, p28, p42, p43, p62, p96 |
+| Backup, offline, network failure | p25, p27, p28, p43, p62, p96 |
 | AI safety (no guessed grams, prompt rules) | p60, p95 |
 | Health tracking (symptoms, fasting, ketosis, weight, bodycomp) | p23, p41, p45, p46, p63, p70 |
 | Voice and chat commands | p97 |

@@ -119,6 +119,6 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Keep show/hide and reorder on every merged card, long text behind "?", rendered side-by-side screenshot check, targeted persona tests (no sweep unless asked).
 
 ## Pre-existing test failures found 28 Oct 2026 (identical on v3.10.1225, not caused by 1226)
-- [ ] p42 (Clear-Site-Data header): test server stops answering, test hangs.
+- [x] p42 (Clear-Site-Data header guard): retired 28 Oct 2026 at Pete's call; it hung every run. The warning comment in server.py (around line 1801) stays. Do not add Clear-Site-Data back without testing on the phone.
 - [ ] p63, p70 (fasting; both PASSED in the 28 Oct 2026 full sweep, so maybe flaky or clock-dependent; watch the nightly runs): multi-day fast not recognised; 20:00 to 08:00 not exactly 12h. Suspect the UK clock change on 25 Oct.
 - [x] p306, p307 (ate-out history): fixed 28 Oct 2026. The tests hard-coded 20/10/26, which fell outside History's default period; they now use a day relative to today. No app bug.
