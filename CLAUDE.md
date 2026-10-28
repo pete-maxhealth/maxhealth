@@ -7,7 +7,8 @@
 
 ## Release routine
 - The version lives in one place: `const APP_VERSION` in maxhealth.html. Bump it, add a CHANGELOG.md entry, update tests that pin text.
-- Merge to `main` only after the FULL regression sweep passes on the final code; push with `git push -q origin HEAD:main`. Then give Pete `bash ~/mh_autoupdate.sh` in its own code block.
+- Release gate (Pete, 28/10/2026): test only what the change touched (its own persona test plus the neighbouring screens and every place the same thing appears), not the full sweep. Before pushing, a backup/restore path must be in place: tag the current `main` (e.g. `git tag pre-v<version> origin/main && git push origin pre-v<version>`) and say how to roll back (`git push -f origin pre-v<version>:main` only with Pete's OK, or revert the release commit). The full sweep runs overnight (scheduled task "MaxedHealth nightly tests", report-only) and is not a release gate; triage its new failures the next day. Known failures live in BACKLOG.md.
+- Push with `git push -q origin HEAD:main`. Then give Pete `bash ~/mh_autoupdate.sh` in its own code block.
 - Commit trailers: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` and the `Claude-Session:` line.
 
 ## Running the tests (hard-won)
@@ -25,5 +26,5 @@
 ## How every change is checked (Pete's standard, 24/10/2026)
 - Before building: think the whole process through, including what it means retrospectively (past days, older data, other screens that show the same thing). List every place the same thing appears (Today, History, edit forms, calendar, copy/duplicate paths) and do all of them, not just the one he pointed at.
 - Uniformity: a new button, chip, control or message must look and act like the existing ones that do the same job (same class, size, icon, position, wording, confirm/undo behaviour). Find the existing one first and reuse it; compare them side by side in a rendered screenshot, not from the code alone.
-- Persona tests are part of building, not a later step: write a test that walks the whole process (set up, do it, undo it, reload, the neighbouring screens it touches) and run the targeted tests for everything it can affect. The full regression sweep is still only run when Pete asks.
+- Persona tests are part of building, not a later step: write a test that walks the whole process (set up, do it, undo it, reload, the neighbouring screens it touches) and run the targeted tests for everything it can affect. The full regression sweep runs overnight, not before a release (see Release routine).
 - Say what was checked and what was not. Never tell Pete a change "landed" without having seen it render.
