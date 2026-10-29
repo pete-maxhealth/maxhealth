@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1245
+- **The photo preview now says how to get your own plate or bowl used.** Under the photo, the existing "Tableware sizes used: Home" line adds: name your plate or bowl in the box below and its size is used. If you have your own tableware items, the first one is the example (e.g. "in the blue bowl"). Tapping the line opens the Tableware settings, like the tableware chip above does. Wording only: nothing about how photos are read or what is sent to the AI changed (your set's sizes were already included, for items that are visible or named).
+- Test p354 added (hint shown after choosing a photo, generic without own items, example from your own item, prompt carries that item, tap opens Tableware settings). p44, p53, p54, p72, p75 and p341 still pass.
+
 ## v3.10.1244
 - **Fixed: tapping a meal name in History did nothing.** The History list shows days newest first, skips empty days and hides placeholder entries (Standard, Occasion, Holiday, Missed day), but the tap handler used the on-screen position as if it were the stored position, so it found no meal (or the wrong one). Taps now map to the real day and the real entry, for edit and for delete-by-tap. Nothing stored changed.
 - Test p353 added (taps every meal on three History days with real clicks, a placeholder entry ahead of the real meals, the right meal opens, delete-by-tap removes the one shown). It fails on v3.10.1243 and passes now. p351 and p352 now open History by tapping the meal name.
