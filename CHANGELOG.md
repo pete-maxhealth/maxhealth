@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1242
+- **A logged meal's ingredients now have the 🔄 library swap.** In the itemised editor for a meal in Today's log, and the same editor for a past day in History, every ingredient row has the swap button the recipe builder, Cook Mode and suggested combos already had (same icon, tooltip, picker and "Swapped in ... ✓" toast). The logged amount and its unit (g or ml) stay, and the calories and macros are recalculated from the library food. If the Amount holds no size (e.g. "a handful") the library's own portion is used and the toast says so; nothing is guessed. Nothing changes in the log until Save changes; Cancel leaves the meal as it was. Swaps are remembered like any other. Test p351 covers Today and History, Cancel, Save, amount edits after a swap, ml, and no-size amounts.
+
 ## v3.10.1241
 - **Fixed: typing minutes in an exercise row could lose digits and focus.** Typing "40" left just "4", because every keystroke redrew the whole Move card (a leftover from the old walking-row logic, since v3.10.1231). That redraw is gone; minutes and distance now keep what you type. Test p350 types 40 min and 3.5 and checks both stick.
 

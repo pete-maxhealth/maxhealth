@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1241'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1242'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -30760,6 +30760,7 @@ function renderLogEditItemsList(id) {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">
         <input value="${it.name || ''}" oninput="updateLogEditItem(${id},${idx},'name',this.value)" class="modal-input" style="flex:1;font-size:12px;padding:5px 8px;" placeholder="Name">
         <input id="log-edit-amt-${id}-${idx}" value="${it.amount || ''}" oninput="updateLogEditItem(${id},${idx},'amount',this.value)" class="modal-input" style="width:70px;font-size:12px;padding:5px 8px;" placeholder="e.g. 150g">
+        <button onclick="swapLogEditItem(${id},${idx})" title="Swap for something similar in your library" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;">🔄</button>
         <button onclick="removeLogEditItem(${id},${idx})" title="Remove" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
@@ -30858,6 +30859,33 @@ function updateLogEditItem(id, idx, field, value) {
       : null;
   }
   updateLogEditTotalLine(id);
+}
+
+// Swap one ingredient of an already-logged meal for another from the library (v3.10.1242). Same picker, same
+// like-for-like memory and same ✓ toast as the recipe builder, Cook Mode and suggested combos; the logged amount and
+// its unit (g or ml) are kept and the macros are recalculated from the library food. No reliable size in Amount means
+// the library's own portion is used and the toast says so (nothing is guessed). Works on the staged copy: nothing
+// changes in the log until Save changes.
+function _editItemSwap(it, onDone) {
+  if (!it) return;
+  const m = String(it.amount || '').match(/^\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
+  const grams = m ? parseFloat(m[1]) : (it._base && it._base.grams > 0 ? it._base.grams : 0);
+  const unit = m ? m[2].toLowerCase() : 'g';
+  const oldName = it.name || '';
+  _openSubstitutePicker(oldName, (f) => {
+    const n = _libItemToScalableIngredient(f, grams || undefined);
+    const sw = { name: n.name, amount: n.amount + unit, kcal: n.kcal, protein: n.protein, fat: n.fat, carbs: n.carbs, fibre: n.fibre, polyols: n.polyols,
+      _base: { grams: n.amount, kcal: n.kcal, protein: n.protein, fat: n.fat, carbs: n.carbs, fibre: n.fibre, polyols: n.polyols }, _baseConfirmed: true, _substitutedFrom: oldName };
+    Object.keys(it).forEach(k => delete it[k]); Object.assign(it, sw);
+    try { mhSwapRemember(oldName, f.name); } catch (_) {}
+    showToast(grams ? `Swapped in "${f.name}" ✓` : `Swapped in "${f.name}" ✓ (no size in Amount, so its own portion is used)`);
+    onDone();
+  });
+}
+function swapLogEditItem(id, idx) {
+  const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
+  if (!items || !items[idx]) return;
+  _editItemSwap(items[idx], () => renderLogEditItemsList(id));
 }
 
 function removeLogEditItem(id, idx) {
@@ -33511,6 +33539,7 @@ function renderHistEditItemsList(key) {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:5px;">
         <input value="${it.name || ''}" oninput="updateHistEditItem('${key}',${idx},'name',this.value)" class="modal-input" style="flex:1;font-size:11px;padding:4px 6px;" placeholder="Name">
         <input id="hist-edit-amt-${key}-${idx}" value="${it.amount || ''}" oninput="updateHistEditItem('${key}',${idx},'amount',this.value)" class="modal-input" style="width:60px;font-size:11px;padding:4px 6px;" placeholder="e.g. 150g">
+        <button onclick="swapHistEditItem('${key}',${idx})" title="Swap for something similar in your library" style="background:none;border:none;color:var(--accent);font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;">🔄</button>
         <button onclick="removeHistEditItem('${key}',${idx})" title="Remove" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:2px 4px;line-height:1;">✕</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;">
@@ -33581,6 +33610,12 @@ function updateHistEditItem(key, idx, field, value) {
       : null;
   }
   updateHistEditTotalLine(key);
+}
+
+function swapHistEditItem(key, idx) {
+  const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
+  if (!items || !items[idx]) return;
+  _editItemSwap(items[idx], () => renderHistEditItemsList(key));
 }
 
 function removeHistEditItem(key, idx) {
