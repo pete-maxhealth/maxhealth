@@ -2,6 +2,9 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1241
+- **Fixed: typing minutes in an exercise row could lose digits and focus.** Typing "40" left just "4", because every keystroke redrew the whole Move card (a leftover from the old walking-row logic, since v3.10.1231). That redraw is gone; minutes and distance now keep what you type. Test p350 types 40 min and 3.5 and checks both stick.
+
 ## v3.10.1240
 - **The body-composition headline no longer cries wolf on one noisy week.** "Gaining fat, losing muscle" (or any fat/muscle verdict) now shows only when the change is at least half a kilo AND the week before moved the same way. A one-off swing shows "Holding steady" with a note that it may be scale noise and will appear if it holds. With only two weigh-ins the card says it is a hint, not a trend. The weekly threshold moved from 0.3 kg to 0.5 kg to match the scale's own noise.
 - Test p46 extended (noisy week held back, continuing trend shown, two-weigh-in hint).

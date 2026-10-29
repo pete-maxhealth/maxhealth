@@ -29,6 +29,13 @@ with fresh_server() as root, sync_playwright() as pw:
     check('picker opens', ev("!!document.getElementById('mhPickOv')"))
     ev("mhPickExercise('cycling')"); page.wait_for_timeout(600)
     check('cycling row appears in Exercise today', ev("[...document.querySelectorAll('#activityCard .activity-name')].some(e=>/Cycling/.test(e.textContent))"))
+    # typing minutes then distance must keep every digit and focus (v3.10.1241: no card redraw per keystroke)
+    ev("(()=>{const i=getActivities().findIndex(a=>a.type==='walking'); toggleActivity(i,true)})()"); page.wait_for_timeout(300)
+    mi = page.locator('#activityRows .activity-row').first.locator('input.activity-dur').first; mi.click(); page.keyboard.type('40', delay=100); page.wait_for_timeout(300)
+    check('typing 40 minutes keeps both digits', ev("document.querySelector('#activityRows input.activity-dur').value")=='40')
+    di = page.locator('#activityRows .activity-row').first.locator('input.activity-dur').nth(1); di.click(); page.keyboard.type('3.5', delay=100); page.wait_for_timeout(300)
+    check('typing a distance keeps focus and value', ev("document.querySelectorAll('#activityRows input.activity-dur')[1].value")=='3.5')
+    ev("(()=>{const i=getActivities().findIndex(a=>a.type==='walking'); updateActivity(i,'duration','',false); updateActivity(i,'distance','',false); toggleActivity(i,false)})()"); page.wait_for_timeout(300)
     # What if: nothing stored, Log it appends
     ev("mhWiSet && 0"); 
     before = ev("getActivities().find(a=>a.type==='walking')")
