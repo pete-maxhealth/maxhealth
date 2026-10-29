@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1242'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1243'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -8195,7 +8195,7 @@ function substituteBuilderIngredient(i) {
   _substituteRecipeIngredient(_recipeIngredients[i], () => {
     renderRecipeIngredients();
     updateRecipeTotals();
-  }, (q) => openRecipeIngredientSearch(i, q));
+  }, (q, ai) => openRecipeIngredientSearch(i, q, ai));
 }
 
 function substituteCookIngredient(i) {
@@ -17285,6 +17285,7 @@ function closeFoodSearch() {
   // No modal to restore for combo mode - just clear the target so a
   // cancelled search doesn't silently apply to a future unrelated one
   _comboSearchTarget = null;
+  _editSearchTarget = null;
   _categorySearchTarget = null;
   // Backing out of a preview-row search (no result picked) needs the meal
   // preview bubble un-hidden again - a completed pick already replaces it
@@ -17765,6 +17766,29 @@ function logFoodFromDatabase() {
     };
     renderMealPreview();
     showToast(`${newName} updated ✓`);
+    return;
+  }
+  // Logged-meal ingredient swap (Today's log or History editor): put the picked online/AI result into that staged row,
+  // keeping its amount and unit, exactly like the library swap. Nothing is saved until the editor's Save.
+  if (_editSearchTarget) {
+    const tg = _editSearchTarget;
+    _editSearchTarget = null;
+    closeFoodSearch();
+    const list = tg.kind === 'hist' ? (window._histEditWorkingItems || {})[tg.key] : (window._logEditWorkingItems || {})[tg.id];
+    const it = list && list[tg.idx];
+    if (!it) { showToast('That ingredient is no longer being edited'); return; }
+    const oldName = it.name || '';
+    const m = String(it.amount || '').match(/^\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
+    const amt = m ? parseFloat(m[1]) : (it._base && it._base.grams > 0 ? it._base.grams : grams);
+    const unit = m ? m[2].toLowerCase() : 'g';
+    const newName = _selectedFoodItem.brand ? `${_selectedFoodItem.name} (${_selectedFoodItem.brand})` : _selectedFoodItem.name;
+    const base = { kcal: _selectedFoodItem.kcal, protein: _selectedFoodItem.prot, fat: _selectedFoodItem.fat || 0, carbs: _selectedFoodItem.carb, fibre: _selectedFoodItem.fibre || 0, polyols: _selectedFoodItem.polyols || 0 };
+    const sc = scaleMacros(base, amt / 100);
+    Object.keys(it).forEach(k => delete it[k]);
+    Object.assign(it, { name: newName, amount: amt + unit, ...sc, _base: { grams: amt, ...sc }, _baseConfirmed: true, _substitutedFrom: oldName });
+    try { mhSwapRemember(oldName, newName); } catch (_) {}
+    if (tg.kind === 'hist') renderHistEditItemsList(tg.key); else renderLogEditItemsList(tg.id);
+    showToast(`Swapped in "${newName}" ✓`);
     return;
   }
   // Suggested-combo substitute mode — route the picked online result back
@@ -19105,7 +19129,7 @@ function substituteComboItem(comboIndex, itemIndex) {
     const oldName = item.name;
     try { mhSwapRemember(oldName, f.name); } catch (_) {} combo.items[itemIndex] = { ..._libItemToScalableIngredient(f, amount), _substitutedFrom: oldName }; // same portion size preserved, same as recipe-ingredient substitute
     _reRenderComboCard(comboIndex);
-  }, (q) => openComboItemOnlineSearch(comboIndex, itemIndex, q));
+  }, (q, ai) => openComboItemOnlineSearch(comboIndex, itemIndex, q, ai));
 }
 
 function removeComboItem(comboIndex, itemIndex) {
@@ -30866,7 +30890,7 @@ function updateLogEditItem(id, idx, field, value) {
 // its unit (g or ml) are kept and the macros are recalculated from the library food. No reliable size in Amount means
 // the library's own portion is used and the toast says so (nothing is guessed). Works on the staged copy: nothing
 // changes in the log until Save changes.
-function _editItemSwap(it, onDone) {
+function _editItemSwap(it, onDone, onlineFallback) {
   if (!it) return;
   const m = String(it.amount || '').match(/^\s*(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
   const grams = m ? parseFloat(m[1]) : (it._base && it._base.grams > 0 ? it._base.grams : 0);
@@ -30880,12 +30904,12 @@ function _editItemSwap(it, onDone) {
     try { mhSwapRemember(oldName, f.name); } catch (_) {}
     showToast(grams ? `Swapped in "${f.name}" ✓` : `Swapped in "${f.name}" ✓ (no size in Amount, so its own portion is used)`);
     onDone();
-  });
+  }, onlineFallback);
 }
 function swapLogEditItem(id, idx) {
   const items = window._logEditWorkingItems && window._logEditWorkingItems[id];
   if (!items || !items[idx]) return;
-  _editItemSwap(items[idx], () => renderLogEditItemsList(id));
+  _editItemSwap(items[idx], () => renderLogEditItemsList(id), (q, ai) => openEditItemOnlineSearch({ kind: 'log', id, idx }, q, ai));
 }
 
 function removeLogEditItem(id, idx) {
@@ -33615,7 +33639,7 @@ function updateHistEditItem(key, idx, field, value) {
 function swapHistEditItem(key, idx) {
   const items = window._histEditWorkingItems && window._histEditWorkingItems[key];
   if (!items || !items[idx]) return;
-  _editItemSwap(items[idx], () => renderHistEditItemsList(key));
+  _editItemSwap(items[idx], () => renderHistEditItemsList(key), (q, ai) => openEditItemOnlineSearch({ kind: 'hist', key, idx }, q, ai));
 }
 
 function removeHistEditItem(key, idx) {
@@ -35351,14 +35375,25 @@ function _openSubstitutePicker(currentName, onPick, searchOnlineFallback) {
 // supplied a fallback (recipe/Cook Mode substitution has one via the
 // existing online food search; suggested-combo substitution currently
 // doesn't - add it there too later if it turns out to matter as much).
-function _libPickerSearchOnline() {
+function _libPickerSearchOnline(ai) {
   const fallback = _libPickerTarget?.searchOnlineFallback;
   if (!fallback) return;
   // What was typed in the picker box (e.g. "beef bacon") is what the person wants to
   // search for; the old item's name is only the starting point when nothing was typed.
   const typed = (document.getElementById('recipeLibSearch')?.value || '').trim();
   closeRecipeLibPicker();
-  fallback(typed);
+  // ✨ Try AI: the same search screen opens (so the pick lands in the same place) but asks the AI instead of the food database.
+  fallback(typed, !!ai);
+}
+// The online escape hatches stay on screen in the swap picker (v3.10.1243), not only after a search finds nothing: a food that
+// is in the library under another name used to hide them. Only where the caller can take an online result back (recipe builder,
+// suggested combos, logged-meal editors); Cook Mode has no such route, so it shows nothing here.
+function _libPickerOnlineRowHtml() {
+  if (!_libPickerTarget?.searchOnlineFallback) return '';
+  if (navigator.onLine === false) return `<div data-lib-online-row="1" style="color:var(--text3);font-size:12px;padding:6px 0 8px;">Online search needs internet (so does ✨ Try AI). Everything in your library is listed below.</div>`;
+  return `<div data-lib-online-row="1" style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;padding:6px 0 8px;border-bottom:1px solid var(--border);">
+    <span onclick="_libPickerSearchOnline()" style="color:var(--blue);text-decoration:underline;cursor:pointer;">🔍 Search online</span>
+    <span onclick="_libPickerSearchOnline(true)" style="color:var(--accent);text-decoration:underline;cursor:pointer;">✨ Try AI</span></div>`;
 }
 
 // Clears the search box and refocuses it, with a short toast for context -
@@ -35434,11 +35469,7 @@ function filterRecipeLibPicker(q) {
     // trusting an algorithm's guess - showing algorithmic guesses here would
     // contradict that. Just says nothing matched, with a retry hint and the
     // online-search escape hatch where one exists.
-    const onlineLink = _libPickerTarget?.searchOnlineFallback
-      ? (navigator.onLine === false
-          ? `<div style="color:var(--text3);font-size:12px;margin-top:8px;">Online search needs internet. Everything in your library is listed below.</div>`
-          : `<div onclick="_libPickerSearchOnline()" style="color:var(--blue);font-size:12px;text-decoration:underline;cursor:pointer;margin-top:8px;">🔍 Can't find it in your library? Search online instead</div>`)
-      : '';
+    const onlineLink = _libPickerOnlineRowHtml();
     // "Try a different search term" already technically covers this - typing
     // anything else into the same box searches normally, and picking any
     // result works identically regardless of what the original search was.
@@ -35457,7 +35488,7 @@ function filterRecipeLibPicker(q) {
     return;
   }
 
-  el.innerHTML = filtered.map((f, i) => {
+  el.innerHTML = _libPickerOnlineRowHtml() + filtered.map((f, i) => {
     const realIdx = lib.findIndex(l => l.name === f.name);
     return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="_libPickerItemChosen(${realIdx})">
       <div>
@@ -35521,6 +35552,7 @@ function recipeOpenSearch() {
 
 let _recipeSearchMode = false;
 let _recipeSearchFixIndex = null; // set when Search is launched FROM a flagged ingredient - tells logFoodFromDatabase() to update that specific row in place rather than push a new one
+let _editSearchTarget = null; // {kind:'log'|'hist', id|key, idx} - set when Search/Try AI is launched from the swap picker of a logged meal's ingredient (v3.10.1243)
 let _comboSearchTarget = null; // {comboIndex, itemIndex} - set when Search is launched from a suggested-combo item's substitute picker
 let _previewSearchFixIndex = null; // set when Search is launched from a meal-preview row tagged "AI estimate" - tells logFoodFromDatabase() to update that specific preview row in place, same idea as _recipeSearchFixIndex above
 
@@ -35550,7 +35582,7 @@ function openPreviewIngredientSearch(index) {
 // ingredients (spices, fresh herbs), and blind auto-matching is exactly
 // what caused the wrong Kp Peanuts / Cumberland sausages matches via the
 // fuzzy library-matcher - this keeps a real human decision in the loop.
-function openRecipeIngredientSearch(index, typedQuery) {
+function openRecipeIngredientSearch(index, typedQuery, ai) {
   const ing = _recipeIngredients[index];
   if (!ing) return;
   _recipeSearchFixIndex = index;
@@ -35560,7 +35592,7 @@ function openRecipeIngredientSearch(index, typedQuery) {
   if (recipeModal) recipeModal.style.display = 'none';
   openFoodSearch();
   const input = document.getElementById('foodSearchInput');
-  if (input) { input.value = cleanName; onFoodSearchInput(cleanName); }
+  if (input) { input.value = cleanName; if (ai && cleanName) tryAISearchForIngredient(cleanName); else onFoodSearchInput(cleanName); }
 }
 
 // Recipe search mode handled inside logFoodFromDatabase directly
@@ -35569,7 +35601,7 @@ function openRecipeIngredientSearch(index, typedQuery) {
 // combo item rather than a recipe ingredient - no modal to hide/restore
 // here since the chat stays visible behind the search overlay the whole
 // time, unlike the recipe builder which gets hidden while search is open.
-function openComboItemOnlineSearch(comboIndex, itemIndex, typedQuery) {
+function openComboItemOnlineSearch(comboIndex, itemIndex, typedQuery, ai) {
   const combo = window._pendingLibraryCombos[comboIndex];
   const item = combo?.items?.[itemIndex];
   if (!item) return;
@@ -35577,7 +35609,19 @@ function openComboItemOnlineSearch(comboIndex, itemIndex, typedQuery) {
   openFoodSearch();
   const cleanName = (typedQuery || '').trim() || item.name.replace(/^⚠️\s*/, '').trim();
   const input = document.getElementById('foodSearchInput');
-  if (input) { input.value = cleanName; onFoodSearchInput(cleanName); }
+  if (input) { input.value = cleanName; if (ai && cleanName) tryAISearchForIngredient(cleanName); else onFoodSearchInput(cleanName); }
+}
+
+// Same idea for an ingredient of a logged meal being edited (Today's log or History).
+function openEditItemOnlineSearch(target, typedQuery, ai) {
+  const list = target.kind === 'hist' ? (window._histEditWorkingItems || {})[target.key] : (window._logEditWorkingItems || {})[target.id];
+  const it = list && list[target.idx];
+  if (!it) return;
+  _editSearchTarget = target;
+  openFoodSearch();
+  const cleanName = (typedQuery || '').trim() || (it.name || '').replace(/^⚠️\s*/, '').trim();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = cleanName; if (ai && cleanName) tryAISearchForIngredient(cleanName); else onFoodSearchInput(cleanName); }
 }
 
 // Same idea again, for "+ Add [category] item" in the category browse view -
