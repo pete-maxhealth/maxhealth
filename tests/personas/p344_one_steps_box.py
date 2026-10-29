@@ -22,10 +22,10 @@ with fresh_server() as root, sync_playwright() as pw:
     # typing a day total still works next to it
     page.fill('#dailyStepsInput', '9000'); page.keyboard.press('Tab'); page.wait_for_timeout(300)
     if ev("parseInt(localStorage.getItem('mh_steps_today'))") != 9000: f.add('BUG', 'typed daily steps not saved')
-    # hide Daily Steps: Walking returns to the activity list
+    # v3.10.1238: steps, walking and the other cardio rows are ONE card (Steps & cardio). Hiding it hides them together; nothing is duplicated elsewhere.
     ev("(()=>{const h=getMoveHidden(); h.push('steps'); saveMoveHidden(h); applyMoveOrder();})()"); page.wait_for_timeout(400)
-    if not ev("!![...document.querySelectorAll('#activityRows .activity-name')].find(e => /Walking/.test(e.textContent))"): f.add('BUG', 'with Daily Steps hidden, Walking must be back in the list')
-    if ev("document.querySelectorAll('#stepsWalkRow .activity-row').length"): f.add('BUG', 'walk row left in hidden Daily Steps')
+    if not ev("document.getElementById('dailyStepsCard').contains(document.getElementById('stepsWalkRow'))"): f.add('BUG', 'walk row must live inside the Steps & cardio card')
+    if ev("document.querySelectorAll('#activityRows .activity-row').length && [...document.querySelectorAll('#activityRows .activity-name')].some(e => /Walking/.test(e.textContent))"): f.add('BUG', 'Walking must not be duplicated in the cardio list')
     ev("(()=>{const h=getMoveHidden().filter(k=>k!=='steps'); saveMoveHidden(h); applyMoveOrder();})()"); page.wait_for_timeout(400)
     if not ev("!!document.querySelector('#dailyStepsCard #stepsWalkRow .activity-row')"): f.add('BUG', 'Walking should return to Daily Steps when it is shown again')
     # reload

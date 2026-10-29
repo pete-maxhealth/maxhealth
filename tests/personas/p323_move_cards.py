@@ -11,7 +11,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("localStorage.setItem('mh_move_order', JSON.stringify(['activity','steps']))")
     ev("switchTabById('move')"); page.wait_for_timeout(1200)
     order = ev("[...document.querySelectorAll('#moveScroll > .activity-card')].map(e=>e.id)")
-    if order[:2] != ['activityCard','dailyStepsCard'] or order[2:] != ['moveExerciseCard','moveBodycompCard','moveJourneyCard']: f.add('BUG', f'saved order kept, new cards join the end: {order}')
+    if order[:2] != ['activityCard','dailyStepsCard'] or order[2:] != ['planCard','regimeCard','moveExerciseCard','moveBodycompCard','moveJourneyCard']: f.add('BUG', f'saved order kept, new cards join the end: {order}')
     for k in ['exercise','bodycomp','journey']:
         if not ev(f"!!document.getElementById('moveRange-{k}') && document.querySelectorAll('#moveRange-{k} .trends-filter-btn').length === 5"): f.add('BUG', f'{k} has its 5 range chips incl. Custom')
         for sel in ['▲','▼','👁']:

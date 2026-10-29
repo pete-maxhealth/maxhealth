@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1238
+- **Move is reorganised so each thing lives in one place.** Steps & cardio is now one card: your steps total, the "what are more steps worth?" calculator, the walking row, every other cardio exercise you have added, and the Add exercise button. Resistance is its own card (sessions and the expandable routines). Plan ahead is its own card with its own order, hide and show controls, kept apart from anything you have actually done: a plan counts when you mark it done, and feeds the In/Out strip as "if you do your plan". Current regime is a new folded card listing your usual cardio and your resistance routines, each with a Plan button.
+- Old names: "Daily steps" is now "Steps & cardio" and "Today's activity" is now "Resistance" in the hidden-card strip and search. Anyone with a saved Move order gets Plan ahead and Current regime right after Resistance. With the Steps card hidden, the walking row hides with it (it is no longer repeated elsewhere).
+- Test p350 added; p198, p323, p344 and p171 updated for the new structure.
+
 ## v3.10.1237
 - **The steps calculator now takes effort into account.** Pick Easy, Steady or Brisk and it shows the time, distance and calories for those steps, using the same walking formula as a logged walk (speed-based, your weight, your calibration). A brisk 3,000 steps is worth more than an easy 3,000. The Add button is now "Add as a walk today": it logs the walk at that pace and puts the steps on top of today's total; steps inside a logged walk are already taken out of the "other steps" figure, so nothing is counted twice.
 - Test p337 extended: brisk > steady > easy, the walk is logged, and no double count.
