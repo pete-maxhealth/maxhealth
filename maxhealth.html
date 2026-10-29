@@ -6567,7 +6567,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1236'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1237'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -26357,28 +26357,55 @@ function mhStepsTodayTotal() {
   return Math.max(typed, dev);
 }
 function mhStepsCalcN() { const el = document.getElementById('stepsPlanInput'); const t = (el && el.value || '').trim(); const m = t.match(/^(\d+(?:\.\d+)?)\s*k$/i); return Math.max(0, m ? Math.round(parseFloat(m[1]) * 1000) : (parseInt(t.replace(/[^\d]/g, '')) || 0)); }
+// Pace is the effort: the same walking formula as a logged walk (speed-based MET, your weight, your calibration), so a brisk 3,000 steps is worth more than an easy 3,000.
+const MH_STEPS_PACES = [['easy', 'Easy', 2.3], ['steady', 'Steady', 3.0], ['brisk', 'Brisk', 3.8]];
+function mhStepsCalcPace() { let k = 'steady'; try { k = localStorage.getItem('mh_steps_calc_pace') || 'steady'; } catch (_) {} return MH_STEPS_PACES.find(p => p[0] === k) || MH_STEPS_PACES[1]; }
+function mhStepsCalcSetPace(k) { try { localStorage.setItem('mh_steps_calc_pace', k); } catch (_) {} mhStepsCalcChips(); mhStepsCalcUpdate(); const el = document.getElementById('stepsPlanInput'); if (el) el.focus(); }
+function mhStepsCalcChips() {
+  const el = document.getElementById('stepsCalcPace'); if (!el) return; const cur = mhStepsCalcPace()[0];
+  el.innerHTML = MH_STEPS_PACES.map(p => '<span onpointerdown="window._stepsCalcHold=true" onclick="mhStepsCalcSetPace(\'' + p[0] + '\')" style="cursor:pointer;font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid ' + (p[0] === cur ? 'var(--accent)' : 'var(--border)') + ';color:' + (p[0] === cur ? 'var(--accent)' : 'var(--text3)') + ';">' + p[1] + '</span>').join('');
+}
+// n steps at the chosen pace as a walk: distance, minutes and kcal from the app's own walking formula.
+function mhStepsCalcWalk(n) {
+  const pace = mhStepsCalcPace(), mph = pace[2], spm = estimateStepsForDistance(1, mph) || getPersonalStepsPerMile();
+  const miles = n / spm, minutes = miles / mph * 60;
+  const act = { type: 'walking', name: 'Walking', enabled: true, needsDistance: true, distance: String(Math.round(miles * 100) / 100), distanceUnit: 'mi', duration: String(Math.round(minutes * 10) / 10) };
+  let kcal = 0; try { kcal = calcActivityKcal(act); } catch (_) {}
+  return { pace, miles, minutes, kcal };
+}
 function mhStepsCalcUpdate() {
   const out = document.getElementById('stepsCalcOut'), add = document.getElementById('stepsCalcAdd'); if (!out) return;
   const n = mhStepsCalcN(), fmt = x => Math.round(x).toLocaleString('en-GB');
   if (!(n > 0)) { out.textContent = ''; if (add) add.style.display = 'none'; return; }
-  // Worth = the extra calories from taking today's total (typed or device, whichever is higher) up by n. Steps under your usual daily baseline add nothing, so say so.
-  const tot = mhStepsTodayTotal(), walking = getEstimatedStepsToday(), f = t => calcNonWalkingStepsKcal(Math.max(0, t - walking));
-  const k = Math.max(0, f(tot + n) - f(tot));
-  out.innerHTML = k > 0 ? fmt(n) + ' more steps is about <strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong>'
-    : fmt(n) + ' more steps adds <strong style="color:var(--yellow);">no extra kcal</strong>: you would still be under your usual ' + fmt(getStepsBaseline()) + ' a day';
+  const w = mhStepsCalcWalk(n);
+  out.innerHTML = fmt(n) + ' steps at a ' + w.pace[1].toLowerCase() + ' pace: about ' + (Math.round(w.minutes)) + ' min, ' + (Math.round(w.miles * 10) / 10) + ' mi, <strong style="color:var(--yellow);">+' + fmt(w.kcal) + ' kcal</strong>';
   if (add) add.style.display = '';
 }
 function mhStepsCalcBlur() {
-  setTimeout(() => { if (window._stepsCalcHold) { window._stepsCalcHold = false; return; } const el = document.getElementById('stepsPlanInput'); if (el) el.value = ''; mhStepsCalcUpdate(); }, 250);
+  setTimeout(() => { const held = window._stepsCalcHold; window._stepsCalcHold = false; const el = document.getElementById('stepsPlanInput'); if (held || !el || document.activeElement === el) return; el.value = ''; mhStepsCalcUpdate(); }, 250);
 }
+// Add: the steps go on top of today's total AND are logged as a walk at that pace, so the effort counts. Steps inside a logged walk are taken
+// out of the "other steps" figure (getNonWalkingStepsToday), so nothing is counted twice.
 function mhStepsCalcAdd() {
   const n = mhStepsCalcN(); if (!(n > 0)) return;
-  const total = mhStepsTodayTotal() + n;
+  const w = mhStepsCalcWalk(n), total = mhStepsTodayTotal() + n;
+  try {
+    const acts = getActivities(); let i = acts.findIndex(a => a.type === 'walking');
+    if (i < 0 && typeof MH_EX_BY_ID !== 'undefined' && MH_EX_BY_ID.walking) { mhAddCatalogActivity('walking', false); acts.length = 0; getActivities().forEach(a => acts.push(a)); i = acts.findIndex(a => a.type === 'walking'); }
+    if (i >= 0) {
+      const a = acts[i], unit = a.distanceUnit || 'km', add = unit === 'mi' ? w.miles : w.miles * 1.609344;
+      a.enabled = true; a.needsDistance = true; a.distanceUnit = unit;
+      a.distance = String(Math.round(((parseFloat(a.distance) || 0) + add) * 100) / 100);
+      a.duration = String(Math.round(((parseFloat(a.duration) || 0) + w.minutes) * 10) / 10);
+      saveActivities(acts); saveActivityToNotes(acts);
+    }
+  } catch (_) {}
   saveDailySteps(String(total));
   const el = document.getElementById('stepsPlanInput'); if (el) el.value = ''; mhStepsCalcUpdate();
   try { const inp = document.getElementById('dailyStepsInput'); if (inp) inp.value = total; } catch (_) {}
-  try { updateDashboard(true); } catch (_) {}
-  showToast('Today\u2019s steps are now ' + total.toLocaleString('en-GB'));
+  try { renderActivityCard(); } catch (_) {}
+  try { updateDashboard(); } catch (_) {}
+  showToast('Added a ' + Math.round(w.minutes) + ' min ' + w.pace[1].toLowerCase() + ' walk. Steps today: ' + total.toLocaleString('en-GB'));
 }
 function mhStepsPlanSet(v) { const el = document.getElementById('stepsPlanInput'); if (el) el.value = v; mhStepsCalcUpdate(); }
 function mhRenderStepsPlan() {
@@ -26387,10 +26414,11 @@ function mhRenderStepsPlan() {
   el.innerHTML = '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">' +
     '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:11px;color:var(--text3);">what are more steps worth? <span title="Details" onclick="mhCardInfo(\'stepscalc\')" class="mh-q">?</span></span>' +
     '<input type="text" inputmode="numeric" id="stepsPlanInput" value="' + keep + '" placeholder="e.g. 3000 or 3k" oninput="mhStepsCalcUpdate()" onblur="mhStepsCalcBlur()" style="width:110px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Space Mono,monospace;">' +
-    '<span id="stepsCalcOut" style="font-size:12px;color:var(--text2);flex:1;"></span>' +
-    '<span id="stepsCalcAdd" onpointerdown="window._stepsCalcHold=true" onclick="mhStepsCalcAdd()" style="display:none;cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Add to today\u2019s steps</span></div>' +
-    '<div id="stepscalcDetail" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;">Just a calculator: type some steps and it shows roughly what they are worth. Leave the box and it clears; nothing is saved. Add to today\u2019s steps puts them on top of your total so far. Your own typed total counts until your watch, ring or phone (through Health Connect) reports the same or more, then the device figure takes over. Devices follow the order you set in Settings.</div></div>';
-  try { mhCardBodyApply(); mhStepsCalcUpdate(); } catch (_) {}
+    '</div><div id="stepsCalcPace" style="display:flex;gap:6px;margin-top:6px;"></div>' +
+    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;"><span id="stepsCalcOut" style="font-size:12px;color:var(--text2);flex:1;"></span>' +
+    '<span id="stepsCalcAdd" onpointerdown="window._stepsCalcHold=true" onclick="mhStepsCalcAdd()" style="display:none;cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Add as a walk today</span></div>' +
+    '<div id="stepscalcDetail" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;">Just a calculator: type some steps, pick a pace, and it shows the time, distance and calories, using the same walking formula as a logged walk (so a brisk walk is worth more than an easy one). Leave the box and it clears; nothing is saved. Add as a walk today logs it as a walk and puts the steps on top of your total, and the walk\u2019s steps are not counted twice. Your own typed total counts until your watch, ring or phone (through Health Connect) reports the same or more, then the device figure takes over. Devices follow the order you set in Settings.</div></div>';
+  try { mhCardBodyApply(); mhStepsCalcChips(); mhStepsCalcUpdate(); } catch (_) {}
 }
 // "Food in, exercise out" (v3.10.1070): the two halves of the day side by side, so exercise is not a footnote to the food.
 function mhInOutNow() {

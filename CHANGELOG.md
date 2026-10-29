@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1237
+- **The steps calculator now takes effort into account.** Pick Easy, Steady or Brisk and it shows the time, distance and calories for those steps, using the same walking formula as a logged walk (speed-based, your weight, your calibration). A brisk 3,000 steps is worth more than an easy 3,000. The Add button is now "Add as a walk today": it logs the walk at that pace and puts the steps on top of today's total; steps inside a logged walk are already taken out of the "other steps" figure, so nothing is counted twice.
+- Test p337 extended: brisk > steady > easy, the walk is logged, and no double count.
+
 ## v3.10.1236
 - **Steps: the "plan more steps" row in Daily Steps is now a calculator.** Type some steps (3000 or 3k) and a line shows what they are worth in calories. Leave the box and it empties; nothing is saved. An optional "Add to today's steps" button puts them on top of today's real total (your typed figure, or the device figure if that is higher). A "?" explains how your own typed total, Health Connect, watch and ring figures work together. Step plans can no longer be created; step plans already in Plan Ahead still finish and clear themselves.
 - Test p337 rewritten for the calculator; p349 covers the add button, the empty-on-leave behaviour and a device figure higher than the typed one.
