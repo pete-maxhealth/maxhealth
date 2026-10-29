@@ -56,6 +56,17 @@ with fresh_server() as root, sync_playwright() as pw:
     setcsv(days(0, [(0, (92.2, 69.9, 18.9))]))
     t = render()[1]
     if 'First reading' not in t: f.add('BUG', f'single reading: {t[:120]!r}')
+    # F (v3.10.1240): a jump that reverses the previous week's direction is held back as possible scale noise
+    setcsv(days(0, [(0, (92.2, 69.9, 18.6)), (2, (92.1, 70.0, 18.5)), (7, (92.2, 70.8, 17.7)), (9, (92.3, 70.9, 17.6)), (14, (92.2, 69.9, 18.6)), (16, (92.1, 70.0, 18.5))]))
+    t = render()[1]
+    if 'Gaining fat' in t or 'Holding steady' not in t or 'scale noise' not in t: f.add('BUG', f'noisy week not held back: {t[:260]!r}')
+    # G: the same change continuing from the week before IS shown
+    setcsv(days(0, [(0, (92.2, 69.9, 18.6)), (2, (92.1, 70.0, 18.5)), (7, (92.2, 70.8, 17.7)), (9, (92.3, 70.9, 17.6)), (14, (92.2, 71.7, 16.8)), (16, (92.1, 71.8, 16.7))]))
+    t = render()[1]
+    if 'Gaining fat, losing muscle' not in t: f.add('BUG', f'continuing trend not shown: {t[:200]!r}')
+    # H: two-weigh-in fallback says it is only a hint
+    setcsv(days(0, [(0, (92.2, 69.9, 18.9)), (3, (92.2, 70.9, 17.9))]))
+    if 'two weigh-ins' not in render()[1]: f.add('BUG', 'fallback hint missing')
     # unit-aware
     setcsv(days(0, [(0, (92.2, 69.9, 18.9)), (3, (92.2, 70.9, 17.9))]))
     page.evaluate("setGlobalWeightUnit('lbs')")

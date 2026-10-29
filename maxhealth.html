@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1239'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1240'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -40875,7 +40875,7 @@ function renderBodyCompCard() {
   const pctOf = (r, k, kgK) => { const v = parseFloat(r[k]); if (!isNaN(v)) return v; const kg = parseFloat(r[kgK]); return (!isNaN(kg) && r.weight) ? kg / r.weight * 100 : null; };
   const cur7 = inWin(7, 0), prev7 = inWin(14, 7);
   let curSet, prevSet, basis, thr;
-  if (cur7.length >= 2 && prev7.length >= 2) { curSet = cur7; prevSet = prev7; basis = 'This week vs last week (averages)'; thr = 0.3; }
+  if (cur7.length >= 2 && prev7.length >= 2) { curSet = cur7; prevSet = prev7; basis = 'This week vs last week (averages)'; thr = 0.5; }
   else if (rows.length >= 2) { curSet = [last]; prevSet = [rows[rows.length - 2]]; basis = 'Latest weigh-in vs the one before'; thr = 0.5; }
   else { curSet = [last]; prevSet = null; basis = ''; thr = 0.5; }
   const M = (set, f) => mean(set, f);
@@ -40885,7 +40885,16 @@ function renderBodyCompCard() {
   let verdict = 'First reading', vcol = 'var(--text2)', note = '';
   if (prv) {
     const dF = cur.fa - prv.fa, dM = cur.mu - prv.mu;
-    const fUp = dF >= thr, fDn = dF <= -thr, mUp = dM >= thr, mDn = dM <= -thr;
+    // v3.10.1240: one noisy week must not raise an alarm. On the weekly basis a change only counts if the week before moved the same way
+    // (scale estimates swing by half a kilo or more); with only two weigh-ins the threshold is the same and the note says it is a hint.
+    let okF = true, okM = true, held = false;
+    if (basis.indexOf('week') >= 0) {
+      const e2 = inWin(21, 14);
+      if (prev7.length >= 2 && e2.length >= 2) { const eF = prv.fa - M(e2, r => r.fat_mass_kg), eM = prv.mu - M(e2, r => r.muscle_mass_kg); okF = eF * dF > 0; okM = eM * dM > 0; }
+    }
+    const rawF = Math.abs(dF) >= thr, rawM = Math.abs(dM) >= thr;
+    const fUp = dF >= thr && okF, fDn = dF <= -thr && okF, mUp = dM >= thr && okM, mDn = dM <= -thr && okM;
+    held = (rawF && !okF) || (rawM && !okM);
     if (fUp && mDn) { verdict = 'Gaining fat, losing muscle'; vcol = 'var(--red)'; }
     else if (fUp && mUp) { verdict = 'Gaining fat and muscle'; vcol = 'var(--yellow)'; }
     else if (fUp) { verdict = 'Gaining fat'; vcol = 'var(--yellow)'; }
@@ -40895,7 +40904,9 @@ function renderBodyCompCard() {
     else if (mDn) { verdict = 'Losing muscle'; vcol = 'var(--yellow)'; }
     else if (mUp) { verdict = 'Gaining muscle'; vcol = 'var(--green)'; }
     else { verdict = 'Holding steady'; vcol = 'var(--green)'; }
-    if (Math.abs(cur.w - prv.w) < 0.5 && (fUp || fDn || mUp || mDn)) note = 'Weight barely moved, but the make-up of it did, which the scale number alone would hide.';
+    if (held && !(fUp || fDn || mUp || mDn)) { verdict = 'Holding steady'; vcol = 'var(--text2)'; note = 'There was a small shift this week, but it did not continue from the week before, so it may just be scale noise. It will show here if it holds.'; }
+    else if (basis.indexOf('Latest') === 0) note = 'Based on just two weigh-ins, so treat this as a hint, not a trend.';
+    else if (Math.abs(cur.w - prv.w) < 0.5 && (fUp || fDn || mUp || mDn)) note = 'Weight barely moved, but the make-up of it did, which the scale number alone would hide.';
   }
 
   // stacked share bar: muscle / fat / bone (+ remainder)
