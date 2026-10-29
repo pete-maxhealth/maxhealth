@@ -19,7 +19,7 @@ with fresh_server() as root, sync_playwright() as pw:
       saveLibrary(lib);})()""")
 
     def swap_via_picker(btn_sel, pick_name):
-        if btn_sel.startswith('JS:'): ev(btn_sel[3:])
+        if btn_sel.startswith('JS:'): ev(btn_sel[3:].replace('@DI@', str(DI)))
         else: p.locator(btn_sel).first.click()
         p.wait_for_timeout(500)
         p.locator('#recipeLibSearch').fill(pick_name); p.wait_for_timeout(600)
@@ -73,21 +73,27 @@ with fresh_server() as root, sync_playwright() as pw:
     p.locator('#log-entry-7003 .log-edit-form button.cancel').click(); p.wait_for_timeout(300)
 
     # ---- History (a past day) ----
-    ev("""(()=>{const d=state.history[0]; d.log=[{id:7101,description:'Zed past plate',amount:'1 serving',time:'12:00',kcal:372,protein:35,carbs:20,fat:12,fibre:0,
+    ev("renderHistory()"); p.wait_for_timeout(300)
+    DI = ev("(()=>{const dt=(document.querySelector('.hist-day-date')||{}).textContent; return state.history.findIndex(x=>x.date===(dt||'').trim());})()")
+    RI = 0  # the day shown first is rendered first
+    evd = lambda js: ev(js.replace('@DI@', str(DI)).replace('@IDX@', str(RI)))
+    evd("""(()=>{const d=state.history[@DI@]; d.log=[{id:7101,description:'Zed past plate',amount:'1 serving',time:'12:00',kcal:372,protein:35,carbs:20,fat:12,fibre:0,
         items:[{name:'Zed chicken',amount:'150g',kcal:288,protein:45,carbs:0,fat:12,fibre:0},{name:'Zed rice',amount:'50g',kcal:84,protein:1,carbs:20,fat:0,fibre:0}]}]; saveState();})()""")
     ev("renderHistory()"); p.wait_for_timeout(500)
-    ev("document.getElementById('histBody0')&&document.getElementById('histBody0').classList.add('open')")
-    ev("editHistEntry(0,0)"); p.wait_for_timeout(500)
-    if p.locator('#hist-edit-items-0-0 button[title*="Swap"]').count() != 2: f.add('BUG', '12: History editor rows have the 🔄 swap too')
+    evd("document.getElementById('histBody@IDX@')&&document.getElementById('histBody@IDX@').classList.add('open')")
+    ev("document.getElementById('maintab-log').click()"); p.wait_for_timeout(400); ev("document.getElementById('logtab-hist').click()"); p.wait_for_timeout(600); ev("renderHistory()"); evd("document.getElementById('histBody@IDX@').classList.add('open')"); p.wait_for_timeout(300)
+    p.locator('.hist-day').nth(RI).locator('.hist-entry').first.locator('span[onclick*=editHistEntryByDate]').click(); p.wait_for_timeout(600)  # a real tap on the meal name
+    if ev("document.querySelectorAll('.hist-edit-form').length") != 1: f.add('BUG', 'H0: tapping a meal name in History opens its editor')
+    if p.locator(f'#hist-edit-items-{DI}-0 button[title*="Swap"]').count() != 2: f.add('BUG', '12: History editor rows have the 🔄 swap too')
     else:
-        swap_via_picker("JS:swapHistEditItem('0-0',0)", 'Zed turkey')
-        row = ev("(()=>{const i=window._histEditWorkingItems['0-0'][0];return [i.name,i.amount,i.kcal]})()")
+        swap_via_picker("JS:swapHistEditItem('@DI@-0',0)", 'Zed turkey')
+        row = evd("(()=>{const i=window._histEditWorkingItems['@DI@-0'][0];return [i.name,i.amount,i.kcal]})()")
         if row != ['Zed turkey', '150g', 222]: f.add('BUG', f'13: History swap keeps 150g and recalculates: {row}')
-        if ev("state.history[0].log[0].items[0].name") != 'Zed chicken': f.add('BUG', '14: History unchanged before Save')
-        ev("saveHistEditItems(0,0)"); p.wait_for_timeout(500)
-        e = ev("state.history[0].log[0]")
+        if evd("state.history[@DI@].log[0].items[0].name") != 'Zed chicken': f.add('BUG', '14: History unchanged before Save')
+        evd("saveHistEditItems(@DI@,0)"); p.wait_for_timeout(500)
+        e = evd("state.history[@DI@].log[0]")
         if e['items'][0]['name'] != 'Zed turkey' or e['kcal'] != 306: f.add('BUG', f'15: History save keeps the swap and total (306): {e["items"][0]["name"]} {e["kcal"]}')
-        if ev("(state.history[0].totals||state.history[0]).kcal") in (None, 0): f.add('BUG', '16: the day total is still present after the swap')
+        if evd("(state.history[@DI@].totals||state.history[@DI@]).kcal") in (None, 0): f.add('BUG', '16: the day total is still present after the swap')
     # neighbours: the recipe-builder swap picker and the combo swap still open the same picker
     ev("_openSubstitutePicker('Zed chicken', ()=>{})"); p.wait_for_timeout(400)
     if ev("document.getElementById('recipeLibSearch').value") != 'Zed chicken': f.add('BUG', '17: the shared swap picker still pre-fills the name')

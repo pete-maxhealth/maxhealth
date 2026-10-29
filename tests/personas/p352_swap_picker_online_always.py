@@ -52,10 +52,17 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("!!_editSearchTarget"): f.add('BUG', '12: backing out clears the swap target')
     p.locator('#log-entry-8001 .log-edit-form button.cancel').click(); p.wait_for_timeout(300)
     # 4: History editor has it too
-    ev("""(()=>{const d=state.history[0]; d.log=[{id:8101,description:'Zed past plate',amount:'1 serving',time:'12:00',kcal:372,protein:35,carbs:20,fat:12,fibre:0,
+    ev("renderHistory()"); p.wait_for_timeout(300)
+    DI = ev("(()=>{const dt=(document.querySelector('.hist-day-date')||{}).textContent; return state.history.findIndex(x=>x.date===(dt||'').trim());})()")
+    RI = 0  # the day shown first is rendered first
+    evd = lambda js: ev(js.replace('@DI@', str(DI)).replace('@IDX@', str(RI)))
+    evd("""(()=>{const d=state.history[@DI@]; d.log=[{id:8101,description:'Zed past plate',amount:'1 serving',time:'12:00',kcal:372,protein:35,carbs:20,fat:12,fibre:0,
         items:[{name:'Zed chicken',amount:'150g',kcal:288,protein:45,carbs:0,fat:12,fibre:0},{name:'Zed rice',amount:'50g',kcal:84,protein:1,carbs:20,fat:0,fibre:0}]}]; saveState();})()""")
-    ev("renderHistory()"); p.wait_for_timeout(500); ev("document.getElementById('histBody0')&&document.getElementById('histBody0').classList.add('open')")
-    ev("editHistEntry(0,0)"); p.wait_for_timeout(500); ev("swapHistEditItem('0-0',0)"); p.wait_for_timeout(500)
+    ev("renderHistory()"); p.wait_for_timeout(500); evd("document.getElementById('histBody@IDX@')&&document.getElementById('histBody@IDX@').classList.add('open')")
+    ev("document.getElementById('maintab-log').click()"); p.wait_for_timeout(400); ev("document.getElementById('logtab-hist').click()"); p.wait_for_timeout(600); ev("renderHistory()"); evd("document.getElementById('histBody@IDX@').classList.add('open')"); p.wait_for_timeout(300)
+    p.locator('.hist-day').nth(RI).locator('.hist-entry').first.locator('span[onclick*=editHistEntryByDate]').click(); p.wait_for_timeout(600)  # a real tap on the meal name
+    if ev("document.querySelectorAll('.hist-edit-form').length") != 1: f.add('BUG', 'H0: tapping a meal name in History opens its editor')
+    evd("swapHistEditItem('@DI@-0',0)"); p.wait_for_timeout(500)
     if row().count() != 1: f.add('BUG', '13: History swap picker has the row')
     else:
         p.locator('#recipeLibSearch').fill('mince'); p.wait_for_timeout(300)
@@ -63,11 +70,11 @@ with fresh_server() as root, sync_playwright() as pw:
         p.locator('#foodResults button:has-text("Use these values")').click(); p.wait_for_timeout(600)
         p.locator('#foodAmountGrams').fill('150'); p.wait_for_timeout(300)
         p.locator('[onclick*="logFoodFromDatabase"]:visible').click(); p.wait_for_timeout(900)
-        it = ev("window._histEditWorkingItems['0-0'][0]")
+        it = evd("window._histEditWorkingItems['@DI@-0'][0]")
         if 'Zed AI mince' not in it['name'] or it['kcal'] != 300: f.add('BUG', f'14: History AI swap: {it["name"]} {it["kcal"]}')
-        if ev("state.history[0].log[0].items[0].name") != 'Zed chicken': f.add('BUG', '15: History unchanged before Save')
-        ev("saveHistEditItems(0,0)"); p.wait_for_timeout(400)
-        if 'Zed AI mince' not in ev("state.history[0].log[0].items[0].name") or ev("state.history[0].log[0].kcal") != 384: f.add('BUG', f'16: History save keeps the AI swap and total (300+84): {ev("state.history[0].log[0].kcal")}')
+        if evd("state.history[@DI@].log[0].items[0].name") != 'Zed chicken': f.add('BUG', '15: History unchanged before Save')
+        evd("saveHistEditItems(@DI@,0)"); p.wait_for_timeout(400)
+        if 'Zed AI mince' not in evd("state.history[@DI@].log[0].items[0].name") or evd("state.history[@DI@].log[0].kcal") != 384: f.add('BUG', f'16: History save keeps the AI swap and total (300+84): {evd("state.history[@DI@].log[0].kcal")}')
     # 5: Cook Mode swap (no online route) shows no row; library swap still works there
     ev("_openSubstitutePicker('Zed chicken', ()=>{})"); p.wait_for_timeout(400)
     if row().count() != 0: f.add('BUG', '17: a swap picker with no online route (Cook Mode) shows no online row')

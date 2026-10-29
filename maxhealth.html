@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1243'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1244'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -33261,6 +33261,10 @@ function renderHistory() {
       const desc = (e.description||'').trim().toLowerCase();
       return desc && !_modeWords.includes(desc);
     });
+    // Entry ids use the day's real position in state.history and the entry's real position in day.log (v3.10.1244). They used the
+    // position in this sorted/filtered list, so tapping a meal name (which looks the entry up in state.history) found no element
+    // whenever the two orders differed and did nothing.
+    const _realDay = (() => { const k = state.history.indexOf(day); return k >= 0 ? k : state.history.findIndex(d => d.date === day.date); })();
     return `
     <div class="hist-day" id="hist-day-${day.date.replace(/\//g,'-')}">
       <div class="hist-day-header" onclick="toggleHistDay(${i})">
@@ -33313,7 +33317,7 @@ function renderHistory() {
       </div>
       <div class="hist-day-body" id="histBody${i}">
         ${cleanLog.map((e, j) => `
-          <div class="hist-entry" id="hist-entry-${i}-${j}" style="flex-direction:column;align-items:flex-start;padding:5px 0;">
+          <div class="hist-entry" id="hist-entry-${_realDay}-${(day.log||[]).indexOf(e)}" style="flex-direction:column;align-items:flex-start;padding:5px 0;">
             <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
               <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.time ? `<span style="color:var(--text3);font-family:Space Mono,monospace;font-size:10px;margin-right:4px;">${e.time}</span>` : ''}${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${(() => {
                 const amt = e.amount || (e.items && e.items.length === 1 ? e.items[0].amount : null);
@@ -33346,10 +33350,20 @@ function toggleHistDay(i) {
   el.classList.toggle('open');
 }
 
+// The History list shows only real meals (ghost mode-word entries are filtered out), so the position tapped on screen is a position
+// in that filtered list. This turns it into the entry's real position in day.log, which is what the edit and delete code index by.
+function _histRealEntryIdx(day, shownIdx) {
+  const modeWords = ['standard','occasion','holiday','missed day entry','missed day'];
+  const clean = (day.log || []).filter(e => { const d = (e.description || '').trim().toLowerCase(); return d && !modeWords.includes(d); });
+  const e = clean[shownIdx];
+  return e ? day.log.indexOf(e) : -1;
+}
 function editHistEntryByDate(date, entryIdx) {
   const dayIdx = state.history.findIndex(d => d.date === date);
   if (dayIdx === -1) return;
-  editHistEntry(dayIdx, entryIdx);
+  const real = _histRealEntryIdx(state.history[dayIdx], entryIdx);
+  if (real < 0) return;
+  editHistEntry(dayIdx, real);
 }
 
 // Same "copy a line to repeat it a few days running" as Today's Log -
@@ -33389,7 +33403,9 @@ function deleteHistDay(date) {
 function deleteHistEntryByDate(date, entryIdx) {
   const dayIdx = state.history.findIndex(d => d.date === date);
   if (dayIdx === -1) return;
-  deleteHistEntry(dayIdx, entryIdx);
+  const real = _histRealEntryIdx(state.history[dayIdx], entryIdx);
+  if (real < 0) return;
+  deleteHistEntry(dayIdx, real);
 }
 
 function editHistEntry(dayIdx, entryIdx) {
