@@ -35,7 +35,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("getMoveOrder().slice(0,2)") != ['activity', 'steps'] or ev("[...document.getElementById('moveScroll').children].map(e=>e.id).filter(i=>i==='dailyStepsCard'||i==='activityCard')") != ['activityCard', 'dailyStepsCard']: f.add('BUG', 'Move order not remembered across reload')
     ev("toggleMoveSectionHidden('steps')")
     if ev("getComputedStyle(document.getElementById('dailyStepsCard')).display") != 'none': f.add('BUG', 'Move hide failed')
-    if 'Steps & cardio' not in ev("document.getElementById('moveRestoreStrip').innerText"): f.add('BUG', 'no way to bring a hidden Move card back')
+    if 'Steps' not in ev("document.getElementById('moveRestoreStrip').innerText"): f.add('BUG', 'no way to bring a hidden Move card back')
     ev("toggleMoveSectionHidden('steps')")
     if ev("getComputedStyle(document.getElementById('dailyStepsCard')).display") == 'none': f.add('BUG', 'Move restore failed')
     # Default on Move touches only Move

@@ -15,8 +15,8 @@ with fresh_server() as root, sync_playwright() as pw:
     ev = page.evaluate
     ev("startDemoMode('alex')"); page.wait_for_timeout(2500)
     ev("document.getElementById('maintab-today').click()"); page.wait_for_timeout(500)
-    check('Resistance section is collapsed by default', ev("getComputedStyle(document.getElementById('strengthRowsWrap')).display") == 'none')
-    check('header says RESISTANCE', 'RESISTANCE' in ev("[...document.querySelectorAll('#activityCard div')].map(e=>e.textContent).join('|')"))
+    check('Resistance row and Train buttons are visible by default', ev("getComputedStyle(document.getElementById('strengthRowsWrap')).display") != 'none')
+    check('header says RESISTANCE', 'SESSIONS' in ev("[...document.querySelectorAll('#activityCard div')].map(e=>e.textContent).join('|')"))
     check('Resistance is not in the Activities list', ev("[...document.querySelectorAll('#activityRows .activity-name')].every(e=>!/Resistance/.test(e.textContent))"))
     check('Resistance minutes/effort row is inside the Resistance section', ev("!!document.querySelector('#resistanceSimple .activity-name')"))
     check('header line exists', ev("document.getElementById('resTotalsLine').textContent.length>5"))

@@ -16,7 +16,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("startDemoMode('alex')"); page.wait_for_timeout(2200)
     ev("document.getElementById('maintab-today').click()"); page.wait_for_timeout(400)
     ev("localStorage.setItem('mh_plan_open','1'); renderActivityCard()"); page.wait_for_timeout(300)
-    check('plan box renders (own card)', 'PLAN AHEAD' in ev("document.getElementById('planCard').textContent") and 'Walk' in ev("document.getElementById('planAhead').textContent"))
+    check('plan box renders (own card)', 'WHAT IF' in ev("document.getElementById('planCard').textContent").upper() and 'Walk' in ev("document.getElementById('whatIf').textContent"))
     # steps far below baseline add nothing
     ev("localStorage.setItem('mh_steps_today','0'); mhXPlanSetType('steps'); mhXPlanSetAmt(500)")
     check('500 steps from zero adds 0 kcal', ev("mhStepsKcalFor(500)") == 0)

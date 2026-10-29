@@ -63,7 +63,8 @@ with fresh_server() as root, sync_playwright() as pw:
     check('unknown name has no match', ev("mhExMatch('Basket weaving')") is None)
     # plan ahead with a catalogue item, Done adds it
     ev("localStorage.setItem('mh_plan_open','1'); mhXPlanSetType('kayak'); mhXPlanSetAmt(60)")
-    check('plan shows kayak chip', 'Kayaking' in ev("document.getElementById('planAhead').textContent"))
+    ev("mhWiMore()"); page.wait_for_timeout(300); ev("mhPickExercise('kayak')"); page.wait_for_timeout(400)
+    check('What if: More… picks kayaking without adding it to the list', 'Kayaking' in ev("document.getElementById('whatIf').textContent") and not ev("getActivities().some(a=>a.type==='kayak')"))
     ev("mhXPlanAdd('activity','kayak',60,'Moderate')"); pid = ev("mhXPlanItems()[0].id")
     check('planned kayak earns (5.0 - 1) MET x kg net of resting', ev("mhXPlanItemEffect(mhXPlanItems()[0]).kcal") == round(4.0 * w))
     ev(f"mhXPlanDone('{pid}')"); page.wait_for_timeout(300)
