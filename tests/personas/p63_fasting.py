@@ -15,7 +15,7 @@ def day(n, meals, notes='standard', **extra):
 M = lambda t, k=500, ap=False: (t, k, ap)
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []
-    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block', timezone_id='UTC')  # fasts are real elapsed hours, so the UK clock-change night is 13h/25h; these checks assume 24h days
     ctx.route(re.compile(r'^https?://(?!localhost)'), lambda r: r.abort())
     # Pin the browser clock to 12:00 today so the 08:00 "today" meal below is always in the past (the app ignores meals stamped
     # later than now, v3.10.1122); without this the test fails whenever it runs before 08:00. Time still ticks on from there.

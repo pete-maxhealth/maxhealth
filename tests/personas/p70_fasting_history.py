@@ -8,7 +8,7 @@ f = Findings()
 dmy = lambda n: (date.today() - timedelta(days=n)).strftime('%d/%m/%y')
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []
-    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block', accept_downloads=True)
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block', accept_downloads=True, timezone_id='UTC')  # fasts are real elapsed hours, so the UK clock-change night is 13h/25h; these checks assume 24h days
     ctx.route(re.compile(r'^https?://(?!localhost)'), lambda r: r.abort())
     page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:200]))
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
