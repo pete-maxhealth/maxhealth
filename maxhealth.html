@@ -6567,7 +6567,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1235'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1236'; // single source of truth — bump here each release
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
 // While a demo is running, any request to the shared proxy or a provider API is answered
@@ -26348,16 +26348,49 @@ function mhRenderPlanAhead() {
   el.innerHTML = head + '<div style="padding:8px 2px 2px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">' + chips + '</div>' + body + list + '</div>';
 }
 
-// Plan more steps lives inside the Daily Steps card (one place for steps); Plan Ahead keeps the other activities.
-let _stepsPlanAmt = 3000;
-function mhStepsPlanSet(v) { _stepsPlanAmt = Math.max(0, parseInt(v) || 0); mhRenderStepsPlan(); }
+// Steps calculator (v3.10.1236). Lives inside the Daily Steps card. A scratch box: type some steps, a live line says what they are worth,
+// leave the box and it empties. Nothing is stored. "Add to today's steps" puts them on top of today's real total (typed or from a device).
+// Plans for steps are no longer made here (old step plans already in Plan Ahead still finish and clear themselves).
+function mhStepsTodayTotal() {
+  const typed = parseInt(localStorage.getItem('mh_steps_today')) || 0;
+  let dev = 0; try { const h = _historyIncludingToday().find(e => e.date === todayStr()); dev = parseInt(h && h.steps) || 0; } catch (_) {}
+  return Math.max(typed, dev);
+}
+function mhStepsCalcN() { const el = document.getElementById('stepsPlanInput'); const t = (el && el.value || '').trim(); const m = t.match(/^(\d+(?:\.\d+)?)\s*k$/i); return Math.max(0, m ? Math.round(parseFloat(m[1]) * 1000) : (parseInt(t.replace(/[^\d]/g, '')) || 0)); }
+function mhStepsCalcUpdate() {
+  const out = document.getElementById('stepsCalcOut'), add = document.getElementById('stepsCalcAdd'); if (!out) return;
+  const n = mhStepsCalcN(), fmt = x => Math.round(x).toLocaleString('en-GB');
+  if (!(n > 0)) { out.textContent = ''; if (add) add.style.display = 'none'; return; }
+  // Worth = the extra calories from taking today's total (typed or device, whichever is higher) up by n. Steps under your usual daily baseline add nothing, so say so.
+  const tot = mhStepsTodayTotal(), walking = getEstimatedStepsToday(), f = t => calcNonWalkingStepsKcal(Math.max(0, t - walking));
+  const k = Math.max(0, f(tot + n) - f(tot));
+  out.innerHTML = k > 0 ? fmt(n) + ' more steps is about <strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong>'
+    : fmt(n) + ' more steps adds <strong style="color:var(--yellow);">no extra kcal</strong>: you would still be under your usual ' + fmt(getStepsBaseline()) + ' a day';
+  if (add) add.style.display = '';
+}
+function mhStepsCalcBlur() {
+  setTimeout(() => { if (window._stepsCalcHold) { window._stepsCalcHold = false; return; } const el = document.getElementById('stepsPlanInput'); if (el) el.value = ''; mhStepsCalcUpdate(); }, 250);
+}
+function mhStepsCalcAdd() {
+  const n = mhStepsCalcN(); if (!(n > 0)) return;
+  const total = mhStepsTodayTotal() + n;
+  saveDailySteps(String(total));
+  const el = document.getElementById('stepsPlanInput'); if (el) el.value = ''; mhStepsCalcUpdate();
+  try { const inp = document.getElementById('dailyStepsInput'); if (inp) inp.value = total; } catch (_) {}
+  try { updateDashboard(true); } catch (_) {}
+  showToast('Today\u2019s steps are now ' + total.toLocaleString('en-GB'));
+}
+function mhStepsPlanSet(v) { const el = document.getElementById('stepsPlanInput'); if (el) el.value = v; mhStepsCalcUpdate(); }
 function mhRenderStepsPlan() {
   const el = document.getElementById('stepsPlanRow'); if (!el) return;
-  const fmt = n => Math.round(n).toLocaleString('en-GB'), k = mhStepsKcalFor(_stepsPlanAmt);
-  el.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap;"><span style="font-size:11px;color:var(--text3);">plan more steps</span>' +
-    '<input type="number" id="stepsPlanInput" value="' + _stepsPlanAmt + '" onchange="mhStepsPlanSet(this.value)" style="width:90px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);">' +
-    '<span style="font-size:12px;color:var(--text2);flex:1;">→ <strong style="color:var(--yellow);">+' + fmt(k) + ' kcal</strong></span>' +
-    '<span onclick="mhXPlanAdd(\'steps\',\'steps\',' + _stepsPlanAmt + ')" style="cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Plan</span></div>';
+  const keep = (document.getElementById('stepsPlanInput') || {}).value || '';
+  el.innerHTML = '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">' +
+    '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><span style="font-size:11px;color:var(--text3);">what are more steps worth? <span title="Details" onclick="mhCardInfo(\'stepscalc\')" class="mh-q">?</span></span>' +
+    '<input type="text" inputmode="numeric" id="stepsPlanInput" value="' + keep + '" placeholder="e.g. 3000 or 3k" oninput="mhStepsCalcUpdate()" onblur="mhStepsCalcBlur()" style="width:110px;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:Space Mono,monospace;">' +
+    '<span id="stepsCalcOut" style="font-size:12px;color:var(--text2);flex:1;"></span>' +
+    '<span id="stepsCalcAdd" onpointerdown="window._stepsCalcHold=true" onclick="mhStepsCalcAdd()" style="display:none;cursor:pointer;color:var(--accent);font-size:11px;padding:4px 10px;border:1px solid var(--accent);border-radius:6px;">Add to today\u2019s steps</span></div>' +
+    '<div id="stepscalcDetail" style="display:none;font-size:11px;color:var(--text3);margin-top:6px;line-height:1.6;">Just a calculator: type some steps and it shows roughly what they are worth. Leave the box and it clears; nothing is saved. Add to today\u2019s steps puts them on top of your total so far. Your own typed total counts until your watch, ring or phone (through Health Connect) reports the same or more, then the device figure takes over. Devices follow the order you set in Settings.</div></div>';
+  try { mhCardBodyApply(); mhStepsCalcUpdate(); } catch (_) {}
 }
 // "Food in, exercise out" (v3.10.1070): the two halves of the day side by side, so exercise is not a footnote to the food.
 function mhInOutNow() {
@@ -27281,7 +27314,7 @@ function mhAuditSave(id, none) {
 // Stored in one key (mh_shopping_v1), so it is in every backup.
 // Per-card show/hide of the body and a tap-to-open details line (v3.10.1094). The eye hides the whole card; "▾ hide" folds the card to its
 // title; the small ⓘ opens or closes the explanatory text under the bar (closed by default, so the cards stay quiet).
-const MH_CARD_FOLDS = ['fibre', 'water', 'fasting', 'mealplan', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'weather', 'stockctl', 'shoplist', 'shopadd'];
+const MH_CARD_FOLDS = ['fibre', 'water', 'fasting', 'mealplan', 'daymode', 'ketosis', 'macros', 'macroratio', 'goalcheck', 'weather', 'stockctl', 'shoplist', 'shopadd', 'stepscalc'];
 function mhCardBodyApply() {
   MH_CARD_FOLDS.forEach(k => {
     const b = document.getElementById(k + 'Body'), i = document.getElementById(k + 'BodyIcon');
