@@ -8,6 +8,7 @@
 // Same JSON protocol the app already speaks (POST { action: 'activate' | 'trial' | 'download' | 'issue' | 'revoke', ... }),
 // so the app only needs its licence address changed. Added on top:
 //   GET  /launcher/version.json   public: what the installed launcher compares against (no download link inside)
+//   GET  /launcher/get            small page: paste a licence key, the APK downloads (the launcher's update banner opens this)
 //   GET  /launcher/download       needs a founder or premium licence token (header X-MH-Licence or ?t=): streams the APK
 //   PUT  /admin/put/<name>        needs X-MH-Admin: stores launcher:apk, launcher:version or payload:zip (each up to 25 MB, a KV limit)
 // Keys are stored only as SHA-256 hashes, so a lost key cannot be looked up: revoke it and issue another.
@@ -26,6 +27,22 @@ const CORS = {
 	'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, X-MH-Licence, X-MH-Admin',
 };
+
+
+// Plain download page the launcher's update banner opens: paste the licence key once, the APK downloads.
+const GET_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MaxedHealth launcher download</title>
+<style>body{font:16px system-ui,sans-serif;background:#080a0d;color:#e8eef2;margin:0;padding:24px;max-width:460px}h1{font-size:20px}input,button{font:inherit;width:100%;box-sizing:border-box;padding:12px;margin-top:10px;border-radius:8px;border:1px solid #2debaf55}input{background:#10151b;color:inherit}button{background:#2debaf;color:#080a0d;border:0;font-weight:600}#m{margin-top:14px;min-height:1.4em}</style></head><body>
+<h1>MaxedHealth Sync: download</h1><p>Enter your licence key to download the latest launcher.</p>
+<input id="k" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters"><button id="b">Download</button><div id="m"></div>
+<script>
+const m=document.getElementById('m');let d;try{d=localStorage.getItem('mh_dev')}catch(e){}
+if(!d){d='web_'+[...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(16).padStart(2,'0')).join('');try{localStorage.setItem('mh_dev',d)}catch(e){}}
+document.getElementById('b').onclick=async()=>{m.textContent='Checking…';
+try{const r=await fetch('/',{method:'POST',body:JSON.stringify({action:'activate',key:document.getElementById('k').value,device:d})});const j=await r.json();
+if(!j.ok){m.textContent=j.error||'That did not work.';return}
+if(j.tier!=='founder'&&j.tier!=='premium'){m.textContent='This key cannot download the launcher.';return}
+m.textContent='Starting your download…';location.href='/launcher/download?t='+encodeURIComponent(j.token)}catch(e){m.textContent='No connection. Please try again.'}};
+</script></body></html>`;
 
 const enc = new TextEncoder();
 function reply(code, obj) { return new Response(JSON.stringify(obj), { status: code, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Content-Type-Options': 'nosniff', ...CORS } }); }
@@ -151,6 +168,7 @@ export default {
 			if (!v) return reply(404, { ok: false, error: 'No launcher published yet' });
 			return new Response(v, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300', ...CORS } });
 		}
+		if (request.method === 'GET' && path === '/launcher/get') return new Response(GET_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 		if (request.method === 'GET' && path === '/launcher/download') {
 			if (!env.LICENCE_KV || !env.LICENCE_SECRET) return reply(500, { ok: false, error: 'Server not configured' });
 			const lic = await verifyToken(env, request.headers.get('X-MH-Licence') || url.searchParams.get('t'));
