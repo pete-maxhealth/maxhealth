@@ -570,7 +570,9 @@ someone to manually `git pull` (or a fresh `bump_and_deploy.sh` push plus
 that pull) on that specific device — which is exactly the gap auto-update
 was meant to close, and hasn't yet.
 
-### Launcher APK distribution — `apk/` folder
+### Launcher APK distribution — `apk/` folder (RETIRED 30/10/2026)
+
+**30/10/2026: the APK is no longer in this repo.** It is stored on the Cloudflare licence Worker (`licence-worker.js`, KV namespace `maxedhealth-licence`) and downloaded only with a founder/premium licence key; launcher 1.6.x reads `version.json` from the Worker and its banner opens `/launcher/get`. To release a new launcher: bump `versionCode`/`versionName`, build in Android Studio, then upload the APK and `version.json` to `/admin/put/launcher:apk` and `/admin/put/launcher:version` with the `X-MH-Admin` header (see LICENCE_WORKER_SETUP.md). The paragraph below describes the old GitHub route.
 
 **01/10/26.** Chosen distribution mechanism, replacing ad-hoc "handed to testers directly": this repo's `apk/` folder always holds exactly one file set — `MaxedHealth-launcher.apk` (the current build, old one replaced not kept), `version.json` (`versionCode`, `versionName`, `apkFile`, `releasedAt`, release notes), and a short `README.md` for anyone finding the folder cold on GitHub.
 

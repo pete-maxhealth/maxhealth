@@ -115,9 +115,8 @@
 
 **The native launcher app is now the real answer to onboarding friction** — every early tester hit the same wall (seeing/manually running Termux), which is exactly what this solves. One APK, installed like any Android app, walks through Termux/Termux:Boot/Termux:API installation and one-time permission steps automatically via `RUN_COMMAND`, with only one unavoidable manual step (a one-time clipboard paste inside Termux, required because Termux blocks external apps from writing `allow-external-apps` to its own settings otherwise). No terminal typing required from the person installing it.
 
-**Download:** [`apk/MaxedHealth-launcher.apk`](apk/MaxedHealth-launcher.apk) in this repo is always the current build — install it like any Android app (you'll need to allow installs from this source the first time). Still a debug build, not published to any app store. The launcher project itself lives in its own Android Studio project (package `com.maxedhealth.launcher`), separate from this repo — only the built APK is kept here.
+**Download:** the launcher is no longer hosted in this repo. It is being offered with MaxedHealth Premium, which is not on sale yet. Updates are checked from inside the launcher itself.
 
-The launcher checks `apk/version.json` on its own each time it opens and shows a banner (linking back to this folder) if a newer build than the one installed is available — so once someone's on this mechanism, future updates don't need a fresh link handed to them each time. To update: download the APK again and install over the existing app; settings and Health Connect permissions aren't affected.
 
 For anyone building/running from source instead (the launcher's own provisioning does this on-device automatically) — the manual path below still works and is what the launcher itself runs under the hood.
 
