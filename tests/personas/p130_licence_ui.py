@@ -17,7 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
         elif b.get('action') == 'trial': r = {'ok': True, 'token': tok('trial', 14), 'tier': 'trial'}
         else: r = {'ok': False}
         route.fulfill(status=200, content_type='application/json', body=json.dumps(r))
-    ctx.route('https://pspence.co.uk/maxedhealth/licence.php', lic)
+    ctx.route('https://maxedhealth-licence.bogginsuk.workers.dev/licence', lic)
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
     page.evaluate("state.onboarded=true; saveState()"); page.reload(); page.wait_for_timeout(1500)
     ev = page.evaluate
@@ -38,6 +38,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("localStorage.setItem('mh_licence_key','GOOD-GOOD-GOOD-GOOD'); localStorage.setItem('mh_licence','%s')" % tok('premium', 2)); calls.clear()
     ev("mhLicenceAutoRefresh()"); page.wait_for_timeout(600)
     if not any(c.get('action') == 'activate' for c in calls): f.add('BUG', 'token near expiry was not refreshed')
+    if any('pspence' in (r or '') for r in [page.evaluate('MH_LICENCE_URL')]): f.add('BUG', 'licence address still points at the old GoDaddy host')
     ev("localStorage.setItem('mh_licence','%s')" % tok('premium', 25)); calls.clear()
     ev("mhLicenceAutoRefresh()"); page.wait_for_timeout(400)
     if calls: f.add('BUG', 'a fresh token was refreshed needlessly')
