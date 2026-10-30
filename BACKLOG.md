@@ -66,7 +66,7 @@ Open, this phase:
 - [x] v1083 Drag-reorder on Statistics; light-theme checked for the Statistics tab and the sleep and outcomes reports (high-contrast theme not checked).
 - [x] v1082/1084 Colour and chart type per statistic and per Trends chart.
 - [x] v1085 What-moves-what: bedtime, next-morning weight change, treatment-session windows. (Whole treatment cycles as a unit are not modelled.)
-- [ ] Remaining personas through `alex_deep.py`; untested: exported PDFs, reminders and notifications, more languages offline, device and wearable import.
+- [ ] Remaining personas through `alex_deep.py`. (Exported PDFs, reminders, language files offline and device import were already covered by p190, v3.10.1086; this line was stale, corrected 30 Oct 2026.)
 
 Older ideas, found in earlier phase chats and NOT confirmed built (check the code before starting):
 - [ ] Watch companion (square and round layouts): quick water / supplement / ketosis status, a daily touchpoint that drives people into the app.
@@ -104,7 +104,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] v3.10.1131 Fridge life by type of food, typed by Pete (rules by name words). Was: Fridge life of 3 days for everything makes every fridge food "use soon". Consider letting Pete set a default per category himself (never a built-in guess).
 - [ ] Custom storage places ("garage freezer", "utility") if three places (fridge, freezer, cupboard) prove too few.
 - [ ] Videos: short tour "idea to plate", 45 s knockout reel, then the clip series (see scratchpad storyboard); record the Import scene last, it changed.
-- [ ] Whole-journey tests (Pete agreed to "test everything"): fresh install, a shopping week, real-life mess, switching it all off. Build from his real-phone checklist, after his cupboard testing.
+- [x] Whole-journey tests, v3.10.1248: p358 (fresh install, a week, backup, restore on a second device, switch off and on) and p359 (real-life mess). Still to build from his real-phone checklist: a longer shopping week with receipts and use-by dates.
 - [ ] Reservations-switch test gap; Surprise sweet/savoury pair with a real web search untested; five stale branches (feat/quick-list, quick-list2, shopping-list, stock-suggest, stock-switch, move-tab, v1095-language-button, fix/p61-tally-link) to delete only with Pete's OK.
 - [ ] Video series (Pete: "I want everything", each clip hooks to the others, one every 2-3 days, short tour first as the hub): everyday user; treatment/symptoms with an invented person; plan/history/library; monitoring/analysis; connected; how safe is my data; accuracy settings tour; Make it yours; Simple please; stock clips (cupboard, receipts, off switch); meals by time of day; history and analysis with Proven/Early Stage/Speculative; "how it differs from a chatbot" (no competitors named, only on-screen claims). Vertical 1080x1920, captions only, hook on a moving screen, no web address burnt in (end card "Link in the description"), no Premium page link (Tally register-interest only), keep "Sample data shown. Not medical advice." Per-clip upload pack: title, description, tags, hashtags, SRT, thumbnail, pinned comment. promo.py line 35 burns in the GitHub URL: change.
 - [ ] Generated voice-over: set up a GitHub-hosted voice (Hugging Face is blocked, pip has no piper-tts/kokoro-onnx), send Pete a short sample for approval before touching any video.
@@ -138,3 +138,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 ## Nightly sweep, night of 29-30 Oct 2026 (triaged 30 Oct)
 - [x] p325: stale test, fixed. The Move tab now has planCard (the exercise planner) after activityCard; the expected order list in the test was missing it. Not an app bug.
 - [ ] p308 (two users uniform, Reports "btn-neutral" font): intermittent. Failed in the sweep and once on a lone run straight after another test, then passed twice. The odd persona reported Arial instead of Space Mono, so a Reports button was measured before it was styled or redrawn. Leave for now; if it keeps appearing, make the test wait for Reports to settle.
+
+- [ ] Manual "Missed day" has no fat box and stores fat as 0 (not "not entered"). Decide whether to add the box, or store nothing.

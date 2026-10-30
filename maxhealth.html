@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1247'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1248'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -37582,10 +37582,32 @@ function saveMissedDay() {
   // Check if date already exists
   const existing = state.history.find(h => h.date === dateVal);
   if (existing) {
-    // Update totals
-    existing.totals = { kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 };
-    existing.notes = notes;
-    showToast(`${dateVal} updated ✓`);
+    // v3.10.1248: a day that already has real meals must never have its totals overwritten (the meals stayed, so the day then disagreed with
+    // its own list, and its tags were lost). Only a day with no real meals, or one that is itself a missed-day entry, is replaced; otherwise
+    // what was typed is added as one more entry and the day's totals are worked out from the list again.
+    const _log = Array.isArray(existing.log) ? existing.log : (existing.log = []);
+    const _real = _log.filter(e => !(e && (e.missedDay || (e.time === '23:59' && _log.length === 1))));
+    const _entry = { id: Date.now(), time: '23:59', missedDay: true, description: notes, kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 };
+    if (!_real.length) {
+      const _oldNote = (_log[0] && _log[0].description) || '';
+      existing.log = [_entry];
+      existing.totals = { kcal, protein, carbs, fat: fat || 0, polyols: polyols || 0, fibre: fibre || 0 };
+      if (!existing.notes || existing.notes === _oldNote || existing.notes === 'missed day entry') existing.notes = notes;
+      showToast(`${dateVal} updated ✓`);
+    } else {
+      if (notes === 'missed day entry') _entry.description = 'Missed meals added later';   // visible in the day's list (the plain placeholder words are hidden there)
+      _log.push(_entry);
+      existing.totals = _log.reduce((acc, e) => ({
+        kcal:    acc.kcal    + (e.kcal    || 0),
+        protein: Math.round((acc.protein + (e.protein || 0)) * 10) / 10,
+        fat:     Math.round((acc.fat     + (e.fat     || 0)) * 10) / 10,
+        carbs:   Math.round((acc.carbs   + (e.carbs   || 0)) * 10) / 10,
+        fibre:   Math.round(((acc.fibre   || 0) + (e.fibre   || 0)) * 10) / 10,
+        polyols: Math.round(((acc.polyols || 0) + (e.polyols || 0)) * 10) / 10,
+      }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
+      showToast(`${dateVal} already had meals, so this was added to them ✓`);
+    }
+    kcal = existing.totals.kcal; protein = existing.totals.protein; carbs = existing.totals.carbs; fat = existing.totals.fat;
   } else {
     // Add new entry
     state.history.push({
