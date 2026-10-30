@@ -134,3 +134,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] **Launcher (laptop):** `versionCheckUrl` and the APK download URL (launcher plan above).
 - [ ] **Bug reports:** with no GitHub issues, `MH_HOME.issues` = '' makes the report copy its text; the settings card text still says "Opens a GitHub report", so reword it at the same time.
 - [ ] **Ads, videos and descriptions** that link to the github.io address (YouTube descriptions, the Ko-fi gallery, the register-interest page) need the new address before the old one goes dark; consider a redirect from the old address first.
+
+## Nightly sweep, night of 29-30 Oct 2026 (triaged 30 Oct)
+- [x] p325: stale test, fixed. The Move tab now has planCard (the exercise planner) after activityCard; the expected order list in the test was missing it. Not an app bug.
+- [ ] p308 (two users uniform, Reports "btn-neutral" font): intermittent. Failed in the sweep and once on a lone run straight after another test, then passed twice. The odd persona reported Arial instead of Space Mono, so a Reports button was measured before it was styled or redrawn. Leave for now; if it keeps appearing, make the test wait for Reports to settle.

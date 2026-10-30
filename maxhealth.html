@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1246'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1247'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -30584,7 +30584,7 @@ function mhEditTimeRow(id, entry) {
   const note = approx ? 'Not set, so this meal is ignored when working out fasts' : 'Only change this if the time is wrong';
   return `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:12px;color:var(--text3);">Meal time</span>
-      <input id="edit-time-${id}" type="time" value="${val}" class="modal-input" style="width:120px;font-size:16px;padding:6px 8px;" oninput="window._logEditTime[${id}]=this.value">
+      <input id="edit-time-${id}" type="time" value="${val}" class="modal-input" style="width:120px;font-size:16px;padding:6px 8px;" oninput="window._logEditTime['${id}']=this.value">
       <span style="font-size:11px;color:var(--text3);">${note}</span>
     </div>`;
 }
@@ -31195,7 +31195,7 @@ function copyLogEntryLine(id) {
 // One shared modal for both today and any past date - the date field
 // inside it is the only thing that changes, not a separate flow per case.
 function openPasteMealModal() {
-  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs'].forEach(id => {
+  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs','pasteMealTime'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -31249,8 +31249,10 @@ function confirmPasteMeal() {
   if (!desc) { showToast('Enter a description'); return; }
   if (isNaN(kcal)) { showToast('Enter a calorie value'); return; }
 
+  const _pt = (document.getElementById('pasteMealTime') || {}).value || '';
+  const _hasT = /^\d{2}:\d{2}$/.test(_pt);
   const entry = {
-    id: Date.now(), time: nowTime(), timeApprox: dateStr !== todayStr(),
+    id: Date.now(), time: _hasT ? _pt : nowTime(), timeApprox: _hasT ? false : dateStr !== todayStr(),
     description: desc,
     amount: amount || null,
     items: [{ name: desc, amount: amount || null, kcal, protein, fat, carbs }],
@@ -33475,6 +33477,7 @@ function editHistEntry(dayIdx, entryIdx) {
   form.style.cssText = 'padding:8px 0;display:flex;flex-direction:column;gap:6px;';
   form.innerHTML = `
     <input id="hedit-desc-${dayIdx}-${entryIdx}" class="modal-input" value="${entry.description}" style="font-size:12px;padding:6px 10px;">
+    ${mhEditTimeRow('h' + dayIdx + '-' + entryIdx, entry)}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;">
       <div>
         <div style="font-size:10px;color:var(--text3);margin-bottom:2px;">KCAL</div>
@@ -33556,6 +33559,7 @@ function cancelHistEdit(key) {
   const form = document.querySelector(`#hist-entry-${key} .hist-edit-form`);
   if (form) form.remove();
   if (window._histEditWorkingItems) delete window._histEditWorkingItems[key];
+  if (window._logEditTime) delete window._logEditTime['h' + key];
 }
 
 // ── Per-ingredient editor for multi-item History entries ────────────────
@@ -33582,6 +33586,7 @@ function renderHistEditItemsForm(dayIdx, entryIdx, entry) {
   form.innerHTML = `
     <div style="font-size:10px;color:var(--text3);font-family:Space Mono,monospace;">EDIT ENTRY — INGREDIENTS</div>
     <input id="hedit-desc-${key}" class="modal-input" value="${entry.description}" style="font-size:12px;padding:6px 10px;">
+    ${mhEditTimeRow('h' + key, entry)}
     <div id="hist-edit-items-${key}"></div>
     <button class="modal-btn" style="font-size:11px;padding:6px;background:transparent;border:1px dashed var(--border);color:var(--text2);" onclick="addHistEditItem('${key}')">+ Add ingredient</button>
     <div style="display:flex;gap:5px;align-items:center;">
@@ -33778,6 +33783,7 @@ function saveHistEditItems(dayIdx, entryIdx) {
 
   const desc = document.getElementById(`hedit-desc-${key}`)?.value.trim();
   entry.description = desc || entry.description;
+  mhApplyEditTime('h' + key, entry);
   entry.items = sanitised;
 
   const totals = sanitised.reduce((a, i) => ({
@@ -33831,6 +33837,7 @@ function saveHistEntry(dayIdx, entryIdx) {
   const fibre = parseFloat(document.getElementById(`hedit-fibre-${dayIdx}-${entryIdx}`)?.value) || 0;
   const polyols = parseFloat(document.getElementById(`hedit-polyols-${dayIdx}-${entryIdx}`)?.value) || 0;
   if (isNaN(kcal) || isNaN(prot) || isNaN(carb)) { showToast('Enter valid numbers'); return; }
+  mhApplyEditTime('h' + dayIdx + '-' + entryIdx, entry);   // a corrected meal time also puts the meal back into that day's fasting figure
   // Guard against duplicates — remove any other entry with same description before saving
   entry.description = desc || entry.description;
   entry.kcal    = Math.round(kcal);
@@ -55871,6 +55878,11 @@ function mhHold(fn) {
     <div style="margin-bottom:14px;">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DATE (DD/MM/YY) — defaults to today, change to add to a past day instead</div>
       <input id="pasteMealDate" class="modal-input" placeholder="e.g. 15/05/26" style="font-size:14px;padding:10px 12px;width:100%;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;">TIME EATEN (optional)</span>
+      <input id="pasteMealTime" type="time" class="modal-input" style="width:120px;font-size:16px;padding:6px 8px;">
+      <span style="font-size:11px;color:var(--text3);">Leave empty for a past day and the meal is ignored when working out fasts</span>
     </div>
 
     <div style="display:flex;gap:8px;">

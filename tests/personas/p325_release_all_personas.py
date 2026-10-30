@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
         # Move
         ev("switchTabById('move')"); page.wait_for_timeout(900)
         order = ev("[...document.querySelectorAll('#moveScroll > .activity-card')].map(e=>e.id)")
-        if order != ['dailyStepsCard', 'activityCard', 'moveExerciseCard', 'moveBodycompCard', 'moveJourneyCard']: W(f'Move card order {order}')
+        if order != ['dailyStepsCard', 'activityCard', 'planCard', 'moveExerciseCard', 'moveBodycompCard', 'moveJourneyCard']: W(f'Move card order {order}')
         for k, inner in [('Exercise', 'exercise-report-section'), ('Bodycomp', 'bodyCompCard'), ('Journey', 'journeyCard')]:
             card, note = f'move{k}Card', f'move{k}Empty'
             if ev(f"document.querySelectorAll('#{card} .trends-filter-btn').length") != 5: W(f'{k} has five range chips incl. Custom')
