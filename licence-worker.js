@@ -41,7 +41,7 @@ document.getElementById('b').onclick=async()=>{m.textContent='Checking…';
 try{const r=await fetch('/',{method:'POST',body:JSON.stringify({action:'activate',key:document.getElementById('k').value,device:d})});const j=await r.json();
 if(!j.ok){m.textContent=j.error||'That did not work.';return}
 if(j.tier!=='founder'&&j.tier!=='premium'){m.textContent='This key cannot download the launcher.';return}
-m.textContent='Starting your download…';location.href='/launcher/download?t='+encodeURIComponent(j.token)}catch(e){m.textContent='No connection. Please try again.'}};
+m.textContent='Starting your download…';location.href='/launcher/download?t='+encodeURIComponent(j.token);setTimeout(()=>{m.textContent='Download started. Check your Downloads. You can close this page.'},2500)}catch(e){m.textContent='No connection. Please try again.'}};
 </script></body></html>`;
 
 const enc = new TextEncoder();

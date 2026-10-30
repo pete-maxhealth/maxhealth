@@ -61,7 +61,7 @@ await put('/admin/put/launcher:version', '{"versionCode":15,"versionName":"1.5.1
 const v = await (await get('/launcher/version.json')).json();
 ok(v.versionCode === 15 && !JSON.stringify(v).includes('http'), 'version.json public, no download link');
 const pg=await get('/launcher/get'); const pgt=await pg.text();
-ok(pg.status===200&&/text\/html/.test(pg.headers.get('Content-Type'))&&pgt.includes('/launcher/download?t='), 'download page served');
+ok(pg.status===200&&/text\/html/.test(pg.headers.get('Content-Type'))&&pgt.includes('/launcher/download?t=')&&pgt.includes('Download started'), 'download page served');
 // premium payload
 await put('/admin/put/payload:zip', 'PKzip');
 ok((await post({ action: 'download', token: trialTok })).status === 200, 'payload downloads with any valid token');
