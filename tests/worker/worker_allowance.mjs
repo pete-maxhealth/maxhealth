@@ -27,10 +27,25 @@ r = await call({ 'X-MH-Device': 'x' }); if (r.status !== 200 || r.headers.get('X
 // 5. licence token
 const mk = (payload, secret = 'sekrit') => { const p = Buffer.from(JSON.stringify(payload)).toString('base64url'); return p + '.' + crypto.createHmac('sha256', secret).update(p).digest('base64url'); };
 const good = mk({ id: 'L1', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 });
-r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good }); if (r.status !== 200 || r.headers.get('X-MH-Tier') !== 'premium' || r.headers.get('X-MH-Remaining') !== '199') bad('valid licence not honoured ' + r.status + r.headers.get('X-MH-Tier'));
+r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good }); if (r.status !== 200 || r.headers.get('X-MH-Tier') !== 'premium' || r.headers.get('X-MH-Remaining') !== '29') bad('valid licence not honoured ' + r.status + r.headers.get('X-MH-Tier'));
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': mk({ id: 'L1', exp: 1 }) }); if (r.headers.get('X-MH-Tier') === 'premium') bad('expired licence accepted');
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': mk({ id: 'L1' }, 'wrong') }); if (r.headers.get('X-MH-Tier') === 'premium') bad('forged licence accepted');
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good.slice(0, -3) + 'abc' }); if (r.headers.get('X-MH-Tier') === 'premium') bad('tampered licence accepted');
+// 5b. licence: daily cap 30, not stopped by the 80-per-connection cap, own monthly pool
+const lic2 = mk({ id: 'L2', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 });
+let okL = 0; for (let i = 0; i < 33; i++) { r = await call({ 'X-MH-Licence': lic2 }); if (r.status === 200) okL++; }
+if (okL !== 30 || r.status !== 429) bad(`licence daily gave ${okL} ok, last ${r.status}`);
+for (const k of [...store.keys()]) if (k.startsWith('calls:day:')) store.delete(k);
+const before = [...store.keys()].filter(k => k.startsWith('calls:day:')).length;
+r = await call({ 'X-MH-Licence': mk({ id: 'L3', tier: 'founder', exp: Math.floor(Date.now() / 1000) + 3600 }) });
+if (r.status !== 200 || [...store.keys()].filter(k => k.startsWith('calls:day:')).length !== before) bad('licensed call used the per-connection cap');
+const lm = [...store.keys()].find(k => k.startsWith('calls:month-lic:')); if (!lm) bad('no licensed monthly pool key');
+store.set(lm, '10000'); r = await call({ 'X-MH-Licence': lic2 }); if (r.status !== 429) bad('licensed monthly cap not enforced ' + r.status);
+store.set(lm, '0');
+// free pool unaffected by licensed use, and full free pool does not block licensed users
+const fm = [...store.keys()].find(k => k.startsWith('calls:month:') && !k.includes('lic')); store.set(fm, '5000');
+r = await call({ 'X-MH-Licence': mk({ id: 'L4', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 }) }); if (r.status !== 200) bad('full free pool blocked a licensed user ' + r.status);
+r = await call({}); if (r.status !== 429) bad('full free pool did not block a free user'); store.set(fm, '0');
 // 6. model / tokens / tools hardening
 upstream = [];
 await call({}, { model: 'claude-opus-9', max_tokens: 99999, messages: [], tools: [{ type: 'bash_20250124', name: 'x' }, { type: 'web_search_20250305', name: 'web_search', max_uses: 500 }] });

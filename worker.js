@@ -13,7 +13,8 @@ const MONTHLY_CALL_CAP = 5000;
 // a request with no X-MH-Device header (an older copy of the app) is handled exactly as before.
 const STARTER_TOTAL   = 60;   // free AI calls for a brand-new device
 const STARTER_TOPUP   = 5;    // calls per day once the starter is used up
-const LICENCE_DAILY   = 200;  // calls per day for a valid licence token
+const LICENCE_DAILY   = 30;   // calls per day for a valid licence token (was 200, lowered 31/10/2026)
+const LICENCE_MONTHLY_CAP = 10000; // separate shared monthly pool for licensed users: 10000 x ~$0.006 = about $60/mo worst case
 const ALLOWED_MODELS  = ['claude-sonnet-4-6', 'claude-haiku-4-5'];
 const MAX_TOKENS_CAP  = 2500;
 const CORS_HEADERS = {
@@ -127,7 +128,20 @@ const handler = {
 			// caps a single-provider call uses.
 			const weight = body.multiCheck ? 3 : 1;
 
-			if (env.RATE_LIMIT_KV) {
+			// Licensed users have their own pool and their own daily cap (LICENCE_DAILY,
+			// applied in allowance()), so they skip the per-connection cap and do not
+			// draw on the free/starter pool (and free users cannot use up theirs).
+			const licensed = !!(await verifyLicence(request.headers.get('X-MH-Licence'), env));
+			if (env.RATE_LIMIT_KV && licensed) {
+				const lmKey = `calls:month-lic:${now.toISOString().slice(0,7)}`;
+				const lmN = parseInt((await env.RATE_LIMIT_KV.get(lmKey)) || '0', 10);
+				if (lmN + weight > LICENCE_MONTHLY_CAP) {
+					return new Response(JSON.stringify({
+						error: { message: `Monthly AI usage cap reached for licensed users (${LICENCE_MONTHLY_CAP} calls) - this protects against runaway cost. Resets at the start of next month.` }
+					}), { status: 429, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
+				}
+				await env.RATE_LIMIT_KV.put(lmKey, String(lmN + weight), { expirationTtl: 60 * 60 * 24 * 31 });
+			} else if (env.RATE_LIMIT_KV) {
 				const [dayCount, monthCount] = await Promise.all([
 					env.RATE_LIMIT_KV.get(dayKey),
 					env.RATE_LIMIT_KV.get(monthKey)
