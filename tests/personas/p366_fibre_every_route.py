@@ -64,6 +64,17 @@ with fresh_server() as root, sync_playwright() as pw:
     chk(abs(ev("calcTotals(state.todayLog).fibre") - b0 - 7.9) < 0.01, f"planned meal eaten today lost its fibre ({b0} -> {ev('calcTotals(state.todayLog).fibre')})")
     ev("mhPlanEat('pb')"); page.wait_for_timeout(500)
     chk(abs(ev("state.history.find(h => h.date === '30/10/26').totals.fibre") - 20.9) < 0.01, "overdue planned meal logged to its own day lost fibre (expected 20.9)")
+    # 10. polyols travel with the copied line (only when the meal has them) and the planned-fibre tile note
+    ev("state.todayLog.push({ id: 9100050, description: 'Keto bar', kcal: 200, protein: 12, carbs: 18, fat: 10, fibre: 3.1, polyols: 9.4, time: '10:00' }); saveState()")
+    ev("copyLogEntryLine(9100050)"); lp = ev("window.__clip"); chk(lp.endswith('3.1g fibre, 9.4g polyols'), f'copy line lost polyols: {lp}')
+    ev("copyLogEntryLine(9100002)"); chk('polyols' not in ev("window.__clip"), 'a food with no polyols got a polyols figure in its copy line')
+    ev("copyLogEntryLine(9100050)"); ev("openPasteMealModal()"); page.wait_for_timeout(400)
+    chk(ev("document.getElementById('pasteMealPolyols').value") == '9.4', 'paste form did not pick up polyols')
+    pb = ev("calcTotals(state.todayLog).polyols"); ev("document.getElementById('pasteMealDate').value = todayStr(); confirmPasteMeal()"); page.wait_for_timeout(300)
+    chk(abs(ev("calcTotals(state.todayLog).polyols") - pb - 9.4) < 0.01, 'pasted polyols not counted in the day total')
+    ev("mhPlanSave([{ id: 'pz', date: localISODate(), time: '23:00', text: 'Oats', foods: [{ name: 'Oats', amount: '50g', kcal: 180, protein: 6, carbs: 30, fat: 3, fibre: 5.0 }], createdAt: 2 }]); mhPlanTileNotes()")
+    tn = ev("(document.getElementById('fibrePlanned') || {}).textContent || ''"); chk('+5g planned' in tn, f'fibre tile has no planned note: {tn!r}')
+    ev("mhPlanSave([]); mhPlanTileNotes()"); chk(ev("document.getElementById('fibrePlanned').style.display") == 'none', 'fibre planned note stays after plan cleared')
     print('routes checked: copy/paste (today, history, old line, no-fibre), typed paste, manual, missed day x2, save dialog, plan today, plan overdue')
 bugs = [x for x in f if x[0] in ('BUG', 'JS-exception')]
 print('findings:', len(f), 'bugs:', len(bugs)); sys.exit(1 if bugs else 0)

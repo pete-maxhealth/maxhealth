@@ -2867,6 +2867,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
             <div class="water-amount" id="fibreAmount">0g</div>
             <div class="water-amount" style="min-width:0;"><span id="fibreTarget" style="word-break:break-word;">/ 30g</span></div>
           </div></div>
+        <div class="prog-planned" id="fibrePlanned" style="display:none;font-size:11px;color:var(--text3);line-height:1.3;margin:-2px 0 6px;"></div>
       </div>
       <div id="fibreBody">
       <div class="water-bar-wrap" title="See your fibre by day" style="cursor:pointer;" onclick="mhFibreHistory()"><div class="water-bar" id="fibreBar" style="width:0%;background:var(--green);"></div></div>
@@ -23518,7 +23519,7 @@ function mhPlanSetAuto(on) { try { localStorage.setItem('mh_plan_auto', on ? '1'
 // The four Today tiles show what your planned meals would add, as a small line under each (v3.10.1184).
 // Same rule as the Meal plan card: plans dated today or overdue count as planned until you answer them.
 function mhPlanTileNotes() {
-  const ids = { cal: 'calPlanned', prot: 'protPlanned', carb: 'carbPlanned', fat: 'fatPlanned' };
+  const ids = { cal: 'calPlanned', prot: 'protPlanned', carb: 'carbPlanned', fat: 'fatPlanned', fibre: 'fibrePlanned' };
   const set = (k, txt) => { const e = document.getElementById(ids[k]); if (!e) return; e.textContent = txt || ''; e.style.display = txt ? '' : 'none'; };
   try {
     const today = localISODate(), foods = [].concat(...mhPlanLoad().filter(p => p.date <= today).map(p => p.foods || []));
@@ -23534,7 +23535,7 @@ function mhPlanTileNotes() {
       if (Math.round(lv) > 0) parts.push((parts.length ? 'and ' : 'includes ') + Math.round(lv) + unit + ' logged for ' + lt);
       set(k, parts.join(' \u00B7 ')); };
     row('cal', pl.kcal, all.kcal, lat.kcal, ' kcal'); row('prot', pl.protein, all.protein, lat.protein, 'g');
-    row('carb', getEffectiveCarbs(pl), getEffectiveCarbs(all), getEffectiveCarbs(lat), 'g'); row('fat', pl.fat || 0, all.fat || 0, lat.fat || 0, 'g');
+    row('carb', getEffectiveCarbs(pl), getEffectiveCarbs(all), getEffectiveCarbs(lat), 'g'); row('fat', pl.fat || 0, all.fat || 0, lat.fat || 0, 'g'); row('fibre', pl.fibre || 0, all.fibre || 0, lat.fibre || 0, 'g');
   } catch (_) {}
 }
 function mhPlanRender() {
@@ -31207,7 +31208,7 @@ function copyLogEntryLine(id) {
   const e = (state.todayLog || []).find(x => x.id === id);
   if (!e) return;
   const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
-  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre`;
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre${(e.polyols || (e.items && e.items.length === 1 && e.items[0].polyols)) ? ', ' + (e.polyols || e.items[0].polyols) + 'g polyols' : ''}`;
   navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
@@ -31218,7 +31219,7 @@ function copyLogEntryLine(id) {
 // One shared modal for both today and any past date - the date field
 // inside it is the only thing that changes, not a separate flow per case.
 function openPasteMealModal() {
-  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs','pasteMealFibre','pasteMealTime'].forEach(id => {
+  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs','pasteMealFibre','pasteMealPolyols','pasteMealTime'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -31244,7 +31245,7 @@ function pasteMealFromClipboard(silent) {
     return;
   }
   navigator.clipboard.readText().then(text => {
-    const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs(?:,\s*([\d.]+|—)\s*g fibre)?/i);
+    const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs(?:,\s*([\d.]+|—)\s*g fibre)?(?:,\s*([\d.]+)\s*g polyols)?/i);
     if (!m) {
       if (!silent) showToast("Clipboard doesn't look like a copied meal line");
       return;
@@ -31256,6 +31257,7 @@ function pasteMealFromClipboard(silent) {
     document.getElementById('pasteMealFat').value = m[5] === '—' ? '' : m[5];
     document.getElementById('pasteMealCarbs').value = m[6];
     { const _fb = document.getElementById('pasteMealFibre'); if (_fb) _fb.value = (m[7] && m[7] !== '—') ? m[7] : ''; }   // v3.10.1252: an older copied line has no fibre; that stays blank
+    { const _pb = document.getElementById('pasteMealPolyols'); if (_pb) _pb.value = m[8] || ''; }   // polyols travel the same way; blank when the line has none
     if (!silent) showToast('Pasted ✓ — check the fields, then Add entry');
   }).catch(() => {
     if (!silent) showToast('Could not read clipboard');
@@ -31271,6 +31273,8 @@ function confirmPasteMeal() {
   const carbs = parseFloat(document.getElementById('pasteMealCarbs').value) || 0;
   const _fibRaw = parseFloat(document.getElementById('pasteMealFibre')?.value);   // v3.10.1252: blank stays 'not recorded' (not guessed)
   const fibre = (!isNaN(_fibRaw) && _fibRaw >= 0) ? Math.round(_fibRaw * 10) / 10 : undefined;
+  const _polRaw = parseFloat(document.getElementById('pasteMealPolyols')?.value);
+  const polyols = (!isNaN(_polRaw) && _polRaw > 0) ? Math.round(_polRaw * 10) / 10 : undefined;
   const dateStr = document.getElementById('pasteMealDate').value.trim() || todayStr();
   if (!desc) { showToast('Enter a description'); return; }
   if (isNaN(kcal)) { showToast('Enter a calorie value'); return; }
@@ -31281,13 +31285,14 @@ function confirmPasteMeal() {
     id: Date.now(), time: _hasT ? _pt : nowTime(), timeApprox: _hasT ? false : dateStr !== todayStr(),
     description: desc,
     amount: amount || null,
-    items: [Object.assign({ name: desc, amount: amount || null, kcal, protein, fat, carbs }, fibre !== undefined ? { fibre } : {})],
+    items: [Object.assign({ name: desc, amount: amount || null, kcal, protein, fat, carbs }, fibre !== undefined ? { fibre } : {}, polyols !== undefined ? { polyols } : {})],
     kcal: Math.round(kcal),
     protein: Math.round(protein * 10) / 10,
     fat: Math.round(fat * 10) / 10,
     carbs: Math.round(carbs * 10) / 10,
   };
   if (fibre !== undefined) entry.fibre = fibre;
+  if (polyols !== undefined) entry.polyols = polyols;
 
   if (dateStr === todayStr()) {
     state.todayLog.push(entry);
@@ -33444,7 +33449,7 @@ function copyHistEntryLine(date, entryIdx) {
   const e = cleanLog[entryIdx];
   if (!e) return;
   const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
-  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein||0}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs||0}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre`;
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein||0}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs||0}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre${(e.polyols || (e.items && e.items.length === 1 && e.items[0].polyols)) ? ', ' + (e.polyols || e.items[0].polyols) + 'g polyols' : ''}`;
   navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
@@ -55972,6 +55977,7 @@ function mhHold(fn) {
       <div><div style="font-size:10px;color:#a78bfa;margin-bottom:4px;">FAT g</div><input id="pasteMealFat" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">CARBS g</div><input id="pasteMealCarbs" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;">FIBRE g</div><input id="pasteMealFibre" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:10px 6px;"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;">POLYOLS g</div><input id="pasteMealPolyols" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:10px 6px;"></div>
     </div>
     <div style="margin-bottom:14px;">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DATE (DD/MM/YY) — defaults to today, change to add to a past day instead</div>
