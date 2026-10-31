@@ -35,7 +35,7 @@ with fresh_server() as root, sync_playwright() as pw:
         ev("localStorage.setItem('mh_shop_pane','both'); window.appConfirm=(m,ok)=>{ok&&ok()}; window._mhLibQuiet=true")
         res[pid] = {}
         for sc in SCREENS:
-            ev("switchTabById(%r)" % sc); page.wait_for_timeout(450)
+            ev("switchTabById(%r)" % sc); page.wait_for_timeout(450); page.evaluate("document.fonts.ready.then(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))"); page.wait_for_timeout(300)   # let fonts load and the screen finish drawing before measuring
             if sc == 'shop': ev("_shopUi.addOpen=true; mhShopRender()"); page.wait_for_timeout(200)   # 'Add to the list' opens by itself only while the list is empty (by design)
             res[pid][sc] = page.evaluate(SIG, DATA_BTN)
             if res[pid][sc]['over']: f.add('BUG', f'{pid}/{sc}: horizontal overflow')

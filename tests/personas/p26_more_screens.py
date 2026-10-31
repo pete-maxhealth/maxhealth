@@ -77,7 +77,11 @@ with fresh_server() as root, sync_playwright() as pw:
     # ── AI chat Q&A ──
     calls.clear()
     page.click("[onclick^=\"switchTab('log'\"]"); page.wait_for_timeout(300)
-    page.evaluate("document.getElementById('chatInput').value='I had two boiled eggs for lunch'"); page.click("[onclick=\"sendChat()\"]"); page.wait_for_timeout(3000)
+    page.evaluate("document.getElementById('chatInput').value='I had two boiled eggs for lunch'"); page.click("[onclick=\"sendChat()\"]")
+    for _ in range(40):   # wait up to 10s: under a parallel sweep the AI request can take longer than a fixed 3s
+        if calls: break
+        page.wait_for_timeout(250)
+    page.wait_for_timeout(500)
     if not calls: f.add('BUG', 'a free-text question never reached the AI')
     else:
         sysp = str(calls[0].get('system', ''))
