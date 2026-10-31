@@ -9634,6 +9634,7 @@ function promptSaveToLibrary(item) {
   const fatEl2 = document.getElementById('saveModalFatEdit');
   if (fatEl2) fatEl2.value = item.fat || 0;
   if (carbEl) carbEl.value = item.carbs || 0;
+  { const _fe = document.getElementById('saveModalFibreEdit'); if (_fe) _fe.value = item.fibre || ''; }   // v3.10.1252
   const catEl = document.getElementById('saveModalCategories');
   if (catEl) catEl.value = '';
   document.getElementById('saveLibraryModal').classList.add('open');
@@ -9668,6 +9669,7 @@ function confirmSaveToLibrary() {
     locked: true,
     source: 'ai_confirmed'
   };
+  { const _fv = parseFloat(document.getElementById('saveModalFibreEdit')?.value); const _fib = !isNaN(_fv) ? _fv : _pendingSaveItem.fibre; if (_fib > 0) newEntry.fibre = Math.round(_fib * 10) / 10; }   // v3.10.1252: kept when the meal had it; blank stays not recorded
   // Was genuinely missing entirely - this is the actual save-after-logging
   // flow (photo/text/multi-AI verify all end here), with no way to set a
   // category at all. Left blank, the item still auto-categorizes normally
@@ -19927,6 +19929,8 @@ function showManualEntryForm(prefillName) {
         <input id="meFat" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
       <div><div style="font-size:10px;color:var(--yellow);margin-bottom:2px;">CARBS g</div>
         <input id="meCarbs" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px;">FIBRE g</div>
+        <input id="meFibre" type="number" placeholder="0" step="0.1" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:14px;font-weight:700;"></div>
     </div>
     <div style="display:flex;gap:8px;">
       <button class="run-btn" style="flex:1;padding:10px;font-size:13px;" onclick="confirmManualEntry()">Log it ✓</button>
@@ -19944,13 +19948,16 @@ function confirmManualEntry() {
   const prot  = parseFloat(document.getElementById('meProt')?.value)  || 0;
   const fat   = parseFloat(document.getElementById('meFat')?.value)   || 0;
   const carbs = parseFloat(document.getElementById('meCarbs')?.value) || 0;
+  const _fibRaw = parseFloat(document.getElementById('meFibre')?.value);   // v3.10.1252: blank stays 'not recorded'
+  const fibre = (!isNaN(_fibRaw) && _fibRaw >= 0) ? Math.round(_fibRaw * 10) / 10 : undefined;
   const entry = { description: name, kcal, protein: prot, fat, carbs,
     time: new Date().toTimeString().slice(0,5), source: 'manual' };
+  if (fibre !== undefined) entry.fibre = fibre;
   state.todayLog.push(entry);
   saveState();
   updateDashboard();
   document.getElementById('manualEntryBubble')?.remove();
-  addBubble(`✓ Logged: ${name} — ${kcal}kcal · ${prot}g P · ${fat}g F · ${carbs}g C`, 'system', 'success');
+  addBubble(`✓ Logged: ${name} — ${kcal}kcal · ${prot}g P · ${fat}g F · ${carbs}g C${fibre !== undefined ? ' · ' + fibre + 'g fibre' : ''}`, 'system', 'success');
 }
 
 // ─── WEIGHT CARRY-FORWARD ─────────────────────────────────────────────────────
@@ -31200,7 +31207,7 @@ function copyLogEntryLine(id) {
   const e = (state.todayLog || []).find(x => x.id === id);
   if (!e) return;
   const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
-  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs`;
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre`;
   navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
@@ -31211,7 +31218,7 @@ function copyLogEntryLine(id) {
 // One shared modal for both today and any past date - the date field
 // inside it is the only thing that changes, not a separate flow per case.
 function openPasteMealModal() {
-  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs','pasteMealTime'].forEach(id => {
+  ['pasteMealDesc','pasteMealAmount','pasteMealKcal','pasteMealProtein','pasteMealFat','pasteMealCarbs','pasteMealFibre','pasteMealTime'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -31237,7 +31244,7 @@ function pasteMealFromClipboard(silent) {
     return;
   }
   navigator.clipboard.readText().then(text => {
-    const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs/i);
+    const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs(?:,\s*([\d.]+|—)\s*g fibre)?/i);
     if (!m) {
       if (!silent) showToast("Clipboard doesn't look like a copied meal line");
       return;
@@ -31248,6 +31255,7 @@ function pasteMealFromClipboard(silent) {
     document.getElementById('pasteMealProtein').value = m[4];
     document.getElementById('pasteMealFat').value = m[5] === '—' ? '' : m[5];
     document.getElementById('pasteMealCarbs').value = m[6];
+    { const _fb = document.getElementById('pasteMealFibre'); if (_fb) _fb.value = (m[7] && m[7] !== '—') ? m[7] : ''; }   // v3.10.1252: an older copied line has no fibre; that stays blank
     if (!silent) showToast('Pasted ✓ — check the fields, then Add entry');
   }).catch(() => {
     if (!silent) showToast('Could not read clipboard');
@@ -31261,6 +31269,8 @@ function confirmPasteMeal() {
   const protein = parseFloat(document.getElementById('pasteMealProtein').value) || 0;
   const fat = parseFloat(document.getElementById('pasteMealFat').value) || 0;
   const carbs = parseFloat(document.getElementById('pasteMealCarbs').value) || 0;
+  const _fibRaw = parseFloat(document.getElementById('pasteMealFibre')?.value);   // v3.10.1252: blank stays 'not recorded' (not guessed)
+  const fibre = (!isNaN(_fibRaw) && _fibRaw >= 0) ? Math.round(_fibRaw * 10) / 10 : undefined;
   const dateStr = document.getElementById('pasteMealDate').value.trim() || todayStr();
   if (!desc) { showToast('Enter a description'); return; }
   if (isNaN(kcal)) { showToast('Enter a calorie value'); return; }
@@ -31271,12 +31281,13 @@ function confirmPasteMeal() {
     id: Date.now(), time: _hasT ? _pt : nowTime(), timeApprox: _hasT ? false : dateStr !== todayStr(),
     description: desc,
     amount: amount || null,
-    items: [{ name: desc, amount: amount || null, kcal, protein, fat, carbs }],
+    items: [Object.assign({ name: desc, amount: amount || null, kcal, protein, fat, carbs }, fibre !== undefined ? { fibre } : {})],
     kcal: Math.round(kcal),
     protein: Math.round(protein * 10) / 10,
     fat: Math.round(fat * 10) / 10,
     carbs: Math.round(carbs * 10) / 10,
   };
+  if (fibre !== undefined) entry.fibre = fibre;
 
   if (dateStr === todayStr()) {
     state.todayLog.push(entry);
@@ -33433,7 +33444,7 @@ function copyHistEntryLine(date, entryIdx) {
   const e = cleanLog[entryIdx];
   if (!e) return;
   const amt = e.amount || (e.items && e.items.length===1 && e.items[0].amount) || '';
-  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein||0}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs||0}g carbs`;
+  const line = `${e.description}${amt ? ' (' + amt + ')' : ''} — ${e.kcal}kcal, ${e.protein||0}g protein, ${e.fat !== undefined ? e.fat : '—'}g fat, ${e.carbs||0}g carbs, ${e.fibre !== undefined ? e.fibre : '—'}g fibre`;
   navigator.clipboard?.writeText(line).then(() => showToast('Copied ✓')).catch(() => showToast('Could not copy'));
 }
 
@@ -37346,6 +37357,7 @@ function openMissedDayModal(presetDate = null) {
   document.getElementById('missedProtein').value = '';
   document.getElementById('missedCarbs').value = '';
   const _mf = document.getElementById('missedFat'); if (_mf) _mf.value = '';
+  const _mfb = document.getElementById('missedFibre'); if (_mfb) _mfb.value = '';
   document.getElementById('missedNotes').value = '';
   _missedAITotals = null;
   setMissedMode('ai');
@@ -37596,7 +37608,8 @@ function saveMissedDay() {
     // after killed closeMissedDayModal() and renderHistory() before they
     // could run - so the modal never closed and History never refreshed,
     // making a successful save look exactly like nothing had happened.
-    fat = _fatTyped; fibre = 0;
+    fat = _fatTyped;
+    { const _fbRaw = parseFloat(document.getElementById('missedFibre')?.value); fibre = (!isNaN(_fbRaw) && _fbRaw >= 0) ? Math.round(_fbRaw * 100) / 100 : 0; }   // v3.10.1252: typed fibre stored as typed; blank counts as 0, not guessed
   }
 
   // Check if date already exists
@@ -55918,6 +55931,10 @@ function mhHold(fn) {
           <div style="font-size:10px;color:var(--red,#e5484d);margin-bottom:4px;">FAT g</div>
           <input id="missedFat" class="modal-input" type="number" placeholder="–" step="0.1" style="font-size:16px;padding:10px 12px;">
         </div>
+        <div>
+          <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">FIBRE g</div>
+          <input id="missedFibre" class="modal-input" type="number" placeholder="–" step="0.1" style="font-size:16px;padding:10px 12px;">
+        </div>
       </div>
     </div>
 
@@ -55954,6 +55971,7 @@ function mhHold(fn) {
       <div><div style="font-size:10px;color:var(--green);margin-bottom:4px;">PROT g</div><input id="pasteMealProtein" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:#a78bfa;margin-bottom:4px;">FAT g</div><input id="pasteMealFat" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">CARBS g</div><input id="pasteMealCarbs" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;width:100%;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:4px;">FIBRE g</div><input id="pasteMealFibre" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:15px;padding:10px 6px;"></div>
     </div>
     <div style="margin-bottom:14px;">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DATE (DD/MM/YY) — defaults to today, change to add to a past day instead</div>
@@ -55996,6 +56014,8 @@ function mhHold(fn) {
       <div>
         <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;font-family:Space Mono,monospace;">CARBS g</div>
         <input class="modal-input" type="number" id="saveModalCarbsEdit" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">FIBRE g</div>
+        <input class="modal-input" type="number" id="saveModalFibreEdit" placeholder="0" step="0.1" style="font-size:15px;padding:8px 10px;">
       </div>
     </div>
     <!-- Was genuinely missing entirely - this is the actual "save an
