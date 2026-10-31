@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1251
+- **Starter packs now work with no internet.** The "What are you tracking now?" picker and the Starter packs screen read the app's own copy first (the phone's server, or the site the app came from) and fall back to the published copy at `MH_HOME.raw` only if that is missing. This is the same order the language files already used. Before this, packs came only from GitHub, so offline the picker showed three built-in choices and the Starter packs screen said it couldn't connect.
+- `server.py` serves `/starter_packs/<name>.json` (plain `.json` names only; anything else is a 404 that shows nothing).
+- Decision (31 Oct): the free app, language files and starter packs stay on GitHub. The "Moving off GitHub" list in BACKLOG.md is closed; `MH_HOME` stays as the one place for addresses.
+- Tests: p361 (everything but the app's own server refused: pack picker, pack preview, Starter packs screen, language file, server only serves plain pack names, nothing sent to GitHub); p355 updated (own copy first, fallback to `MH_HOME.raw`).
+
 ## v3.10.1250
 - **"Missed day" now has a Fat box.** The manual form takes calories, protein, carbs and fat. A typed fat figure is stored as typed (entry, day total, History); left blank it is not guessed and the day counts it as 0. Adding to a day that already has meals adds the fat to that day. The form is empty again each time it opens.
 - **Bug-report wording follows the setting.** With no public report page configured (`MH_HOME.issues` empty) the two hints under "Report a problem" now say the report is copied and nothing is sent, instead of "Opens a GitHub report". With GitHub configured the old wording stays.

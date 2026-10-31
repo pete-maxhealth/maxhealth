@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1250'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1251'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -21251,16 +21251,15 @@ async function mhStarterPacks() {
   document.body.appendChild(m);
   document.getElementById('mhStarterClose').onclick = () => m.remove();
   const body = document.getElementById('mhStarterBody');
-  const base = MH_HOME.raw + 'starter_packs/';
   try {
-    const r = await fetch(base + 'index.json', { cache: 'no-store' }); if (!r.ok) throw 0;
+    const r = await mhPackFetch('index.json');
     const idx = await r.json(); if (!Array.isArray(idx.packs)) throw 0;
     idx.packs = idx.packs.slice(0, 60).sort((a, b) => String(a.title).localeCompare(String(b.title)));
     body.innerHTML = idx.packs.map((p, i) => `<div style="padding:10px 0;border-bottom:1px solid var(--border);"><div style="color:var(--text);font-weight:600;">${_pkEsc(p.title)}</div><div style="font-size:12px;margin:2px 0 6px;">${_pkEsc(p.description)}</div><button class="copy-btn" data-i="${i}" style="font-size:12px;">Preview</button></div>`).join('') || 'No starter packs yet.';
     body.querySelectorAll('button[data-i]').forEach(btn => btn.onclick = async () => {
       const p = idx.packs[+btn.dataset.i];
       try {
-        const rr = await fetch(base + String(p.file).replace(/[^A-Za-z0-9_.-]/g, ''), { cache: 'no-store' }); const pack = await rr.json();
+        const rr = await mhPackFetch(String(p.file).replace(/[^A-Za-z0-9_.-]/g, '')); const pack = await rr.json();
         if (!pack || pack.mhpack !== 1 || !pack.sets) throw 0;
         pack.title = p.title; mhPackPreview(pack);
       } catch (e) { showToast("Couldn't open that pack"); }
@@ -21272,6 +21271,14 @@ async function mhStarterPacks() {
 // tucked away and which will stay in front; applying swaps the screen layout to that pack's and adds its symptom/treatment lists to
 // yours (never removes any). Nothing you logged is touched and every hidden card stays reachable under Filter.
 const MH_PACK_BASE = MH_HOME.raw + 'starter_packs/';
+// v3.10.1251: the app's own copy of a starter pack first (served by the phone's server or the site the app came from, so it works with no
+// internet and can be tested offline); the published copy at MH_HOME.raw only if that is missing. Same order as the language files.
+async function mhPackFetch(name) {
+  for (const url of [new URL('starter_packs/' + name, location.href).href, MH_PACK_BASE + name]) {
+    try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return r; } catch (_) {}
+  }
+  throw new Error('pack not found');
+}
 function mhFocusSummary(pack) {
   const lay = (pack.sets && pack.sets.layout && pack.sets.layout.data) || {}, hidden = [], folded = [], trend = [];
   try { JSON.parse(lay.mh_dashboard_hidden || '[]').forEach(k => hidden.push(DASHBOARD_SECTION_LABELS[k] || k)); } catch (_) {}
@@ -21291,7 +21298,7 @@ async function mhFocusOpen() {
   document.getElementById('mhFocusClose').onclick = () => m.remove();
   const body = document.getElementById('mhFocusBody');
   let packs = [];
-  try { const r = await fetch(MH_PACK_BASE + 'index.json', { cache: 'no-store' }); if (!r.ok) throw 0; const idx = await r.json(); if (!Array.isArray(idx.packs)) throw 0; packs = idx.packs.slice(0, 60).sort((a, b) => String(a.title).localeCompare(String(b.title))); }
+  try { const r = await mhPackFetch('index.json'); const idx = await r.json(); if (!Array.isArray(idx.packs)) throw 0; packs = idx.packs.slice(0, 60).sort((a, b) => String(a.title).localeCompare(String(b.title))); }
   catch (_) { packs = [{ embedded: 'brain', title: 'Brain tumour tracking', description: 'Symptoms and treatments people commonly track, with the metabolic cards folded away.' }, { embedded: 'simple', title: 'Keep it simple', description: 'Everyday symptoms, with the advanced cards tucked away.' }]; }
   const row = (t, d, i) => `<div style="padding:10px 0;border-bottom:1px solid var(--border);"><div style="color:var(--text);font-weight:600;">${_pkEsc(t)}</div><div style="font-size:12px;margin:2px 0 6px;">${_pkEsc(d)}</div><button class="copy-btn" data-f="${i}" style="font-size:12px;">Choose</button></div>`;
   body.innerHTML = row('Show me everything', 'Every card visible in its standard place. Good if you are not sure yet.', 'all') + packs.map((p, i) => row(p.title, p.description, i)).join('');
@@ -21302,7 +21309,7 @@ async function mhFocusOpen() {
     try {
       let pack;
       if (p.embedded) pack = JSON.parse(JSON.stringify(MH_FIRST_RUN_PACKS[p.embedded]));
-      else { const rr = await fetch(MH_PACK_BASE + String(p.file).replace(/[^A-Za-z0-9_.-]/g, ''), { cache: 'no-store' }); pack = await rr.json(); }
+      else { const rr = await mhPackFetch(String(p.file).replace(/[^A-Za-z0-9_.-]/g, '')); pack = await rr.json(); }
       if (!pack || !pack.sets) throw 0; pack.title = p.title; pack._cond = { id: String(p.embedded || String(p.file || p.title).replace(/\.json$/, '').replace(/_tracking$/, '')).replace(/[^A-Za-z0-9_-]/g, ''), name: String(p.title).replace(/ tracking$/i, '') }; mhFocusPreview(pack);
     } catch (_) { showToast("Couldn't open that one"); }
   });

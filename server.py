@@ -1767,6 +1767,25 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_json({'error': 'Language not found'}, 404)
 
+        # Starter packs ship with the app (v3.10.1251), like the language files: they load with no internet.
+        # Only plain <name>.json files that exist in starter_packs/ are served (basename, no traversal).
+        elif path.startswith('/starter_packs/'):
+            pack_name = os.path.basename(path)
+            pack_path = os.path.join(APP_DIR, 'starter_packs', pack_name)
+            if re.fullmatch(r'[A-Za-z0-9_.-]+\.json', pack_name) and os.path.isfile(pack_path):
+                with open(pack_path, 'rb') as f:
+                    body = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Cache-Control', 'no-cache')
+                for k, v in CORS.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_json({'error': 'Pack not found'}, 404)
+
         elif path.startswith('/icons/'):
             # Serve icon files from the maxhealth app directory
             icon_name = os.path.basename(path)
