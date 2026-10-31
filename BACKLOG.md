@@ -123,7 +123,8 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] p63, p70 (fasting): v3.10.1246 pinned to UTC. Cause was the UK clock change on 25 Oct (that night is 13h of real fasting); the app counts real elapsed hours and is right.
 - [x] p306, p307 (ate-out history): fixed 28 Oct 2026. The tests hard-coded 20/10/26, which fell outside History's default period; they now use a day relative to today. No app bug.
 
-## Steps: plan vs actual in one box (Pete, 28 Oct 2026; build only after the videos, not needed for them)
+## Steps: plan vs actual in one box (Pete, 28 Oct 2026) - PARKED, NOT NEEDED (Pete, 31 Oct 2026)
+- Pete's decision 31 Oct: the planner works as it is. He books food and exercise in the morning as a forecast of how the day will play out, then deletes or adjusts portions and adds a snack before the end of the day to close the macros; his weight stability shows it works. Do NOT build the box or change how plans affect the fast timer unless he asks. The notes below are kept only in case he returns to it.
 - [ ] One Daily Steps box that knows if the number is a plan (intention) or an actual. A plan is replaced by the first device figure even if lower; an actual stays a floor (today's rule). Plan ahead becomes how a plan is entered. Card says "planned, waiting for your watch". Steps become the one metric where a device beats a manual entry; everything else keeps manual wins. Whole-day test: plan, device lower, device higher, midnight, reload, History.
 - [ ] No in-app step counter (a web page cannot count in the background). Phone steps come from Health Connect via the launcher; fix the phone+watch double count there (needs the laptop).
 
