@@ -4,7 +4,7 @@ const tmp = path.join(os.tmpdir(), 'mh_worker_test.mjs'); fs.copyFileSync(new UR
 const worker = (await import(tmp)).default;
 let fails = 0; const bad = (m) => { fails++; console.log('FAIL', m); };
 const store = new Map();
-const KV = { get: async k => store.has(k) ? store.get(k) : null, put: async (k, v) => { store.set(k, v); } };
+const KV = { get: async k => store.has(k) ? store.get(k) : null, put: async (k, v) => { store.set(k, v); }, delete: async k => { store.delete(k); } };
 let upstream = [];
 globalThis.fetch = async (url, init) => { upstream.push({ url, body: JSON.parse(init.body) }); return new Response(JSON.stringify({ content: [{ type: 'text', text: 'ok' }] }), { headers: { 'Content-Type': 'application/json' } }); };
 const env = { RATE_LIMIT_KV: KV, ANTHROPIC_API_KEY: 'k', LICENCE_SECRET: 'sekrit' };
@@ -59,4 +59,23 @@ const u = upstream[0].body; if (u.model !== 'claude-sonnet-4-6') bad('model not 
 if (!u.tools || u.tools.length !== 1 || u.tools[0].max_uses !== 3 || u.tools[0].type !== 'web_search_20250305') bad('tools not restricted ' + JSON.stringify(u.tools));
 // 7. preflight exposes headers
 r = await worker.fetch(new Request('https://w.test/', { method: 'OPTIONS' })); if (!/X-MH-Device/.test(r.headers.get('Access-Control-Allow-Headers') || '')) bad('preflight missing X-MH-Device');
+// 8. admin: limits adjustable without redeploying
+const adm = (headers, body) => worker.fetch(new Request('https://w.test/admin/limits', { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }), env);
+r = await adm({ 'X-MH-Admin': 'x' }, { action: 'get' }); if (r.status !== 403) bad('admin worked with no ADMIN_SECRET set ' + r.status);
+env.ADMIN_SECRET = 'a'.repeat(64);
+r = await adm({}, { action: 'get' }); if (r.status !== 403) bad('admin worked with no header');
+r = await adm({ 'X-MH-Admin': 'b'.repeat(64) }, { action: 'get' }); if (r.status !== 403) bad('admin worked with wrong secret');
+r = await worker.fetch(new Request('https://w.test/admin/limits', { method: 'GET', headers: { 'X-MH-Admin': env.ADMIN_SECRET } }), env); if (r.status !== 405) bad('admin GET allowed ' + r.status);
+const A = { 'X-MH-Admin': env.ADMIN_SECRET };
+r = await adm(A, { action: 'get' }); let j = await r.json(); if (j.limits.licenceDaily !== 30 || j.limits.licenceMonthly !== 10000 || j.limits.freeMonthly !== 5000) bad('defaults wrong ' + JSON.stringify(j));
+r = await adm(A, { action: 'set', limits: { nope: 1 } }); if (r.status !== 400) bad('unknown limit accepted');
+r = await adm(A, { action: 'set', limits: { licenceDaily: -5 } }); if (r.status !== 400) bad('negative accepted');
+r = await adm(A, { action: 'set', limits: { licenceDaily: '5' } }); if (r.status !== 400) bad('string accepted');
+r = await adm(A, { action: 'set', limits: { licenceDaily: 2 } }); j = await r.json(); if (!j.ok || j.limits.licenceDaily !== 2 || j.limits.licenceMonthly !== 10000) bad('set failed ' + JSON.stringify(j));
+const lic9 = mk({ id: 'L9', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 });
+let ok9 = 0; for (let i = 0; i < 4; i++) { r = await call({ 'X-MH-Licence': lic9 }); if (r.status === 200) ok9++; }
+if (ok9 !== 2) bad('new licence daily limit not applied: ' + ok9);
+if (!store.get('cfg:limits')) bad('limits not stored in KV');
+r = await adm(A, { action: 'reset' }); j = await r.json(); if (j.limits.licenceDaily !== 30) bad('reset failed');
+r = await call({ 'X-MH-Licence': mk({ id: 'L10', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 }) }); if (r.headers.get('X-MH-Remaining') !== '29') bad('default not back after reset');
 console.log('worker findings', fails); process.exit(fails ? 1 : 0);

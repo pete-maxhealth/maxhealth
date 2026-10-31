@@ -24,6 +24,53 @@ const CORS_HEADERS = {
 	'Access-Control-Expose-Headers': 'X-MH-Remaining, X-MH-Tier',
 };
 
+// ── Adjustable limits (31/10/2026) ───────────────────────────────────────────────
+// The numbers above are only the DEFAULTS. They can be changed without redeploying: store
+// overrides in KV under "cfg:limits" with the admin command (POST /admin/limits, header
+// X-MH-Admin = the ADMIN_SECRET secret on this Worker). If nothing is stored, or KV is
+// unavailable, the defaults apply.
+const LIMIT_DEFAULTS = { licenceDaily: LICENCE_DAILY, licenceMonthly: LICENCE_MONTHLY_CAP, freeMonthly: MONTHLY_CALL_CAP, perIpDaily: PER_IP_DAILY_CAP, starterTotal: STARTER_TOTAL, starterTopup: STARTER_TOPUP };
+let limitCache = null;   // { t, v } kept per Worker instance for 30 seconds to save KV reads
+async function getLimits(env) {
+	if (limitCache && Date.now() - limitCache.t < 30000) return limitCache.v;
+	let v = { ...LIMIT_DEFAULTS };
+	try {
+		const raw = env.RATE_LIMIT_KV ? await env.RATE_LIMIT_KV.get('cfg:limits') : null;
+		if (raw) { const o = JSON.parse(raw); for (const k of Object.keys(v)) if (Number.isInteger(o[k]) && o[k] >= 0 && o[k] <= 1000000) v[k] = o[k]; }
+	} catch (e) { /* fall back to defaults */ }
+	limitCache = { t: Date.now(), v };
+	return v;
+}
+async function sameSecret(a, b) {
+	const enc = new TextEncoder();
+	const [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', enc.encode(a)), crypto.subtle.digest('SHA-256', enc.encode(b))]);
+	const A = new Uint8Array(x), B = new Uint8Array(y); let d = 0;
+	for (let i = 0; i < A.length; i++) d |= A[i] ^ B[i];
+	return d === 0;
+}
+async function adminLimits(request, env) {
+	const json = (o, st = 200) => new Response(JSON.stringify(o), { status: st, headers: { 'Content-Type': 'application/json' } });
+	if (request.method !== 'POST') return json({ ok: false, error: 'POST only' }, 405);
+	const given = request.headers.get('X-MH-Admin') || '';
+	if (!env.ADMIN_SECRET || !given || !(await sameSecret(given, env.ADMIN_SECRET))) return json({ ok: false, error: 'Not allowed' }, 403);
+	let body; try { body = await request.json(); } catch (e) { return json({ ok: false, error: 'Bad JSON' }, 400); }
+	try {
+		if (body.action === 'reset') { await env.RATE_LIMIT_KV.delete('cfg:limits'); limitCache = null; return json({ ok: true, limits: await getLimits(env) }); }
+		if (body.action === 'set') {
+			const cur = (await getLimits(env)), next = { ...cur };
+			for (const [k, val] of Object.entries(body.limits || {})) {
+				if (!(k in LIMIT_DEFAULTS)) return json({ ok: false, error: 'Unknown limit: ' + k }, 400);
+				if (!Number.isInteger(val) || val < 0 || val > 1000000) return json({ ok: false, error: 'Bad value for ' + k }, 400);
+				next[k] = val;
+			}
+			await env.RATE_LIMIT_KV.put('cfg:limits', JSON.stringify(next)); limitCache = { t: Date.now(), v: next };
+			return json({ ok: true, limits: next });
+		}
+		if (body.action === 'get') return json({ ok: true, limits: await getLimits(env), defaults: LIMIT_DEFAULTS });
+		return json({ ok: false, error: 'action must be get, set or reset' }, 400);
+	} catch (e) { return json({ ok: false, error: 'KV unavailable: ' + e.message }, 503); }
+}
+
 function b64uToBytes(s) {
 	s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
 	const bin = atob(s); const out = new Uint8Array(bin.length);
@@ -67,14 +114,15 @@ function busy(err) {
 // Returns { block?: Response, remaining?: number, tier?: string }.
 async function allowance(request, env, weight) {
 	if (!env.RATE_LIMIT_KV) return {};
+	const L = await getLimits(env);
 	const today = new Date().toISOString().slice(0, 10);
 	const lic = await verifyLicence(request.headers.get('X-MH-Licence'), env);
 	if (lic) {
 		const k = `lic:${lic.id}:${today}`;
 		const used = parseInt((await env.RATE_LIMIT_KV.get(k)) || '0', 10);
-		if (used + weight > LICENCE_DAILY) return { block: limited(`Daily AI limit for your licence reached (${LICENCE_DAILY}). It resets tomorrow.`, 0) };
+		if (used + weight > L.licenceDaily) return { block: limited(`Daily AI limit for your licence reached (${L.licenceDaily}). It resets tomorrow.`, 0) };
 		await env.RATE_LIMIT_KV.put(k, String(used + weight), { expirationTtl: 60 * 60 * 36 });
-		return { remaining: LICENCE_DAILY - used - weight, tier: lic.tier || 'premium' };
+		return { remaining: L.licenceDaily - used - weight, tier: lic.tier || 'premium' };
 	}
 	const dev = request.headers.get('X-MH-Device') || '';
 	if (!/^[A-Za-z0-9_-]{16,64}$/.test(dev)) return {};   // older app: existing per-IP caps still apply
@@ -82,15 +130,15 @@ async function allowance(request, env, weight) {
 	let s; try { s = JSON.parse((await env.RATE_LIMIT_KV.get(k)) || 'null'); } catch (e) { s = null; }
 	if (!s) s = { used: 0, day: today, dayUsed: 0 };
 	if (s.day !== today) { s.day = today; s.dayUsed = 0; }
-	if (s.used + weight <= STARTER_TOTAL) {
+	if (s.used + weight <= L.starterTotal) {
 		s.used += weight;
 		await env.RATE_LIMIT_KV.put(k, JSON.stringify(s), { expirationTtl: 60 * 60 * 24 * 400 });
-		return { remaining: STARTER_TOTAL - s.used, tier: 'starter' };
+		return { remaining: L.starterTotal - s.used, tier: 'starter' };
 	}
-	if (s.dayUsed + weight <= STARTER_TOPUP) {
+	if (s.dayUsed + weight <= L.starterTopup) {
 		s.dayUsed += weight;
 		await env.RATE_LIMIT_KV.put(k, JSON.stringify(s), { expirationTtl: 60 * 60 * 24 * 400 });
-		return { remaining: STARTER_TOPUP - s.dayUsed, tier: 'topup' };
+		return { remaining: L.starterTopup - s.dayUsed, tier: 'topup' };
 	}
 	return { block: limited(`Your free starter AI allowance is used up and today's top-up is spent. It tops up a little each day, or you can add your own API key in Settings, or look at Premium.`, 0) };
 }
@@ -137,6 +185,7 @@ const handler = {
 			// accordingly rather than letting it count as "1" against the same
 			// caps a single-provider call uses.
 			const weight = body.multiCheck ? 3 : 1;
+			const L = await getLimits(env);
 
 			// Licensed users have their own pool and their own daily cap (LICENCE_DAILY,
 			// applied in allowance()), so they skip the per-connection cap and do not
@@ -145,9 +194,9 @@ const handler = {
 			if (env.RATE_LIMIT_KV && licensed) {
 				const lmKey = `calls:month-lic:${now.toISOString().slice(0,7)}`;
 				const lmN = parseInt((await env.RATE_LIMIT_KV.get(lmKey)) || '0', 10);
-				if (lmN + weight > LICENCE_MONTHLY_CAP) {
+				if (lmN + weight > L.licenceMonthly) {
 					return new Response(JSON.stringify({
-						error: { message: `Monthly AI usage cap reached for licensed users (${LICENCE_MONTHLY_CAP} calls) - this protects against runaway cost. Resets at the start of next month.` }
+						error: { message: `Monthly AI usage cap reached for licensed users (${L.licenceMonthly} calls) - this protects against runaway cost. Resets at the start of next month.` }
 					}), { status: 429, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } });
 				}
 				await env.RATE_LIMIT_KV.put(lmKey, String(lmN + weight), { expirationTtl: 60 * 60 * 24 * 31 });
@@ -159,14 +208,14 @@ const handler = {
 				const dayN = parseInt(dayCount || '0', 10);
 				const monthN = parseInt(monthCount || '0', 10);
 
-				if (monthN + weight > MONTHLY_CALL_CAP) {
+				if (monthN + weight > L.freeMonthly) {
 					return new Response(JSON.stringify({
-						error: { message: `Monthly AI usage cap reached (${MONTHLY_CALL_CAP} calls) - this protects against runaway cost across all users. Resets at the start of next month.` }
+						error: { message: `Monthly AI usage cap reached (${L.freeMonthly} calls) - this protects against runaway cost across all users. Resets at the start of next month.` }
 					}), { status: 429, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 				}
-				if (dayN + weight > PER_IP_DAILY_CAP) {
+				if (dayN + weight > L.perIpDaily) {
 					return new Response(JSON.stringify({
-						error: { message: `Daily AI usage cap reached for this connection (${PER_IP_DAILY_CAP} calls) - try again tomorrow, or add your own API key in Settings to bypass the shared account entirely.` }
+						error: { message: `Daily AI usage cap reached for this connection (${L.perIpDaily} calls) - try again tomorrow, or add your own API key in Settings to bypass the shared account entirely.` }
 					}), { status: 429, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
 				}
 
@@ -352,6 +401,7 @@ const handler = {
 
 export default {
 	async fetch(request, env) {
+		if (new URL(request.url).pathname === '/admin/limits') return adminLimits(request, env);
 		if (request.method !== 'POST') return handler.fetch(request, env);
 		let weight = 1;
 		try { const b = await request.clone().json(); if (b && b.multiCheck) weight = 3; } catch (e) {}

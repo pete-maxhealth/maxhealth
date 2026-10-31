@@ -170,6 +170,8 @@ Fires in `updateDashboard()` when `state.lastDate !== todayStr()`.
 
 ## Cloudflare Worker
 
+**Adjustable AI limits (31/10/2026).** The limits in `worker.js` are only defaults. Overrides live in KV key `cfg:limits` and are changed from Termux with no redeploy: `POST https://maxhealth-ai.bogginsuk.workers.dev/admin/limits`, header `X-MH-Admin: <ADMIN_SECRET secret on the maxhealth-ai Worker>`, body `{"action":"get"}`, `{"action":"set","limits":{"licenceDaily":30}}` or `{"action":"reset"}`. Names: licenceDaily (30), licenceMonthly (10000, shared pool for licensed users), freeMonthly (5000, shared pool for free/starter), perIpDaily (80), starterTotal (60), starterTopup (5). Values are whole numbers 0 to 1,000,000; changes apply within about 30 seconds. If KV is unavailable the defaults apply (and AI calls themselves fail closed with a 503). Tests: `node tests/worker/worker_allowance.mjs`.
+
 Two request modes, one `worker.js` file:
 
 **Normal path** — forwards whatever the client actually requests rather than hardcoding anything. Previously silently forced `claude-haiku-4-5` and `max_tokens: 500` regardless of the client's request, meaning every proxy-routed call (the default for anyone without their own API key, including the entire cloud version) ran on a smaller model with a harder cap than any feature was designed around. Now:
