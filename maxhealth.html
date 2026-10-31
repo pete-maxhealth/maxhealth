@@ -5524,8 +5524,8 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <button class="copy-btn" onclick="showDemoPersonaPicker()" style="margin-top:12px;">👁 TRY DEMO MODE</button>
       <div class="settings-hint" style="margin-top:6px;">Explore with 30 days of sample data — nothing you do in demo mode touches your real data. Exit anytime from the banner at the top.</div>
       <button onclick="mhReportBug()" style="display:block;width:100%;margin-top:12px;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:11px 16px;font-size:12px;font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);cursor:pointer;">💬 SEND FEEDBACK / REPORT A BUG</button>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;text-align:center;">Opens a GitHub report already filled in with your app version, device and a health check. Add a screenshot by dragging it into the box or using the image button. No GitHub account? <a href="#" onclick="mhReportBug(true);return false;" style="color:var(--accent);">Copy the report text instead</a> and send it however you like.</div>
-      <div class="settings-hint" style="margin-top:6px;">Opens GitHub Issues — no account needed to read, account required to post.</div>
+      <div id="mhBugHint1" style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5;text-align:center;">Opens a GitHub report already filled in with your app version, device and a health check. Add a screenshot by dragging it into the box or using the image button. No GitHub account? <a href="#" onclick="mhReportBug(true);return false;" style="color:var(--accent);">Copy the report text instead</a> and send it however you like.</div>
+      <div id="mhBugHint2" class="settings-hint" style="margin-top:6px;">Opens GitHub Issues — no account needed to read, account required to post.</div>
     </div>
     </div>
 
@@ -6557,7 +6557,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1249'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1250'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -6570,7 +6570,14 @@ const MH_HOME = {
 };
 (function () {
   const apply = () => document.querySelectorAll('[data-mh-site]').forEach(a => { a.href = MH_HOME.site + a.getAttribute('data-mh-site'); });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+  // With no public bug-report page configured (MH_HOME.issues = ''), the button copies the report, so the hint must say that.
+  const hints = () => {
+    if (MH_HOME.issues) return;
+    const h1 = document.getElementById('mhBugHint1'), h2 = document.getElementById('mhBugHint2');
+    if (h1) h1.textContent = 'Copies a bug report with your app version, device and a health check filled in. Paste it into a message and send it to us, with a screenshot if you can.';
+    if (h2) h2.textContent = 'Nothing is sent from your phone until you paste it somewhere yourself.';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { apply(); hints(); }); else { apply(); hints(); }
 })();
 
 // ── Demo mode never calls a live AI (v3.10.1010) ─────────────────────────────
@@ -37329,6 +37336,7 @@ function openMissedDayModal(presetDate = null) {
   document.getElementById('missedKcal').value = '';
   document.getElementById('missedProtein').value = '';
   document.getElementById('missedCarbs').value = '';
+  const _mf = document.getElementById('missedFat'); if (_mf) _mf.value = '';
   document.getElementById('missedNotes').value = '';
   _missedAITotals = null;
   setMissedMode('ai');
@@ -37557,7 +37565,7 @@ function saveMissedDay() {
   if (_dateProb) { showToast(_dateProb); return; }
   const notes = document.getElementById('missedNotes').value.trim() || 'missed day entry';
 
-  let kcal, protein, carbs, fat, polyols, fibre;
+  let kcal, protein, carbs, fat, polyols, fibre, _fatTyped = 0;
   if (_missedMode === 'ai') {
     if (!_missedAITotals) { showToast('Calculate with AI first, or switch to manual entry'); return; }
     ({ kcal, protein, carbs, fat, polyols, fibre } = _missedAITotals);
@@ -37565,8 +37573,11 @@ function saveMissedDay() {
     kcal    = parseFloat(document.getElementById('missedKcal').value);
     protein = parseFloat(document.getElementById('missedProtein').value);
     carbs   = parseFloat(document.getElementById('missedCarbs').value);
-    if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) { showToast('Enter all three values'); return; }
+    if (isNaN(kcal) || isNaN(protein) || isNaN(carbs)) { showToast('Enter calories, protein and carbs'); return; }
     kcal = Math.round(kcal); protein = Math.round(protein*100)/100; carbs = Math.round(carbs*100)/100;
+    // v3.10.1250: Fat is optional. A typed figure is stored as typed; left blank it is not guessed, and the day's total counts it as 0.
+    const _fatRaw = parseFloat(document.getElementById('missedFat')?.value);
+    _fatTyped = (!isNaN(_fatRaw) && _fatRaw >= 0) ? Math.round(_fatRaw * 100) / 100 : 0;
     // Manual entry form only ever had Kcal/Protein/Carbs fields - no Fat,
     // Fibre or Polyols input exists to read here. Real bug found alongside
     // the fibre gap: the save call below referenced a bare `fat` that was
@@ -37576,7 +37587,7 @@ function saveMissedDay() {
     // after killed closeMissedDayModal() and renderHistory() before they
     // could run - so the modal never closed and History never refreshed,
     // making a successful save look exactly like nothing had happened.
-    fat = 0; fibre = 0;
+    fat = _fatTyped; fibre = 0;
   }
 
   // Check if date already exists
@@ -55847,7 +55858,7 @@ function mhHold(fn) {
 
     <!-- Manual mode -->
     <div id="missedManualSection" style="display:none;">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
         <div>
           <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">KCAL</div>
           <input id="missedKcal" class="modal-input" type="number" placeholder="0" style="font-size:16px;padding:10px 12px;">
@@ -55859,6 +55870,10 @@ function mhHold(fn) {
         <div>
           <div style="font-size:10px;color:var(--yellow);margin-bottom:4px;">CARBS g</div>
           <input id="missedCarbs" class="modal-input" type="number" placeholder="0" step="0.1" style="font-size:16px;padding:10px 12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--red,#e5484d);margin-bottom:4px;">FAT g</div>
+          <input id="missedFat" class="modal-input" type="number" placeholder="–" step="0.1" style="font-size:16px;padding:10px 12px;">
         </div>
       </div>
     </div>

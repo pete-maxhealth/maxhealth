@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1250
+- **"Missed day" now has a Fat box.** The manual form takes calories, protein, carbs and fat. A typed fat figure is stored as typed (entry, day total, History); left blank it is not guessed and the day counts it as 0. Adding to a day that already has meals adds the fat to that day. The form is empty again each time it opens.
+- **Bug-report wording follows the setting.** With no public report page configured (`MH_HOME.issues` empty) the two hints under "Report a problem" now say the report is copied and nothing is sent, instead of "Opens a GitHub report". With GitHub configured the old wording stays.
+- Test p360 walks both. Test-only fixes the same day: p131 (three Cloudflare Worker files classified private in `tools/split_premium.py`), p26 and p308 (steadier waits).
+
 ## v3.10.1249
 - **Licence service moved off GoDaddy.** Keys, the 14-day trial and token renewal now go to a small Cloudflare Worker (`licence-worker.js`) instead of `pspence.co.uk/.../licence.php`, which needed PHP hosting. Same requests and same answers, so nothing changes on screen. The Worker also holds the Android launcher behind a licence key (launcher 1.6.1), so it no longer has to sit on public GitHub.
 - p130 now points at the new address and fails if the old one comes back. Worker tests: `node tests/worker/licence_worker.mjs`.
