@@ -46,6 +46,12 @@ store.set(lm, '0');
 const fm = [...store.keys()].find(k => k.startsWith('calls:month:') && !k.includes('lic')); store.set(fm, '5000');
 r = await call({ 'X-MH-Licence': mk({ id: 'L4', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 }) }); if (r.status !== 200) bad('full free pool blocked a licensed user ' + r.status);
 r = await call({}); if (r.status !== 429) bad('full free pool did not block a free user'); store.set(fm, '0');
+// 5c. KV failing (e.g. daily write limit) gives a clear 503 with CORS, never an uncounted AI call
+{ const real = env.RATE_LIMIT_KV; upstream = [];
+  env.RATE_LIMIT_KV = { get: async () => { throw new Error('KV GET failed: 429 Too Many Requests'); }, put: async () => { throw new Error('KV put() limit exceeded for the day.'); } };
+  for (const h of [{ 'X-MH-Device': dev }, { 'X-MH-Licence': good }, {}]) { r = await call(h);
+    if (r.status !== 503 || !r.headers.get('Access-Control-Allow-Origin') || !(await r.json()).error.message.includes('temporarily unavailable') || upstream.length) bad('KV failure not handled ' + r.status + ' ' + JSON.stringify(h)); }
+  env.RATE_LIMIT_KV = real; }
 // 6. model / tokens / tools hardening
 upstream = [];
 await call({}, { model: 'claude-opus-9', max_tokens: 99999, messages: [], tools: [{ type: 'bash_20250124', name: 'x' }, { type: 'web_search_20250305', name: 'web_search', max_uses: 500 }] });

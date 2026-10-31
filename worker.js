@@ -54,6 +54,16 @@ function limited(message, remaining) {
 	});
 }
 
+// If the usage counters (KV) are unavailable, e.g. the daily KV write limit on the free
+// Cloudflare plan is used up, fail closed (no uncounted AI calls) but with a clear message.
+function busy(err) {
+	try { console.log('KV unavailable: ' + (err && err.message)); } catch (e) {}
+	return new Response(JSON.stringify({ error: { message: 'The shared AI service is temporarily unavailable. Please try again later, or add your own API key in Settings.' } }), {
+		status: 503,
+		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+	});
+}
+
 // Returns { block?: Response, remaining?: number, tier?: string }.
 async function allowance(request, env, weight) {
 	if (!env.RATE_LIMIT_KV) return {};
@@ -328,6 +338,7 @@ const handler = {
 			});
 
 		} catch (err) {
+			if (/\bKV\b/i.test(String(err && err.message))) return busy(err);
 			return new Response(JSON.stringify({ error: { message: err.message } }), {
 				status: 500,
 				headers: {
@@ -344,7 +355,8 @@ export default {
 		if (request.method !== 'POST') return handler.fetch(request, env);
 		let weight = 1;
 		try { const b = await request.clone().json(); if (b && b.multiCheck) weight = 3; } catch (e) {}
-		const a = await allowance(request, env, weight);
+		let a;
+		try { a = await allowance(request, env, weight); } catch (e) { return busy(e); }
 		if (a.block) return a.block;
 		const res = await handler.fetch(request, env);
 		if (a.remaining === undefined) return res;
