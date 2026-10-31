@@ -45,7 +45,7 @@ with fresh_server() as root, sync_playwright() as pw:
         kc = round(tk * fr); pr = round(kc * (0.25 if T != 'struggling' else 0.18) / 4); ca = round(kc * 0.30 / 4); fa = round((kc - pr * 4 - ca * 4) / 9)
         log = [dict(name=n, description=n, kcal=round(kc * s), protein=round(pr * s), carbs=round(ca * s), fat=round(fa * s), time=t, id=f'p363_{i}_{k}') for k, (n, s, t) in enumerate([('Breakfast', .28, '08:00'), ('Lunch', .34, '13:00'), ('Dinner', .38, '19:00')])]
         e = dict(date=d, log=log, totals=dict(kcal=sum(x['kcal'] for x in log), protein=sum(x['protein'] for x in log), carbs=sum(x['carbs'] for x in log), fat=sum(x['fat'] for x in log)))
-        w = {'improving': SETUP['w'] - (SETUP['w'] - 84.5) * p, 'maintenance': 82 + random.uniform(-.5, .5), 'struggling': 80 - 9 * p}[T] + random.uniform(-.25, .25)
+        w = {'improving': SETUP['w'] - (SETUP['w'] - 86.0) * p, 'maintenance': 82 + random.uniform(-.5, .5), 'struggling': 80 - 9 * p}[T] + random.uniform(-.25, .25)
         if i % 2 == 0: e['weight'] = round(w, 1)
         e['steps'] = round({'improving': 5000 + 4200 * p, 'maintenance': 8000, 'struggling': 4200 - 1500 * p}[T] * random.uniform(.85, 1.15))
         sl = {'improving': 6.3 + 1.2 * p, 'maintenance': 7.2, 'struggling': 5.4 - 0.9 * p}[T] * 60 * random.uniform(.93, 1.07); sl = round(sl)
@@ -80,6 +80,16 @@ with fresh_server() as root, sync_playwright() as pw:
     if T == 'maintenance' and any(v.startswith(('Gaining fat', 'Losing fat', 'Losing muscle')) for v in verdicts): f.add('BUG', f'noise reported as a change: {verdicts}')
     if T == 'improving' and not any(v.startswith('Losing fat') for v in verdicts): f.add('check', f'improving user: no "Losing fat" verdict ({verdicts})')
     for m in re.finditer(r'(?i)(gain\w*|lost|loss|losing|up|down|increase\w*|decrease\w*|[+−-])\s*0\.[0-2]\d?\s*kg', allt): f.add('review', f'tiny change worded as movement: …{allt[max(0, m.start() - 40):m.end() + 40]}…')
+    # ---- v3.10.1252 checks ----
+    if goal != SETUP['goal']: f.add('BUG', f"goal chosen in setup was {SETUP['goal']} but the app has {goal}")
+    if re.search(r'moving away from gain|toward gain target', allt + out.get('dash', '')) and SETUP['goal'] != 'gain': f.add('BUG', 'weight card still talks about a gain target')
+    if re.search(r'\bKetosis\b', out.get('dash', '') + ' ' + allt.replace('Sleep & carb adherence', '')) : f.add('BUG', 'Ketosis wording visible to a standard user')
+    if 'oncology' in allt.lower(): f.add('BUG', 'oncology wording on a standard profile')
+    if re.search(r'[↗↙]\s*[+-]?0\.[0-2]\dkg', allt): f.add('BUG', 'arrow shown on a change under 0.3 kg')
+    fast = 'falling faster than your goal explains' in allt; fastlose = 'falling faster than usual advice' in allt
+    if T == 'struggling' and not (fast and 'GP' in allt): f.add('BUG', 'fast unintended loss: no plain "talk to your GP" message')
+    if T != 'struggling' and (fast or fastlose): f.add('BUG', f'{T}: told weight is falling too fast')
+    print('  clinician message shown:', fast, '| fast-pace-for-a-lose-goal message shown:', fastlose)
     json.dump(dict(out=out, findings=[list(x) for x in f]), open(f'/tmp/claude-0/crawl/p363_{T}.json', 'w'), indent=1)
 bugs = [x for x in f if x[0] in ('BUG', 'JS-exception')]
 print('findings:', len(f), 'bugs:', len(bugs)); sys.exit(1 if bugs else 0)

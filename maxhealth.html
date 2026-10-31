@@ -4405,7 +4405,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div id="rpt-export-wrap">
       <div class="settings-card" style="padding:14px 16px;">
         <div style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.6;">
-          Generate a summary to keep as a record or share with your oncology team. Want your raw data or a full backup instead? <span style="color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="switchTab('import')">Settings → Data</span>.
+          Generate a summary to keep as a record or share with your doctor or care team. Want your raw data or a full backup instead? <span style="color:var(--accent);cursor:pointer;text-decoration:underline;" onclick="switchTab('import')">Settings → Data</span>.
         </div>
 
         <!-- Mode toggle -->
@@ -5308,8 +5308,8 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
           <strong style="color:var(--text);">Verify across 3 AIs</strong> (Library edit, Log/History edit, Recipe add) — queries Claude, Gemini, and ChatGPT independently for the same food. On a logged meal an amount is only sent if you typed or said it; a guessed amount is left out so each AI judges the portion itself (the answers are scaled back to the logged amount to compare and average). Where you entered the amount yourself (library or edit forms), it is sent, shows where they agree or disagree, and only applies a value if you choose to.<br><br>
           <strong style="color:var(--text);">Balance my macros / Next meal idea</strong> — the AI is given today's real remaining macro budget and your actual library, and picks or combines from it — it isn't estimating new nutrition data here, only choosing and composing from figures that are already real.<br><br>
           <strong style="color:var(--text);">Reports — Ask a question / Full Summary</strong> — free-text answers and narrative summaries generated from your own logged history. Informational, not used to change any stored value.<br><br>
-          <strong style="color:var(--text);">GBM Research Digest / Monthly Summary</strong> — narrative generation only, explicitly categorised Proven / Early Stage / Speculative rather than presented as one undifferentiated answer.<br><br>
-          <strong style="color:var(--text);">Clinical/oncology narrative</strong> (Full Report Package) — generates the narrative text for a clinician-facing export from your logged data and any reference dates you've entered.
+          <span id="helpLineGbm"><strong style="color:var(--text);">GBM Research Digest / Monthly Summary</strong> — narrative generation only, explicitly categorised Proven / Early Stage / Speculative rather than presented as one undifferentiated answer.<br><br></span>
+          <strong style="color:var(--text);">Clinical narrative</strong> (Full Report Package) — generates the narrative text for a clinician-facing export from your logged data and any reference dates you've entered.
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:10px;">By default, all of this runs through a shared proxy. Settings → AI Provider lets you connect your own API key instead, so requests go directly rather than through anyone else's account.</div>
       </div>
@@ -6111,6 +6111,7 @@ let _obProvider = 'claude';
 let _obSex = 'male';
 let _obActivity = null;
 let _obGoal = 'maintain';
+let _obGoalChosen = false;   // v3.10.1252: only save a goal the person actually picked
 let _obCondition = 'general';
 let _obLifestyle = '', _obPool = true, _ob5cSeen = false;
 function obRender5c() {
@@ -6145,7 +6146,7 @@ function obSetActivity(level) {
 }
 
 function obSetGoal(goal) {
-  _obGoal = goal;
+  _obGoal = goal; _obGoalChosen = true;
   document.querySelectorAll('[id^="ob-goalBtn-"]').forEach(b => b.classList.remove('active'));
   document.getElementById(`ob-goalBtn-${goal}`).classList.add('active');
   calcTDEE();
@@ -6332,6 +6333,7 @@ function onboardNext(step) {
   // Apply condition defaults on transition from step 5
   if (step === 6 && !isPreview) {
     localStorage.setItem('mh_condition', _obCondition);
+    if (_obGoalChosen) localStorage.setItem('mh_goal', _obGoal);   // v3.10.1252: setup used the goal for the calorie target but never saved it, so the app read it as Gain
     appendConditionHistory(_obCondition); // day-one entry, so Condition History has a real starting point rather than staying empty until the first change via Settings
     // Apply carb ceiling based on condition (if not already set in step 4) -
     // same shared mapping saveCondition() uses when condition changes later
@@ -6557,7 +6559,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1251'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1252'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -25438,7 +25440,7 @@ function getDashboardOrder() {
 // existing ▲▼ pair instead.
 const DASHBOARD_HIDDEN_KEY = 'mh_dashboard_hidden';
 const DASHBOARD_SECTION_LABELS = {
-  weight: 'Weight', daymode: 'Day Mode', ketosis: 'Ketosis', macros: 'Macros',
+  weight: 'Weight', daymode: 'Day Mode', get ketosis() { return isKetogenicCondition() ? 'Ketosis' : 'Carbs'; }, macros: 'Macros',
   remaining: 'Remaining', mealplan: 'Meal plan', macroratio: 'Macro Ratio', fibre: 'Fibre', goalcheck: 'Goal Check',
   steps: 'Daily Steps', symptoms: 'Symptoms', treatment: "Today's Treatment",
   activity: "Today's Activity", weather: 'Weather', stats: 'My statistics', fasting: 'Fasting', water: 'Water', log: 'Log', guides: 'Guides',
@@ -40428,6 +40430,31 @@ function renderPatternsCard() {
     earlyWarnings.push(`<strong>Weight — ${label}:</strong> ${result.rule}. Your baseline (last ${result.baselineCount} logged days): ${mhWtText(result.mean)} average, ±${mhWtDeltaAbs(result.sd)}. Most recent: ${result.recentVals.join(', ')}kg.`);
   })();
 
+  // v3.10.1252: weight falling faster than the goal explains. Proven: unintended loss of 5% or more of body weight in a few
+  // months is a standard reason for a medical check; for a deliberate loss, more than about 1 kg (or 1%) a week is faster than usual advice.
+  (function fastLoss() {
+    try {
+      const now = Date.now(), DAY = 864e5;
+      const ws = state.history.filter(d => d.weight > 0).map(d => ({ t: parseDateStr(d.date), w: d.weight })).filter(x => x.t && now - x.t.getTime() <= 60 * DAY).sort((a, b) => a.t - b.t);
+      if (ws.length < 6) return;
+      const avg = a => a.reduce((p, c) => p + c.w, 0) / a.length;
+      const first = avg(ws.slice(0, 3)), last = avg(ws.slice(-3));
+      const days = (ws[ws.length - 1].t - ws[0].t) / DAY; if (days < 21) return;
+      const lossKg = first - last, lossPct = lossKg / first * 100, perWeek = lossKg / (days / 7);
+      const goal = localStorage.getItem('mh_goal');
+      let intake = ''; const tk = parseFloat(localStorage.getItem('mh_target_kcal')) || 0;
+      const rec = state.history.filter(d => d.totals && d.totals.kcal > 0 && parseDateStr(d.date) && now - parseDateStr(d.date).getTime() <= 14 * DAY);
+      if (tk > 0 && rec.length >= 7) { const pct = Math.round(rec.reduce((p, c) => p + c.totals.kcal, 0) / rec.length / tk * 100); if (pct < 75) intake = ` You have been eating about ${pct}% of your calorie target.`; }
+      if (goal === 'lose') {
+        if (perWeek <= 1 || perWeek / first * 100 <= 1) return;   // losing steadily at the usual pace: the plan working
+        earlyWarnings.push(`<strong>Weight — falling faster than usual advice:</strong> down ${mhWtDeltaAbs(lossKg)} (${lossPct.toFixed(1)}%) in ${Math.round(days / 7)} weeks, about ${mhWtDeltaAbs(perWeek)} a week.${intake} More than about 1 kg a week is faster than the usual advice (proven), and it tends to cost muscle and energy. Consider easing your calories up a little. If you feel unwell or exhausted, talk to your GP.`);
+        return;
+      }
+      if (lossPct < 5) return;
+      earlyWarnings.push(`<strong>Weight — falling faster than your goal explains:</strong> down ${mhWtDeltaAbs(lossKg)} (${lossPct.toFixed(1)}%) in ${Math.round(days / 7)} weeks.${intake} Losing 5% or more of your weight without trying is a standard reason to see a doctor (proven), whatever the cause turns out to be. It is worth booking a GP or dietitian appointment and taking these figures. This is a pattern in your numbers, not a diagnosis.`);
+    } catch (_) {}
+  })();
+
   // 1. Sleep quality → NEXT day's ketosis adherence. Uses the person's own
   // median sleep duration as the good/poor split point, not an arbitrary
   // fixed hour count that may not suit them.
@@ -41090,11 +41117,11 @@ function renderBodyCompCard() {
     <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;font-family:'Space Mono',monospace;">${segs.map(x => `<span style="color:${x[2]};">${x[0]} ${x[1].toFixed(1)}%</span>`).join('')}</div>` : '';
 
   // change badges (kg masses in the chosen unit; shares in percentage points)
-  const arrow = d => d > 0.05 ? '↗' : d < -0.05 ? '↙' : '→';
+  const arrow = d => d >= 0.3 ? '↗' : d <= -0.3 ? '↙' : '→';   // v3.10.1252: no arrow on a change under 0.3 kg (scale noise)
   const badge = (label, kgNow, kgPrev, pNow, pPrev, good) => {
     if (!prv || kgNow == null || kgPrev == null) return `<div style="flex:1;min-width:0;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">${label}</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px;">${mhWtText(kgNow)}</div></div>`;
     const d = kgNow - kgPrev, dp = (pNow != null && pPrev != null) ? pNow - pPrev : null;
-    const col = Math.abs(d) < 0.15 ? 'var(--text3)' : (good(d) ? 'var(--green)' : 'var(--yellow)');
+    const col = Math.abs(d) < 0.3 ? 'var(--text3)' : (good(d) ? 'var(--green)' : 'var(--yellow)');
     return `<div style="flex:1;min-width:0;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;"><div style="font-size:8px;color:var(--text3);font-family:'Space Mono',monospace;">${label}</div><div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px;">${mhWtText(kgNow)}</div><div style="font-size:10px;color:${col};font-family:'Space Mono',monospace;margin-top:2px;">${arrow(d)} ${mhWtDelta(d)}</div>${dp != null ? `<div style="font-size:10px;color:${col};font-family:'Space Mono',monospace;">${dp > 0 ? '+' : ''}${dp.toFixed(1)} pts</div>` : ''}</div>`;
   };
   // Over the chosen range (the Move card's chips): fat and muscle mass as two lines, each on its own scale, with the change across the range (v3.10.1216).
@@ -46233,6 +46260,13 @@ function updateGBMSectionVisibility() {
     const a = document.getElementById(id);
     if (a) a.style.display = isGBM ? '' : 'none';
   });
+  // v3.10.1252: wording that only makes sense on a ketogenic or GBM profile stays off a standard profile
+  try {
+    const keto = isKetogenicCondition();
+    const st = document.getElementById('title-rpt-sleepketo');
+    if (st && st.firstChild && st.firstChild.nodeType === 3) st.firstChild.nodeValue = keto ? 'Sleep & Ketosis ' : 'Sleep & carb adherence ';
+    const hl = document.getElementById('helpLineGbm'); if (hl) hl.style.display = isGBM ? '' : 'none';
+  } catch (_) {}
 }
 
 // Same concern as updateGBMSectionVisibility() above, applied to the Daily
@@ -47315,7 +47349,8 @@ function mhTcAll(open, ids) {   // returns how many visible cards changed; ids =
 function mhDcGet(k) { try { return localStorage.getItem('mh_collapse_dc_' + k) === 'closed'; } catch (_) { return false; } }
 function mhDcSet(k, closed) { try { localStorage.setItem('mh_collapse_dc_' + k, closed ? 'closed' : 'open'); } catch (_) {} }
 function mhDcApply() {
-  MH_DASH_CARDS.forEach(([k, id, title]) => {
+  MH_DASH_CARDS.forEach(([k, id, title0]) => {
+    const title = (k === 'ketosis' && !isKetogenicCondition()) ? 'Carbs' : title0;   // v3.10.1252
     const el = document.getElementById(id); if (!el) return;
     if (!mhDcGet(k) && !el.querySelector(':scope > .mh-dc-bar') && (!el.offsetParent || el.getBoundingClientRect().height < 8)) return;   // nothing to collapse yet
     let bar = el.querySelector(':scope > .mh-dc-bar');
@@ -47434,7 +47469,8 @@ function mhNudgeRender() {
   const cand = mhNudgeCandidate(); let card = document.getElementById('mhNudgeCard');
   if (!cand) { if (card) card.remove(); return; }
   if (card && card.dataset.key === cand.key) return;
-  const info = MH_NUDGES.find(n => n[0] === cand.key);
+  let info = MH_NUDGES.find(n => n[0] === cand.key);
+  if (cand.key === 'ketosis' && !isKetogenicCondition()) info = ['ketosis', 'Carbs', 'how your carbs are tracking against your daily ceiling.'];   // v3.10.1252
   if (!card) { card = document.createElement('div'); card.id = 'mhNudgeCard'; card.style.cssText = 'margin:0 0 12px;padding:12px 14px;border:1px solid var(--accent-glow);background:var(--accent-dim);border-radius:12px;font-size:12px;line-height:1.5;color:var(--text2);'; }
   card.dataset.key = cand.key;
   card.innerHTML = `<div style="font-weight:700;color:var(--accent);margin-bottom:3px;">Optional: bring back ${_pkEsc(info[1])}?</div>
