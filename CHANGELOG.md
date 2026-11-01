@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1253
+Test-only release: no change to how the app behaves. Fixes the six new failures from the 1 Nov nightly sweep.
+- p178, p183: the weekly summary runs Sunday to Saturday, so on a Sunday it held only today; the tests now use last week when today is Sunday.
+- p366: the test snack was logged at 10:00, which counts as "logged for later" before 10:00; now 00:01.
+- p104: the Muscle growth preview has no Ketosis (that focus tucks away Carbs and Fasting); test updated, and its failure message now lists what is missing.
+- p362, p364: crawls that take 5 to 8 minutes alone; `tools/run_sweep_par.py` now gives them a 720s limit instead of 240s (sweep about 10 minutes longer).
+
 ## v3.10.1252
 Found by walking a standard General Health user through setup and eight weeks of use (improving, steady, and "not working").
 - **The goal picked in setup is now saved.** Setup used Lose / Maintain / Gain to work out calories but never stored it, so the app read it as Gain and the weight card told a Lose user they were "moving away from gain target". A goal is saved only if the person actually chose one. Existing users who set up earlier are not changed (their original choice is unknown; Settings has the goal buttons).
