@@ -25,6 +25,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ctxt=ev("patientContextBlock(buildPatientContext(state.history))")
     check('shared statistic reaches the AI context', "SAVED STATISTICS" in ctxt and 'Eggs' in ctxt, ctxt[-200:])
     ev("switchTabById('reports')"); page.wait_for_timeout(300)
+    ev("(()=>{const s=document.getElementById('weekExportSelector'); if(s && new Date().getDay()===0) s.value='1'})()")  # Sunday: this week holds only today, so use last week
     ev("generateWeeklySummary()"); page.wait_for_timeout(300)
     wk=ev("window._weeklySummaryText||''")
     check('shared statistic reaches the weekly summary text', 'SAVED STATISTICS' in wk, wk[-150:])

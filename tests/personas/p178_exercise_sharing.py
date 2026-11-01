@@ -25,6 +25,7 @@ with fresh_server() as root, sync_playwright() as pw:
     check('carer view shows the weekly exercise line', 'active day' in t and 'of exercise' in t, t[:100])
     check('carer view still shows daily log', 'daily log' in t)
     # weekly summary export text
+    ev("(()=>{const s=document.getElementById('weekExportSelector'); if(s && new Date().getDay()===0) s.value='1'})()")  # Sunday: this week holds only today, so use last week
     ev("_exportMode='personal'; generateWeeklySummary()"); page.wait_for_timeout(300)
     txt = ev("window._weeklySummaryText || ''")
     check('weekly summary text carries exercise', 'Exercise:' in txt or ev("document.getElementById('exportOutput').innerText.includes('🏋️')"), txt[:100])

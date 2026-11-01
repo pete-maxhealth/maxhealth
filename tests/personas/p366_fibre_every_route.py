@@ -65,7 +65,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhPlanEat('pb')"); page.wait_for_timeout(500)
     chk(abs(ev("state.history.find(h => h.date === '30/10/26').totals.fibre") - 20.9) < 0.01, "overdue planned meal logged to its own day lost fibre (expected 20.9)")
     # 10. polyols travel with the copied line (only when the meal has them) and the planned-fibre tile note
-    ev("state.todayLog.push({ id: 9100050, description: 'Keto bar', kcal: 200, protein: 12, carbs: 18, fat: 10, fibre: 3.1, polyols: 9.4, time: '10:00' }); saveState()")
+    ev("state.todayLog.push({ id: 9100050, description: 'Keto bar', kcal: 200, protein: 12, carbs: 18, fat: 10, fibre: 3.1, polyols: 9.4, time: '00:01' }); saveState()")
     ev("copyLogEntryLine(9100050)"); lp = ev("window.__clip"); chk(lp.endswith('3.1g fibre, 9.4g polyols'), f'copy line lost polyols: {lp}')
     ev("copyLogEntryLine(9100002)"); chk('polyols' not in ev("window.__clip"), 'a food with no polyols got a polyols figure in its copy line')
     ev("copyLogEntryLine(9100050)"); ev("openPasteMealModal()"); page.wait_for_timeout(400)

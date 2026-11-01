@@ -25,12 +25,13 @@ if _pu:
             c, _ = _l.accept(); u = socket.create_connection((_pp.hostname, _pp.port))
             threading.Thread(target=_pipe, args=(c, u), daemon=True).start(); threading.Thread(target=_pipe, args=(u, c), daemon=True).start()
     threading.Thread(target=_accept, daemon=True).start()
+SLOW = {'p362_standard_user_crawl': 720, 'p364_destructive_buttons': 720}  # crawls that legitimately take 5-8 min alone
 def run(f):
-    n = os.path.basename(f)[:-3]; t = time.time()
+    n = os.path.basename(f)[:-3]; t = time.time(); tmo_f = max(tmo, SLOW.get(n, 0))
     p = subprocess.Popen(['unshare', '-n', sys.executable, '-I', '-c',
         f"exec(open({LO!r}).read()); import runpy,sys; sys.argv=[{f!r}]; runpy.run_path({f!r}, run_name='__main__')"],
         cwd=R, env={**os.environ, 'MH_PROXY_SOCK': SOCK}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True)
-    try: txt, _ = p.communicate(timeout=tmo); rc = p.returncode
+    try: txt, _ = p.communicate(timeout=tmo_f); rc = p.returncode
     except subprocess.TimeoutExpired:
         os.killpg(p.pid, signal.SIGKILL); txt = (p.communicate()[0] or '') + '\nTIMEOUT'; rc = -9
     open(f'{od}/{n}.txt', 'w').write(txt)

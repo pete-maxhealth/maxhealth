@@ -27,7 +27,7 @@ with fresh_server() as root, sync_playwright() as pw:
         if want not in body: f.add('BUG', f'focus list missing {want}')
     prev = ev("document.getElementById('mhFocusModal').innerText")
     if 'not medical advice' not in prev: f.add('BUG', 'disclaimer missing from the focus preview')
-    if 'Ketosis' not in prev or 'Fasting' not in prev or 'Nothing you have logged is touched' not in prev: f.add('BUG', f'preview wrong: {prev[:300]}')
+    if 'Carbs' not in prev or 'Fasting' not in prev or 'Nothing you have logged is touched' not in prev: f.add('BUG', f'preview wrong (missing: {[w for w in ("Carbs","Fasting","Nothing you have logged is touched") if w not in prev]}): {prev[:600]}')
     with page.expect_navigation(): ev("document.getElementById('mhFocusGo').click()")
     page.wait_for_timeout(1800)
     r = ev("({hidden: localStorage.getItem('mh_dashboard_hidden'), water: localStorage.getItem('mh_collapse_dc_water'), wx: localStorage.getItem('mh_collapse_dc_wx'), syms: loadSymptomDefs().map(s=>s.name), marker: localStorage.getItem('mh_marker_log'), base: Object.keys(mhLayoutBase()).length})")
