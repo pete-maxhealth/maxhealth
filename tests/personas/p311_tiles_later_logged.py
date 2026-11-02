@@ -9,6 +9,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay').style.display='none'")
     ev("switchTabById('dash')"); page.wait_for_timeout(400)
+    if ev("new Date().getUTCHours()") >= 23: print('p311 skipped: it needs times later than now today, and there are none after 23:00'); sys.exit(0)
     txt = lambda i: ev("(()=>{const e=document.getElementById('%s');return e&&e.style.display!=='none'?e.textContent:''})()" % i)
     put = lambda e: ev("(()=>{state.todayLog.push(%s); saveState(); updateDashboard();})()" % e)
     put("{id:'z1',description:'Zzqx early',time:'00:01',kcal:200,protein:10,carbs:5,fat:12}"); page.wait_for_timeout(300)
