@@ -9,6 +9,10 @@ Test-only release: no change to how the app behaves. Fixes the six new failures 
 - p104: the Muscle growth preview has no Ketosis (that focus tucks away Carbs and Fasting); test updated, and its failure message now lists what is missing.
 - p362, p364: crawls that take 5 to 8 minutes alone; `tools/run_sweep_par.py` now gives them a 720s limit instead of 240s (sweep about 10 minutes longer).
 
+## v3.10.1255
+- **A typed step total stays in the box.** Typing 23.5k also saves it to the server as today's steps; the next sync read that figure back, took it for a watch reporting "the same or more", and retired your typed number, so the box went blank and the card said no real count had been entered. Your own typed figure coming back no longer retires itself. A watch or phone figure that is higher still retires it, and a lower one never does.
+- Test p368 (real server round trip; it fails on v3.10.1254 and passes now); p268 updated to match.
+
 ## v3.10.1254
 - **History: add several lines to Today at once.** Tap Select above the list, open a day, tick the lines (or "Select whole day"), then "Add selected to Today". You are asked first; each line comes across as a new entry with its calories, macros, fibre, polyols and amount, stamped with the time you add it. The original day is untouched. Same Select / Cancel link as the strength and routine lists. In select mode the row icons are hidden and tapping a name ticks it instead of opening the editor.
 - Test p367 (select, whole day, cancel, confirm, figures kept, nothing invented, ids, Today totals, reload, normal buttons back afterwards).

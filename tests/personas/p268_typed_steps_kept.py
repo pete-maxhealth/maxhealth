@@ -14,8 +14,10 @@ with fresh_server() as root, sync_playwright() as pw:
     if (box(), st()) != ('10000', '10000'): f.add('BUG', f'10k is kept: {box()} {st()}')
     ev("mhStepsRetireTyped(3000)"); ev("updateDashboard(true)")
     if (box(), st()) != ('10000', '10000'): f.add('BUG', f'a synced 3,000 must not wipe a typed 10,000: {box()} {st()}')
-    ev("mhStepsRetireTyped(10000)")
-    if st(): f.add('BUG', 'a synced figure equal to what you typed retires it')
+    ev("mhStepsRetireTyped(10000)")   # v3.10.1255: exactly what was typed and saved to the server is its own echo and stays (p368); a device reporting the same figure is not told apart from it, and nothing is lost
+    if not st(): f.add('BUG', 'your own typed figure coming back from the server retired itself')
+    ev("mhStepsRetireTyped(10001)")
+    if st(): f.add('BUG', 'a synced figure higher than what you typed does not retire it')
     ev("localStorage.setItem('mh_steps_today','4000'); mhStepsRetireTyped(9000)")
     if st(): f.add('BUG', 'a higher synced figure retires it')
     ev("localStorage.removeItem('mh_steps_today')")
