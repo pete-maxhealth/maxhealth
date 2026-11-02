@@ -9,6 +9,10 @@ Test-only release: no change to how the app behaves. Fixes the six new failures 
 - p104: the Muscle growth preview has no Ketosis (that focus tucks away Carbs and Fasting); test updated, and its failure message now lists what is missing.
 - p362, p364: crawls that take 5 to 8 minutes alone; `tools/run_sweep_par.py` now gives them a 720s limit instead of 240s (sweep about 10 minutes longer).
 
+## v3.10.1254
+- **History: add several lines to Today at once.** Tap Select above the list, open a day, tick the lines (or "Select whole day"), then "Add selected to Today". You are asked first; each line comes across as a new entry with its calories, macros, fibre, polyols and amount, stamped with the time you add it. The original day is untouched. Same Select / Cancel link as the strength and routine lists. In select mode the row icons are hidden and tapping a name ticks it instead of opening the editor.
+- Test p367 (select, whole day, cancel, confirm, figures kept, nothing invented, ids, Today totals, reload, normal buttons back afterwards).
+
 ## v3.10.1252
 Found by walking a standard General Health user through setup and eight weeks of use (improving, steady, and "not working").
 - **The goal picked in setup is now saved.** Setup used Lose / Maintain / Gain to work out calories but never stored it, so the app read it as Gain and the weight card told a Lose user they were "moving away from gain target". A goal is saved only if the person actually chose one. Existing users who set up earlier are not changed (their original choice is unknown; Settings has the goal buttons).

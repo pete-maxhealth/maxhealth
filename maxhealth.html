@@ -994,6 +994,11 @@
     display: none;
   }
   .hist-day-body.open { display: block; }
+  .hist-sel-cb { display: none; }
+  .hist-sel-only { display: none; }
+  #histEntries.hist-selecting .hist-sel-cb { display: inline-block; width: 18px; height: 18px; flex-shrink: 0; margin-right: 8px; }
+  #histEntries.hist-selecting .hist-act { display: none; }
+  #histEntries.hist-selecting .hist-sel-only { display: block; }
   .hist-entry { font-size: 13px; color: var(--text2); padding: 3px 0; display: flex; justify-content: space-between; }
   .hist-entry-macros { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text3); }
   .hist-notes { font-size: 12px; color: var(--text3); margin-top: 6px; font-style: italic; }
@@ -3297,6 +3302,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div class="hist-filter-btn" onclick="setHistFilter('month',this)">Month</div>
       <div class="hist-filter-btn" onclick="setHistFilter('all',this)">All</div>
     </div>
+    <div id="histSelectRow" style="margin:4px 0;"></div>
     <div id="histEntries">
       <div class="hist-empty">No history yet.<br>Start logging meals.</div>
     </div>
@@ -6560,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1253'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1254'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -33380,17 +33386,19 @@ function renderHistory() {
         </div>
       </div>
       <div class="hist-day-body" id="histBody${i}">
+        <div class="hist-sel-only" style="text-align:right;margin:2px 0 4px;"><span onclick="histSelectDay(${i})" style="cursor:pointer;color:var(--accent);font-size:11px;text-decoration:underline;">Select whole day</span></div>
         ${cleanLog.map((e, j) => `
           <div class="hist-entry" id="hist-entry-${_realDay}-${(day.log||[]).indexOf(e)}" style="flex-direction:column;align-items:flex-start;padding:5px 0;">
             <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="editHistEntryByDate('${day.date}',${j})">${e.time ? `<span style="color:var(--text3);font-family:Space Mono,monospace;font-size:10px;margin-right:4px;">${e.time}</span>` : ''}${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${(() => {
+              <input type="checkbox" class="hist-sel-cb" data-date="${day.date}" data-idx="${j}" onchange="renderHistSelectBar()">
+              <span style="flex:1;cursor:pointer;color:var(--text2);" onclick="if (_histSelMode) { histToggleRow(this); return; } editHistEntryByDate('${day.date}',${j})">${e.time ? `<span style="color:var(--text3);font-family:Space Mono,monospace;font-size:10px;margin-right:4px;">${e.time}</span>` : ''}${e.description ? (e.description.length > 32 ? e.description.slice(0,32)+'…' : e.description) : 'entry'}${(() => {
                 const amt = e.amount || (e.items && e.items.length === 1 ? e.items[0].amount : null);
                 return amt ? ` <span style="color:var(--text3);font-size:11px;">(${amt})</span>` : '';
               })()}</span>
               <span class="hist-entry-macros" style="margin:0 6px;">${e.kcal}kcal · ${e.protein||0}g P · ${e.carbs||0}g C${e.fat ? ` · ${e.fat}g F` : ''}</span>
-              <span onclick="copyHistEntryLine('${day.date}',${j})" title="Copy this line" style="color:var(--text3);cursor:pointer;padding:2px 6px;font-size:14px;">📋</span>
-              ${(typeof mhStockOn === 'function' && mhStockOn() && e.id) ? `<span data-hist-ateout="${e.id}" onclick="mhStockAteOutHist('${day.date}',${e.id})" title="${e.noStock ? 'Ate out: stock left alone (tap to take stock off after all)' : 'Ate out? Tap so this meal does not touch your stock'}" style="padding:2px 6px;font-size:14px;cursor:pointer;opacity:${e.noStock ? '1' : '0.45'};">🍽</span>` : ''}
-              <span style="cursor:pointer;padding:2px 6px;font-size:13px;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})" title="Delete entry">🗑</span>
+              <span class="hist-act" onclick="copyHistEntryLine('${day.date}',${j})" title="Copy this line" style="color:var(--text3);cursor:pointer;padding:2px 6px;font-size:14px;">📋</span>
+              ${(typeof mhStockOn === 'function' && mhStockOn() && e.id) ? `<span class="hist-act" data-hist-ateout="${e.id}" onclick="mhStockAteOutHist('${day.date}',${e.id})" title="${e.noStock ? 'Ate out: stock left alone (tap to take stock off after all)' : 'Ate out? Tap so this meal does not touch your stock'}" style="padding:2px 6px;font-size:14px;cursor:pointer;opacity:${e.noStock ? '1' : '0.45'};">🍽</span>` : ''}
+              <span class="hist-act" style="cursor:pointer;padding:2px 6px;font-size:13px;opacity:0.7;" onclick="deleteHistEntryByDate('${day.date}',${j})" title="Delete entry">🗑</span>
             </div>
           </div>
         `).join('')}
@@ -33407,6 +33415,48 @@ function renderHistory() {
       </div>
     </div>
   `}).join('');
+  _histSelMode = false; try { renderHistSelectBar(); } catch (_) {}   // a fresh list starts with nothing selected
+}
+
+// v3.10.1254: pick several History lines and add them all to Today in one go (leftovers the next day). Same Select / Cancel link as the strength and routine lists.
+let _histSelMode = false;
+function renderHistSelectBar() {
+  const row = document.getElementById('histSelectRow'), list = document.getElementById('histEntries');
+  if (!row || !list) return;
+  list.classList.toggle('hist-selecting', _histSelMode);
+  const n = list.querySelectorAll('.hist-sel-cb:checked').length;
+  row.innerHTML = `<div style="display:flex;justify-content:flex-end;gap:12px;margin-bottom:4px;"><span onclick="toggleHistSelectMode()" style="cursor:pointer;color:var(--text3);font-size:11px;text-decoration:underline;">${_histSelMode ? 'Cancel' : 'Select'}</span></div>` +
+    (_histSelMode ? `<button onclick="histAddSelectedToToday()" ${n ? '' : 'disabled'} style="width:100%;font-size:12px;padding:8px 10px;border-radius:6px;border:1px solid var(--accent);background:${n ? 'var(--accent)' : 'var(--surface2)'};color:${n ? '#fff' : 'var(--text3)'};cursor:${n ? 'pointer' : 'default'};">📋 Add selected to Today${n ? ` (${n})` : ''}</button><div style="font-size:11px;color:var(--text3);margin-top:4px;">Open a day, tick the lines you want, then add them to Today.</div>` : '');
+}
+function toggleHistSelectMode() {
+  _histSelMode = !_histSelMode;
+  document.querySelectorAll('#histEntries .hist-sel-cb').forEach(c => { c.checked = false; });
+  renderHistSelectBar();
+}
+function histToggleRow(span) { const c = span.closest('.hist-entry')?.querySelector('.hist-sel-cb'); if (c) { c.checked = !c.checked; renderHistSelectBar(); } }
+function histSelectDay(i) {
+  const body = document.getElementById('histBody' + i); if (!body) return;
+  const cbs = [...body.querySelectorAll('.hist-sel-cb')], all = cbs.every(c => c.checked);
+  cbs.forEach(c => { c.checked = !all; }); renderHistSelectBar();
+}
+function histAddSelectedToToday() {
+  const picked = [...document.querySelectorAll('#histEntries .hist-sel-cb:checked')].map(c => {
+    const day = state.history.find(d => d.date === c.dataset.date); if (!day) return null;
+    const real = _histRealEntryIdx(day, +c.dataset.idx); return real < 0 ? null : day.log[real];
+  }).filter(Boolean);
+  if (!picked.length) return;
+  const names = picked.slice(0, 8).map(e => mhPlanEsc(e.description || 'meal')).join(', ') + (picked.length > 8 ? ` and ${picked.length - 8} more` : '');
+  appConfirm(`Add ${picked.length} line${picked.length === 1 ? '' : 's'} to Today as new entries, with the same calories, macros and fibre?<br><span style="font-size:12px;color:var(--text3);">${names}</span>`, () => {
+    const t0 = Date.now();
+    picked.forEach((e, k) => {
+      const c = JSON.parse(JSON.stringify(e));
+      c.id = t0 + k; c.time = nowTime(); delete c.timeApprox; delete c.missedDay; delete c.noStock;
+      state.todayLog.push(c); mhStockOnLog(c, todayStr());
+    });
+    saveState(); updateDashboard();
+    toggleHistSelectMode();
+    showToast(`Added ${picked.length} to Today ✓`);
+  }, null, false, { confirm: 'Add to Today' });
 }
 
 function toggleHistDay(i) {
