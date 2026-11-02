@@ -9,6 +9,10 @@ Test-only release: no change to how the app behaves. Fixes the six new failures 
 - p104: the Muscle growth preview has no Ketosis (that focus tucks away Carbs and Fasting); test updated, and its failure message now lists what is missing.
 - p362, p364: crawls that take 5 to 8 minutes alone; `tools/run_sweep_par.py` now gives them a 720s limit instead of 240s (sweep about 10 minutes longer).
 
+## v3.10.1256
+- **Three-AI check: the calorie range is whole numbers.** The "disagree by more than 25%" and "reasonably consistent" notes could print a figure like 95.83333333333334-315kcal once the checkers' portions were scaled to the logged amount. Found in a phone recording.
+- Test p369b (stubbed worker reply, real check, both notes; fails on v3.10.1255, passes now).
+
 ## v3.10.1255
 - **A typed step total stays in the box.** Typing 23.5k also saves it to the server as today's steps; the next sync read that figure back, took it for a watch reporting "the same or more", and retired your typed number, so the box went blank and the card said no real count had been entered. Your own typed figure coming back no longer retires itself. A watch or phone figure that is higher still retires it, and a lower one never does.
 - Test p368 (real server round trip; it fails on v3.10.1254 and passes now); p268 updated to match.
