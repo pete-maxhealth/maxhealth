@@ -50,6 +50,6 @@ with fresh_server() as root, sync_playwright() as pw:
         print(f'  {tab}: clicked {n_here}')
         page.reload(); page.wait_for_timeout(900)
     print(f'clicked {clicked} buttons, skipped {len(skipped)} destructive ones')
-    json.dump({'skipped': skipped, 'findings': [list(x) for x in f]}, open('/tmp/claude-0/crawl/%s.json' % PERSONA, 'w'), indent=1)
+    json.dump({'skipped': skipped, 'findings': [list(x) for x in f]}, open(__import__('os').makedirs('/tmp/claude-0/crawl', exist_ok=True) or '/tmp/claude-0/crawl/%s.json' % PERSONA, 'w'), indent=1)
 bugs = [x for x in f if x[0] in ('BUG', 'JS-exception')]
 print('findings:', len(f), 'bugs/exceptions:', len(bugs)); sys.exit(1 if bugs else 0)

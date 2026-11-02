@@ -37,6 +37,8 @@ with fresh_server() as root, sync_playwright() as pw:
     print('   goal-ish keys after onboarding:', ev("Object.keys(localStorage).filter(k=>/goal/i.test(k)).map(k=>k+'='+localStorage.getItem(k))"), ev("typeof state.goal!=='undefined'?state.goal:'(no state.goal)'"))
     print(f'{T}: condition={cond} goal={goal} targets kcal={tk} protein={tp} carbs={tc}'); out['setup'] = dict(cond=cond, goal=goal, kcal=tk, protein=tp, carbs=tc)
     if cond != 'general': f.add('BUG', f'condition {cond}')
+    # The app can reload itself just after setup finishes; let that settle before seeding, or the seeding calls hit a navigation.
+    page.wait_for_timeout(3000); page.wait_for_load_state('load'); page.wait_for_timeout(1000)
     # ---- 8 weeks of use ----
     hist = []
     for i in range(DAYS - 1, 0, -1):

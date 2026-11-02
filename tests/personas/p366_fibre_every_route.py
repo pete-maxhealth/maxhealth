@@ -74,6 +74,8 @@ with fresh_server() as root, sync_playwright() as pw:
     chk(abs(ev("calcTotals(state.todayLog).polyols") - pb - 9.4) < 0.01, 'pasted polyols not counted in the day total')
     ev("mhPlanSave([{ id: 'pz', date: localISODate(), time: '23:00', text: 'Oats', foods: [{ name: 'Oats', amount: '50g', kcal: 180, protein: 6, carbs: 30, fat: 3, fibre: 5.0 }], createdAt: 2 }]); mhPlanTileNotes()")
     tn = ev("(document.getElementById('fibrePlanned') || {}).textContent || ''"); chk('+5g planned' in tn, f'fibre tile has no planned note: {tn!r}')
+    # Meals logged for a later clock time legitimately keep a "logged for HH:MM" note, so move them to the small hours (time-of-day proof).
+    ev("state.todayLog.forEach(e => { e.time = '00:01'; }); saveState()")
     ev("mhPlanSave([]); mhPlanTileNotes()"); chk(ev("document.getElementById('fibrePlanned').style.display") == 'none', 'fibre planned note stays after plan cleared')
     print('routes checked: copy/paste (today, history, old line, no-fibre), typed paste, manual, missed day x2, save dialog, plan today, plan overdue')
 bugs = [x for x in f if x[0] in ('BUG', 'JS-exception')]

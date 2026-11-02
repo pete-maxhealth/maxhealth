@@ -67,7 +67,7 @@ with fresh_server() as root, sync_playwright() as pw:
             if mode == 'confirm' and prot and LAYOUT_ONLY.search(label + ' ' + tab) : f.add('BUG', f"{tab} / '{label}': a layout button changed your data/profile keys {prot[:6]}")
             if mode == 'confirm' and changed and not conf: f.add('review', f"{tab} / '{label}': changed {changed[:5]} with NO confirmation asked")
         report.append(row)
-    json.dump(dict(report=report, findings=[list(x) for x in f]), open('/tmp/claude-0/crawl/p364.json', 'w'), indent=1, ensure_ascii=False)
+    json.dump(dict(report=report, findings=[list(x) for x in f]), open(__import__('os').makedirs('/tmp/claude-0/crawl', exist_ok=True) or '/tmp/claude-0/crawl/p364.json', 'w'), indent=1, ensure_ascii=False)
 for r in report: print(r['screen'], '|', r['button'], '| asked:', (r.get('confirm') or {}).get('asked') if isinstance(r.get('confirm'), dict) else r.get('confirm'), '| changed on confirm:', (r.get('confirm') or {}).get('changed') if isinstance(r.get('confirm'), dict) else '-')
 bugs = [x for x in f if x[0] in ('BUG', 'JS-exception')]
 print('findings:', len(f), 'bugs:', len(bugs)); sys.exit(1 if bugs else 0)
