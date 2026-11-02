@@ -65,3 +65,28 @@ def write_ringconn_zip(root, per_day):
              [[d, v['hr'], v['hrmin'], v['hrmax'], v['hrv'], v['spo2']] for d, v in per_day.items()])
     with zipfile.ZipFile(os.path.join(root, 'data', 'inbox', 'Data Export-Test-2026-01-01-2026-12-31.zip'), 'w') as z:
         z.writestr('Activity-Test-1.csv', act); z.writestr('Sleep-Test-1.csv', slp); z.writestr('Vital Signs-Test-1.csv', vit)
+
+
+# ── Optional clock for every browser a test opens ────────────────────────────
+# MH_CLOCK=HH:MM runs the whole test as if it were that time of day today (UTC, which is what the test browsers use), with time still flowing. It finds tests and
+# app code that only work at certain times (a meal "logged for later", the midnight rollover, "today" vs "yesterday"). Off by default: nothing changes unless it is set.
+# MH_CLOCK=HH:MM@+N also moves the DATE forward N days (browser only, so only for tests that do not compute dates in Python).
+def _mh_install_clock():
+    spec = os.environ.get('MH_CLOCK', '').strip()
+    if not spec: return
+    from datetime import datetime, timezone
+    hhmm, _, plus = spec.partition('@+')
+    h, m = [int(x) for x in hhmm.split(':')]
+    now = datetime.now(timezone.utc)
+    t = now.replace(hour=h, minute=m, second=0, microsecond=0) + timedelta(days=int(plus or 0))
+    import playwright.sync_api as sa
+    def _wrap(cls, name, page_level):
+        orig = getattr(cls, name)
+        def inner(self, *a, **k):
+            obj = orig(self, *a, **k)
+            try: (obj.clock if hasattr(obj, 'clock') else obj.context.clock).install(time=t)
+            except Exception as e: print('MH_CLOCK: could not install clock:', str(e)[:120])
+            return obj
+        setattr(cls, name, inner)
+    _wrap(sa.Browser, 'new_context', False); _wrap(sa.Browser, 'new_page', True)
+_mh_install_clock()
