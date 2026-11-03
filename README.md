@@ -4,13 +4,26 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.1090
+**Version:** v3.10.1256
 
 ---
 
 ## What it does
 
-**Newest (v3.10.1118 – 1124): know what you have.**
+**Newest (v3.10.1219 – 1256): one place for each thing, and fewer ways to lose a number.**
+
+- **Move is three cards.** *Steps* (your day total), *Exercise today* (one list for walking, cardio and resistance: minutes, distance and effort, calories worked out for you) and *What if…* (pick an exercise or steps, type "40 min", "3 mi" or "3k", choose Easy / Moderate / Hard, see the calories and what it does to your room; nothing is stored until you tap Log it). Exercise over time, Body composition and Your Journey sit below, all with the same date-range chips.
+- **One date range everywhere.** Reports, Trends, Move, Compare Metrics, Treatment and Statistics share the chips 7 Days / 30 Days / 90 Days / All / Custom and the same From / To boxes. Long explanations on report cards sit behind a "?".
+- **Fewer, tidier cards.** Reports: Sleep lives inside Sleep & Ketosis, Treatment Analysis and Sessions are one card, Ask AI and Query Builder are one ("Ask about this period"). Settings → Data is five cards (Export, import & backup; Restore; Sync Wearable Data; Manual Entry; Missing Data) with Phone to phone (QR) first and one main Save to Downloads button; Starter packs moved to Manage → Setup.
+- **Phone to phone (QR) carries all your own data** (stock, shopping list, recipes, library, history, routines, supplements, symptoms, treatments, labs, and settings only if you tick them). The receiving phone shows a preview and only adds.
+- **History: add several lines to Today at once.** Select, tick lines (or Select whole day), Add selected to Today. History editors also have a Meal time box, a tap on a meal name opens the right meal, and an earlier day's meal can be marked as eaten out. "Missed day" adds to a day instead of overwriting it, and has a Fat box.
+- **Swap an ingredient in a logged meal** (Today and History) with the 🔄 picker, which always offers 🔍 Search online and ✨ Try AI. One ✨ icon marks everything that talks to an AI.
+- **Logging a multi-serving recipe asks how many you cooked**, so stock matches the pot; stock counts, "how many to buy each time", shop-by-shop lists and the Add foods screen were refined throughout (v3.10.1125 – 1218, see CHANGELOG.md).
+- **Starter packs work offline** (the app's own copy first, then GitHub); fibre travels with a meal everywhere fat does; the goal chosen in setup is saved; a standard (non-ketogenic) profile says "Carbs" and "doctor or care team" instead of Ketosis and oncology wording; weight falling faster than your goal explains is flagged plainly.
+- **Fixes worth knowing:** a typed step total no longer blanks itself, the Trends weight chart no longer hides weights under 80 kg, read aloud no longer stops mid-sentence on Android, the body-composition headline waits for a trend rather than one noisy week, the three-AI check shows whole-number calorie ranges.
+- **Licence service on Cloudflare.** Keys, the 14-day trial and token renewal go to a small Worker (`licence-worker.js`). Every address the app uses for GitHub lives in one `MH_HOME` block at the top of the script.
+
+**Earlier (v3.10.1118 – 1124): know what you have.**
 
 - **A Shopping page that flows (v3.10.1124).** Three sections (My list, Add to the list, My cupboards) with the same ▲ ▼ 👁 ▾ controls, a compact cupboards view (tabs for fridge, freezer, cupboard, non-nutritional, low and use soon; aisles that fold; search that adds), and one 📥 Import button with three purposes (just bought, starting my cupboards, a list to shop for), a what-can-I-import hint, and a warning if the same receipt is pasted twice. "Not food" now reads Non-nutritional.
 
@@ -91,7 +104,7 @@
 - **Faint "last known" weight line** — Your Journey and the Trends weight chart draw a dotted flat line across gaps. Display only, never saved. Gaps over 7 days show a "⋯ Nd" marker on Your Journey.
 - **Journey overlays** — chips on Your Journey add Calories, Protein, Carbs, Water, Logged exercise, Active calories or Steps as dashed lines on the weight chart. Compare Metrics gains Logged exercise, Active calories and Fat (g).
 - **Compare Two Periods** (Trends) — compares a recent stretch (default: latest Holiday-mode run) with the weeks before, on logged kcal, steps and weight trend, to check whether photo estimates are running high or low. Verdict always carries a margin of error, plus an expected-trend row and a list of exactly which days were counted.
-- **One-tap bug report** (Settings → About) — opens a GitHub issue pre-filled with app version, device and a health check, with a prompt for a screenshot; a copy-text option for anyone without GitHub.
+- **One-tap bug report** (Settings → About) — opens a GitHub issue pre-filled with app version, device and a health check, with a prompt for a screenshot; a copy-text option for anyone without GitHub (if no public report page is configured in `MH_HOME`, it only copies the text and says so).
 - **Photo ruler** (Settings → Tableware, 📏) — photograph a plate, bowl or spoon beside a bank card, tap the card's edge then the item's edges, and its width is filled in for you.
 - **Body Composition card** (Trends) — plain-words verdict (gaining fat / losing muscle / recomposition and so on) from smart-scale readings, with a share bar and change badges.
 - **Topic chips** on Trends, Reports, Settings → Manage and Settings → Data — view filters only, nothing is moved or hidden.
@@ -166,6 +179,16 @@ bash bump_and_deploy.sh X.X.X "description"
 
 For anything other than `maxhealth.html` itself (worker.js, docs, scripts), commit manually and selectively — avoid `git add -A`, which will happily stage pycache and stray backup files alongside real changes.
 
+## Testing and release (cloud sessions)
+
+- **The version lives in one place:** `const APP_VERSION` in `maxhealth.html`. A release bumps it, adds a `CHANGELOG.md` entry and updates any test that pins text.
+- **Persona tests** (`tests/personas/pNNN_*.py`, Playwright + headless Chromium, not available in Termux) each start their own server on port 5757, so run one at a time. Test only what a change touched: its own persona test plus the neighbouring screens and every place the same thing appears.
+- **Full sweep:** `python3 -u tools/run_sweep_par.py <logfile> [workers=3] [timeout=240]` (as root) runs each test in its own network namespace, three at a time (about 27 minutes; `run_sweep.py` is the older serial version). It runs overnight as a report-only scheduled task and is not a release gate; new failures are triaged the next day. Known failures are listed in `BACKLOG.md`.
+- **Worker tests:** `node tests/worker/licence_worker.mjs` (also `verify_token.mjs`, `worker_allowance.mjs`).
+- **Before pushing:** tag the current `main` as a restore point (`pre-v<version>`), push with `git push -q origin HEAD:main`, and roll back by reverting the release commit (or force-pushing the tag with the owner's OK).
+
+---
+
 ## Full backup
 
 ```bash
@@ -182,8 +205,14 @@ zip -r "/storage/emulated/0/Download/maxhealth_backup_$(date +%Y%m%d).zip" app/m
 /storage/emulated/0/maxhealth/          ← root, in shared storage (visible to Termux via ~/storage/shared/)
 ├── app/
 │   ├── maxhealth/
-│   │   ├── maxhealth.html      # Complete PWA (~1.3MB)
+│   │   ├── maxhealth.html      # Complete PWA (~4MB)
 │   │   ├── worker.js           # Cloudflare Worker — Claude proxy + Gemini/OpenAI for multi-AI consensus
+│   │   ├── licence-worker.js   # Cloudflare Worker — licence keys, 14-day trial, token renewal (replaced the old PHP service, v3.10.1249)
+│   │   ├── starter_packs/      # 27 condition starter packs (*.json) + index.json; served offline by server.py, GitHub is the fallback
+│   │   ├── lang/               # Language files (the app speaks nine languages)
+│   │   ├── docs/               # Public pages: story, why-free, user-guide, legal, changelog
+│   │   ├── tests/              # personas/ (one script per kind of user), worker/ (node tests for the Workers), TEST_PLAN.md
+│   │   ├── tools/              # run_sweep_par.py (parallel sweep), run_sweep.py, split_premium.py, language helpers
 │   │   ├── find_orphans.py     # Maintenance script — flags potentially unused functions/variables (manual review only)
 │   │   ├── why-free.html       # Why MaxedHealth is free
 │   │   ├── user-guide.html     # User guide
