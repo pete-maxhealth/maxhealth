@@ -9,6 +9,12 @@ Test-only release: no change to how the app behaves. Fixes the six new failures 
 - p104: the Muscle growth preview has no Ketosis (that focus tucks away Carbs and Fasting); test updated, and its failure message now lists what is missing.
 - p362, p364: crawls that take 5 to 8 minutes alone; `tools/run_sweep_par.py` now gives them a 720s limit instead of 240s (sweep about 10 minutes longer).
 
+## v3.10.1257
+AI recipe card reads naturally. Spotted on a phone: a whiteboard photo came back as "8 wholes vine tomatoes".
+- Count items now read "8 vine tomatoes" and "1 small carrot" (the word "whole" is no longer printed or pluralised).
+- Cloves still read "2 cloves garlic"; cups and pinches now have a space ("2 cups flour", "1 pinch salt"). Grams, ml, tsp and tbsp are unchanged.
+- New test p372 covers every unit; checked alongside p222 (recipe bubble hooks).
+
 ## v3.10.1256
 - **Three-AI check: the calorie range is whole numbers.** The "disagree by more than 25%" and "reasonably consistent" notes could print a figure like 95.83333333333334-315kcal once the checkers' portions were scaled to the logged amount. Found in a phone recording.
 - Test p369b (stubbed worker reply, real check, both notes; fails on v3.10.1255, passes now).
