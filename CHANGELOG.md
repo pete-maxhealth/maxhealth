@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1285
+Docs and search for the meal-timing features (new-feature checklist). User guide paragraph "More from your meal times" in both guides; the "When you eat" search entry now also finds the Meal times card, Compare Metrics series, Statistics measures, treatment sessions and the advisers. Checked: every demo persona has 30 days of timed meals, and Maria (GBM) has logged treatment sessions, so the timing features and Around treatment sessions work in the demo; John (type 2 diabetes) starts as Diabetes team.
+- Not done: a tour floor and short videos for these features (see BACKLOG).
+
 ## v3.10.1284
 Condition-aware timing (Pete, 4 Nov: diabetes wants foods by time of day, oncology wants intake around treatment sessions and supplements).
 - The timing adviser now STARTS from the condition when you have not chosen one: type 2 diabetes starts as Diabetes team, GBM as Oncology nutrition, anything else as Coach. Your own choice is remembered and always wins.
