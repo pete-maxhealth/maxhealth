@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1260
+My cupboards keeps its sections when you pick a shop. Spotted on a phone (4 Nov): open Non-nutritional, change the shop, and everything opened up.
+- Sections only drew when more than 8 items were showing, so a shop with a few items turned the whole list into one flat, fully open list. Whether sections are used now depends on the tab (more than 8 items), not on the shop filter, so the sections you had shut stay shut and the one you opened stays open, as you move between shops and tabs.
+- Search is still a flat list, and a cupboard of 8 items or fewer is still flat.
+- New test p375; it fails on v3.10.1259 and passes now. Checked with p225, p243, p248, p270, p271, p277, p282, p283, p284, p297, p373 and a rendered screenshot.
+
 ## v3.10.1259
 Check for updates now finds a new version without a refresh first. Spotted on a phone (4 Nov): the button did nothing, but pulling to refresh updated the app.
 - The old check only asked whether sw.js had changed, and sw.js almost never does, so it could not see a new app page. The button now also reads the version line of the page this phone's server is handing out, and shows the same "A new version is ready, Reload now" banner when it is newer.
