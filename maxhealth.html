@@ -6566,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1257'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1258'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27655,6 +27655,7 @@ function mhShopSugNew() {
   else { _shopUi.msg = t + ' is on your ' + shop + ' list'; mhShopRender(); }
 }
 function mhShopAddOwn() {
+  const _k = (_shopUi.addKind === 'nonfood') ? mhShopKeepStart() : null;
   const inp = document.getElementById('mhShopOwn'); let v = inp ? inp.value.trim() : ''; if (!v) return;
   let qtyIn = 0; { const m = /^(\d{1,2})\s*[x×]\s*(.+)$/i.exec(v); if (m && +m[1] > 0 && !/^\d/.test(m[2])) { qtyIn = +m[1]; v = m[2].trim(); } }   // "2 x double cream" (v3.10.1216)
   const nonFood = _shopUi.addKind === 'nonfood';
@@ -27668,9 +27669,9 @@ function mhShopAddOwn() {
   if (nonFood && mhStockOn()) { const key = mhShopKey(v), o0 = mhStockLoad(); if (!o0.items[key]) { mhStockTrack(v, { base: 'each', pack: null, serving: null, shop: s.shop }); const o1 = mhStockLoad(); if (o1.items[key]) { o1.items[key].nonFood = true; mhStockSave(o1); cupNote = ' and to your cupboards'; } } else cupNote = ' (already in your cupboards)'; }
   // Say where it is, and open that aisle and scroll to it: aisles start closed, so a bare "Added" left it out of sight (v3.10.1178)
   _shopUi.msg = it ? (added ? 'Added ' + it.name + ' to your ' + it.shop + ' list' + cupNote : it.name + ' is already on your ' + it.shop + ' list' + (it.checked ? ' (ticked, in the basket)' : '')) : (added ? 'Added' : 'Already on the list');
-  if (it) mhShopRevealItem(s, it);
-  mhShopRender();
-  if (it) setTimeout(() => { const el = [...document.querySelectorAll('#mhShopPane [data-item]')].find(e => e.dataset.item === it.name); if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} const bg = el.style.background; el.style.transition = 'background .4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); } }, 150);
+  if (it) mhShopRevealItem(s, it);   // opens its aisle; a non-nutritional add then stays where you are (no scroll to it), so you can add several in a row (v3.10.1258)
+  mhShopRender(); if (_k) mhShopKeepEnd(_k);
+  if (it && !nonFood) setTimeout(() => { const el = [...document.querySelectorAll('#mhShopPane [data-item]')].find(e => e.dataset.item === it.name); if (el) { try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} const bg = el.style.background; el.style.transition = 'background .4s'; el.style.background = 'var(--accent-dim, rgba(120,120,255,0.25))'; setTimeout(() => { el.style.background = bg; }, 2500); } }, 150);
 }
 function mhShopRevealItem(s, it) {
   if (it.checked) { _shopUi.basketOpen = true; return; }
@@ -30194,10 +30195,20 @@ function mhStockToList(key) {
 }
 // Non-nutritional things have no level to police, so you say when one is running low: it goes on the list under its shop, stays on the
 // shelf, and Shopping complete leaves it there (v3.10.1137).
-function mhStockLowNow(key) {
+// Re-draw the Shopping pane but keep the Add to the list card where it was on the screen. The new list item lands ABOVE it, so a plain re-draw pushed the card away
+// (and the browser clamped the scroll while the pane was empty), which read as "the focus jumped to the shopping list" (v3.10.1258).
+// Call mhShopKeepStart() BEFORE changing anything (saving the list also re-draws the pane), then mhShopKeepEnd() after the last re-draw.
+function mhShopKeepStart() { const sc = document.getElementById('shopScroll'), p = document.getElementById('mhShopAddPanel'); return { sc, top: p ? p.getBoundingClientRect().top : null, st: sc ? sc.scrollTop : 0 }; }
+function mhShopKeepEnd(k, again) {
+  const p2 = document.getElementById('mhShopAddPanel'); if (!k || !k.sc) return;
+  if (k.top !== null && p2) k.sc.scrollTop += p2.getBoundingClientRect().top - k.top; else k.sc.scrollTop = k.st;
+  if (!again) { try { requestAnimationFrame(() => mhShopKeepEnd(k, true)); } catch (_) {} setTimeout(() => mhShopKeepEnd(k, true), 120); }   // layout that settles a moment later (fonts, the browser's own scroll anchoring) must not undo it
+}
+function mhStockLowNow(key, keep) {
+  const _k = keep ? mhShopKeepStart() : null;
   const it = mhStockLoad().items[key]; if (!it) return; const s = mhShopLoad(), shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : '';
   const ok = mhShopSetAdd(s, it.name, 'stock', 'running low', null, { nonFood: !!it.nonFood, qty: it.buyQty }); if (ok && shop) s.items[s.items.length - 1].shop = shop;
-  mhShopSave(s); _shopUi.msg = it.name + (ok ? ' is on your list' : ' is already on your list'); mhShopRender();
+  mhShopSave(s); _shopUi.msg = it.name + (ok ? ' is on your list' : ' is already on your list'); mhShopRender(); if (_k) mhShopKeepEnd(_k);
 }
 function mhStockCardHtml(s) {
   let restoredFrom = ''; try { restoredFrom = sessionStorage.getItem('mh_stock_restored') || ''; } catch (_) {}
@@ -30333,10 +30344,11 @@ function mhShopFold(k) { _shopUi.fold = _shopUi.fold || {}; const sec = +String(
 function mhShopTickSection(sec) { const s = mhShopLoad(), ids = new Set(mhShopVisible(s).filter(i => !i.checked && mhShopSection(i.cat) === sec).map(i => i.id)); let n = 0; s.items.forEach(i => { if (ids.has(i.id)) { i.checked = true; n++; } }); _shopUi.msg = n ? n + ' ticked into the basket' : ''; mhShopSave(s); mhShopRender(); }
 // A non-nutritional item flagged as a regular stays on the list after every shop; switch it off and it goes back to the shelf like the rest (v3.10.1153).
 function mhNfRegular(key) {
+  const _k = mhShopKeepStart();
   const s = mhShopLoad(), o = mhStockLoad(), it = o.items[key]; if (!it) return; const u = mhShopUsualFind(s, key);
   if (u) { s.usuals = s.usuals.filter(x => mhShopKey(x) !== key); _shopUi.msg = it.name + ' is no longer a regular'; }
   else { s.usuals.push(it.name); if (mhShopSetAdd(s, it.name, 'usual', 'regular', null, { nonFood: true })) s.items[s.items.length - 1].shop = it.shop || s.shop; _shopUi.msg = it.name + ' is a regular: it stays on your list after every shop'; }
-  mhShopSave(s); mhShopRender();
+  mhShopSave(s); mhShopRender(); mhShopKeepEnd(_k);
 }
 // The same Regular on/off as the shelf's button, for an item already on the list (v3.10.1223).
 function mhShopRegularRow(id) { const s = mhShopLoad(), i = s.items.find(x => x.id === id); if (!i) return; const u = mhShopUsualFind(s, i.key); if (u) { s.usuals = s.usuals.filter(x => mhShopKey(x) !== i.key); _shopUi.msg = i.name + ' is no longer a regular'; } else { s.usuals.push(i.name); _shopUi.msg = i.name + ' is a regular: it stays on your list after every shop'; } mhShopSave(s); mhShopRender(); }
@@ -30569,7 +30581,7 @@ function mhShopRender(keepFocus) {
       + (addKind === 'nonfood' ? (() => {
         const nfAll = Object.values(mhStockLoad().items).filter(x => x.nonFood), nf = nfAll.filter(x => !x.held && !s.items.some(i => i.key === x.key)).sort((x, y) => x.name.localeCompare(y.name));   // only what is not already on the list (v3.10.1211)
         return nf.length ? '<div id="mhNfShelf" style="margin:2px 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">On your shelf: tap to put one on the list</div>' + nf.map(x => { const on = s.items.some(i => i.key === x.key);
-          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span title="' + esc(x.name) + '" style="font-size:15px;color:var(--text);min-width:0;flex:1 1 auto;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + esc(x.name) + '</span>' + '<span style="display:flex;align-items:center;gap:6px;flex:0 0 auto;"><button class="copy-btn" data-regk="' + esc(x.key) + '" onclick="mhNfRegular(this.dataset.regk)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, x.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, x.key) ? '⭐ Regular' : '☆ Regular') + '</button>' + '<span style="display:flex;justify-content:center;flex:0 0 auto;min-width:104px;">' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k)" style="width:auto;font-size:13px;padding:8px 10px;white-space:nowrap;">＋ Add</button>') + '</span>' + '</span></div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
+          return '<div data-nfshelf="' + esc(x.name) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 2px;border-top:1px solid var(--border);"><span title="' + esc(x.name) + '" style="font-size:15px;color:var(--text);min-width:0;flex:1 1 auto;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + esc(x.name) + '</span>' + '<span style="display:flex;align-items:center;gap:6px;flex:0 0 auto;"><button class="copy-btn" data-regk="' + esc(x.key) + '" onclick="mhNfRegular(this.dataset.regk)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, x.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, x.key) ? '⭐ Regular' : '☆ Regular') + '</button>' + '<span style="display:flex;justify-content:center;flex:0 0 auto;min-width:104px;">' + (on ? '<span style="font-size:11px;font-weight:700;color:var(--accent);">ON LIST</span>' : '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockLowNow(this.dataset.k,1)" style="width:auto;font-size:13px;padding:8px 10px;white-space:nowrap;">＋ Add</button>') + '</span>' + '</span></div>'; }).join('') + '<div style="font-size:12px;color:var(--text3);margin:10px 0 4px;">Not on the shelf? Type it:</div></div>'
           : '<div id="mhNfShelf" style="font-size:12px;color:var(--text3);margin:2px 0 8px;line-height:1.5;">' + (nfAll.length ? 'Everything non-nutritional on your shelf is already on the list or in Filtered. Type a new one below.' : 'Nothing non-nutritional on your shelf yet. Type one below, or add them to My cupboards (Add a food, then Add as non-nutritional) and they will be listed here.') + '</div>'; })() : '')
       + '<div style="display:flex;gap:6px;"><input id="mhShopOwn" placeholder="' + (addKind === 'nonfood' ? 'What do you need? e.g. Toilet roll' : 'Search or type a food') + '" oninput="mhShopSug()" autocomplete="off" onkeydown="if(event.key===\'Enter\')' + (addKind === 'nonfood' ? 'document.getElementById(\'mhShopOwnAmount\').focus()' : 'mhShopAddOwn()') + '" style="flex:1;min-width:0;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;">' + (addKind === 'food' ? btn('Add', 'mhShopAddOwn()', 'font-size:14px;padding:10px 14px;') : '') + '</div>'
       + (addKind === 'food' ? '<div id="mhShopSug"></div>' : '')
@@ -30594,7 +30606,11 @@ function mhShopRender(keepFocus) {
     body = '<div id="mhShopSwitch" style="display:flex;gap:8px;margin:2px 0 0;">' + swBtn('list', '🛒 Shopping list') + swBtn('stock', '🏠 My cupboards') + '</div>'
       + lay.order.filter(id => pane === 'both' || (pane === 'stock' ? id === 'stock' : id !== 'stock')).map(id => lay.hid[id] ? mhShopSecShowRow(id) : secs[id]()).join('');
   }
+  // Redrawing the pane empties it for a moment and the browser clamps the scroll position, so every redraw while scrolled down threw you up the page. Put it back when the view has not changed (v3.10.1258).
+  const _sc = document.getElementById('shopScroll'), _st = _sc ? _sc.scrollTop : 0, _same = m.dataset.view === String(_shopUi.view);
   m.innerHTML = (_isList ? '' : head) + msg + body;
+  m.dataset.view = String(_shopUi.view);
+  if (_sc && _same) _sc.scrollTop = _st;
   try { mhCardBodyApply(); } catch (_) {}
   try { mhAttachClear(); } catch (_) {}
   if (keepFocus === 'uq') { const q = document.getElementById('mhShopUsualNew'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1258
+Adding a non-nutritional item no longer throws you off the Add to the list card. Spotted on a phone (4 Nov): the new item lands in My list above the card, so the card was pushed away and the screen jumped up towards the list.
+- The shelf "Add", the Regular star and the typed Add (Add to the list, Non-nutritional) now keep the card exactly where it was on the screen, so you can add several in a row. Typed non-nutritional Add no longer scrolls to the list; typed food Add still opens its aisle and shows the item as before.
+- Any redraw of the Shopping pane now keeps your scroll position (the pane used to empty for a moment and the browser clamped the scroll up the page).
+- New test p373 (real taps: one, three in a row, Regular, typed, reload, food Add, My cupboards Low button); it fails on v3.10.1257 and passes now.
+
 ## v3.10.1253
 Test-only release: no change to how the app behaves. Fixes the six new failures from the 1 Nov nightly sweep.
 - p178, p183: the weekly summary runs Sunday to Saturday, so on a Sunday it held only today; the tests now use last week when today is Sunday.
