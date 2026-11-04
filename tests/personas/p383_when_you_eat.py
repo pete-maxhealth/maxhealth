@@ -24,12 +24,18 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = lambda: ev("(document.getElementById('wheneat-report-content')?.innerText||'')")
     # 1. too few days: hidden
     ev("state.history = " + str([day(i) for i in range(1, 6)]).replace('True', 'true') + "; saveState()"); show()
-    if disp() != 'none': f.add('BUG', '1: hidden with fewer than 7 days of timed meals')
+    if disp() == 'none' or not ev("!!document.getElementById('wheneat-few')") or 'All time' not in txt(): f.add('BUG', '1: fewer than 7 timed days: card says so, with its period (v3.10.1274)')
+    ev("_rptRange=7; renderReports()"); page.wait_for_timeout(300)
+    if 'Last 7 days' not in txt(): f.add('BUG', '1b: the card names the 7 Days period: ' + txt()[:60])
+    ev("state.history = []; saveState()"); show()
+    if disp() != 'none': f.add('BUG', '1c: no timed meals at all: hidden')
+    ev("state.history = " + str([day(i) for i in range(1, 6)]).replace('True', 'true') + "; saveState()"); show()
     # 2. ten days, with an approximate-time meal that must be ignored
     import json
     hist = [day(i, [('15:00', 99, 99, 99, 'approx')]) for i in range(1, 11)]
     ev("state.history = " + json.dumps(hist) + "; saveState()"); show()
     if disp() == 'none': f.add('BUG', '2: shown with 10 days')
+    if 'All time' not in txt() or ev("!!document.getElementById('wheneat-few')"): f.add('BUG', '2b: the full card names its period: ' + txt()[:60])
     t = txt(); tl = t.lower()
     if 'from 10 days' not in tl: f.add('BUG', f'3: says it covers 10 days: {t[:120]!r}')
     for want in ['early morning', 'late morning', 'afternoon', 'evening', 'late night', '30 g', '40 g', '50 g', '23%', '31%', '38%', '8%']:
