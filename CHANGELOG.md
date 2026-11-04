@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1265
+My cupboards rows no longer squash their text. Spotted on a phone (4 Nov): with the trolley added, the five icons took the whole row and the name and stock wrapped one word per line.
+- The text now keeps at least 150px; when the icons do not fit beside it they drop to their own line, right-aligned. On a wide screen they stay on the same line.
+- Checked with p225, p376, p378, p379 and a rendered screenshot at 360px.
+
 ## v3.10.1264
 Every food in My cupboards now has the shopping trolley too, not only the non-nutritional ones. Spotted on a phone (4 Nov): the cupboards are where you check the stock and add things where stock is not a consideration.
 - Grey trolley = not on the list: tap to put it on. Coloured trolley + ON LIST = on the list: tap to take it off (Undo). Same as the non-nutritional rows.
