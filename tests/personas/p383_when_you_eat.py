@@ -35,9 +35,12 @@ with fresh_server() as root, sync_playwright() as pw:
     hist = [day(i, [('15:00', 99, 99, 99, 'approx')]) for i in range(1, 11)]
     ev("state.history = " + json.dumps(hist) + "; saveState()"); show()
     if disp() == 'none': f.add('BUG', '2: shown with 10 days')
+    ev("_rptRange=30; renderReports()"); page.wait_for_timeout(300)
+    if 'of 30)' not in txt() or '10 days' not in txt(): f.add('BUG', '2c: count line shows the period length: ' + txt()[:120])
+    ev("_rptRange=0; renderReports()"); page.wait_for_timeout(300)
     if 'All time' not in txt() or ev("!!document.getElementById('wheneat-few')"): f.add('BUG', '2b: the full card names its period: ' + txt()[:60])
     t = txt(); tl = t.lower()
-    if 'from 10 days' not in tl: f.add('BUG', f'3: says it covers 10 days: {t[:120]!r}')
+    if 'the 10 days' not in tl: f.add('BUG', f'3: says it covers 10 days: {t[:120]!r}')
     for want in ['early morning', 'late morning', 'afternoon', 'evening', 'late night', '30 g', '40 g', '50 g', '23%', '31%', '38%', '8%']:
         if want not in tl: f.add('BUG', f'4: the card shows {want!r}')
     if '99 g' in tl or '229' in tl: f.add('BUG', '5: a meal with an approximate time is left out')

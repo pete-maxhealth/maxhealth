@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1275
+"When you eat" count line now shows both figures (Pete, 4 Nov: 29 was still on screen): "Grams a day, from the 29 days (of 90) that have timed meals." On All and Custom it reads "(of N logged)".
+- p383 updated (2c), p384 re-run.
+
 ## v3.10.1274
 "When you eat" now shows its period (Pete, 4 Nov: where is its date range? it just said 29 days). The card follows the Reports range buttons at the top like its neighbours, but never said so. It now has a chip at the top (Last 30 days, All time, or the custom dates); tap it to jump to the range buttons. When the chosen period has fewer than 7 timed days the card now says so, instead of vanishing (it still hides when there are no timed meals anywhere).
 - Test p383 updated (period chip, short-period note, nothing-timed hidden). p384 re-run. Seen rendered.
