@@ -168,3 +168,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Timing features (v3.10.1277 to 1285): demos, user guide and search are done. Still to do: a tour floor and a short or two (When you eat card with the adviser; choosing what a carer sees), playlist entries, then set any replaced versions Private.
 
 - Recipe steps follow ingredients (v3.10.1286): not yet covered - the AI recipe bubble method text, placeholder resolution and fuzzy re-match do not rewrite steps; tour floor/clip for this feature still to do.
+
+- Videos (4 Nov, evening): three new clips recorded, voiced (Alba) and sent to Pete for review: c_meal_times (37s), c_share_choices (40s), c_recipe_follows (72s). Scripts in ytbuild (v_c_meal_times.py, v_c_share_choices.py, v_c_recipe_follows.py). Still to do once Pete approves: upload, playlist entries ("Your health data": meal times, sharing; "Your kitchen": recipe), pinned comment, a tour floor, and set any replaced version Private.
