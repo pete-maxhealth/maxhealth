@@ -23,6 +23,15 @@
 - No ad or public page may link to the Premium page until it is live: Premium is "coming soon" with the Tally register-interest link.
 - Keep personal health details out of the public repo and the app.
 
+## Every new feature ships with all of these (Pete, 4 Nov 2026)
+- Each new tile/card: show/hide, reorder, a Filter pill entry, a "?" for any text longer than a couple of lines, the standard date range where it has a period, and a Settings tile or entry.
+- Findable: add it to the Settings/screen search list (label, key, keywords).
+- Stays in step with the rest: AI context, reports, History, backup/export, the clinician/carer share (opt-in only, nothing shared by default), and language strings.
+- Demo personas carry sample data for it, so it shows working in the demo.
+- Docs: user guide, README/story page if it is a headline feature, CHANGELOG, BACKLOG.
+- Videos: a new "floor" in the tour, a short clip, and a place in the right playlist. Prefer low-typing demos, and set any replaced version to Private, not deleted.
+- Persona test walks it end to end (set up, use, undo, reload, neighbouring screens).
+
 ## How every change is checked (Pete's standard, 24/10/2026)
 - Before building: think the whole process through, including what it means retrospectively (past days, older data, other screens that show the same thing). List every place the same thing appears (Today, History, edit forms, calendar, copy/duplicate paths) and do all of them, not just the one he pointed at.
 - Uniformity: a new button, chip, control or message must look and act like the existing ones that do the same job (same class, size, icon, position, wording, confirm/undo behaviour). Find the existing one first and reuse it; compare them side by side in a rendered screenshot, not from the code alone.
