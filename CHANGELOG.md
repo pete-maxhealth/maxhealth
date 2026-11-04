@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1273
+Duplicate check on the import routes (Pete, 4 Nov: check every add route). A CSV or receipt row that looks like a new food but is close to one you hold (on the shelf or in Filtered) now says so under its "New food" badge, e.g. "You may already have X (in Filtered). This one will go in as a separate food." Rows already matched are unchanged.
+- Test p385. Neighbours re-run: p213, p223, p233, p220, p314, p382. Seen rendered (dark theme, phone width).
+
 ## v3.10.1272
 AI context for "When you eat" now follows the Reports date range (Pete, 4 Nov: same intervals as the date ranges). Before, the AI summary always used the last 30 logged days whatever chip was chosen; it now uses the same days as the card and the timing advice, and is labelled "this period".
 - Tests: p383, p384 re-run.
