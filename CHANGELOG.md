@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1263
+Open and shut sections now stay exactly as you leave them, in the shopping list and in My cupboards. Spotted on a phone (4 Nov): "wherever you leave the focus, that state should stay, the same as hide/show in the rest of the app".
+- Adding to the list (typed food, typed non-nutritional, already there) no longer opens the item's aisle. The message now names the aisle: "Added Sponges to your Asda list (Non-nutritional)".
+- Coming back from editing or adding a food in My cupboards no longer opens a section and no longer resets the tab, shop filter or search.
+- My cupboards sections start shut on every tab (they used to start open on every tab except All), so a section you opened is the only one open wherever you go.
+- Tapping a name on Use soon still takes you to that food with its section opened, because that is you asking to go there.
+- New test p378 (fails on v3.10.1262). Old tests that expected an aisle to open on add (p201, p281, p283, p321, p329) now open it by hand or check it stays shut. Checked with p197, p205, p225, p242, p243, p248, p253, p255, p259, p267, p270, p271, p274, p277, p284, p286, p289, p291, p296, p297, p299, p300, p373, p375, p376, p377 and a rendered screenshot.
+
 ## v3.10.1262
 The app starts each session on your default shop. Spotted on a phone (4 Nov): new things were going to Tesco, not Asda.
 - The shop you last tapped was remembered for ever, and it took every new item. Now, each time the app is opened it goes back to your default shop (set with the Default shop picker on the shopping list). Inside a session, the shop you are on still takes what you add, as before.

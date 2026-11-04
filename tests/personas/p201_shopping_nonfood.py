@@ -27,7 +27,10 @@ with fresh_server() as root, sync_playwright() as pw:
         f.add('BUG', f'non-food item not saved correctly: {item}')
 
     # the row shows the amount, and it sits in its own "Non-nutritional" section, not lumped into "Other"
-    # adding the item opens its aisle (v3.10.1178), so there is nothing to unfold here
+    # adding no longer opens its aisle (v3.10.1263): open them by hand
+    for _ in range(8):
+        if not ev("(()=>{const e=[...document.querySelectorAll('#mhShopPane .mh-aisle > span:first-child')].find(x=>x.innerText.trim().startsWith('▸')); if(!e) return false; e.click(); return true})()"): break
+        page.wait_for_timeout(200)
     row_txt = ev("document.querySelector('[data-item=\"Toilet roll\"]')?.textContent || ''")
     if '24 pack' not in row_txt: f.add('BUG', f'amount not shown on the row: {row_txt!r}')
     secs = ev("[...document.querySelectorAll('.mh-aisle span')].map(e=>e.textContent)")

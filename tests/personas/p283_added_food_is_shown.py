@@ -1,4 +1,4 @@
-"""Persona 283: a food added in My cupboards (as non-nutritional) is shown afterwards: aisle open, scrolled to, other aisles untouched (v3.10.1180). Invented data."""
+"""Persona 283: a food added in My cupboards (as non-nutritional) is in My cupboards afterwards and every aisle is exactly as you left it (v3.10.1263, was: its aisle opened, v3.10.1180). Invented data."""
 import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -20,8 +20,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhStockAddNonFood('Zzqx Washing up liquid')"); page.wait_for_timeout(400)
     page.click('button:has-text("Back")'); page.wait_for_timeout(800)
     names = ev("[...document.querySelectorAll('#stockctlCard [data-stock]')].map(e=>e.dataset.stock)")
-    if 'Zzqx Washing up liquid' not in names: f.add('BUG', f'the added food is on screen after Back: {names}')
-    if ev(rowsN) < opened + 1: f.add('BUG', 'the aisle you had open stays open')
+    if not ev("!!mhStockLoad().items[mhShopKey('Zzqx Washing up liquid')]"): f.add('BUG', 'the added food is in My cupboards')
+    if 'Zzqx Washing up liquid' in names: f.add('BUG', f'its aisle was shut, so it stays shut: {names}')
+    if ev(rowsN) != opened: f.add('BUG', f'the aisle you had open stays open and nothing else changes ({opened} rows before, {ev(rowsN)} after)')
     if ev("mhShopPane()") != 'stock': f.add('BUG', 'it shows on the cupboards pane')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)

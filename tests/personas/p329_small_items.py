@@ -21,6 +21,9 @@ with fresh_server() as root, sync_playwright() as pw:
     # (1)(2) shelf + list row
     ev("localStorage.setItem('mh_shop_pane','both')"); ev("switchTabById('shop'); mhShopOpen()"); page.wait_for_timeout(400)
     ev("(()=>{ let e = document.getElementById('mhShopOwn'); if (!e) { e = document.createElement('input'); e.id = 'mhShopOwn'; document.body.appendChild(e); } e.value = 'Zz Washing powder'; mhShopAddOwn(); _shopUi.edit = true; mhShopRender(); })()"); page.wait_for_timeout(300)
+    for _ in range(8):   # adding no longer opens an aisle (v3.10.1263): open them by hand
+        if not ev("(()=>{const e=[...document.querySelectorAll('#mhShopPane .mh-aisle > span:first-child')].find(x=>x.innerText.trim().startsWith('▸')); if(!e) return false; e.click(); return true})()"): break
+        page.wait_for_timeout(200)
     sel = '[data-regid]'
     if not ev("!!document.querySelector('[data-regid]')"): f.add('BUG', 'a Regular button on list rows in Edit mode')
     else:

@@ -14,6 +14,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(()=>{ document.getElementById('mhShopOwn') ? 0 : mhShopAddOpen && mhShopAddOpen(); })()")
     ev("(()=>{ let e=document.getElementById('mhShopOwn'); if(!e){ const i=document.createElement('input'); i.id='mhShopOwn'; document.body.appendChild(i); e=i;} e.value='2 x Zz Double cream'; mhShopAddOwn(); })()"); page.wait_for_timeout(300)
     if q('Zz Double cream') != 2: f.add('BUG', f'typing "2 x name" gives 2: {q("Zz Double cream")}')
+    for _ in range(8):   # adding no longer opens an aisle (v3.10.1263): open them by hand
+        if not ev("(()=>{const e=[...document.querySelectorAll('#mhShopPane .mh-aisle > span:first-child')].find(x=>x.innerText.trim().startsWith('▸')); if(!e) return false; e.click(); return true})()"): break
+        page.wait_for_timeout(200)
     if '2 × Zz Double cream' not in ev("document.body.innerText.replace(/\\s+/g,' ')") and '2 ×' not in ev("document.body.innerText"): f.add('BUG', 'the row shows 2 ×')
     # stepper in edit mode
     ev("_shopUi.edit = true; mhShopRender()"); page.wait_for_timeout(300)
