@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1270
+"When you eat" (Pete, 4 Nov): "we already have the ability to see what times of the day protein, fat, and carbs are consumed ... a real tool for any analysis." Step 1 of the meal-timing idea: descriptive only; the goal-based timing coach is a later step.
+- New Reports card (after Fasting): grams a day of protein, carbs and fat in five parts of the day (early morning, late morning, afternoon, evening, late night) with each part's share, how many eating occasions a day (a new one after an hour apart), average protein a meal, and how big the biggest protein meal is.
+- Measured from the times on logged meals. Meals with an approximate time, medication items and restored-from-backup placeholders are left out. Hidden until 7 days have timed meals.
+- Follows the Reports date range and Include today. Show/hide, reorder, Filter, search ("When you eat"), the standard Select all / Copy tools and the "?" for long text all work as on every Reports card. All 29 demo personas show it.
+- The AI context carries a one-line summary (last 30 days), told to treat it as a pattern in the person's own data, not a target.
+- User guide (both copies) updated. Test p383. Neighbours re-run: p61, p63, p70, p215, p303, p327, p328, p343.
+
 ## v3.10.1269
 Typed Add asks first. Follow-on to v3.10.1268 (Pete, 4 Nov: duplicates should be caught when you enter something new).
 - Typing a food into the shopping-list add box and pressing Add, with no suggestion picked: if it is the same words in another order or spelling as something you hold or have listed (or it has two or more words that all match something), a question says where it is and offers "Add anyway" or Cancel. The exact food you already have is not asked about, and a single loose word never is.
