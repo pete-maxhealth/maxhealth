@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1269
+Typed Add asks first. Follow-on to v3.10.1268 (Pete, 4 Nov: duplicates should be caught when you enter something new).
+- Typing a food into the shopping-list add box and pressing Add, with no suggestion picked: if it is the same words in another order or spelling as something you hold or have listed (or it has two or more words that all match something), a question says where it is and offers "Add anyway" or Cancel. The exact food you already have is not asked about, and a single loose word never is.
+- Asking for a food that is waiting in Filtered by its exact name puts it back on the shelf and on the list, with a message.
+- The "New food" suggestion says "as a separate food" when matches are shown above it.
+- Test p382 extended (questions, Cancel, Add anyway, exact food, brand-new food, one loose word). Neighbours re-run: p197, p201, p207, p239-p243, p249, p267, p282, p283, p299, p329, p373, p376, p377, p379-p381.
+
 ## v3.10.1268
 "Do I already have this?" Pete (4 Nov): "I keep adding things only to find that they're in the filtered items ... when I'm entering something new, there could be an option for a comparison from existing."
 - One finder for every add route. It looks in My cupboards (on the shelf or in Filtered), on the shopping list (including ticked) and in the Library, and needs every word you typed to be in the name (so "stock cubes" finds "Beef Stock Cubes", but unrelated foods are not offered).

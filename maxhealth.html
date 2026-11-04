@@ -6566,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1268'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1269'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27649,13 +27649,21 @@ function mhFindExisting(q, opts) {
   s.items.forEach(i => { if (!!i.nonFood === nf && !out.some(o => o.key === i.key) && has(i.name)) out.push({ key: i.key, name: i.name, it: null, where: 'on your list' + (i.checked ? ', ticked in your basket' : ''), exact: i.key === mhShopKey(q) }); });
   return out.sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0));
 }
+// Typed Add with no suggestion picked: ask first when what you typed is the same food by another name, or close to something you already hold or have listed (v3.10.1269).
+// The exact same food is not asked about (it is the same one); a food waiting in Filtered is put back on the shelf when you ask for it by hand.
+function mhAddNeedsAsk(v) {
+  let shops = []; try { shops = mhShopLoad().shops || []; } catch (_) {}
+  const A = mhStockDupeWords({ name: v }, shops), k = mhShopKey(v);
+  const found = mhFindExisting(v); if (found.some(m => m.key === k && (m.it || m.where.indexOf('on your list') === 0))) return [];   // the exact food is held or listed already: that is the one you mean
+  return found.filter(m => m.key !== k && (m.it || m.where.indexOf('on your list') === 0)).filter(m => { const B = mhStockDupeWords({ name: m.name, shop: m.it && m.it.shop }, shops); return (A.length === B.length && A.every(w => B.includes(w))) || A.length >= 2; });
+}
 function mhShopSug() {
   const box = document.getElementById('mhShopSug'), inp = document.getElementById('mhShopOwn'); if (!box || !inp) return;
   const q = inp.value.trim(); if (q.length < 2 || _shopUi.addKind === 'nonfood') { box.innerHTML = ''; return; }
   const esc = mhPlanEsc, s = mhShopLoad(), hits = mhSlMatch(mhSlRows(), q).filter(r => !(r.it && r.it.nonFood)).slice(0, 6);
   const row = (label, sub, fn, k) => '<button type="button" data-k="' + esc(k) + '" onclick="' + fn + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;padding:12px 10px;margin-top:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;cursor:pointer;"><span style="min-width:0;">' + esc(label) + (sub ? '<span style="display:block;font-size:12px;color:var(--text3);">' + esc(sub) + '</span>' : '') + '</span><span style="flex:0 0 auto;color:var(--accent);font-weight:600;">＋ ' + esc(s.shop) + '</span></button>';
   let h = hits.map(r => row(r.name, mhWhereIs(r, s), 'mhShopSugPick(this.dataset.k)', r.key)).join('');
-  if (!hits.some(r => r.name.toLowerCase() === q.toLowerCase())) h += row('New food: ' + q, 'not in my library or cupboards yet', 'mhShopSugNew()', '');
+  if (!hits.some(r => r.name.toLowerCase() === q.toLowerCase())) h += row('New food: ' + q, hits.length ? 'as a separate food, not one of the above' : 'not in my library or cupboards yet', 'mhShopSugNew()', '');
   box.innerHTML = h;
 }
 function mhShopSugPick(key) {
@@ -27672,11 +27680,15 @@ function mhShopSugNew() {
   if (mhStockOn()) mhStockAddFood({ name: t, origin: 'cupboard', shop, ret: () => { try { mhShopView('list'); } catch (_) {} } });
   else { _shopUi.msg = t + ' is on your ' + shop + ' list'; mhShopRender(); }
 }
-function mhShopAddOwn() {
+function mhShopAddOwn(ok) {
   const _k = (_shopUi.addKind === 'nonfood') ? mhShopKeepStart() : null;
   const inp = document.getElementById('mhShopOwn'); let v = inp ? inp.value.trim() : ''; if (!v) return;
   let qtyIn = 0; { const m = /^(\d{1,2})\s*[x×]\s*(.+)$/i.exec(v); if (m && +m[1] > 0 && !/^\d/.test(m[2])) { qtyIn = +m[1]; v = m[2].trim(); } }   // "2 x double cream" (v3.10.1216)
   const nonFood = _shopUi.addKind === 'nonfood';
+  if (!nonFood) {
+    if (!ok) { const ask = mhAddNeedsAsk(v); if (ask.length) { const nm = ask.slice(0, 3).map(m => m.name + ' (' + m.where + ')').join(', '); appConfirm('You already have ' + mhPlanEsc(nm) + '. Add "' + mhPlanEsc(v) + '" as well?', () => mhShopAddOwn(true), null, false, { confirm: 'Add anyway', cancel: 'Cancel' }); return; } }
+    const so = mhStockLoad(), ex = so.items[mhShopKey(v)]; if (ex && ex.held) { ex.held = false; mhStockSave(so); showToast(ex.name + ' put back on your shelf (it was in Filtered)'); }
+  }
   const amount = nonFood ? (document.getElementById('mhShopOwnAmount')?.value || '').trim() : '';
   const s = mhShopLoad(); s.pantry = s.pantry.filter(k => k !== mhShopKey(v));
   const added = mhShopSetAdd(s, v, 'own', '', null, { nonFood, amount, qty: qtyIn }), it = s.items.find(i => i.key === mhShopKey(v));
