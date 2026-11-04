@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1279
+More uses for meal timing (Pete, 4 Nov: where else could it be useful, a few prompts, and statistics).
+- Statistics: five new measures for Individual days, Weeks, Months and Days of the week: Eating occasions, First meal, Last meal (shown as clock times; a Total of times becomes an Average), Protein before noon, Carbs after 5pm.
+- Six example questions in Browse saved prompts (Reports > Ask AI): When do I eat my protein?, Protein spread, Late eating and sleep, Last meal and overnight fast, Around treatment sessions, Weekdays vs weekends. Added once to an existing saved list (never re-added if you delete them), seeded for new installs. The AI already gets the meal-timing figures for the period.
+- Test p388. Neighbours re-run: p180, p183, p185, p189 (+ p156, p162 for saved prompts). Seen rendered (saved prompts list, dark theme).
+
 ## v3.10.1278
 Meal timing in Compare Metrics (Pete, 4 Nov: could the extra nuggets feed into the multiple metrics graph?). Five new series in the Nutrition group, taken from the times on logged meals (same rules as Reports > When you eat: approximate times and medication items left out): Eating occasions, First meal (hour of day), Last meal (hour of day), Protein before noon, Carbs after 5pm. They also appear in the Treatment sessions metric picker under "Meal timing", so they can be compared around treatment.
 - Overlay only for now: no Trends cards (see BACKLOG). Test p387. Neighbours re-run: p63, p327, p107. Seen rendered (picker, dark theme).
