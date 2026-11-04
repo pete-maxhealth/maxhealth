@@ -382,6 +382,7 @@
     if (n === undefined || n === null || n === 0) return '—';
     return Number(n).toFixed(dec || 0);
   }
+  function esc(x) { return String(x == null ? '' : x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }   // names come from the link, so never put them in the page raw
   function fmtDate(ddmmyy) {
     if (!ddmmyy) return '—';
     const p = ddmmyy.split('/');
@@ -498,7 +499,7 @@
     html += `
       <div class="header">
         <div class="header-brand">MaxedHealth · Carer View</div>
-        <div class="header-name">${data.name || 'MaxedHealth User'}</div>
+        <div class="header-name">${esc(data.name || 'MaxedHealth User')}</div>
         <div class="header-sub">Generated ${fmtDateFull(data.generated)} · Expires ${fmtDateFull(data.expires)}</div>
       </div>`;
 
@@ -599,6 +600,28 @@
           ${s.exMin > 0 ? `<div class="adherence-label" style="color:var(--yellow);">🏋️ ${s.exDays} active day${s.exDays === 1 ? '' : 's'} · ${s.exMin >= 90 ? (s.exMin/60).toFixed(1) + ' h' : s.exMin + ' min'} of exercise</div>` : ''}
         </div>`;
       });
+    }
+
+    // Optional extras the person chose to share (v3.10.1277). Each appears only if it is in the link.
+    const rowSt = 'display:grid;gap:6px;padding:9px 14px;border-bottom:1px solid var(--border);align-items:center;font-size:13px;';
+    if (data.timing && data.timing.bands) {
+      html += `<div class="section-title">Grams by time of day</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Average grams a day over ${esc(data.timing.n)} days with timed meals. No food names.</div>`;
+      html += `<div class="history-table"><div style="${rowSt}grid-template-columns:1.6fr 1fr 1fr 1fr;background:var(--surface2);font-size:9px;font-family:'Space Mono',monospace;text-transform:uppercase;color:var(--text3);"><div>Time</div><div>Protein</div><div>Carbs</div><div>Fat</div></div>`;
+      data.timing.bands.forEach(b => { html += `<div style="${rowSt}grid-template-columns:1.6fr 1fr 1fr 1fr;"><div>${esc(b.l)}<div style="font-size:10px;color:var(--text3);">${esc(b.r)}</div></div><div>${esc(b.p)}g</div><div>${esc(b.c)}g</div><div>${esc(b.f)}g</div></div>`; });
+      html += `</div>`;
+    }
+    if (Array.isArray(data.treat) && data.treat.length) {
+      html += `<div class="section-title">Treatment sessions</div><div class="history-table">`;
+      data.treat.slice().reverse().forEach(x => { const d = allHistory.find(q => q.date === x[0]); const t = d && d.totals || {};
+        html += `<div style="${rowSt}grid-template-columns:70px 1fr;"><div style="font-family:'Space Mono',monospace;">${esc(fmtDate(x[0]))}</div><div>${esc(x[1])}${x[2] ? ' at ' + esc(x[2]) : ''}<div style="font-size:11px;color:var(--text3);">That day: ${fmt(t.kcal)} kcal, ${fmt(t.protein)}g protein, ${fmt(t.carbs)}g carbs</div></div></div>`; });
+      html += `</div>`;
+    }
+    if (allHistory.some(d => Array.isArray(d.m) && d.m.length)) {
+      html += `<div class="section-title">Meals, last 10 days</div><div class="history-table">`;
+      allHistory.slice().reverse().filter(d => Array.isArray(d.m) && d.m.length).forEach(d => {
+        html += `<div style="${rowSt}grid-template-columns:1fr;"><div style="font-family:'Space Mono',monospace;font-size:12px;">${esc(fmtDate(d.date))}</div>` + d.m.map(r => `<div style="font-size:12px;color:var(--text2);">${esc(r[0] || '--:--')} ${esc(r[1])} <span style="color:var(--text3);">${esc(r[2])}p ${esc(r[3])}c ${esc(r[4])}f</span></div>`).join('') + `</div>`;
+      });
+      html += `</div>`;
     }
 
     // Day-by-day history

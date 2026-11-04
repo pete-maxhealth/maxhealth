@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1277
+You choose what a carer or clinician link shows (Pete, 4 Nov: governed by the user in Settings, roles only as starting points).
+- Settings > Carer & Clinician: "What this link shows". Role chips (Carer or family, Clinician, Diabetes team, Oncology team, PT or coach) set a starting set; every item can then be changed. Daily totals always on; weight, exercise and sleep on as before; NEW and off by default: grams by time of day (no food names), meal times and food names (last 10 days, names cut to 30 characters), treatment sessions (name, date, time; the session note is never shared). A summary line says what is and is not shown, and repeats on the made link. Choices are remembered and are in backups.
+- The carer page shows the extras only when they are in the link.
+- SECURITY FIX: the carer page printed the name from the link without escaping, so a crafted link could run script on that page. All names are now escaped.
+- Test p386. Neighbours re-run: p119, p178, p26, p72. Seen rendered (Settings and carer page, dark theme, phone width).
+- Not done yet (see BACKLOG): supplements as their own item (they appear within meals), per-role carer page layout, a preview of the carer page itself before sending.
+
 ## v3.10.1276
 "When you eat" needs 3 timed days, not 7 (Pete, 4 Nov: 7 Days with today included said "not enough"). A 7-day range could only ever reach 7 if every single day had a timed meal. Now 3 to 6 days show the card with a yellow "rough picture" line; 7 or more show it plainly; fewer than 3 still says it needs more.
 - p383 (new 1d, 2), p384 re-run.
