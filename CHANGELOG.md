@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1264
+Every food in My cupboards now has the shopping trolley too, not only the non-nutritional ones. Spotted on a phone (4 Nov): the cupboards are where you check the stock and add things where stock is not a consideration.
+- Grey trolley = not on the list: tap to put it on. Coloured trolley + ON LIST = on the list: tap to take it off (Undo). Same as the non-nutritional rows.
+- A food you put on by hand stays on the list even when it is not low (the stock tidy-up leaves it alone). A food that really is low still goes on as "running low".
+- Taking off a low food the app added moves it to Filtered, the same as the list's own X, so it does not come straight back.
+- New test p379 (fails on v3.10.1263). Checked with p201, p206, p210, p212, p225, p242, p243, p248, p253, p259, p266, p270, p274, p283, p284, p291, p297, p300, p373, p375, p376, p377, p378 and a rendered screenshot.
+
 ## v3.10.1263
 Open and shut sections now stay exactly as you leave them, in the shopping list and in My cupboards. Spotted on a phone (4 Nov): "wherever you leave the focus, that state should stay, the same as hide/show in the rest of the app".
 - Adding to the list (typed food, typed non-nutritional, already there) no longer opens the item's aisle. The message now names the aisle: "Added Sponges to your Asda list (Non-nutritional)".
