@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1284
+Condition-aware timing (Pete, 4 Nov: diabetes wants foods by time of day, oncology wants intake around treatment sessions and supplements).
+- The timing adviser now STARTS from the condition when you have not chosen one: type 2 diabetes starts as Diabetes team, GBM as Oncology nutrition, anything else as Coach. Your own choice is remembered and always wins.
+- "When you eat" gets an "Around treatment sessions" block when you have logged sessions in the period: average calories, protein and carbs the day before, the session day and the day after, with how many sessions and days it rests on. It is also given to the timing advice. Supplements already sit in the meals (medication-style items are left out of the timing itself).
+- Test p392. Neighbours re-run: p383, p384. Seen rendered (dark theme, phone width).
+
 ## v3.10.1283
 A "your usual" line on the Today Fasting card (Pete, 4 Nov: all of them would be useful). Under the bar: "Your usual (last 30 logged days with times): first meal 08:10, last meal 20:30. Your biggest meal holds about 52% of your protein." Newest 30 logged days only, 3+ timed days, a plain fact with no advice. No new tile, so it follows the card's own show/hide.
 - Test p391. Neighbour re-run: p63. Seen rendered (dark theme, phone width).

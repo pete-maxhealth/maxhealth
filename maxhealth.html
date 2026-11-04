@@ -6610,7 +6610,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1283'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1284'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -48002,7 +48002,25 @@ function mhWhenEatSummary(w) {
 // The "who should advise" hat is the person's own choice. The advice is generated from their own logged days, labelled Proven / Early Stage / Speculative,
 // and never sent anywhere: "Write it for my ..." only produces text to copy. Runs on the same AI route as the other reports (starter allowance or their own key).
 const MH_COACH_ROLES = [['coach', 'Coach', 'a supportive nutrition and fitness coach', 'coach'], ['pt', 'PT / sports nutritionist', 'a personal trainer and sports nutritionist focused on training and body-composition goals', 'PT'], ['dietitian', 'Dietitian', 'a registered dietitian', 'dietitian'], ['diabetes', 'Diabetes team', 'a diabetes dietitian focused on glucose-friendly meal timing', 'diabetes team'], ['oncology', 'Oncology nutrition', 'an oncology dietitian focused on intake around treatment sessions and supplements', 'oncology dietitian']];
-function mhCoachRole() { try { const r = localStorage.getItem('mh_coach_role'); return MH_COACH_ROLES.some(x => x[0] === r) ? r : 'coach'; } catch (_) { return 'coach'; } }
+// With no choice made yet, the adviser starts from the person's condition (a starting point only; their own choice is remembered and wins) (v3.10.1284).
+function mhCoachDefaultRole() { try { const c = localStorage.getItem('mh_condition') || ''; return c === 't2_diabetes' ? 'diabetes' : c === 'gbm' ? 'oncology' : 'coach'; } catch (_) { return 'coach'; } }
+function mhCoachRole() { try { const r = localStorage.getItem('mh_coach_role'); return MH_COACH_ROLES.some(x => x[0] === r) ? r : mhCoachDefaultRole(); } catch (_) { return 'coach'; } }
+// Intake the day before, the day of and the day after logged treatment sessions, from the person's own days (v3.10.1284). Null with no sessions in the period.
+function mhAroundTreatment(hist) {
+  try {
+    const log = loadTreatmentLog(), all = state.history || [], inRange = new Set((hist || []).map(d => d.date)); if (!log.length || !all.length) return null;
+    const byDate = new Map(all.map(d => [d.date, d])), sess = log.filter(x => x && x.date && inRange.has(x.date)); if (!sess.length) return null;
+    const four = sess[0].date.split('/')[2].length === 4, f2 = n => String(n).padStart(2, '0');
+    const shift = (ds, k) => { const d = parseDateStr(ds); if (!d) return ''; d.setDate(d.getDate() + k); return f2(d.getDate()) + '/' + f2(d.getMonth() + 1) + '/' + (four ? d.getFullYear() : String(d.getFullYear()).slice(2)); };
+    const rows = [['Day before', -1], ['Session day', 0], ['Day after', 1]].map(([label, k]) => {
+      const ds = sess.map(x => byDate.get(shift(x.date, k))).filter(d => d && d.totals && d.totals.kcal > 0); if (!ds.length) return null;
+      const av = f => Math.round(ds.reduce((a, d) => a + (f(d) || 0), 0) / ds.length);
+      return { label, n: ds.length, kcal: av(d => d.totals.kcal), p: av(d => d.totals.protein), c: av(d => getEffectiveCarbsForDay(d)) };
+    }).filter(Boolean);
+    return rows.length ? { sessions: sess.length, rows } : null;
+  } catch (_) { return null; }
+}
+function mhAroundTreatmentText(a) { return a ? 'Average intake around ' + a.sessions + ' logged treatment session' + (a.sessions === 1 ? '' : 's') + ': ' + a.rows.map(r => r.label + ' ' + r.kcal + ' kcal, ' + r.p + 'g protein, ' + r.c + 'g carbs (' + r.n + ' day' + (r.n === 1 ? '' : 's') + ')').join('; ') + '.' : ''; }
 function mhCoachRoleName() { return (MH_COACH_ROLES.find(x => x[0] === mhCoachRole()) || MH_COACH_ROLES[0])[3]; }
 function mhCoachSetRole(k) { try { localStorage.setItem('mh_coach_role', k); } catch (_) {} renderWhenYouEat(); }
 function mhCoachCopy() { const o = document.getElementById('wheneatCoachOut'); if (!o) return; try { navigator.clipboard.writeText(o.textContent).then(() => showToast('Copied'), () => showToast('Select the text to copy it')); } catch (_) { showToast('Select the text to copy it'); } }
@@ -48018,7 +48036,7 @@ async function mhTimingCoach(forThem) {
   const prompt = `${head}
 
 WHEN THEY EAT (from logged meal times, ${w.n} days with timed meals): ${data}
-
+${mhAroundTreatmentText(mhAroundTreatment(hist)) ? '\n' + mhAroundTreatmentText(mhAroundTreatment(hist)) + '\n' : ''}
 ${body}
 
 ${rules}`;
@@ -48068,6 +48086,7 @@ function renderWhenYouEat() {
       <div style="background:var(--surface2);border-radius:8px;padding:10px;"><div style="font-size:9px;color:#4d9fff;font-family:'Space Mono',monospace;margin-bottom:6px;">EATING OCCASIONS</div><div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:#4d9fff;">${r1(w.perDay)}</div><div style="font-size:10px;color:var(--text3);">a day (a new one after an hour apart)</div></div>
       <div style="background:var(--surface2);border-radius:8px;padding:10px;"><div style="font-size:9px;color:#4d9fff;font-family:'Space Mono',monospace;margin-bottom:6px;">PROTEIN A MEAL</div><div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:#4d9fff;">${Math.round(w.avgP)} g</div><div style="font-size:10px;color:var(--text3);">${w.maxShare != null ? 'biggest meal is ' + Math.round(w.maxShare * 100) + '% of the day' : ''}</div></div>
     </div>
+    ${(() => { const a = mhAroundTreatment(getReportHistory()); return a ? '<div id="wheneat-around" style="margin-top:12px;"><div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">AROUND TREATMENT SESSIONS (' + a.sessions + ')</div>' + a.rows.map(r => '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text2);padding:4px 0;border-bottom:1px solid var(--border);"><span>' + r.label + '</span><span>' + r.kcal + ' kcal · ' + r.p + 'g protein · ' + r.c + 'g carbs</span></div>').join('') + '</div>' : ''; })()}
     <div id="wheneat-coach" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
       <div style="font-size:12px;color:var(--text2);font-weight:700;margin-bottom:6px;">Timing advice: who should advise?</div>
       <div id="wheneatRoles" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${MH_COACH_ROLES.map(r => `<span class="hist-filter-btn${r[0] === mhCoachRole() ? ' active' : ''}" data-role="${r[0]}" onclick="mhCoachSetRole('${r[0]}')">${r[1]}</span>`).join('')}</div>
