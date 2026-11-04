@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1286
+- Recipe steps now follow the ingredients as you change them, in the builder and in Cook Mode. Swap butter for ghee and "melt the butter" becomes "melt the ghee" in every step (toast with Undo). Change an amount and the amount quoted in the step follows after a short pause ("200g butter" to "300g butter"). Servings in Cook Mode scale the amounts in the step text, the read-aloud and the timer wording too. Removing an ingredient flags the steps that mention it (never deletes them), with Undo and "keep as is".
+- Only wording that clearly belongs to the ingredient changes: quantities need a unit or count beside the name, times ("2 minutes") are never touched, and a short name only counts when no other ingredient shares it.
+- Builder Servings is still the per-serving divisor and does not rescale ingredients. Placeholder resolution and fuzzy re-match do not rewrite steps.
+- New test p393.
+
 ## v3.10.1285
 Docs and search for the meal-timing features (new-feature checklist). User guide paragraph "More from your meal times" in both guides; the "When you eat" search entry now also finds the Meal times card, Compare Metrics series, Statistics measures, treatment sessions and the advisers. Checked: every demo persona has 30 days of timed meals, and Maria (GBM) has logged treatment sessions, so the timing features and Around treatment sessions work in the demo; John (type 2 diabetes) starts as Diabetes team.
 - Not done: a tour floor and short videos for these features (see BACKLOG).

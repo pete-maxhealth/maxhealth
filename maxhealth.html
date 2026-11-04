@@ -6610,7 +6610,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1285'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1286'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -8260,19 +8260,38 @@ function findLibrarySubstitutes(name, excludeName, limit = 3) {
 // a match, so the person always makes the final call themselves. Ingredient
 // amount stays the same; macros recalculate against the chosen item's own
 // values, same math as addLibItemToRecipe.
-function _substituteRecipeIngredient(ing, onSwapped, searchOnlineFallback) {
+function _substituteRecipeIngredient(ing, onSwapped, searchOnlineFallback, ctx) {
   if (!ing) return;
   const amount = ing.amount || 100;
   _openSubstitutePicker(ing.name, (f) => {
     const oldName = ing.name;
+    const before = JSON.parse(JSON.stringify(ing));
     const scaled = _libItemToScalableIngredient(f, amount); // same amount, preserved - portion size unchanged
+    // Steps follow the swap (v3.10.1286): "melt the butter" becomes "melt the ghee". ctx = { ings, steps, after } for the builder or Cook Mode.
+    let changed = 0, snap = null;
+    if (ctx && ctx.steps && ctx.ings) {
+      const names = ctx.ings.map(i => i.name);
+      snap = ctx.steps.map(st => (typeof st === 'string' ? st : st.text));
+      ctx.steps.forEach((st, k) => {
+        const t = typeof st === 'string' ? st : st.text, r = mhStepRenameText(t, oldName, f.name, names);
+        if (r.n) { changed++; if (typeof st === 'string') ctx.steps[k] = r.text; else { st.text = r.text; st._upd = true; } }
+      });
+    }
     Object.assign(ing, scaled);
     // Tags the swap so it's visibly traceable rather than looking identical
     // to having always been this ingredient - shows as a small note in the
     // ingredient row (both builder and Cook Mode) until removed/re-edited.
     ing._substitutedFrom = oldName; mhSwapRemember(oldName, f.name);
-    showToast(`Swapped in "${f.name}" ✓`);
+    if (ctx && ctx.base) ing._stepAmt = parseFloat(ing.amount) || ing._stepAmt;
+    const undo = () => {
+      Object.keys(ing).forEach(k => delete ing[k]); Object.assign(ing, before);
+      if (snap && ctx) ctx.steps.forEach((st, k) => { if (typeof st === 'string') ctx.steps[k] = snap[k]; else { st.text = snap[k]; delete st._upd; } });
+      onSwapped(); if (ctx && ctx.after) ctx.after();
+    };
+    if (changed) showToast(`Swapped in "${f.name}" · ${changed} step${changed === 1 ? '' : 's'} updated`, 'Undo', undo, 6000);
+    else showToast(`Swapped in "${f.name}" ✓`, snap ? 'Undo' : undefined, snap ? undo : undefined, 6000);
     onSwapped();
+    if (ctx && ctx.after) ctx.after();
   }, searchOnlineFallback);
 }
 
@@ -8282,16 +8301,17 @@ function substituteBuilderIngredient(i) {
   // needs a real _recipeIngredients index, which Cook Mode ingredients don't
   // reliably map to (they may have been loaded from a saved recipe, a
   // separate object entirely from the live builder array).
+  mhStepsLiveFlush();
   _substituteRecipeIngredient(_recipeIngredients[i], () => {
     renderRecipeIngredients();
     updateRecipeTotals();
-  }, (q, ai) => openRecipeIngredientSearch(i, q, ai));
+  }, (q, ai) => openRecipeIngredientSearch(i, q, ai), { ings: _recipeIngredients, steps: _recipeSteps, base: true, after: () => { renderRecipeSteps(); mhStepFlashSoon(); try { _saveRecipeDraft(); } catch (_) {} } });
 }
 
 function substituteCookIngredient(i) {
   _substituteRecipeIngredient(_cookRecipe?.ingredients?.[i], () => {
     renderCookModeIngredients();
-  });
+  }, undefined, { ings: _cookRecipe?.ingredients || [], steps: _cookRecipe?.steps || [], after: () => { try { _renderCookStep(); } catch (_) {} } });
 }
 
 function jumpToLibraryLetter(letter) {
@@ -34992,6 +35012,7 @@ function _maybeOfferRecipeDraftRestore() {
     document.getElementById('recipeName').value = draft.name || '';
     document.getElementById('recipeServings').value = draft.servings || 1;
     _recipeIngredients = draft.ingredients || [];
+    try { setTimeout(mhStepsBaseline, 0); } catch (_) {}
     _recipeSteps = draft.steps || [];
     renderRecipeIngredients();
     renderRecipeSteps();
@@ -35107,6 +35128,7 @@ function openRecipeBuilder(editId = null) {
 
   document.getElementById('recipeAddForm').style.display = 'none';
   document.getElementById('recipeBuilderModal').style.display = 'flex';
+  mhStepsBaseline();
   renderRecipeIngredients();
   renderRecipeSteps();
   updateRecipeTotals();
@@ -35843,6 +35865,7 @@ function addLibItemToRecipe(idx) {
   const f = lib[idx];
   if (!f) return;
   _recipeIngredients.push(_libItemToScalableIngredient(f));
+  mhStepsBaseline();
   closeRecipeLibPicker();
   renderRecipeIngredients();
   updateRecipeTotals();
@@ -35975,7 +35998,9 @@ function scaleRecipeIngredient(idx, gramsStr) {
   if (!ing) return;
   const grams = parseFloat(gramsStr) || 0;
   if (grams <= 0) return;
+  if (!(ing._stepAmt > 0)) ing._stepAmt = parseFloat(ing.amount) || grams;   // what the steps reflect right now
   ing.amount = grams;
+  mhStepsLiveSoon();
   const scaled = getScaledIngredient(ing);
   ing.kcal = scaled.kcal; ing.protein = scaled.protein; ing.fat = scaled.fat; ing.carbs = scaled.carbs; ing.fibre = scaled.fibre; ing.polyols = scaled.polyols;
   // Update macros display inline without full re-render
@@ -35984,11 +36009,85 @@ function scaleRecipeIngredient(idx, gramsStr) {
   updateRecipeTotals();
 }
 
-function removeRecipeIngredient(idx) {
-  _recipeIngredients.splice(idx, 1);
-  renderRecipeIngredients();
-  updateRecipeTotals();
+// ─── RECIPE STEPS FOLLOW THE INGREDIENTS (v3.10.1286) ─────────────────────────────────────────────────────────────────────
+// Steps are free text, so they used to keep saying "melt the butter" after a swap, or "add 200g flour" after the amount changed. These helpers rewrite
+// what a step SAYS about an ingredient (its name and any amount quoted beside it) when that ingredient is swapped, rescaled or removed, in the builder and
+// in Cook Mode. Only wording that clearly belongs to the ingredient is touched: a quantity needs a unit (or a size word) right beside the name, and a
+// short name ("butter", "oil") only counts when no other ingredient in the recipe shares it. Nothing is deleted; removed ingredients flag the steps instead.
+const MH_STEP_SKIP = new Set(['and', 'with', 'the', 'fresh', 'dried', 'large', 'small', 'medium', 'whole', 'raw', 'cooked', 'plain', 'free', 'range', 'organic', 'extra', 'virgin', 'light', 'dark', 'low', 'fat', 'full', 'reduced', 'unsalted', 'salted', 'sweet', 'frozen', 'tinned', 'canned', 'sliced', 'diced', 'chopped', 'grated', 'minced', 'ground', 'fillet', 'fillets', 'pack', 'mixed']);
+function mhStepClean(name) { return String(name || '').replace(/^\s*⚠️\s*/, '').replace(/\([^)]*\)/g, ' ').replace(/[,;].*$/, ' ').replace(/\b\d+(?:\.\d+)?\s?(?:g|kg|ml|l|cl|pk|pack|x|%)(?![a-z])/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function mhStepEsc(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+// What a step might call this ingredient, most specific first: [{ p: phrase, kind: 'full'|'first2'|'last2'|'core' }]. A shorter phrase is dropped if another ingredient also contains it.
+function mhStepPhrases(name, allNames) {
+  const c = mhStepClean(name), w = c.split(' ').filter(Boolean); if (!c) return [];
+  const out = [{ p: c, kind: 'full' }], others = (allNames || []).filter(n => mhStepClean(n) !== c).map(mhStepClean);
+  const uniq = ph => !others.some(o => new RegExp('\\b' + mhStepEsc(ph).replace(/ /g, '\\s+') + '(?:s|es)?\\b').test(o));
+  const add = (ph, kind) => { if (ph && ph !== c && !out.some(x => x.p === ph) && uniq(ph)) out.push({ p: ph, kind }); };
+  if (w.length > 2) { add(w.slice(0, 2).join(' '), 'first2'); add(w.slice(-2).join(' '), 'last2'); }
+  const core = w.slice().reverse().find(x => x.length >= 3 && !MH_STEP_SKIP.has(x)); if (core && w.length > 1) add(core, 'core');
+  else if (w.length === 1 && w[0].length >= 3 && !MH_STEP_SKIP.has(w[0])) { /* the full phrase already is the single word */ }
+  return out.sort((a, b) => b.p.length - a.p.length);
 }
+function mhStepAlt(phrases) { return '(?:' + phrases.map(x => mhStepEsc(x.p).replace(/ /g, '\\s+')).join('|') + ')(?:s|es)?'; }
+function mhStepFmtNum(v, unit) { if (unit && /^(g|ml)$/i.test(unit) && v >= 10) return String(Math.round(v)); if (v >= 10) return String(Math.round(v)); const r = Math.round(v * 10) / 10; return String(r); }
+// Scale the amounts quoted next to this ingredient by ratio. Returns { text, n } (n = how many numbers were changed).
+function mhStepScaleText(text, ing, allNames, ratio) {
+  if (!text || !ing || !(ratio > 0) || Math.abs(ratio - 1) < 0.005) return { text, n: 0 };
+  const ph = mhStepPhrases(ing.name, allNames); if (!ph.length) return { text, n: 0 };
+  const P = mhStepAlt(ph), U = '(?:kg|g|ml|l|tbsp|tsp|oz|lb|cups?)', num = '(\\d+(?:\\.\\d+)?)'; let n = 0, t = text;
+  t = t.replace(new RegExp(num + '(\\s?' + U + ')\\b((?:\\s+[A-Za-z-]+){0,3}\\s+)(' + P + ')\\b', 'gi'), (m, a, u, mid, nm) => { n++; return mhStepFmtNum(parseFloat(a) * ratio, u.trim()) + u + mid + nm; });
+  t = t.replace(new RegExp('(' + P + ')\\b(\\s*\\(\\s*)' + num + '(\\s?' + U + ')(\\s*\\))', 'gi'), (m, nm, o, a, u, c) => { n++; return nm + o + mhStepFmtNum(parseFloat(a) * ratio, u.trim()) + u + c; });
+  t = t.replace(new RegExp('(^|[^\\d.])' + num + '(\\s+(?:(?:large|medium|small|big|ripe|whole|fresh)\\s+){0,2})(' + P + ')\\b', 'gi'), (m, pre, a, mid, nm) => { n++; return pre + String(Math.max(1, Math.round(parseFloat(a) * ratio))) + mid + nm; });
+  return { text: t, n };
+}
+// Rename this ingredient inside a step: what it was called becomes what it is now called.
+function mhStepRenameText(text, oldName, newName, allNames) {
+  const ph = mhStepPhrases(oldName, allNames); if (!ph.length || !text) return { text, n: 0 };
+  const nc = mhStepClean(newName), nw = nc.split(' ').filter(Boolean); if (!nc) return { text, n: 0 };
+  const core = nw.slice().reverse().find(x => x.length >= 3 && !MH_STEP_SKIP.has(x)) || nw[nw.length - 1];
+  const rep = k => k === 'full' ? nc : k === 'first2' ? nw.slice(0, 2).join(' ') : k === 'last2' ? nw.slice(-2).join(' ') : core;
+  let n = 0;
+  const t = text.replace(new RegExp('\\b(' + mhStepAlt(ph) + ')\\b', 'gi'), (m) => {
+    const low = m.toLowerCase().replace(/\s+/g, ' '), hit = ph.find(x => low === x.p || low === x.p + 's' || low === x.p + 'es'); if (!hit) return m;
+    let r = rep(hit.kind); if (!r || r === low) return m; n++;
+    if (/s$/.test(low) && !/s$/.test(hit.p) && !/s$/.test(r)) r += 's';
+    return /^[A-Z]/.test(m) ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+  });
+  return { text: t, n };
+}
+function mhStepMentions(text, name, allNames) { const ph = mhStepPhrases(name, allNames); return !!(ph.length && text && new RegExp('\\b' + mhStepAlt(ph) + '\\b', 'i').test(text)); }
+function mhStepFlashSoon() { try { clearTimeout(window._mhStepFlash); window._mhStepFlash = setTimeout(() => { _recipeSteps.forEach(s => { delete s._upd; }); try { renderRecipeSteps(); } catch (_) {} }, 4000); } catch (_) {} }
+// Amounts: ratio against what the steps currently reflect (ing._stepAmt), after a short pause so typing "3", "30", "300" settles once.
+function mhStepsLiveSoon() { try { clearTimeout(window._mhStepLive); window._mhStepLive = setTimeout(mhStepsLiveFlush, 350); } catch (_) {} }
+function mhStepsLiveFlush() {
+  try { clearTimeout(window._mhStepLive); } catch (_) {}
+  const names = _recipeIngredients.map(i => i.name); let total = 0;
+  _recipeIngredients.forEach(ing => {
+    const was = ing._stepAmt, now = parseFloat(ing.amount); if (!(was > 0) || !(now > 0) || was === now) { if (now > 0) ing._stepAmt = now; return; }
+    _recipeSteps.forEach(st => { const r = mhStepScaleText(st.text, ing, names, now / was); if (r.n) { st.text = r.text; st._upd = true; total += r.n; } });
+    ing._stepAmt = now;
+  });
+  if (total) { renderRecipeSteps(); mhStepFlashSoon(); try { _saveRecipeDraft(); } catch (_) {} }
+}
+function mhStepsBaseline() { _recipeIngredients.forEach(i => { if (parseFloat(i.amount) > 0) i._stepAmt = parseFloat(i.amount); }); }
+
+function removeRecipeIngredient(idx) {
+  const ing = _recipeIngredients[idx]; if (!ing) return;
+  const names = _recipeIngredients.map(i => i.name); mhStepsLiveFlush();
+  _recipeIngredients.splice(idx, 1);
+  // steps that talk about it are flagged, never deleted (v3.10.1286)
+  const hit = _recipeSteps.filter(st => mhStepMentions(st.text, ing.name, names));
+  const label = mhStepClean(ing.name) || 'ingredient'; hit.forEach(st => { st.flag = 'Mentions ' + label + ', which you removed.'; st._flagFor = ing.name; });
+  renderRecipeIngredients();
+  renderRecipeSteps();
+  updateRecipeTotals();
+  try { _saveRecipeDraft(); } catch (_) {}
+  if (hit.length) showToast('Removed ' + label + ' · ' + hit.length + ' step' + (hit.length === 1 ? ' mentions' : 's mention') + ' it', 'Undo', () => {
+    _recipeIngredients.splice(Math.min(idx, _recipeIngredients.length), 0, ing); hit.forEach(st => { delete st.flag; delete st._flagFor; });
+    renderRecipeIngredients(); renderRecipeSteps(); updateRecipeTotals(); try { _saveRecipeDraft(); } catch (_) {}
+  }, 7000);
+}
+function dismissRecipeStepFlag(i) { const st = _recipeSteps[i]; if (!st) return; delete st.flag; delete st._flagFor; renderRecipeSteps(); try { _saveRecipeDraft(); } catch (_) {} }
 
 function renderRecipeIngredients() {
   const el = document.getElementById('recipeIngredientsList');
@@ -36080,7 +36179,7 @@ function renderRecipeSteps() {
       return `
     <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="width:22px;height:22px;border-radius:50%;background:var(--surface2);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;font-family:Space Mono,monospace;">${i+1}</div>
-      <div style="flex:1;font-size:13px;color:var(--text2);line-height:1.5;cursor:pointer;" onclick="editRecipeStep(${i})">${s.text}</div>
+      <div style="flex:1;font-size:13px;color:var(--text2);line-height:1.5;cursor:pointer;" onclick="editRecipeStep(${i})">${s.text}${s._upd ? ' <span class="mh-step-upd" style="font-size:10px;color:var(--green);font-weight:700;">✓ updated</span>' : ''}${s.flag ? '<div class="mh-step-flag" style="font-size:11px;color:var(--yellow);margin-top:3px;">⚠ ' + s.flag + ' Tap to fix it, or <span style="text-decoration:underline;" onclick="event.stopPropagation();dismissRecipeStepFlag(' + i + ')">keep as is</span>.</div>' : ''}</div>
       <div style="display:flex;flex-direction:column;flex-shrink:0;">
         <span onclick="moveRecipeStep(${i},-1)" style="color:${i===0 ? 'var(--border)' : 'var(--text3)'};cursor:${i===0 ? 'default' : 'pointer'};font-size:13px;padding:2px 6px;line-height:1.3;">▲</span>
         <span onclick="moveRecipeStep(${i},1)" style="color:${i===_recipeSteps.length-1 ? 'var(--border)' : 'var(--text3)'};cursor:${i===_recipeSteps.length-1 ? 'default' : 'pointer'};font-size:13px;padding:2px 6px;line-height:1.3;">▼</span>
@@ -36114,7 +36213,7 @@ function editRecipeStep(i) {
   const step = _recipeSteps[i];
   if (!step) return;
   appPrompt('Edit step', 'Step text', (val) => {
-    step.text = val.trim();
+    step.text = val.trim(); delete step.flag; delete step._flagFor; delete step._upd;
     renderRecipeSteps();
   }, step.text);
 }
@@ -36314,6 +36413,7 @@ function openCookMode(recipeId) {
 // you could only cook a recipe that was already saved. Now you can
 // test-read steps while still mid-edit, exactly the same interface either way.
 function openCookModeFromDraft() {
+  mhStepsLiveFlush();
   if (!_recipeSteps.length) { showToast('Add at least one step first'); return; }
   _openCookModeForRecipe({
     name: document.getElementById('recipeName').value.trim() || 'Untitled recipe',
@@ -36389,11 +36489,20 @@ function toggleCookModeIngredients() {
   label.textContent = show ? '(tap to hide)' : '(tap to show)';
 }
 
+// Step wording as it should read now: amounts quoted beside each ingredient follow the servings (v3.10.1286).
+function _cookStepText(i) {
+  const raw = _cookRecipe?.steps?.[i]; let t = (typeof raw === 'string' ? raw : raw?.text) || '';
+  const ratio = (_cookCurrentServings && _cookOriginalServings) ? _cookCurrentServings / _cookOriginalServings : 1;
+  if (!t || Math.abs(ratio - 1) < 0.005) return t;
+  const ings = _cookRecipe.ingredients || [], names = ings.map(x => x.name);
+  ings.forEach(ing => { t = mhStepScaleText(t, ing, names, ratio).text; });
+  return t;
+}
 function _renderCookStep() {
   if (!_cookRecipe) return;
   const steps = _cookRecipe.steps;
   document.getElementById('cookModeStepCounter').textContent = `Step ${_cookStepIndex + 1} of ${steps.length}`;
-  document.getElementById('cookModeStepText').textContent = steps[_cookStepIndex]?.text || '';
+  document.getElementById('cookModeStepText').textContent = _cookStepText(_cookStepIndex);
 }
 
 function cookModeTogglePlayPause() {
@@ -36496,6 +36605,7 @@ function cookModeRescale(newServings) {
   const ratio = newServings / _cookOriginalServings;
   document.getElementById('cookModeServingsLabel').textContent = `${newServings} serving${newServings === 1 ? '' : 's'}${ratio !== 1 ? ` (×${ratio.toFixed(2).replace(/\.?0+$/,'')})` : ''}`;
   renderCookModeIngredients();
+  try { _renderCookStep(); } catch (_) {}
   const text = `Scaled to ${newServings} serving${newServings === 1 ? '' : 's'}.`;
   if (!_cookReadAloud || !('speechSynthesis' in window)) { _setCookMicStatus(text); return; }
   window.speechSynthesis.cancel();
@@ -36537,7 +36647,7 @@ function _cookFormatTimer(totalSeconds) {
 function cookModeStartTimer(seconds = null) {
   if (!_cookRecipe) return;
   if (seconds == null) {
-    seconds = _parseDurationFromText(_cookRecipe.steps[_cookStepIndex]?.text || '');
+    seconds = _parseDurationFromText(_cookStepText(_cookStepIndex));
     if (seconds == null) {
       _setCookMicStatus('Couldn\'t find a time in this step — try "timer for 10 minutes" instead.');
       return;
@@ -36617,7 +36727,7 @@ function _clearCookAutoAdvance() {
 function _cookSpeakCurrentStep() {
   if (!_cookRecipe) return;
   _clearCookAutoAdvance(); // a fresh read always supersedes whatever advance was previously queued
-  const text = _cookRecipe.steps[_cookStepIndex]?.text || '';
+  const text = _cookStepText(_cookStepIndex);
   if (!_cookReadAloud || !('speechSynthesis' in window)) {
     _setCookMicStatus('Say "next", "back", "pause", or "end" any time.');
     return;
@@ -37038,6 +37148,7 @@ function migrateMealsToRecipes() {
   );
 }
 function saveRecipe() {
+  mhStepsLiveFlush();
   if (_recipeVoiceActive) stopRecipeVoiceInput(null);
   if (_recipeStepVoiceActive) stopRecipeStepVoiceInput(null, false);
   const name = document.getElementById('recipeName').value.trim();

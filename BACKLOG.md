@@ -166,3 +166,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Videos still wanted: a short clip on typing part of a name (like "pep" or "nick") and picking from the library; more low-typing demos (Pete's 3 Nov priority).
 - [ ] Meal-timing series (v3.10.1278) are Compare Metrics overlays only. Trends card DONE v3.10.1282. Still to check: demo-persona coverage, videos.
 - [ ] Timing features (v3.10.1277 to 1285): demos, user guide and search are done. Still to do: a tour floor and a short or two (When you eat card with the adviser; choosing what a carer sees), playlist entries, then set any replaced versions Private.
+
+- Recipe steps follow ingredients (v3.10.1286): not yet covered - the AI recipe bubble method text, placeholder resolution and fuzzy re-match do not rewrite steps; tour floor/clip for this feature still to do.
