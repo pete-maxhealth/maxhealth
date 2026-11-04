@@ -32,6 +32,8 @@ with fresh_server() as root, sync_playwright() as pw:
             ev("(() => { const b = [...document.querySelectorAll('#onboardingOverlay button,#onboardingOverlay [onclick]')].find(e => /^No set pattern/.test(e.innerText.trim())); if (b) b.click(); })()")
         ev(CLICK, ['NEXT', 'GET STARTED', 'START TRACKING']); page.wait_for_timeout(500)
     else: f.add('BUG', 'onboarding never closed')
+    # Finishing onboarding can reload the page a moment later; let that settle so the next evaluate does not hit a destroyed context (intermittent, 4 Nov 2026).
+    page.wait_for_timeout(2500); page.wait_for_load_state('load')
     cond, goal = ev("localStorage.getItem('mh_condition')"), ev("localStorage.getItem('mh_goal')")
     tk, tp, tc = (int(ev(f"localStorage.getItem('mh_target_{k}')") or 0) for k in ('kcal', 'protein', 'carbs'))
     print('   goal-ish keys after onboarding:', ev("Object.keys(localStorage).filter(k=>/goal/i.test(k)).map(k=>k+'='+localStorage.getItem(k))"), ev("typeof state.goal!=='undefined'?state.goal:'(no state.goal)'"))

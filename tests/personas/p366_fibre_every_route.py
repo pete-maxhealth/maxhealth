@@ -4,6 +4,13 @@ the Missed day form (manual); the save-to-library dialog; a planned meal eaten (
 A figure that was never recorded stays 'not recorded' (shown as a dash when copied, left blank when pasted): never guessed.
 Invented data."""
 import sys, json; sys.path.insert(0, __file__.rsplit('/', 1)[0])
+from datetime import date, timedelta
+# Dates are relative to today (1, 2, 3 days back) so the test does not age out of History's default period (stale since 4 Nov 2026).
+_d1, _d2, _d3 = (date.today() - timedelta(days=n) for n in (1, 2, 3))
+_DATES = {'30/10/26': _d1.strftime('%d/%m/%y'), '29/10/26': _d2.strftime('%d/%m/%y'), '28/10/26': _d3.strftime('%d/%m/%y'), '2026-10-30': _d1.isoformat()}
+def _rel(s):
+    for k, v in _DATES.items(): s = s.replace(k, v)
+    return s
 from harness import *
 from playwright.sync_api import sync_playwright
 f = Findings()
@@ -11,7 +18,8 @@ def setv(i, v): ev("(a => { const e = document.getElementById(a[0]); e.value = a
 def chk(cond, msg):
     if not cond: f.add('BUG', msg)
 with fresh_server() as root, sync_playwright() as pw:
-    page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); ev = page.evaluate
+    page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); _ev0 = page.evaluate
+    ev = lambda s, *a: _ev0(_rel(s), *a)
     page.on('pageerror', lambda e: f.add('JS-exception', str(e)[:200])); page.on('dialog', lambda d: d.accept())
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1200)
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay').style.display='none'"); page.reload(); page.wait_for_timeout(1200)
