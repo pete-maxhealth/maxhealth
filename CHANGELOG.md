@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1280
+The weekly summary says when you ate (Pete, 4 Nov: where else could the timing data be useful). A plain line under the average tiles and in the copied text: first and last meal, eating occasions a day, protein before noon, carbs after 5pm, from days with timed meals. Shown only with 3 or more such days; no food names. The AI-written summaries and report narratives already carry the timing figures (v3.10.1272).
+- Test p389. Neighbours re-run: p178, p183. Seen rendered (dark theme, phone width). Printed Clinical/Custom layouts not changed.
+
 ## v3.10.1279
 More uses for meal timing (Pete, 4 Nov: where else could it be useful, a few prompts, and statistics).
 - Statistics: five new measures for Individual days, Weeks, Months and Days of the week: Eating occasions, First meal, Last meal (shown as clock times; a Total of times becomes an Average), Protein before noon, Carbs after 5pm.
