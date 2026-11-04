@@ -6566,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1258'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1259'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -50791,11 +50791,24 @@ function registerServiceWorker() {
     // browser feels like it.
     reg.update().catch(() => {});
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      if (document.visibilityState === 'visible') { reg.update().catch(() => {}); if (Date.now() - _servedCheckAt > 60000) { _servedCheckAt = Date.now(); mhServedPageNewer(); } }
     });
   }).catch(err => console.warn('SW registration failed (non-fatal):', err));
 }
 
+// Is the copy this phone's server hands out NEWER than the page that is open right now? sw.js almost never changes, so reg.update() cannot see a new app
+// page: the open page stayed old until you pulled to refresh (4 Nov: "it updates with the refresh, not the button"). This reads the served page's own
+// version line (network only, no cache) and shows the same "Reload now" banner when it is ahead (v3.10.1258). Resolves true when the banner is showing.
+let _servedCheckAt = 0;
+async function mhServedPageNewer() {
+  try {
+    const r = await fetch(window.location.pathname, { cache: 'no-store' });
+    if (!r || !r.ok) return false;
+    const m = /const APP_VERSION = '(v\d+\.\d+\.\d+)'/.exec(await r.text());
+    if (m && mhVerNum(m[1]) > mhVerNum(APP_VERSION)) { showUpdateAvailableBanner(null); return true; }
+  } catch (_) {}
+  return !!document.getElementById('swUpdateBanner');
+}
 // 01/10/26 — Settings > About > "Check for updates" button. The automatic
 // checks (on load, on tab-focus) already cover the common case; this exists
 // for the moment someone specifically wants to know right now, e.g. right
@@ -50827,8 +50840,9 @@ function manualCheckForUpdate() {
     // app supports — 500ms is just a safety margin, not a real wait for
     // anything slow, so this never makes a normal "up to date" check feel
     // sluggish.
-    setTimeout(() => {
+    setTimeout(async () => {
       clearInterval(watcherInterval);
+      if (!bannerShown && !document.getElementById('swUpdateBanner')) { await mhServedPageNewer(); }
       if (btn) { btn.disabled = false; btn.textContent = '🔄 CHECK FOR UPDATES'; }
       if (!bannerShown && !document.getElementById('swUpdateBanner')) {
         mhBehindCheck(true).then(() => { if (mhBehindState().behind) showToast('This phone is behind ' + mhBehindState().latest, 'Update now', () => mhRestartDialog('update'), 10000); else showToast("You're on the latest version ✓"); });
@@ -50895,7 +50909,7 @@ function showUpdateAvailableBanner(newWorker) {
     // doesn't, the reload below still works, it just relies on the browser
     // naturally activating the new worker once nothing controls the old
     // one anymore, same as it would without this banner at all.
-    newWorker.postMessage({ action: 'skipWaiting' });
+    try { if (newWorker) newWorker.postMessage({ action: 'skipWaiting' }); } catch (_) {}
     window.location.reload();
   };
   document.body.appendChild(banner);

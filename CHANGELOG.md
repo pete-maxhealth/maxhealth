@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1259
+Check for updates now finds a new version without a refresh first. Spotted on a phone (4 Nov): the button did nothing, but pulling to refresh updated the app.
+- The old check only asked whether sw.js had changed, and sw.js almost never does, so it could not see a new app page. The button now also reads the version line of the page this phone's server is handing out, and shows the same "A new version is ready, Reload now" banner when it is newer.
+- Coming back to the app (switching back to it, or waking the phone) does the same check on its own, at most once a minute.
+- "You're on the latest version" and "This phone is behind" messages are unchanged, and only appear when the served page is not newer.
+- New test p374 (up to date; newer page found by the button; Reload now lands on the new version; coming back to the app); it fails on v3.10.1258 and passes now. Checked with p74, p269, p355, p43, p62, p346.
+
 ## v3.10.1258
 Adding a non-nutritional item no longer throws you off the Add to the list card. Spotted on a phone (4 Nov): the new item lands in My list above the card, so the card was pushed away and the screen jumped up towards the list.
 - The shelf "Add", the Regular star and the typed Add (Add to the list, Non-nutritional) now keep the card exactly where it was on the screen, so you can add several in a row. Typed non-nutritional Add no longer scrolls to the list; typed food Add still opens its aisle and shows the item as before.
