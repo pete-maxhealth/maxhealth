@@ -6580,7 +6580,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1277'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1278'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -42237,6 +42237,12 @@ const DRILL_CONFIG = {
   // v3.10.930: fasting, measured from logged meal times (see mhFastingMap)
   fast_h:     { title: 'Overnight fast',  unit: 'h', color: '#4d9fff', icon: '⏱', field: '_fastH',   ref: null, refLabel: '' },
   eat_window: { title: 'Eating window',   unit: 'h', color: '#818cf8', icon: '🍽', field: '_windowH', ref: null, refLabel: '' },
+  // v3.10.1278: meal timing, from the times on logged meals (same source as Reports > When you eat; approximate times and medication items left out)
+  meal_n:     { title: 'Eating occasions', unit: '', color: '#818cf8', icon: '🍽', field: '_mealN', ref: null, refLabel: '' },
+  meal_first: { title: 'First meal (hour of day)', unit: 'h', color: '#60a5fa', icon: '🌅', field: '_mealFirst', ref: null, refLabel: '' },
+  meal_last:  { title: 'Last meal (hour of day)', unit: 'h', color: '#a78bfa', icon: '🌙', field: '_mealLast', ref: null, refLabel: '' },
+  am_protein: { title: 'Protein before noon', unit: 'g', color: '#34d399', icon: '🥚', field: '_amProtein', ref: null, refLabel: '' },
+  eve_carbs:  { title: 'Carbs after 5pm', unit: 'g', color: '#fbbf24', icon: '🌆', field: '_eveCarbs', ref: null, refLabel: '' },
   gki:        { title: 'GKI (Glucose Ketone Index)', unit: '', color: '#f472b6', icon: '🩸', field: 'gki', ref: [0,2], refLabel: 'Therapeutic ketosis target', lowerIsBetter: true },
 };
 // Lab markers registered as real DRILL_CONFIG entries (29/09/2026) — real
@@ -42626,6 +42632,11 @@ function getDrillData(metric, period) {
       val = mhExerciseDay(d).res.volumeKg;
     } else if (metric === 'exercise_kcal') {
       val = (d.exercises || []).reduce((s, e) => s + (parseFloat(e.kcal) || 0), 0);
+    } else if (metric === 'meal_n' || metric === 'meal_first' || metric === 'meal_last' || metric === 'am_protein' || metric === 'eve_carbs') {
+      const rows = mhWhenEatDayRows(d), r1 = x => Math.round(x * 10) / 10;
+      val = !rows.length ? null : metric === 'meal_n' ? rows.reduce((n, r, i) => n + (!i || r.m - rows[i - 1].m >= 60 ? 1 : 0), 0)
+        : metric === 'meal_first' ? r1(rows[0].m / 60) : metric === 'meal_last' ? r1(rows[rows.length - 1].m / 60)
+        : metric === 'am_protein' ? Math.round(rows.filter(r => r.m < 720).reduce((a, r) => a + r.p, 0)) : Math.round(rows.filter(r => r.m >= 1020).reduce((a, r) => a + r.c, 0));
     } else if (metric === 'fast_h' || metric === 'eat_window') {
       const r = (window._mhFastMapForDrill || (window._mhFastMapForDrill = mhFastingMap())).get(d.date);
       val = r ? (metric === 'fast_h' ? r.fastH : r.windowH) : null;
@@ -42877,7 +42888,7 @@ const MM_METRIC_GROUPS = [
   { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
   { label: 'Exercise', match: m => ['steps', 'distance', 'exercise_kcal', 'exercise_min', 'res_volume', 'active_cal'].includes(m.key) },
   { label: 'Lab Results', match: m => m.isLabMarker },
-  { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water', 'fast_h', 'eat_window'].includes(m.key) },
+  { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water', 'fast_h', 'eat_window', 'meal_n', 'meal_first', 'meal_last', 'am_protein', 'eve_carbs'].includes(m.key) },
   { label: 'Symptoms', match: m => m.isSymptom },
   { label: 'Tags', match: m => m.isTag },
   { label: 'Treatment', match: m => m.isTreatment },
@@ -48306,6 +48317,7 @@ function mhCompareMetricsHtml() {
     ['Nutrition', ['calories','protein','carbs','fat','ketosis','water','gki']],
     ['Activity and sleep', ['steps','distance','sleep','hr','hrv','spo2','exercise_kcal','exercise_min','res_volume','active_cal']],
     ['Fasting', ['fast_h','eat_window']],
+    ['Meal timing', ['meal_n','meal_first','meal_last','am_protein','eve_carbs']],
   ];
   const all = Object.keys(DRILL_CONFIG);
   const labs = all.filter(k => DRILL_CONFIG[k].isLabMarker);

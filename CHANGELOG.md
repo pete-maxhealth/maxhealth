@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1278
+Meal timing in Compare Metrics (Pete, 4 Nov: could the extra nuggets feed into the multiple metrics graph?). Five new series in the Nutrition group, taken from the times on logged meals (same rules as Reports > When you eat: approximate times and medication items left out): Eating occasions, First meal (hour of day), Last meal (hour of day), Protein before noon, Carbs after 5pm. They also appear in the Treatment sessions metric picker under "Meal timing", so they can be compared around treatment.
+- Overlay only for now: no Trends cards (see BACKLOG). Test p387. Neighbours re-run: p63, p327, p107. Seen rendered (picker, dark theme).
+
 ## v3.10.1277
 You choose what a carer or clinician link shows (Pete, 4 Nov: governed by the user in Settings, roles only as starting points).
 - Settings > Carer & Clinician: "What this link shows". Role chips (Carer or family, Clinician, Diabetes team, Oncology team, PT or coach) set a starting set; every item can then be changed. Daily totals always on; weight, exercise and sleep on as before; NEW and off by default: grams by time of day (no food names), meal times and food names (last 10 days, names cut to 30 characters), treatment sessions (name, date, time; the session note is never shared). A summary line says what is and is not shown, and repeats on the made link. Choices are remembered and are in backups.
