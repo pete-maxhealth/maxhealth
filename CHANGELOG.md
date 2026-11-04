@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1262
+The app starts each session on your default shop. Spotted on a phone (4 Nov): new things were going to Tesco, not Asda.
+- The shop you last tapped was remembered for ever, and it took every new item. Now, each time the app is opened it goes back to your default shop (set with the Default shop picker on the shopping list). Inside a session, the shop you are on still takes what you add, as before.
+- A new non-nutritional item typed into My cupboards also uses your default shop.
+- New test p377 (fails on v3.10.1261). Checked with p197, p201, p205, p242, p243, p259, p266, p274, p289, p291, p296, p297, p299, p300, p373, p375, p376.
+
+## v3.10.1261
+In My cupboards, a non-nutritional item's trolley is now grey when it is not on the shopping list, and a coloured trolley with ON LIST when it is. Tap ON LIST to take it off the list again (Undo on the message); it stays on the shelf. Spotted on a phone (4 Nov).
+- New test p376 (add, take off, Undo, add again, reload, rendered screenshot).
+
 ## v3.10.1260
 My cupboards keeps its sections when you pick a shop. Spotted on a phone (4 Nov): open Non-nutritional, change the shop, and everything opened up.
 - Sections only drew when more than 8 items were showing, so a shop with a few items turned the whole list into one flat, fully open list. Whether sections are used now depends on the tab (more than 8 items), not on the shop filter, so the sections you had shut stay shut and the one you opened stays open, as you move between shops and tabs.
