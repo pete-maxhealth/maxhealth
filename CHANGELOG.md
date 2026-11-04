@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1288
+- Polyols now has a box in Manual entry, the Missed day totals form and the Save-to-library dialog, matching Fibre beside it. A typed figure is stored as typed; left blank it stays "not recorded" (Manual entry, library) or counts as 0 (Missed day). Missed day's totals boxes now sit three across so all six fit.
+- Closes the polyols gaps pinned by p369 (its list of known gaps is now empty). New test p395.
+
 ## v3.10.1287
 - The printed Clinical report (Nutrition Protocol) now carries the same plain "Meal timing" line as the weekly summary, on screen and in the copied text (3 or more days with timed meals; no food names).
 - Carer and clinician sharing gains a Supplements choice: the regular list with dose and time of day (active ones only, not a record of what was taken each day). Off by default; the Oncology team starting set turns it on. Shown on the carer page only when included.

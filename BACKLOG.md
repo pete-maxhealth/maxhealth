@@ -153,7 +153,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] p26 (more screens): failed once in the 30-31 Oct sweep ("free-text question never reached the AI"), passed alone 4 times. Test waited a fixed 3s; now waits up to 10s. Not an app bug.
 
 ## Known gaps pinned by tests (p369, nutrient x route grid)
-- [ ] Polyols has no box in Manual entry or the Missed day form (it travels through copy/paste, the Paste form, planned meals, recipes and the AI/library route). The Save-to-library dialog also has no Polyols box. p369 lists these in EXPECTED_GAPS; closing one makes p369 fail until the list is updated.
+- [x] (DONE v3.10.1288) Polyols has no box in Manual entry or the Missed day form (it travels through copy/paste, the Paste form, planned meals, recipes and the AI/library route). The Save-to-library dialog also has no Polyols box. p369 lists these in EXPECTED_GAPS; closing one makes p369 fail until the list is updated.
 - Test p370 types into every box that saves itself (35 today) and checks each keeps its value after the sync round trip and a reload; settingKcalTarget rejects an implausible 53 kcal by design.
 
 ## From the 3-4 Nov 2026 session

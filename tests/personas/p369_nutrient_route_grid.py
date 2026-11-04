@@ -10,7 +10,7 @@ def chk(c, m):
     if not c: f.add('BUG', m)
 N = ['kcal', 'protein', 'carbs', 'fat', 'fibre', 'polyols']
 V = {'kcal': 335, 'protein': 20.0, 'carbs': 30.0, 'fat': 15.0, 'fibre': 8.2, 'polyols': 6.3}
-EXPECTED_GAPS = {('manual entry', 'polyols'), ('missed day (typed)', 'polyols')}   # BACKLOG: polyols boxes in Manual entry, Missed day (and the Save dialog)
+EXPECTED_GAPS = set()   # all closed (v3.10.1288: polyols boxes in Manual entry and Missed day)
 gaps = set()
 with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); ev = page.evaluate
@@ -57,15 +57,15 @@ with fresh_server() as root, sync_playwright() as pw:
     ev(f"document.getElementById('pasteMealDate').value = '{Y}'; confirmPasteMeal()"); page.wait_for_timeout(300); check('paste into a past day', yday(), {n: V[n] for n in N}, ALL)
     # 5 History multi-select, add to Today
     reset(); ev("switchTabById('hist')"); page.wait_for_timeout(400); ev("renderHistory()"); ev("document.getElementById('histBody0').classList.add('open')"); ev("toggleHistSelectMode(); histSelectDay(0); histAddSelectedToToday()"); page.wait_for_timeout(400); check('History multi-select to Today', today(), None, ALL)
-    # 6 manual entry (no polyols box)
+    # 6 manual entry (polyols box since v3.10.1288)
     reset(); ev("switchTabById('chat')"); page.wait_for_timeout(300); ev("showManualEntryForm('Grid meal')"); page.wait_for_timeout(300)
-    for i, k in [('meKcal', '335'), ('meProt', '20'), ('meCarbs', '30'), ('meFat', '15'), ('meFibre', '8.2')]: setv(i, k)
-    ev("confirmManualEntry()"); page.wait_for_timeout(300); check('manual entry', today(), None, {'kcal', 'protein', 'carbs', 'fat', 'fibre'})
+    for i, k in [('meKcal', '335'), ('meProt', '20'), ('meCarbs', '30'), ('meFat', '15'), ('meFibre', '8.2'), ('mePolyols', '6.3')]: setv(i, k)
+    ev("confirmManualEntry()"); page.wait_for_timeout(300); check('manual entry', today(), None, {'kcal', 'protein', 'carbs', 'fat', 'fibre', 'polyols'})
     # 7 Missed day, typed totals, into a day not yet in history
     reset(); ev("state.history = []; saveState()"); ev("openMissedDayModal('28/10/26')"); page.wait_for_timeout(300); ev("_missedMode = 'manual'")
-    for i, k in [('missedKcal', '335'), ('missedProtein', '20'), ('missedCarbs', '30'), ('missedFat', '15'), ('missedFibre', '8.2')]: setv(i, k)
+    for i, k in [('missedKcal', '335'), ('missedProtein', '20'), ('missedCarbs', '30'), ('missedFat', '15'), ('missedFibre', '8.2'), ('missedPolyols', '6.3')]: setv(i, k)
     ev("document.getElementById('missedDayDate').value = '28/10/26'; saveMissedDay()"); page.wait_for_timeout(400)
-    t = ev("(state.history.find(h => h.date === '28/10/26') || { totals: {} }).totals"); t = {n: (t.get(n) or 0) for n in N}; check('missed day (typed)', t, None, {'kcal', 'protein', 'carbs', 'fat', 'fibre'})
+    t = ev("(state.history.find(h => h.date === '28/10/26') || { totals: {} }).totals"); t = {n: (t.get(n) or 0) for n in N}; check('missed day (typed)', t, None, {'kcal', 'protein', 'carbs', 'fat', 'fibre', 'polyols'})
     # 8 planned meal eaten today
     reset(); ev("mhPlanSave([{ id: 'pg', date: localISODate(), time: '07:00', text: 'Grid meal', foods: [{ name: 'Grid meal', amount: '100g', kcal: 335, protein: 20, carbs: 30, fat: 15, fibre: 8.2, polyols: 6.3 }], createdAt: 1 }]); mhPlanEat('pg')"); page.wait_for_timeout(400); check('planned meal eaten', today(), None, ALL)
     # 9 recipe logged
