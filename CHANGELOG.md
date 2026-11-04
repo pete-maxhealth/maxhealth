@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1272
+AI context for "When you eat" now follows the Reports date range (Pete, 4 Nov: same intervals as the date ranges). Before, the AI summary always used the last 30 logged days whatever chip was chosen; it now uses the same days as the card and the timing advice, and is labelled "this period".
+- Tests: p383, p384 re-run.
+
 ## v3.10.1271
 Timing advice, inside "When you eat" (Pete, 4 Nov: "we have age, sex, weight and everything else needed for another detailed AI response with its clinical/PT/nutritional advisor/treatment session providers hat on ... personal use or third party").
 - Pick who should advise: Coach, PT / sports nutritionist, Dietitian, Diabetes team or Oncology nutrition (remembered). Then "Timing advice for me", or "Write it for my ..." which writes a short factual note addressed to that adviser, with the numbers and two or three questions to ask. Nothing is sent anywhere; the note is text to copy.
