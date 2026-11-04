@@ -2,6 +2,18 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1267
+Possible duplicates in My cupboards. Spotted on a phone (4 Nov): the same food under two names ("Asda Frozen Mushrooms" and "Frozen Mushrooms (Asda)"), so two foods and two lines on the list.
+- A "Possible duplicates (N)" button appears in My cupboards when there are any. Two foods are offered only when, ignoring shop names, brackets, sizes and plurals, they are made of the same words (or all but one of five or more). A food and a non-nutritional item are never paired.
+- One pair at a time, side by side (stock, reorder level, shop, where kept, on my list, filtered). Keep either one and the other is removed from My cupboards, with Undo. The removed food's stock figure is NOT added to the one you keep. A want on the list moves to the food you kept. "Not duplicates" is remembered.
+- New test p381.
+
+## v3.10.1266
+Two fixes from the shopping list. Spotted on a phone (4 Nov).
+- The trolley on a filtered food now puts it on the list and it stays. It was marked "running low", and the stock tidy-up removed a filtered food straight away, so it never showed ON LIST. A filtered food put on by hand now comes off the filter, as the Add path always did.
+- Every shopping-list row shows its quantity with − and + (it was only in Edit mode), so you can change your mind in the aisle when there is an offer on.
+- New test p380. Checked with p64, p197, p201, p214, p220, p221, p225, p237, p242, p248, p249, p321, p329, p373, p376, p378, p379.
+
 ## v3.10.1265
 My cupboards rows no longer squash their text. Spotted on a phone (4 Nov): with the trolley added, the five icons took the whole row and the name and stock wrapped one word per line.
 - The text now keeps at least 150px; when the icons do not fit beside it they drop to their own line, right-aligned. On a wide screen they stay on the same line.

@@ -6566,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1265'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1267'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -28018,6 +28018,56 @@ function mhStockTrack(name, opts) {
 }
 // Removing a food keeps a copy of it (counts and all) so it can be put back: Undo on the message, and "Recently removed" under the shop chips (v3.10.1200).
 function mhStockRemovedLoad() { try { const a = JSON.parse(localStorage.getItem('mh_stock_removed') || '[]'); return Array.isArray(a) ? a.filter(x => x && x.it && x.it.key) : []; } catch (_) { return []; } }
+// ─── POSSIBLE DUPLICATES IN MY CUPBOARDS (v3.10.1267) ───────────────────────────────────────────────────────────────────────
+// Receipts and orders name the same food differently ("Asda Frozen Mushrooms" / "Frozen Mushrooms (Asda)"), which leaves two foods in the cupboards and two lines on
+// the list. Two foods are offered as a pair only when, with shop names, brackets, sizes and plurals ignored, they are made of the same words (or all but one of
+// five or more). You choose which to keep; nothing is ever merged by guesswork, and the other food's stock figure is NOT added to the one you keep (the box shows both).
+function mhStockDupeWords(it, shops) {
+  const drop = new Set((shops || []).map(x => String(x).toLowerCase()).concat(it.shop ? [String(it.shop).toLowerCase()] : []).concat(['the', 'and', 'of', 'with', 'pack', 'x']));
+  return [...new Set(String(it.name || '').toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9']+/).filter(w => w && !/\d/.test(w) && !drop.has(w)).map(w => (w.length > 3 && /s$/.test(w) && !/ss$/.test(w)) ? w.slice(0, -1) : w))].sort();
+}
+function mhStockDupePairs() {
+  let o, shops = []; try { o = mhStockLoad(); shops = mhShopLoad().shops || []; } catch (_) { return []; }
+  const no = (() => { try { return new Set(JSON.parse(localStorage.getItem('mh_stock_notdupes') || '[]')); } catch (_) { return new Set(); } })();
+  const its = Object.values(o.items || {}).filter(it => it && it.name).map(it => ({ it, w: mhStockDupeWords(it, shops) })).filter(x => x.w.length), out = [];
+  for (let i = 0; i < its.length; i++) for (let j = i + 1; j < its.length; j++) {
+    const a = its[i], b = its[j]; if (!!a.it.nonFood !== !!b.it.nonFood) continue;
+    if (no.has([a.it.key, b.it.key].sort().join('|'))) continue;
+    const inter = a.w.filter(w => b.w.includes(w)).length, uni = new Set(a.w.concat(b.w)).size;
+    if (inter === a.w.length && inter === b.w.length || (uni >= 5 && inter / uni >= 0.8)) out.push({ a: a.it, b: b.it });
+  }
+  return out;
+}
+function mhStockDupeOpen() { window._stkDupes = mhStockDupePairs(); if (!window._stkDupes.length) { showToast('No likely duplicates found ✓'); return; } mhStockDupeRender(); }
+function mhStockDupeRender() {
+  const pairs = window._stkDupes || [], old = document.getElementById('stkDupeModal'); if (old) old.remove();
+  if (!pairs.length) { showToast('Done reviewing, no more possible duplicates ✓'); try { mhShopRender(); } catch (_) {} return; }
+  const p = pairs[0], esc = mhPlanEsc, sl = mhShopLoad(), onl = it => sl.items.some(x => x.key === it.key) ? 'yes' : 'no';
+  const rows = [['Stock', it => esc(mhStockFmt(it, it.level))], ['Reorder at', it => it.reorder != null ? esc(mhStockFmt(it, it.reorder)) : 'not set'], ['Shop', it => esc(it.shop || 'none')], ['Kept in', it => esc(mhStoreName(it.store))], ['On my list', onl], ['Filtered', it => it.held ? 'yes' : 'no']]
+    .map(([l, f]) => '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;"><span style="color:var(--text3);flex:0 0 78px;">' + l + '</span><span style="flex:1;text-align:right;color:var(--text);">' + f(p.a) + '</span><span style="flex:1;text-align:right;color:var(--accent);">' + f(p.b) + '</span></div>').join('');
+  const m = document.createElement('div'); m.id = 'stkDupeModal'; m.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  const bt = 'width:100%;padding:12px;background:var(--accent);color:#080a0d;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;overflow-wrap:anywhere;';
+  m.innerHTML = '<div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 32px;max-height:85vh;overflow-y:auto;box-sizing:border-box;">'
+    + '<div style="font-family:\'Syne\',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Possible duplicate' + (pairs.length > 1 ? ' (1 of ' + pairs.length + ')' : '') + '</div>'
+    + '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:10px 0 14px;"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;margin-bottom:8px;"><span style="flex:0 0 78px;"></span><span style="flex:1;text-align:right;color:var(--text);overflow-wrap:anywhere;">' + esc(p.a.name) + '</span><span style="flex:1;text-align:right;color:var(--accent);overflow-wrap:anywhere;">' + esc(p.b.name) + '</span></div>' + rows + '</div>'
+    + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Keeping one removes the other from My cupboards (Undo is offered). Its stock figure is not added to the one you keep.</div>'
+    + '<button data-act="keepA" onclick="mhStockDupeResolve(\'keepA\')" style="' + bt + '">Keep “' + esc(p.a.name) + '”, remove the other</button>'
+    + '<button data-act="keepB" onclick="mhStockDupeResolve(\'keepB\')" style="' + bt + '">Keep “' + esc(p.b.name) + '”, remove the other</button>'
+    + '<button data-act="no" onclick="mhStockDupeResolve(\'no\')" style="width:100%;padding:12px;background:none;border:1px solid var(--border);color:var(--text2);border-radius:10px;font-size:14px;cursor:pointer;margin-bottom:8px;">Not duplicates, don\'t ask again</button>'
+    + '<button data-act="close" onclick="document.getElementById(\'stkDupeModal\').remove();try{mhShopRender()}catch(_){}" style="width:100%;padding:10px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;">Close (review the rest later)</button></div>';
+  document.body.appendChild(m);
+}
+function mhStockDupeResolve(act) {
+  const pairs = window._stkDupes || [], p = pairs[0]; if (!p) return;
+  if (act === 'no') { let l = []; try { l = JSON.parse(localStorage.getItem('mh_stock_notdupes') || '[]'); } catch (_) {} l.push([p.a.key, p.b.key].sort().join('|')); try { localStorage.setItem('mh_stock_notdupes', JSON.stringify(l)); } catch (_) {} showToast("Won't ask about this pair again"); }
+  else if (act === 'keepA' || act === 'keepB') {
+    const keep = act === 'keepA' ? p.a : p.b, gone = act === 'keepA' ? p.b : p.a, s = mhShopLoad(), li = s.items.find(x => x.key === gone.key);
+    if (li) { if (s.items.some(x => x.key === keep.key)) s.items = s.items.filter(x => x !== li); else { li.key = keep.key; li.name = keep.name; } mhShopSave(s); }   // a want on the list is kept, under the food you kept
+    mhStockUntrackUndoable(gone.key, gone.name);
+  }
+  window._stkDupes = mhStockDupePairs();   // look again: the removed food's other pairs go, the ones you dismissed stay dismissed
+  mhStockDupeRender();
+}
 function mhStockUntrackUndoable(key, name) {
   const o = mhStockLoad(), it = o.items[key]; if (!it) return false;
   const copy = JSON.parse(JSON.stringify(it)), ledger = o.ledger.filter(l => l.k === key);
@@ -30217,7 +30267,8 @@ function mhStockLowOff(key) {
 function mhStockLowNow(key, keep) {
   const _k = keep ? mhShopKeepStart() : null;
   const it = mhStockLoad().items[key]; if (!it) return; const s = mhShopLoad(), shop = it.shop ? s.shops.find(x => x.toLowerCase() === it.shop.toLowerCase()) : '';
-  const ok = mhShopSetAdd(s, it.name, 'stock', (it.nonFood || mhStockIsLow(it)) ? 'running low' : 'added by hand', null, { nonFood: !!it.nonFood, qty: it.buyQty });   // a food put on by hand is not tidied away when it is not low (v3.10.1264) if (ok && shop) s.items[s.items.length - 1].shop = shop;
+  // a filtered food put on by hand comes off the filter; as 'running low' the tidy-up would drop it again (v3.10.1266)
+  const ok = mhShopSetAdd(s, it.name, 'stock', (it.nonFood || (mhStockIsLow(it) && !it.held)) ? 'running low' : 'added by hand', null, { nonFood: !!it.nonFood, qty: it.buyQty });   // a food put on by hand is not tidied away when it is not low (v3.10.1264) if (ok && shop) s.items[s.items.length - 1].shop = shop;
   mhShopSave(s); _shopUi.msg = it.name + (ok ? ' is on your list' : ' is already on your list'); mhShopRender(); if (_k) mhShopKeepEnd(_k);
 }
 function mhStockCardHtml(s) {
@@ -30260,7 +30311,7 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone. 🧾 Add a receipt to stock adds a shop on top of what you have (paste it, choose a file or table, or photograph a paper one); Start stock from an order sets counts from a recent order. Each food can be kept in the cupboard, fridge or freezer, and the days it lasts there are yours to change and are remembered. Toilet roll and bin bags can be counted too, as items.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + cbHtml
-    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + '</div>'
+    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + (mhStockDupePairs().length ? tile('🔍 Possible duplicates (' + mhStockDupePairs().length + ')', "mhStockDupeOpen()") : '') + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + '</div>'
     + '<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3);"><span onclick="mhxOpen()" style="cursor:pointer;text-decoration:underline;">📲 Phone to phone (QR)</span><span onclick="mhStockExportAsk()" style="cursor:pointer;text-decoration:underline;">📤 Send stock and list to another device</span><span onclick="mhStockImportPick()" style="cursor:pointer;text-decoration:underline;">📥 Receive stock and list</span><span onclick="mhStockOffAsk()" style="cursor:pointer;text-decoration:underline;">⏻ Turn off</span></div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
@@ -30571,7 +30622,7 @@ function mhShopRender(keepFocus) {
       + '<input type="checkbox" ' + (i.checked ? 'checked' : '') + ' style="width:28px;height:28px;flex:0 0 auto;pointer-events:none;" tabindex="-1">'
       + '<div style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:18px;line-height:1.25;color:var(--text);' + (i.checked ? 'text-decoration:line-through;color:var(--text3);' : '') + '">' + (i.qty > 1 ? '<span data-qty="1" style="font-weight:700;">' + i.qty + ' × </span>' : '') + esc(i.name) + (i.amount ? ' <span style="font-size:13px;color:var(--text3);">· ' + esc(i.amount) + '</span>' : '') + stkNote(i) + (i.from && i.src === 'recipe' ? ' <span style="font-size:11px;color:var(--text3);">' + esc(i.from) + '</span>' : '') + (i.src === 'stock' && i.from === 'running low' ? ' <span style="font-size:11px;color:var(--red);">running low</span>' : '') + (srcIcon[i.src] ? ' <span style="font-size:12px;">' + srcIcon[i.src] + '</span>' : '') + '</div></div>'
       + '<span style="display:flex;align-items:center;gap:6px;margin-left:auto;flex:0 0 auto;">'
-      + (edit ? '<span data-qtyctl="1" style="display:inline-flex;align-items:center;gap:2px;font-size:16px;color:var(--text2);"><span title="One fewer" onclick="mhShopQty(\'' + i.id + '\',-1)" style="cursor:pointer;padding:6px 8px;">−</span><span style="min-width:14px;text-align:center;">' + (i.qty || 1) + '</span><span title="One more" onclick="mhShopQty(\'' + i.id + '\',1)" style="cursor:pointer;padding:6px 8px;">+</span></span>' : '')
+      + ('<span data-qtyctl="1" style="display:inline-flex;align-items:center;gap:2px;font-size:16px;color:var(--text2);"><span title="One fewer" onclick="mhShopQty(\'' + i.id + '\',-1)" style="cursor:pointer;padding:6px 8px;">−</span><span style="min-width:14px;text-align:center;">' + (i.qty || 1) + '</span><span title="One more" onclick="mhShopQty(\'' + i.id + '\',1)" style="cursor:pointer;padding:6px 8px;">+</span></span>')   // the quantity and - / + show on every row, not only in Edit, so you can change it on the spot when there is an offer (v3.10.1266)
       + (edit ? '<button class="copy-btn" data-regid="' + i.id + '" onclick="mhShopRegularRow(this.dataset.regid)" title="A regular stays on your list after every shop" style="width:auto;flex:0 0 auto;font-size:13px;padding:8px 10px;white-space:nowrap;' + (mhShopUsualFind(s, i.key) ? 'background:var(--accent);color:#fff;' : '') + '">' + (mhShopUsualFind(s, i.key) ? '⭐ Regular' : '☆ Regular') + '</button>' : '') + '<span title="Remove from the list" data-rm="' + i.id + '" onclick="mhShopRemove(this.dataset.rm)" style="cursor:pointer;color:var(--text3);padding:10px 12px;font-size:18px;flex:0 0 auto;">✕</span></span></div>';
     const shopIx = n => Math.max(0, s.shops.indexOf(n)), multi = new Set(s.items.map(i => i.shop)).size > 1;
     const pendingVis = vis.filter(i => !i.checked).sort((a, b) => (multi ? shopIx(a.shop) - shopIx(b.shop) : 0) || mhShopSection(a.cat) - mhShopSection(b.cat) || String(a.name).localeCompare(String(b.name)));
