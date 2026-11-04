@@ -4022,6 +4022,35 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       <div style="font-size:10px;color:var(--text3);margin-top:6px;">Bars: fast ending that morning. Line: your goal. Measured from meal times in your log.</div>
     </div>
 
+    <!-- When you eat: first and last meal by day, from the times on logged meals (v3.10.1282) -->
+    <div class="metric-card" id="mcMealTime" style="display:none;border-left:3px solid #818cf8;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:2px;margin-bottom:4px;">
+        <div></div>
+        <div style="display:flex;gap:2px;">
+        <button onclick="moveTrendCard('mcMealTime','up')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▲</button>
+        <button onclick="moveTrendCard('mcMealTime','down')" style="background:none;border:none;color:var(--text3);font-size:11px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">▼</button>
+        <button onclick="toggleTrendCardHidden('mcMealTime')" title="Hide" style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 4px;cursor:pointer;touch-action:manipulation;">👁</button>
+        </div>
+      </div>
+      <div class="metric-header">
+        <div class="metric-icon-label">
+          <div class="metric-icon" style="color:#818cf8;">🍽</div>
+          <div class="metric-name">Meal times</div>
+        </div>
+      </div>
+      <div class="metric-main">
+        <div class="metric-value" id="mcMealTimeVal" style="color:#818cf8;">—</div>
+        <div class="metric-unit">last meal, avg</div>
+      </div>
+      <div class="metric-stats">
+        <div class="metric-stat"><div class="metric-stat-val" id="statMealFirst">—</div><div class="metric-stat-lbl">First meal</div></div>
+        <div class="metric-stat"><div class="metric-stat-val" id="statMealN">—</div><div class="metric-stat-lbl">Meals a day</div></div>
+        <div class="metric-stat"><div class="metric-stat-val" id="statMealEve">—</div><div class="metric-stat-lbl">Carbs after 5pm</div></div>
+      </div>
+      <div class="trend-canvas-wrap" style="margin-top:10px;"><canvas id="chartMealTime"></canvas></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:6px;">Lines: first and last meal (hour of day). From meal times in your log.</div>
+    </div>
+
     <!-- Real blood glucose/ketone GKI readings - added 29/09/2026 alongside
          the logging modal (openGKIModal/confirmGKI). Only shows a data point
          on days a reading was actually logged (sparse by nature, unlike the
@@ -6580,7 +6609,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1281'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1282'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -41388,7 +41417,7 @@ function renderTrends() {
   if (trendsWindow === 'today') {
     if (noData) noData.style.display = 'none';
     if (wellnessCard) wellnessCard.style.display = 'none';
-    ['mcWeight','mcHR','mcSpO2','mcHRV','mcSteps','mcSleep','mcCal','mcProt','mcCarb','mcFast'].forEach(id => {
+    ['mcWeight','mcHR','mcSpO2','mcHRV','mcSteps','mcSleep','mcCal','mcProt','mcCarb','mcFast','mcMealTime'].forEach(id => {
       const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     renderDailyView(data);
@@ -41402,7 +41431,7 @@ function renderTrends() {
   if (data.length === 0) {
     if (noData) noData.style.display = 'block';
     if (wellnessCard) wellnessCard.style.display = 'none';
-    ['mcWeight','mcHR','mcSpO2','mcHRV','mcSteps','mcSleep','mcCal','mcProt','mcCarb','mcFast'].forEach(id => {
+    ['mcWeight','mcHR','mcSpO2','mcHRV','mcSteps','mcSleep','mcCal','mcProt','mcCarb','mcFast','mcMealTime'].forEach(id => {
       const el = document.getElementById(id); if (el) el.style.display = 'none';
     });
     return;
@@ -41990,6 +42019,34 @@ function renderTrends() {
             { type: 'line', label: `Goal (${fgoal}h)`, data: labels.map(() => fgoal), borderColor: 'rgba(45,235,143,0.8)', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
           ] },
           options: { ...CHART_DEFAULTS, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, min: 0 } } }
+        });
+      }
+    }
+  }
+
+  // ── Meal times (v3.10.1282) — first and last meal by day, from logged meal times ──
+  {
+    const rows = data.map(d => mhWhenEatDayRows(d));
+    const firstV = rows.map(r => r.length ? Math.round(r[0].m / 6) / 10 : null), lastV = rows.map(r => r.length ? Math.round(r[r.length - 1].m / 6) / 10 : null);
+    const occ = r => r.reduce((n, x, i) => n + (!i || x.m - r[i - 1].m >= 60 ? 1 : 0), 0);
+    const clk = h => { const t = Math.round(h * 60) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+    const lclean = clean(lastV), fcl = clean(firstV);
+    destroyChart('chartMealTime');
+    if (lclean.length >= 3) {
+      showCard('mcMealTime');
+      document.getElementById('mcMealTimeVal').textContent = clk(avg(lclean));
+      document.getElementById('statMealFirst').textContent = clk(avg(fcl));
+      document.getElementById('statMealN').textContent = (Math.round(avg(rows.filter(r => r.length).map(occ)) * 10) / 10).toString();
+      const ev5 = rows.filter(r => r.length).map(r => r.filter(x => x.m >= 1020).reduce((a, x) => a + x.c, 0));
+      document.getElementById('statMealEve').textContent = Math.round(avg(ev5)) + 'g';
+      if (document.getElementById('chartMealTime')) {
+        chartInstances['chartMealTime'] = new Chart(document.getElementById('chartMealTime'), {
+          type: 'line',
+          data: { labels, datasets: [
+            { label: 'First meal', data: firstV, borderColor: 'rgba(96,165,250,0.9)', backgroundColor: 'rgba(96,165,250,0.15)', borderWidth: 2, pointRadius: 2, spanGaps: true, tension: 0.25 },
+            { label: 'Last meal', data: lastV, borderColor: 'rgba(129,140,248,0.95)', backgroundColor: 'rgba(129,140,248,0.15)', borderWidth: 2, pointRadius: 2, spanGaps: true, tension: 0.25 },
+          ] },
+          options: { ...CHART_DEFAULTS, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, suggestedMin: 4, suggestedMax: 24, ticks: { ...(CHART_DEFAULTS.scales.y.ticks || {}), stepSize: 4, callback: v => clk(v) } } } }
         });
       }
     }
@@ -43522,18 +43579,23 @@ function renderMMSectionRestoreStrip(hidden) {
 // hide control can't be the only way to undo hiding that same card.
 const TREND_CARDS_ORDER_KEY = 'mh_trend_cards_order';
 const TREND_CARDS_HIDDEN_KEY = 'mh_trend_cards_hidden';
-const DEFAULT_TREND_CARDS_ORDER = ['mcWeight', 'mcHR', 'mcSpO2', 'mcHRV', 'mcSteps', 'mcSleep', 'mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcFast', 'mcGKI', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration', 'mcDistance'];
-const TREND_CARD_LABELS = { mcWeight: '⚖️ Weight', mcHR: '❤️ Heart Rate', mcSpO2: '🫁 Oxygen Sat', mcHRV: '💜 HRV', mcSteps: '🚶 Steps', mcSleep: '🌙 Sleep', mcCal: '🔥 Calories', mcProt: '💪 Protein', mcCarb: '🌾 Carbs', mcWater: '💧 Water', mcFast: '⏱ Overnight Fast', mcGKI: '🩸 GKI', mcFatPct: '🧫 Fat %', mcMusclePct: '💪 Muscle %', mcBoneMass: '🦴 Bone Mass', mcHydration: '💧 Hydration', mcDistance: '📍 Distance' };
+const DEFAULT_TREND_CARDS_ORDER = ['mcWeight', 'mcHR', 'mcSpO2', 'mcHRV', 'mcSteps', 'mcSleep', 'mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcFast', 'mcMealTime', 'mcGKI', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration', 'mcDistance'];
+const TREND_CARD_LABELS = { mcWeight: '⚖️ Weight', mcHR: '❤️ Heart Rate', mcSpO2: '🫁 Oxygen Sat', mcHRV: '💜 HRV', mcSteps: '🚶 Steps', mcSleep: '🌙 Sleep', mcCal: '🔥 Calories', mcProt: '💪 Protein', mcCarb: '🌾 Carbs', mcWater: '💧 Water', mcFast: '⏱ Overnight Fast', mcMealTime: '🍽 Meal times', mcGKI: '🩸 GKI', mcFatPct: '🧫 Fat %', mcMusclePct: '💪 Muscle %', mcBoneMass: '🦴 Bone Mass', mcHydration: '💧 Hydration', mcDistance: '📍 Distance' };
 
 function getTrendCardsOrder() {
   try {
     let stored = JSON.parse(localStorage.getItem(TREND_CARDS_ORDER_KEY) || 'null');
     // Migration (v3.10.930): slot the Overnight Fast card in after Water for anyone with a saved order.
     if (Array.isArray(stored) && !stored.includes('mcFast')
-        && DEFAULT_TREND_CARDS_ORDER.filter(k => k !== 'mcFast').every(k => stored.includes(k))
-        && stored.length === DEFAULT_TREND_CARDS_ORDER.length - 1) {
+        && DEFAULT_TREND_CARDS_ORDER.filter(k => k !== 'mcFast' && k !== 'mcMealTime').every(k => stored.includes(k))
+        && stored.length === DEFAULT_TREND_CARDS_ORDER.length - 1 - (stored.includes('mcMealTime') ? 0 : 1)) {
       const wi = stored.indexOf('mcWater');
       stored = [...stored]; stored.splice(wi > -1 ? wi + 1 : stored.length, 0, 'mcFast');
+      localStorage.setItem(TREND_CARDS_ORDER_KEY, JSON.stringify(stored));
+    }
+    // Migration (v3.10.1282): slot the Meal times card in after Overnight Fast for anyone with a saved order.
+    if (Array.isArray(stored) && !stored.includes('mcMealTime') && stored.includes('mcFast')) {
+      stored = [...stored]; stored.splice(stored.indexOf('mcFast') + 1, 0, 'mcMealTime');
       localStorage.setItem(TREND_CARDS_ORDER_KEY, JSON.stringify(stored));
     }
     // Migration (v3.10.1027): Your routine moved to the Trends sections (like Patterns), so drop it from a saved card order.
@@ -54491,7 +54553,7 @@ function mhTrendsGroupDefs() {
   return {
     body:    { label: 'Body',           ids: ['mcWeight', 'mcFatPct', 'mcMusclePct', 'mcBoneMass', 'mcHydration', 'dv-weight-wrap'] },
     heart:   { label: 'Heart & sleep',  ids: ['mcHR', 'mcSpO2', 'mcHRV', 'mcSleep', 'mcSteps', 'mcDistance', 'dv-activity-wrap', 'dv-sleep-wrap'] },
-    food:    { label: 'Food',           ids: ['mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcFast', 'mcGKI', 'dv-meals-wrap'] },
+    food:    { label: 'Food',           ids: ['mcCal', 'mcProt', 'mcCarb', 'mcWater', 'mcFast', 'mcMealTime', 'mcGKI', 'dv-meals-wrap'] },
     patterns:{ label: 'Patterns',       ids: ['mcRoutine', 'wellnessCard', 'patternsCard', 'periodCmpCard'] },
   };
 }

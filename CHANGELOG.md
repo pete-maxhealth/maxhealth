@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1282
+Meal times card on Trends (Pete, 4 Nov: all of them would be useful). A Food-group card after Overnight Fast: average last meal as the big figure, first meal, meals a day and carbs after 5pm, with a two-line chart of first and last meal (hour of day). Same controls as its neighbours: ▲ ▼ 👁, restore strip, Food filter, 30/90/All ranges. Hidden until 3 days have timed meals. Saved card orders get it slotted in after Overnight Fast.
+- Test p390. Neighbours re-run: p63, p327, p102, p136, p49, p71, p78, p371 (0 bugs; one standing review note about the public story page, as before). Seen rendered (dark theme, phone width).
+
 ## v3.10.1281
 Preview before sending, and timing in report profiles (Pete, 4 Nov: all of them would be useful).
 - Settings > Carer & Clinician: after making a link, "Preview what they will see" opens the carer page from that exact link inside the app, so you can check it before you send it. Nothing leaves the device.
