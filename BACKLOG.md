@@ -62,7 +62,7 @@ Built in the Move / Sleep / Statistics phase (v3.10.1071 - 1081), see CHANGELOG:
 Open, this phase:
 - [ ] Re-record the tour videos with Move, Sleep and Statistics chapters (and the "general health and muscle gain" framing).
 - [x] Story page and docs/changelog.html updated 16 Oct.
-- [ ] Phone checks for v3.10.1081 (Today statistics card, Statistics tab on light theme, net exercise energy figures, weather follow).
+- [x] DROPPED (Pete, 4 Nov): phone checks for v3.10.1081; overtaken by daily use on the phone.
 - [x] v1083 Drag-reorder on Statistics; light-theme checked for the Statistics tab and the sleep and outcomes reports (high-contrast theme not checked).
 - [x] v1082/1084 Colour and chart type per statistic and per Trends chart.
 - [x] v1085 What-moves-what: bedtime, next-morning weight change, treatment-session windows. (Whole treatment cycles as a unit are not modelled.)
