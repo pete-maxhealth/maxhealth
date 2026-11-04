@@ -6566,7 +6566,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1267'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1268'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27633,12 +27633,28 @@ function mhShopCopy() {
 function mhShopAddKind(k) { _shopUi.addKind = k === 'nonfood' ? 'nonfood' : 'food'; mhShopRender(); setTimeout(() => { const i = document.getElementById('mhShopOwn'); if (i) i.focus(); }, 0); }
 // Type in the Add box and the foods you already know (cupboards and library) appear right under it; tap one to put it on THIS shop's list. A library food that is not
 // in your cupboards yet also opens the stock form (shop already known) so the list has what it needs; a name that matches nothing offers to become a new food (v3.10.1160).
+// ─── "DO I ALREADY HAVE THIS?" (v3.10.1268) ───────────────────────────────────────────────────────────────────────────────
+// One finder for every place you add something: it looks in My cupboards (on the shelf or in Filtered), on the shopping list (including ticked) and in the Library,
+// with the same loose wording match the Add foods screen uses, and says WHERE each match is, so nothing is added twice by accident.
+function mhWhereIs(r, s) {
+  s = s || mhShopLoad(); const on = s.items.find(i => i.key === r.key);
+  const w = r.it ? (r.it.held ? 'in Filtered' : 'in My cupboards') : 'in my library';
+  return w + (on ? (on.checked ? ', ticked in your basket' : ', on your list') : '');
+}
+function mhFindExisting(q, opts) {
+  q = String(q || '').trim(); if (q.length < 2) return [];
+  const s = mhShopLoad(), nf = !!(opts && opts.nonFood), rows = mhSlRows().filter(r => !!(r.it && r.it.nonFood) === nf || (!nf && !r.it));
+  const w = mhSlWords(q), has = n => { n = String(n || '').toLowerCase(); const nw = mhSlWords(n); return w.length && (w.every(x => n.includes(x)) || (nw.length >= 2 && nw.every(x => q.toLowerCase().includes(x)))); };   // every word of what you typed, not just one of them
+  const out = rows.filter(r => has(r.name)).filter(r => !r.twin).map(r => ({ key: r.key, name: r.name, it: r.it, where: mhWhereIs(r, s), exact: r.key === mhShopKey(q) }));
+  s.items.forEach(i => { if (!!i.nonFood === nf && !out.some(o => o.key === i.key) && has(i.name)) out.push({ key: i.key, name: i.name, it: null, where: 'on your list' + (i.checked ? ', ticked in your basket' : ''), exact: i.key === mhShopKey(q) }); });
+  return out.sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0));
+}
 function mhShopSug() {
   const box = document.getElementById('mhShopSug'), inp = document.getElementById('mhShopOwn'); if (!box || !inp) return;
   const q = inp.value.trim(); if (q.length < 2 || _shopUi.addKind === 'nonfood') { box.innerHTML = ''; return; }
   const esc = mhPlanEsc, s = mhShopLoad(), hits = mhSlMatch(mhSlRows(), q).filter(r => !(r.it && r.it.nonFood)).slice(0, 6);
   const row = (label, sub, fn, k) => '<button type="button" data-k="' + esc(k) + '" onclick="' + fn + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;padding:12px 10px;margin-top:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;cursor:pointer;"><span style="min-width:0;">' + esc(label) + (sub ? '<span style="display:block;font-size:12px;color:var(--text3);">' + esc(sub) + '</span>' : '') + '</span><span style="flex:0 0 auto;color:var(--accent);font-weight:600;">＋ ' + esc(s.shop) + '</span></button>';
-  let h = hits.map(r => row(r.name, r.it ? 'in my cupboards' : 'in my library', 'mhShopSugPick(this.dataset.k)', r.key)).join('');
+  let h = hits.map(r => row(r.name, mhWhereIs(r, s), 'mhShopSugPick(this.dataset.k)', r.key)).join('');
   if (!hits.some(r => r.name.toLowerCase() === q.toLowerCase())) h += row('New food: ' + q, 'not in my library or cupboards yet', 'mhShopSugNew()', '');
   box.innerHTML = h;
 }
@@ -30311,14 +30327,16 @@ function mhStockCardHtml(s) {
     + '<div id="stockctlDetail" style="display:none;font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">Pick the ingredients you run out of. Give each a pack size and a serving size and you can type either way: with whey at 30 servings of 25 g, 2 servings and 50 g are the same. When one drops to its reorder level it joins your list under its shop. Logging food takes stock off by itself when the amount can be read (g, ml, servings, or a count); if it cannot, stock is left alone and you are told. Deleting or editing an entry puts it back. Planned meals never take stock. A stock-take (setting the amount yourself) always wins. Send / Receive moves your stock to another device: the receiving device is replaced, after checking it has a backup and asking you which way it goes. Give any item a use-by date and cooked batches get an eat-by date; past it they stop being suggested. 🗑 takes off what you used up or binned, and 🍽 on a logged meal means you ate out, so stock is left alone. 🧾 Add a receipt to stock adds a shop on top of what you have (paste it, choose a file or table, or photograph a paper one); Start stock from an order sets counts from a recent order. Each food can be kept in the cupboard, fridge or freezer, and the days it lasts there are yours to change and are remembered. Toilet roll and bin bags can be counted too, as items.</div>'
     + (restoredFrom ? '<div data-stocknotice="1" style="font-size:13px;line-height:1.5;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">Stock was restored from <b>' + esc(restoredFrom) + '</b>. Counts may be out of date for anything you used or bought since that backup: stock-take what you can (tap an item and set how much you have now). <span onclick="mhStockRestoreNoticeClear()" style="cursor:pointer;text-decoration:underline;">Got it</span></div>' : '')
     + mhStockExtrasHtml(o) + '<div id="stockctlBody">' + cbHtml
-    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + (mhStockDupePairs().length ? tile('🔍 Possible duplicates (' + mhStockDupePairs().length + ')', "mhStockDupeOpen()") : '') + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + '</div>'
+    + '<div class="mh-tiles">' + ((o.review || []).filter(k => o.items[k]).length ? tile('🛒 Add what you bought (' + (o.review || []).filter(k => o.items[k]).length + ')', "mhShopView('stockbought')") : '') + tile('📥 Import', "mhOrdOpen('receipt')") + tile('🔍 Possible duplicates' + (mhStockDupePairs().length ? ' (' + mhStockDupePairs().length + ')' : ''), "mhStockDupeOpen()") + tile('📋 Check the cupboards' + (mhStockGapCount() ? ' (' + mhStockGapCount() + ' need details)' : ''), mhStockGapCount() ? "mhSlGaps()" : "mhShopView('stocklist')") + tile('＋ Add a food', "mhShopView('stockadd')") + '</div>'
     + '<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text3);"><span onclick="mhxOpen()" style="cursor:pointer;text-decoration:underline;">📲 Phone to phone (QR)</span><span onclick="mhStockExportAsk()" style="cursor:pointer;text-decoration:underline;">📤 Send stock and list to another device</span><span onclick="mhStockImportPick()" style="cursor:pointer;text-decoration:underline;">📥 Receive stock and list</span><span onclick="mhStockOffAsk()" style="cursor:pointer;text-decoration:underline;">⏻ Turn off</span></div>'
     + '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Meal ideas and macro balancing use my stock</div><select id="mhSuggestMode" onchange="mhSuggestSetMode(this.value)" style="width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);">' + [['hide', 'Hide what I am out of (recommended)'], ['strict', 'Only what I have counted'], ['off', 'Off: suggest from everything']].map(a => '<option value="' + a[0] + '"' + (mhSuggestMode() === a[0] ? ' selected' : '') + '>' + a[1] + '</option>').join('') + '</select><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.4;">Foods that never run out, such as salt or herbs and spices you have not counted, always count as in the cupboard.</div></div>' + mhRulesHtml() + '</div></div>';
 }
 function mhStockQ(v) { _shopUi.sq = v; mhShopRender('sq'); }
 // A non-nutritional item (toilet roll, bin bags, washing powder) added by hand: counted in "each", flagged non-food, never in the food library.
 function mhStockAddNonFood(name) {
-  const nm = String(name || '').trim(); if (!nm) return; const s = mhShopLoad(), it = mhStockTrack(nm, { base: 'each', pack: null, serving: null, shop: s.def });
+  const nm = String(name || '').trim(); if (!nm) return; const s = mhShopLoad();
+  { const had = mhStockLoad().items[mhShopKey(nm)]; if (had) { showToast(had.name + ' is already in My cupboards' + (had.held ? ' (in Filtered)' : '')); mhStockEditView(had.key); return; } }
+  const it = mhStockTrack(nm, { base: 'each', pack: null, serving: null, shop: s.def });
   const o = mhStockLoad(), key = mhShopKey(nm); if (o.items[key]) { o.items[key].nonFood = true; mhStockSave(o); }
   mhStockEditView(key, nm);
 }
@@ -30516,12 +30534,13 @@ function mhShopRender(keepFocus) {
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockadd') {
     const q = (_shopUi.sq || '').trim(), ql = q.toLowerCase(), tr = mhStockLoad().items, all = mhShopKnown().filter(x => !tr[x.key] && (!ql || x.name.toLowerCase().includes(ql))).slice(0, 40);
-    const typedNew = q && !tr[mhShopKey(q)] && !all.some(x => x.name.toLowerCase() === ql);
+    const have = q ? mhFindExisting(q).filter(x => x.it) : [], typedNew = q && !tr[mhShopKey(q)] && !all.some(x => x.name.toLowerCase() === ql);
     body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🏠 Add a food to my cupboards</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Choose one you keep running out of. Next you say how it is counted and how much you have.</div>'
       + '<input id="mhStockQ" value="' + esc(_shopUi.sq || '') + '" oninput="mhStockQ(this.value)" placeholder="Search your ingredients, or type a new one" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:6px;">'
+      + (have.length ? '<div id="mhStockHave" style="font-size:12px;color:var(--text2);font-weight:700;margin:12px 0 2px;">Already in your cupboards</div>' + have.slice(0, 8).map(x => '<div data-have="' + esc(x.key) + '" data-k="' + esc(x.key) + '" onclick="mhStockEditView(this.dataset.k)" style="display:flex;justify-content:space-between;gap:8px;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + '</span><span style="font-size:12px;color:var(--text3);white-space:nowrap;">' + esc(x.where) + '</span></div>').join('') : '')
       + all.map(x => '<div data-k="' + esc(x.key) + '" data-n="' + esc(x.name) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="display:flex;justify-content:space-between;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(x.cat)) + '</span></span><span style="color:var(--accent);">add</span></div>').join('')
       + (typedNew ? '<div id="mhStockTypedNew" data-k="' + esc(mhShopKey(q)) + '" data-n="' + esc(q) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">＋ Add "' + esc(q) + '" as typed</div><div id="mhStockTypedNonFood" data-n="' + esc(q) + '" onclick="mhStockAddNonFood(this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">🧻 Add "' + esc(q) + '" as non-nutritional (toilet roll, cleaning, pet food)</div>' : '')
-      + (!all.length && !typedNew ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing else to add. Everything matching is already in your cupboards.</div>' : '')
+      + (!all.length && !typedNew && !have.length ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing else to add. Everything matching is already in your cupboards.</div>' : '')
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockedit' && _shopUi.stk) {
     const f = _shopUi.stk, inp = 'width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;';

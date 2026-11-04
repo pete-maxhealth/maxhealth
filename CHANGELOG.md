@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1268
+"Do I already have this?" Pete (4 Nov): "I keep adding things only to find that they're in the filtered items ... when I'm entering something new, there could be an option for a comparison from existing."
+- One finder for every add route. It looks in My cupboards (on the shelf or in Filtered), on the shopping list (including ticked) and in the Library, and needs every word you typed to be in the name (so "stock cubes" finds "Beef Stock Cubes", but unrelated foods are not offered).
+- Add a food (My cupboards): "Already in your cupboards" comes first, each with where it is ("in Filtered", "in My cupboards"). Tap one to open it. The misleading "Nothing else to add" message no longer appears when matches exist.
+- Shopping list add box: every suggestion now says where it is (in Filtered, in My cupboards, in my library, on your list, ticked in your basket), and a "New food" row is not offered for one that already exists.
+- Adding a non-nutritional item that already exists opens the existing one with "already in My cupboards" instead of making a second copy.
+- The Possible duplicates button is always there. With none it says so.
+- Test p382 (every route, loose wording, each place, tap-through, no second copy). Checked with p375-p383 neighbours, p197, p201, p207, p239-p243, p249, p267, p282, p283, p299, p329, p373.
+
 ## v3.10.1267
 Possible duplicates in My cupboards. Spotted on a phone (4 Nov): the same food under two names ("Asda Frozen Mushrooms" and "Frozen Mushrooms (Asda)"), so two foods and two lines on the list.
 - A "Possible duplicates (N)" button appears in My cupboards when there are any. Two foods are offered only when, ignoring shop names, brackets, sizes and plurals, they are made of the same words (or all but one of five or more). A food and a non-nutritional item are never paired.

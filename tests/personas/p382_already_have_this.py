@@ -1,0 +1,65 @@
+"""Persona 382: adding something says where you already have it (v3.10.1268).
+Pete (4 Nov): "I keep adding things only to find that they're in the filtered items ... when I'm entering something new, there could be an option for a comparison from existing."
+Covers: the shared finder (exact and loose wording; cupboards, Filtered, list, ticked, library), the cupboard Add a food screen listing what is already there with its place, opening it, the list add suggestions naming the place and not offering a New food that exists, adding a non-nutritional item that exists opens it (no second copy), and the Possible duplicates tile showing even with none. Invented data; real taps."""
+import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
+from harness import *
+from playwright.sync_api import sync_playwright
+f = Findings()
+with fresh_server() as root, sync_playwright() as pw:
+    page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 800}, service_workers='block').new_page(); errs = []
+    page.on('pageerror', lambda e: errs.append(str(e)[:200])); page.on('dialog', lambda d: d.accept())
+    page.goto('http://localhost:5757/'); page.wait_for_timeout(1200); ev = page.evaluate
+    ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')?.remove()")
+    ev("mhShopOpen()"); page.wait_for_timeout(300)
+    def tap(sel):
+        ev("document.querySelectorAll('.toast').forEach(t=>t.style.display='none')")
+        bb = page.locator(sel).first.bounding_box(); page.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); page.mouse.down(); page.mouse.up(); page.wait_for_timeout(450)
+    ev("mhStockTrack('Zzqx Beef Stock Cubes',{base:'g',shop:'Asda'}); mhStockSetLevel(mhShopKey('Zzqx Beef Stock Cubes'),60)")
+    ev("(()=>{const o=mhStockLoad(), k=mhShopKey('Zzqx Beef Stock Cubes'); o.items[k].held=true; mhStockSave(o)})()")
+    ev("mhStockTrack('Zzqx Rice',{base:'g',shop:'Asda'})")
+    ev("(()=>{const s=mhShopLoad(); mhShopSetAdd(s,'Zzqx Washing Powder','own',''); mhShopSetAdd(s,'Zzqx Tea Bags','own',''); s.items.find(i=>i.name==='Zzqx Tea Bags').checked=true; mhShopSave(s)})()")
+    ev("mhStockAddNonFood('Zzqx Sponges')"); ev("try{mhStkBack()}catch(e){}")
+    find = lambda q, nf=False: ev(f"mhFindExisting({q!r},{{nonFood:{str(nf).lower()}}}).map(x=>x.name+' | '+x.where+' | '+x.exact)")
+    r = find('Zzqx Beef Stock Cubes')
+    if not r or 'in Filtered' not in r[0] or not r[0].endswith('true'): f.add('BUG', f'1: a Filtered food is found with its place: {r}')
+    r = find('zzqx stock cube')
+    if not any('Beef Stock Cubes' in x for x in r): f.add('BUG', f'2: loose wording still finds it: {r}')
+    r = find('Zzqx Rice')
+    if not r or 'in My cupboards' not in r[0]: f.add('BUG', f'3: a shelf food says in My cupboards: {r}')
+    r = find('Zzqx Washing Powder'); r2 = find('Zzqx Tea Bags')
+    if not any('on your list' in x for x in r): f.add('BUG', f'4: a list item says on your list: {r}')
+    if not any('ticked in your basket' in x for x in r2): f.add('BUG', f'5: a ticked item says so: {r2}')
+    if find('Zzqx Sponges') : f.add('BUG', f'6: a food search does not return non-nutritional items: {find("Zzqx Sponges")}')
+    if not find('Zzqx Sponges', True): f.add('BUG', '7: a non-nutritional search finds it')
+    # cupboard Add a food
+    ev("_shopUi.view='stockadd'; _shopUi.sq='Zzqx Beef Stock Cubes'; mhShopRender()"); page.wait_for_timeout(300)
+    txt = ev("(document.getElementById('mhShopPane')?.innerText||document.body.innerText).toLowerCase()")
+    if not ev("!!document.getElementById('mhStockHave')") or 'in filtered' not in txt: f.add('BUG', '8: Add a food lists what is already there and that it is in Filtered')
+    if 'nothing else to add' in txt: f.add('BUG', '9: no misleading "nothing else to add"')
+    tap('[data-have]')
+    if not ev("!!_shopUi.stk && !_shopUi.stk.isNew && _shopUi.stk.key===mhShopKey('Zzqx Beef Stock Cubes')"): f.add('BUG', '10: tapping it opens the existing food, not a new one')
+    ev("_shopUi.stk=null; _shopUi.view='list'; mhShopRender()")
+    # list add suggestions
+    ev("_shopUi.addOpen=true; _shopUi.view='list'; mhShopAddKind('food')"); page.wait_for_timeout(300)
+    page.fill('#mhShopOwn', 'Zzqx Beef Stock Cubes'); page.wait_for_timeout(400)
+    sug = ev("(document.getElementById('mhShopSug')?.innerText||'').toLowerCase()")
+    if 'in filtered' not in sug: f.add('BUG', f'11: the suggestion names the place: {sug[:160]!r}')
+    if 'new food: zzqx beef stock cubes' in sug: f.add('BUG', f'12: no "New food" offered for one that exists: {sug[:160]!r}')
+    page.fill('#mhShopOwn', 'Zzqx Brand New Thing'); page.wait_for_timeout(400)
+    if 'new food' not in ev("(document.getElementById('mhShopSug')?.innerText||'').toLowerCase()"): f.add('BUG', '13: a truly new food still offers New food')
+    # non-nutritional that exists
+    n0 = ev("Object.keys(mhStockLoad().items).length")
+    ev("mhStockAddNonFood('Zzqx Sponges')"); page.wait_for_timeout(300)
+    if ev("Object.keys(mhStockLoad().items).length") != n0: f.add('BUG', '14: adding an existing non-nutritional item makes no second copy')
+    if not ev("!!_shopUi.stk && !_shopUi.stk.isNew"): f.add('BUG', '15: it opens the existing one')
+    ev("_shopUi.stk=null; _shopUi.view='list'; mhShopRender()")
+    # tile always there
+    ev("localStorage.setItem('mh_shop_pane','stock'); mhCbTab('all'); mhShopRender()"); page.wait_for_timeout(300)
+    lab = ev("[...document.querySelectorAll('#stockctlCard .mh-tiles button')].map(b=>b.innerText.trim()).find(t=>/duplicate/i.test(t))||''")
+    if not lab: f.add('BUG', '16: the duplicates tile shows even when there are none')
+    else:
+        ev("document.getElementById('stockctlCard').scrollIntoView()"); tap('#stockctlCard .mh-tiles button:has-text("duplicates")')
+        if 'no likely duplicates' not in ev("(document.getElementById('toast')?.innerText||'').toLowerCase()"): f.add('BUG', '17: tapping it with none says so')
+    page.screenshot(path='/tmp/p382.png')
+    if errs: f.add('BUG', f'page errors: {errs}')
+print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)
