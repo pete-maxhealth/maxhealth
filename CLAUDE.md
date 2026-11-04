@@ -25,6 +25,7 @@
 
 ## Every new feature ships with all of these (Pete, 4 Nov 2026)
 - Each new tile/card: show/hide, reorder, a Filter pill entry, a "?" for any text longer than a couple of lines, the standard date range where it has a period, and a Settings tile or entry.
+- Styled like its neighbours: same class, size, icon, colour, position and wording as the existing control that does the same job (compare side by side in a rendered screenshot, light and dark themes).
 - Findable: add it to the Settings/screen search list (label, key, keywords).
 - Stays in step with the rest: AI context, reports, History, backup/export, the clinician/carer share (opt-in only, nothing shared by default), and language strings.
 - Demo personas carry sample data for it, so it shows working in the demo.
