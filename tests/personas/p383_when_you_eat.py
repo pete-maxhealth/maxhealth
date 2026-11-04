@@ -23,18 +23,21 @@ with fresh_server() as root, sync_playwright() as pw:
     disp = lambda: ev("getComputedStyle(document.getElementById('wheneat-report-section')).display")
     txt = lambda: ev("(document.getElementById('wheneat-report-content')?.innerText||'')")
     # 1. too few days: hidden
-    ev("state.history = " + str([day(i) for i in range(1, 6)]).replace('True', 'true') + "; saveState()"); show()
-    if disp() == 'none' or not ev("!!document.getElementById('wheneat-few')") or 'All time' not in txt(): f.add('BUG', '1: fewer than 7 timed days: card says so, with its period (v3.10.1274)')
+    ev("state.history = " + str([day(i) for i in range(1, 3)]).replace('True', 'true') + "; saveState()"); show()
+    if disp() == 'none' or not ev("!!document.getElementById('wheneat-few')") or 'All time' not in txt(): f.add('BUG', '1: fewer than 3 timed days: card says so, with its period (v3.10.1274)')
     ev("_rptRange=7; renderReports()"); page.wait_for_timeout(300)
     if 'Last 7 days' not in txt(): f.add('BUG', '1b: the card names the 7 Days period: ' + txt()[:60])
     ev("state.history = []; saveState()"); show()
     if disp() != 'none': f.add('BUG', '1c: no timed meals at all: hidden')
+    ev("state.history = " + str([day(i) for i in range(1, 3)]).replace('True', 'true') + "; saveState()"); show()
+    # 1d. five timed days: a rough picture, shown with a warning (v3.10.1276)
     ev("state.history = " + str([day(i) for i in range(1, 6)]).replace('True', 'true') + "; saveState()"); show()
+    if ev("!!document.getElementById('wheneat-few')") or not ev("!!document.getElementById('wheneat-rough')") or 'rough picture' not in txt(): f.add('BUG', '1d: 5 timed days: shown as a rough picture')
     # 2. ten days, with an approximate-time meal that must be ignored
     import json
     hist = [day(i, [('15:00', 99, 99, 99, 'approx')]) for i in range(1, 11)]
     ev("state.history = " + json.dumps(hist) + "; saveState()"); show()
-    if disp() == 'none': f.add('BUG', '2: shown with 10 days')
+    if disp() == 'none' or ev("!!document.getElementById('wheneat-rough')"): f.add('BUG', '2: shown with 10 days, no rough warning')
     ev("_rptRange=30; renderReports()"); page.wait_for_timeout(300)
     if 'of 30)' not in txt() or '10 days' not in txt(): f.add('BUG', '2c: count line shows the period length: ' + txt()[:120])
     ev("_rptRange=0; renderReports()"); page.wait_for_timeout(300)

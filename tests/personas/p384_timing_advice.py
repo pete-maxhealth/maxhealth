@@ -23,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     def tap(sel):
         ev("document.querySelectorAll('.toast').forEach(t=>t.style.display='none')")
         page.locator(sel).first.scroll_into_view_if_needed(); bb = page.locator(sel).first.bounding_box(); page.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); page.mouse.down(); page.mouse.up(); page.wait_for_timeout(500)
-    ev("state.history = " + json.dumps([day(i) for i in range(1, 4)]) + "; saveState()"); show()
+    ev("state.history = " + json.dumps([day(i) for i in range(1, 3)]) + "; saveState()"); show()
     if ev("!!document.getElementById('wheneat-coach')") and ev("getComputedStyle(document.getElementById('wheneat-report-section')).display") != 'none': f.add('BUG', '1: no advice box with too few days')
     ev("state.history = " + json.dumps([day(i) for i in range(1, 11)]) + "; saveState()"); show()
     roles = ev("[...document.querySelectorAll('#wheneatRoles [data-role]')].map(e=>e.dataset.role)")

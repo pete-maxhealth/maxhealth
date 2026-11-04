@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1276
+"When you eat" needs 3 timed days, not 7 (Pete, 4 Nov: 7 Days with today included said "not enough"). A 7-day range could only ever reach 7 if every single day had a timed meal. Now 3 to 6 days show the card with a yellow "rough picture" line; 7 or more show it plainly; fewer than 3 still says it needs more.
+- p383 (new 1d, 2), p384 re-run.
+
 ## v3.10.1275
 "When you eat" count line now shows both figures (Pete, 4 Nov: 29 was still on screen): "Grams a day, from the 29 days (of 90) that have timed meals." On All and Custom it reads "(of N logged)".
 - p383 updated (2c), p384 re-run.
