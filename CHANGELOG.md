@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1281
+Preview before sending, and timing in report profiles (Pete, 4 Nov: all of them would be useful).
+- Settings > Carer & Clinician: after making a link, "Preview what they will see" opens the carer page from that exact link inside the app, so you can check it before you send it. Nothing leaves the device.
+- Report Profiles: the five meal-timing series can be ticked for any profile (they are in the Nutrition group), but a NEW profile never starts with them ticked.
+- Test p386 extended (7d to 7g). Neighbours re-run: p119, p72, p112, p13. Seen rendered (preview, dark theme, phone width).
+
 ## v3.10.1280
 The weekly summary says when you ate (Pete, 4 Nov: where else could the timing data be useful). A plain line under the average tiles and in the copied text: first and last meal, eating occasions a day, protein before noon, carbs after 5pm, from days with timed meals. Shown only with 3 or more such days; no food names. The AI-written summaries and report narratives already carry the timing figures (v3.10.1272).
 - Test p389. Neighbours re-run: p178, p183. Seen rendered (dark theme, phone width). Printed Clinical/Custom layouts not changed.

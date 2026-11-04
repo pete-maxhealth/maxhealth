@@ -62,6 +62,18 @@ with fresh_server() as root, sync_playwright() as pw:
     if p2.evaluate("!!document.querySelector('#app b, #app i')"): f.add('BUG', '7b: names (including the person\'s own name in the link) are escaped, not rendered as markup')
     if '<b>zzqx chicken</b>' not in t2: f.add('BUG', '7c: a name with markup shows as plain text')
     p2.evaluate("[...document.querySelectorAll('.section-title')].find(e=>/time of day/i.test(e.innerText)).scrollIntoView()"); p2.screenshot(path='/tmp/p386_carer.png')
+    # 7d preview inside the app, before sending (v3.10.1281)
+    page.bring_to_front(); ev("mhShareRole('diab')"); pl, url = link(); tap('#carerPreviewBtn'); page.wait_for_timeout(1500)
+    if not ev("!!document.getElementById('carerPreviewModal')"): f.add('BUG', '7d: the preview opens')
+    fr = [x for x in page.frames if 'carer.html' in x.url]
+    if not fr or 'grams by time of day' not in fr[0].evaluate("document.body.innerText").lower(): f.add('BUG', '7e: the preview shows the page the link makes')
+    page.screenshot(path='/tmp/p386_preview.png')
+    ev("document.getElementById('carerPreviewModal').remove()")
+    # 7f report profiles: timing series can be picked, but are never pre-ticked
+    ev("openReportProfileWizard()"); page.wait_for_timeout(300)
+    d = ev("window._reportWizardDraft.metrics"); ev("closeReportProfileWizard()")
+    if any(k in d for k in ['meal_n', 'meal_first', 'meal_last', 'am_protein', 'eve_carbs']) or 'calories' not in d: f.add('BUG', '7f: a new report profile starts without the timing series: ' + str(d)[:80])
+    if not ev("getAllOverlayableMetrics().some(m => m.key === 'meal_last')"): f.add('BUG', '7g: the timing series can be chosen for a report profile')
     # 8 default link on the carer page shows none of the extras
     page.bring_to_front(); ev("mhShareToggle('timing',false); mhShareToggle('meals',false); mhShareToggle('treat',false)"); pl, url = link()
     p2.goto('http://localhost:5757/carer.html#' + url.split('#', 1)[1]); p2.reload(); p2.wait_for_timeout(1000); t3 = p2.evaluate("document.body.innerText").lower().lower()
