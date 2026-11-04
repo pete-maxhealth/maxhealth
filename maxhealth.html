@@ -6576,7 +6576,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1270'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1271'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -47878,6 +47878,45 @@ function mhWhenEatSummary(w) {
   if (!w) return '';
   return 'Average grams a day by time of day over ' + w.n + ' days with timed meals (protein/carbs/fat): ' + w.bands.map(b => b.label + ' ' + b.range + ' ' + Math.round(b.p) + '/' + Math.round(b.c) + '/' + Math.round(b.f)).join('; ') + '. About ' + (Math.round(w.perDay * 10) / 10) + ' eating occasions a day, averaging ' + Math.round(w.avgP) + ' g protein each' + (w.maxShare != null ? '; the biggest protein meal is on average ' + Math.round(w.maxShare * 100) + '% of the day\'s protein' : '') + '.';
 }
+// ─── TIMING ADVICE (v3.10.1271) ─────────────────────────────────────────────────────────────────────────────────────────────
+// The "who should advise" hat is the person's own choice. The advice is generated from their own logged days, labelled Proven / Early Stage / Speculative,
+// and never sent anywhere: "Write it for my ..." only produces text to copy. Runs on the same AI route as the other reports (starter allowance or their own key).
+const MH_COACH_ROLES = [['coach', 'Coach', 'a supportive nutrition and fitness coach', 'coach'], ['pt', 'PT / sports nutritionist', 'a personal trainer and sports nutritionist focused on training and body-composition goals', 'PT'], ['dietitian', 'Dietitian', 'a registered dietitian', 'dietitian'], ['diabetes', 'Diabetes team', 'a diabetes dietitian focused on glucose-friendly meal timing', 'diabetes team'], ['oncology', 'Oncology nutrition', 'an oncology dietitian focused on intake around treatment sessions and supplements', 'oncology dietitian']];
+function mhCoachRole() { try { const r = localStorage.getItem('mh_coach_role'); return MH_COACH_ROLES.some(x => x[0] === r) ? r : 'coach'; } catch (_) { return 'coach'; } }
+function mhCoachRoleName() { return (MH_COACH_ROLES.find(x => x[0] === mhCoachRole()) || MH_COACH_ROLES[0])[3]; }
+function mhCoachSetRole(k) { try { localStorage.setItem('mh_coach_role', k); } catch (_) {} renderWhenYouEat(); }
+function mhCoachCopy() { const o = document.getElementById('wheneatCoachOut'); if (!o) return; try { navigator.clipboard.writeText(o.textContent).then(() => showToast('Copied'), () => showToast('Select the text to copy it')); } catch (_) { showToast('Select the text to copy it'); } }
+async function mhTimingCoach(forThem) {
+  const out = document.getElementById('wheneatCoachOut'), btn = document.getElementById(forThem ? 'wheneatCoachBtn2' : 'wheneatCoachBtn'), cp = document.getElementById('wheneatCoachCopy'); if (!out) return;
+  const hist = getReportHistory(), w = mhWhenEatStats(hist); if (!w) return;
+  const role = MH_COACH_ROLES.find(x => x[0] === mhCoachRole()) || MH_COACH_ROLES[0];
+  const data = mhWhenEatSummary(w), ctx = buildPatientContext(hist), head = patientContextBlock(ctx);
+  const rules = `Rules: use only the figures given and never invent numbers. Label every suggestion Proven, Early Stage or Speculative, based on how strong the evidence really is (for example, total daily protein matters more than exact timing). Treat anything seen in these days as an association, not a cause, and say plainly if ${w.n} days is too few to be sure. Do not give medication or treatment directions; where something is a clinical decision, say it is one for their own team. Do not push weight loss. British English, no more than 330 words.`;
+  const body = forThem
+    ? `Write a short, factual note ADDRESSED TO ${role[2]}, from the patient, summarising when they eat and what it might mean for their goal. Include the numbers, what is uncertain, and 2 to 3 specific questions they could ask. Do not give the patient advice in this note.`
+    : `You are ${role[2]}. Using the patient's own pattern below, give practical advice on WHEN to eat what, for their goal and situation. Structure: (1) what your pattern shows, in 3 short lines; (2) 3 to 4 timing suggestions, each with its evidence label and the reason; (3) one thing to check with your own team.`;
+  const prompt = `${head}
+
+WHEN THEY EAT (from logged meal times, ${w.n} days with timed meals): ${data}
+
+${body}
+
+${rules}`;
+  let sig = ''; try { sig = 'coach:' + role[0] + ':' + (forThem ? 1 : 0) + ':' + prompt.length + ':' + Array.from(prompt).reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7); } catch (_) {}
+  let cache = {}; try { cache = JSON.parse(localStorage.getItem('mh_ai_coach') || '{}') || {}; } catch (_) {}
+  out.style.display = 'block';
+  if (cache[sig]) { out.textContent = cache[sig]; if (cp) cp.style.display = 'inline-block'; return; }
+  const old = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = 'Thinking…'; }
+  out.textContent = 'Reading your meal times…'; if (cp) cp.style.display = 'none';
+  try {
+    const r = await callHealthAI(prompt + mhLangAINote(), { maxTokens: 700, system: 'You are a careful, kind nutrition adviser. Be concrete, honest about the strength of evidence, and never overstate.' });
+    if (!r.ok) { out.textContent = "Couldn't get advice: " + r.error; return; }
+    out.textContent = r.text; if (cp) cp.style.display = 'inline-block';
+    cache[sig] = r.text; const ks = Object.keys(cache); if (ks.length > 20) delete cache[ks[0]];
+    try { localStorage.setItem('mh_ai_coach', JSON.stringify(cache)); } catch (_) {}
+  } catch (e) { out.textContent = 'Error. Check your connection and try again.'; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+}
 function renderWhenYouEat() {
   const section = document.getElementById('wheneat-report-section'), el = document.getElementById('wheneat-report-content');
   if (!section || !el) return;
@@ -47895,6 +47934,13 @@ function renderWhenYouEat() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
       <div style="background:var(--surface2);border-radius:8px;padding:10px;"><div style="font-size:9px;color:#4d9fff;font-family:'Space Mono',monospace;margin-bottom:6px;">EATING OCCASIONS</div><div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:#4d9fff;">${r1(w.perDay)}</div><div style="font-size:10px;color:var(--text3);">a day (a new one after an hour apart)</div></div>
       <div style="background:var(--surface2);border-radius:8px;padding:10px;"><div style="font-size:9px;color:#4d9fff;font-family:'Space Mono',monospace;margin-bottom:6px;">PROTEIN A MEAL</div><div style="font-size:20px;font-weight:800;font-family:'Syne',sans-serif;color:#4d9fff;">${Math.round(w.avgP)} g</div><div style="font-size:10px;color:var(--text3);">${w.maxShare != null ? 'biggest meal is ' + Math.round(w.maxShare * 100) + '% of the day' : ''}</div></div>
+    </div>
+    <div id="wheneat-coach" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--text2);font-weight:700;margin-bottom:6px;">Timing advice: who should advise?</div>
+      <div id="wheneatRoles" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${MH_COACH_ROLES.map(r => `<span class="hist-filter-btn${r[0] === mhCoachRole() ? ' active' : ''}" data-role="${r[0]}" onclick="mhCoachSetRole('${r[0]}')">${r[1]}</span>`).join('')}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="run-btn" id="wheneatCoachBtn" style="flex:1;min-width:140px;padding:10px;font-size:13px;" onclick="mhTimingCoach(false)">✨ Timing advice for me</button><button class="run-btn" id="wheneatCoachBtn2" style="flex:1;min-width:140px;padding:10px;font-size:13px;" onclick="mhTimingCoach(true)">📋 Write it for my ${mhCoachRoleName()}</button></div>
+      <div id="wheneatCoachOut" style="display:none;margin-top:10px;padding:12px;border-radius:8px;background:var(--surface2);font-size:13px;color:var(--text);line-height:1.55;white-space:pre-wrap;"></div>
+      <button class="copy-btn" id="wheneatCoachCopy" style="display:none;margin-top:8px;width:auto;font-size:13px;padding:7px 12px;" onclick="mhCoachCopy()">📋 Copy</button>
     </div>`;
 }
 function renderFastingReport() {

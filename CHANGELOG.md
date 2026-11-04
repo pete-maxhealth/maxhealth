@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1271
+Timing advice, inside "When you eat" (Pete, 4 Nov: "we have age, sex, weight and everything else needed for another detailed AI response with its clinical/PT/nutritional advisor/treatment session providers hat on ... personal use or third party").
+- Pick who should advise: Coach, PT / sports nutritionist, Dietitian, Diabetes team or Oncology nutrition (remembered). Then "Timing advice for me", or "Write it for my ..." which writes a short factual note addressed to that adviser, with the numbers and two or three questions to ask. Nothing is sent anywhere; the note is text to copy.
+- The AI gets the person's own profile (age, sex, height, weight, goal, condition), the timing figures and the days they cover. Every suggestion is labelled Proven, Early Stage or Speculative; anything seen is an association, not a cause; it says plainly when the days are too few; it gives no medication or treatment directions and does not push weight loss.
+- Same AI route as the other reports (starter allowance or the person's own key). Answers are cached, so a repeat costs nothing; a failed call says so. Only shows when the card does (7 days of timed meals).
+- Test p384 (AI stubbed). Neighbours re-run: p63, p327, p328, p343, p383.
+
 ## v3.10.1270
 "When you eat" (Pete, 4 Nov): "we already have the ability to see what times of the day protein, fat, and carbs are consumed ... a real tool for any analysis." Step 1 of the meal-timing idea: descriptive only; the goal-based timing coach is a later step.
 - New Reports card (after Fasting): grams a day of protein, carbs and fat in five parts of the day (early morning, late morning, afternoon, evening, late night) with each part's share, how many eating occasions a day (a new one after an hour apart), average protein a meal, and how big the biggest protein meal is.
