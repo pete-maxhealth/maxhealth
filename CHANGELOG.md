@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1287
+- The printed Clinical report (Nutrition Protocol) now carries the same plain "Meal timing" line as the weekly summary, on screen and in the copied text (3 or more days with timed meals; no food names).
+- Carer and clinician sharing gains a Supplements choice: the regular list with dose and time of day (active ones only, not a record of what was taken each day). Off by default; the Oncology team starting set turns it on. Shown on the carer page only when included.
+- Tests: p394 (clinical timing line), p386 extended (supplements).
+
 ## v3.10.1286
 - Recipe steps now follow the ingredients as you change them, in the builder and in Cook Mode. Swap butter for ghee and "melt the butter" becomes "melt the ghee" in every step (toast with Undo). Change an amount and the amount quoted in the step follows after a short pause ("200g butter" to "300g butter"). Servings in Cook Mode scale the amounts in the step text, the read-aloud and the timer wording too. Removing an ingredient flags the steps that mention it (never deletes them), with Undo and "keep as is".
 - Only wording that clearly belongs to the ingredient changes: quantities need a unit or count beside the name, times ("2 minutes") are never touched, and a short name only counts when no other ingredient shares it.
