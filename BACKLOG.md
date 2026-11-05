@@ -182,3 +182,8 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Watch/sleep/activity data on a PC: a CSV import and export routine (same shape both ways) so people can add data by hand or move it by downloads; no launcher or pipeline needed. Check what the app already imports first; this is NOT the old shopping CSV screen listed for retirement above.
 - [ ] Desktop layout: a wide-screen stylesheet (centred column or two-pane) applied by screen width, phone layout untouched.
 - [ ] Camera features on desktop: left as they are (best effort, not our problem); say so in the guide.
+- [ ] PC: default folder paths configurable (inbox, backups, exports), with sensible per-platform defaults.
+- [ ] PC: anything that does not apply on a PC (launcher, Health Connect, Termux, camera-only features) is hidden or marked "phone only" with a "?" explaining why.
+- [ ] PC: persona tests at desktop size (wide viewport, mouse and keyboard, no touch), including the CSV routine and configurable paths.
+- [ ] PC: support by donations (a donate link on its own page; the no-Premium-links rule still applies until Premium is live). Advertising can add a "works on your PC too" angle.
+- [ ] Phone and PC sync: decide free vs Premium. Options: (a) manual backup or QR (already free), (b) encrypted file the user keeps in their own cloud folder, no MaxedHealth server, (c) a hosted sync service (Premium, costs money, brings ICO and data-protection duties). Recommend (a) free, (b) as the Premium candidate.
