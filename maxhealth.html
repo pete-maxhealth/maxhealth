@@ -3133,6 +3133,11 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
         </div>
         <div class="food-search-close" onclick="closeFoodSearch()">✕</div>
       </div>
+      <div id="foodSearchOrdTools" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="copy-btn" onclick="mhOrdScanFromPanel()" style="width:auto;font-size:12px;padding:6px 10px;">📷 Scan barcode</button>
+        <button class="copy-btn" onclick="mhOrdLabelPick(true)" style="width:auto;font-size:12px;padding:6px 10px;">📸 Photo of label</button>
+        <button class="copy-btn" onclick="mhOrdLabelPick(false)" style="width:auto;font-size:12px;padding:6px 10px;">🖼 Choose a photo</button>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <span style="font-size:11px;color:var(--text3);">Powered by Open Food Facts · 3M+ products</span>
         <!-- Always available, not just when the database comes back empty -
@@ -6612,7 +6617,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1294'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1295'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -29951,16 +29956,18 @@ function mhOrdChooserHtml(i, btn) {
 function mhOrdFind(i, mode) {
   const d = _shopUi.ord, r = d && d.rows[i]; if (!r) return; d.create = null;
   if (mode === 'type') { mhShopRender(); mhOrdTyped(i); return; }
-  _ordSearchTarget = { i }; const name = mhOrdName(r, d);
+  _ordSearchTarget = { i }; const name = String(r.track || r.name || '').trim().replace(/\s*\([^)]*\)\s*$/, '');
   if (mode === 'label' || mode === 'scan') { setTimeout(() => { const o = document.getElementById('foodSearchOverlay'); if (_ordSearchTarget && _ordSearchTarget.i === i && !(o && o.classList.contains('open'))) _ordSearchTarget = null; }, 120000); if (mode === 'label') mhOrdLabelPick(); else openLiveBarcodeScanner(); return; }
   openFoodSearch(); mhOrdPanelSync();
   const input = document.getElementById('foodSearchInput');
   if (input) { input.value = name; if (mode === 'ai' && name) tryAISearchForIngredient(name); else onFoodSearchInput(name); }
 }
 // Label photo: the AI reads only what is printed (per 100 g). Anything it cannot read stays missing; nothing is estimated.
-function mhOrdLabelPick() {
+function mhOrdScanFromPanel() { openLiveBarcodeScanner(); }
+function mhOrdLabelPick(cam) {
   let inp = document.getElementById('mhOrdLabelInput');
-  if (!inp) { inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.id = 'mhOrdLabelInput'; inp.style.display = 'none'; inp.setAttribute('capture', 'environment'); inp.onchange = () => mhOrdLabelRead(inp); document.body.appendChild(inp); }
+  if (!inp) { inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.id = 'mhOrdLabelInput'; inp.style.display = 'none'; inp.onchange = () => mhOrdLabelRead(inp); document.body.appendChild(inp); }
+  if (cam === false) inp.removeAttribute('capture'); else inp.setAttribute('capture', 'environment');
   inp.value = ''; inp.click();
 }
 function mhOrdLabelParse(text) {
@@ -29969,6 +29976,7 @@ function mhOrdLabelParse(text) {
   const kcal = n('kcal'), prot = n('protein'), carb = n('carbs'); if (kcal == null || prot == null || carb == null) return null;
   return { kcal, prot, carb, fat: n('fat') || 0, fibre: n('fibre') || 0, polyols: n('polyols') || 0, satFat: n('sat_fat') || 0, sugars: n('sugars') || 0, salt: n('salt') || 0, name: String(o.name || '').trim() };
 }
+function mhOrdLabelFail() { const o = document.getElementById('foodSearchOverlay'); if (!(o && o.classList.contains('open'))) _ordSearchTarget = null; mhOrdPanelSync(); }
 async function mhOrdLabelRead(inp) {
   const t = _ordSearchTarget, d = _shopUi.ord, r = t && d && d.rows[t.i], file = inp.files && inp.files[0]; if (!r || !file) { _ordSearchTarget = null; return; }
   showToast('✨ Reading the label…');
@@ -29976,14 +29984,14 @@ async function mhOrdLabelRead(inp) {
     const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(file); });
     const res = await callHealthAI('Read this food nutrition label. Reply with ONLY a JSON object: {"name":"product name if printed","kcal":,"protein":,"carbs":,"fat":,"fibre":,"polyols":,"sat_fat":,"sugars":,"salt":} using the PER 100 g (or per 100 ml) column exactly as printed. Use null for anything not printed or not readable. Never estimate or calculate. If there is no per 100 g column, reply {}.', { maxTokens: 300, image: { base64: b64, mimeType: file.type || 'image/jpeg' } });
     const v = res && res.ok ? mhOrdLabelParse(res.text) : null;
-    if (!v) { showToast('⚠ Could not read a per 100 g label. Try again, or use search or typing.'); _ordSearchTarget = null; return; }
+    if (!v) { showToast('⚠ Could not read a per 100 g label. Try again, or use search or typing.'); mhOrdLabelFail(); return; }
     _selectedFoodItem = { name: mhOrdName(r, d), brand: '', kcal: v.kcal, prot: v.prot, carb: v.carb, fat: v.fat, fibre: v.fibre, polyols: v.polyols, satFat: v.satFat, sugars: v.sugars, salt: v.salt, qty: '' };
     _lastFoodSourceType = 'search';
     document.getElementById('foodSearchOverlay').classList.add('open'); document.getElementById('foodSearchView').style.display = 'none'; document.getElementById('foodAmountView').classList.add('open');
     document.getElementById('foodAmountName').textContent = _selectedFoodItem.name;
     document.getElementById('foodAmountPer100').textContent = 'per 100g: ' + v.kcal + 'kcal · ' + v.prot + 'g P · ' + v.carb + 'g C · ' + v.fat + 'g F · read from your photo, check it against the pack';
     mhOrdPanelSync();
-  } catch (_) { showToast('⚠ Label read failed. Try again, or use search or typing.'); _ordSearchTarget = null; }
+  } catch (_) { showToast('⚠ Label read failed. Try again, or use search or typing.'); mhOrdLabelFail(); }
 }
 function mhOrdSearchDone(t, name) {
   closeFoodSearch(); const d = _shopUi.ord; if (!d || !d.rows || !d.rows[t.i]) return;
@@ -29993,6 +30001,7 @@ function mhOrdSearchDone(t, name) {
 function mhOrdPanelSync() {
   const v = document.getElementById('foodAmountView'); if (!v) return; const on = !!_ordSearchTarget && v.classList.contains('open');
   v.classList.toggle('ord-mode', on);
+  const tools = document.getElementById('foodSearchOrdTools'); if (tools) tools.style.display = _ordSearchTarget ? 'flex' : 'none';
   const note = document.getElementById('foodAmountOrdNote'); if (note) note.style.display = on ? 'block' : 'none';
   const sv = v.querySelector('.food-amount-save'); if (sv) sv.textContent = on ? '💾 Save to library' : '💾 Save';
 }
@@ -30080,7 +30089,7 @@ function mhOrdViewHtml(s, esc, btn) {
       : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 0 24px;"><div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Put in my cupboards as</div><input data-i="' + i + '" value="' + esc(r.track) + '" oninput="mhOrdSet(+this.dataset.i,\'track\',this.value)" style="' + inp + '">' + mhOrdMatchBadge(r, esc) + '</div>'
     + '<div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Have' + (r.check ? ' (check)' : '') + (r.hint && !r.amount ? ' (' + esc(r.hint) + ')' : '') + '</div><input data-i="' + i + '" value="' + esc(r.amount) + '" placeholder="e.g. 800 g or 12" oninput="mhOrdSet(+this.dataset.i,\'amount\',this.value)" style="' + inp + '"></div></div>')
     + (mhOrdName(r, d) !== String(r.track || '').trim() ? '<div data-saveas style="margin:4px 0 0 24px;font-size:12px;color:var(--text3);">Will be saved as <b style="color:var(--text);">' + esc(mhOrdName(r, d)) + '</b></div>' : '')
-    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!r.done && r.kind === 'food' && (!r.from || r.from === 'closest in your library') ? btn('✨ Ask AI', 'mhOrdAskAI(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!ls && r.on && !need(r) ? btn('✓ Add this one now', 'mhOrdApply(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
+    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!r.done && r.kind === 'food' && (!r.from || r.from === 'closest in your library') ? btn('✨ Ask AI (my foods)', 'mhOrdAskAI(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!ls && r.on && !need(r) ? btn('✓ Add this one now', 'mhOrdApply(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
     + '<select data-i="' + i + '" onchange="mhOrdKindSet(+this.dataset.i,this.value)" style="' + sel + '"><option value="food"' + (r.kind === 'food' ? ' selected' : '') + '>🍎 Food</option><option value="nonfood"' + (r.kind === 'nonfood' ? ' selected' : '') + '>🧻 Non-nutritional</option></select></div>'
     + (d.pick && d.pick.i === i ? '<div data-pick style="margin:8px 0 0 24px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Which food is this? Pick one, or search.</div>' + mhOrdAiHtml(d.pick) + '<input id="mhOrdPickQ" value="' + esc(d.pick.q) + '" placeholder="Search your foods" oninput="mhOrdPickQ(this.value)" style="' + inp + 'margin-bottom:8px;"><div id="mhOrdPickList">' + mhOrdPickListHtml() + '</div><div style="margin-top:4px;">' + btn('＋ It is not in my library: create it', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') + '</div></div>' : '')
     + (d.create === i ? mhOrdChooserHtml(i, btn) : '')

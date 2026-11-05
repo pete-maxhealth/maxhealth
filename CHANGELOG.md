@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1295
+
+- Import "Create new" search no longer carries the shop name into the online search ("Vine Tomatoes", not "Vine Tomatoes (Asda)").
+- While an import line owns the search panel it now shows 📷 Scan barcode, 📸 Photo of label and 🖼 Choose a photo, so the Log routes are all there once you are in the search.
+- The row button that only looks through your own foods is now "✨ Ask AI (my foods)", so it is not mistaken for the online AI search.
+- p399 extended; p235 and p220 re-run.
+
 ## v3.10.1294
 
 - Import "Create new" now also offers 📸 Read a label: take a photo of the pack and the AI reads the per 100 g column only. Anything not printed stays missing (nothing is estimated), you see the values and can check them against the pack, and it saves to the library only, back to your list.

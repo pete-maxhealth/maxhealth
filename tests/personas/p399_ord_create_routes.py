@@ -15,6 +15,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("t=>mhOrdLoad(t,'test')", "1 x Zzqx Oat Biscuits 300g\t£1.20\n2 x Zzqx Hazel Spread 350g\t£3.00"); page.wait_for_timeout(500)
     snap = lambda: ev("JSON.stringify(Object.keys(localStorage).filter(k=>/log|meal|entries/i.test(k)&&!/library|stock|shop/i.test(k)).sort().map(k=>[k,localStorage.getItem(k)]))")
     before = snap(); lib0 = ev("loadLibrary().length")
+    vis0 = lambda sel: ev("s=>{const e=document.querySelector(s);return !!e&&getComputedStyle(e).display!=='none'}", sel)
     # 1 chooser
     ev("mhOrdCreate(0)"); page.wait_for_timeout(300)
     labs = ev("[...document.querySelectorAll('[data-create] button')].map(b=>b.textContent.trim())")
@@ -26,7 +27,9 @@ with fresh_server() as root, sync_playwright() as pw:
     # 2 search online
     ev("mhOrdFind(0,'search')"); page.wait_for_timeout(500)
     if not ev("document.getElementById('foodSearchOverlay').classList.contains('open')"): f.add('BUG', '4: search opens the shared panel')
-    if 'Oat Biscuits' not in ev("document.getElementById('foodSearchInput').value"): f.add('BUG', '5: search prefilled with the line name')
+    sv = ev("document.getElementById('foodSearchInput').value")
+    if 'Oat Biscuits' not in sv or '(' in sv: f.add('BUG', f'5: search prefilled with the line name, without the shop suffix: {sv}')
+    if not vis0("#foodSearchOrdTools") or ev("document.querySelectorAll('#foodSearchOrdTools button').length") != 3: f.add('BUG', '5b: scan and label buttons sit in the search panel while an import line owns it')
     ev("_selectedFoodItem={name:'Zzqx Oat Biscuits',brand:'Zzqx',kcal:450,prot:7,carb:60,fat:20,fibre:3,polyols:0,satFat:9,sugars:20,salt:1};document.getElementById('foodSearchView').style.display='none';document.getElementById('foodAmountView').classList.add('open')"); page.wait_for_timeout(300)
     vis = lambda sel: ev("s=>{const e=document.querySelector(s);return !!e&&getComputedStyle(e).display!=='none'}", sel)
     if vis('.food-amount-log'): f.add('BUG', '6: no Log button while an import line owns the panel')
@@ -46,6 +49,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not ev("document.getElementById('foodSearchOverlay').classList.contains('open')"): f.add('BUG', '15: AI opens the shared panel')
     ev("closeFoodSearch()")
     if ev("_ordSearchTarget") is not None: f.add('BUG', '16: cancelling clears the target')
+    if vis0('#foodSearchOrdTools'): f.add('BUG', '16b: import tools hidden again after cancelling')
     # 4 normal Log panel unaffected afterwards
     ev("openFoodSearch();_selectedFoodItem={name:'Zzqx Plain',brand:'',kcal:100,prot:1,carb:1,fat:1};document.getElementById('foodSearchView').style.display='none';document.getElementById('foodAmountView').classList.add('open')"); page.wait_for_timeout(300)
     if not vis('.food-amount-log') or not vis('.food-amount-row'): f.add('BUG', '17: ordinary Log panel keeps Log and amount')
