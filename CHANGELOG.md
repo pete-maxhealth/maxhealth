@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1291
+
+- Sleep total corrected when the launcher (up to 1.7.0) reports the whole time in bed as sleep: if a night has deep/light/REM minutes and the stated total exceeds them by an amount explained by the recorded awake time, the total becomes deep + light + REM and efficiency becomes asleep / time in bed (a night read as 7h42 with efficiency 100% now reads 6h29 and 84%). Normal nights, nights with an unexplained gap, and nights with no stage data are left exactly as sent. Done in the pipeline (extractors/health_connect.py) so no launcher reinstall is needed; launcher 1.7.1 carries the matching fix at source.
+- Nights already stored keep the old figure; only new syncs are corrected.
+- New test p397 (invented nights through the real pipeline).
+
 ## v3.10.1290
 
 - Importing an order page saved as a PDF (Asda "Order Detail" and similar) no longer adds page furniture as items: "Rate your driver", "Your order" and "Substitutes & unavailable" are ignored. The PDF's price column made the page look like a table, which skipped the order-page rules; it is now read as an order page.

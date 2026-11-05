@@ -36,6 +36,40 @@ FIELDS = [
 ROUND_1DP = {'hr_avg', 'hrv', 'hrv_min', 'hrv_max', 'spo2', 'spo2_min', 'spo2_max', 'sleep_efficiency'}
 
 
+def _hhmm(v):
+    try:
+        h, m = str(v).split(':'); return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return None
+
+
+def fix_overstated_sleep(row):
+    """v1.5 (05/11/26): launchers up to 1.7.0 can report sleep_duration as the whole
+    time in bed (bed -> wake) with efficiency 100, even when the same night carries
+    real deep/light/REM minutes. Asleep time is those three stages. Only corrected
+    when the gap between the stated total and the stages is fully explained by the
+    recorded awake time (+15 min of slack for unstaged edges), so a total that
+    legitimately differs (nap, other device) is never touched. Efficiency is then
+    asleep / time in bed (bed -> wake clock times, else asleep + awake)."""
+    try:
+        asleep = row['sleep_deep'] + row['sleep_light'] + row['sleep_rem']
+        total = row['sleep_duration']
+        wake = row.get('sleep_wake') or 0
+    except (KeyError, TypeError):
+        return row
+    if not all(isinstance(x, (int, float)) for x in (asleep, total, wake)) or asleep <= 0:
+        return row
+    excess = total - asleep
+    if excess <= 10 or excess > wake + 15:
+        return row
+    row['sleep_duration'] = asleep
+    bed, wk = _hhmm(row.get('bedtime')), _hhmm(row.get('wake_time'))
+    in_bed = (wk - bed) % 1440 if bed is not None and wk is not None else asleep + wake
+    if in_bed > 0:
+        row['sleep_efficiency'] = round(min(100.0, asleep * 100.0 / in_bed), 1)
+    return row
+
+
 def run(inbox, password=None, dry_run=False):
     export_path = os.path.join(inbox, 'health_connect_export.json')
 
@@ -69,6 +103,6 @@ def run(inbox, password=None, dry_run=False):
                 if isinstance(v, float) and field in ROUND_1DP:
                     v = round(v, 1)
                 row[field] = v
-        rows.append(row)
+        rows.append(fix_overstated_sleep(row))
 
     return rows
