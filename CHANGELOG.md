@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1290
+
+- Importing an order page saved as a PDF (Asda "Order Detail" and similar) no longer adds page furniture as items: "Rate your driver", "Your order" and "Substitutes & unavailable" are ignored. The PDF's price column made the page look like a table, which skipped the order-page rules; it is now read as an order page.
+- A leading "1 x" is stripped from names ("1 x ASDA VINE TOMATOES 250G" is now "Vine Tomatoes", 250 g), and accented capitals keep their case ("Pâté").
+- New test p396 (invented page text; checks item count, no furniture rows, no "X " prefix, amounts, plain-text version and a real table still read as a table).
+
 ## v3.10.1289
 
 - The Oncology nutrition adviser on the When you eat card now only shows for a GBM profile, once treatment sessions are logged, or if it is already the chosen adviser. A standard profile sees no oncology wording (it had slipped in with v3.10.1271; found by the full sweep).

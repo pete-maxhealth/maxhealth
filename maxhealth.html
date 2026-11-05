@@ -6610,7 +6610,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1289'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1290'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -29589,11 +29589,11 @@ function mhOrdSize(name) {
 }
 function mhOrdFmt(n, base) { return base === 'each' ? String(Math.round(n * 100) / 100) : (Math.round(n * 100) / 100) + ' ' + base; }
 function mhOrdClean(name) {
-  let t = String(name || '').replace(/\d+\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l|lt|ltr|litres?|liters?)\b/gi, ' ').replace(new RegExp('\\d+(?:\\.\\d+)?\\s*' + MH_ORD_U + '\\b', 'gi'), ' ').replace(/\((?:[^)]*\d[^)]*)\)/g, ' ');
+  let t = String(name || '').replace(/^\s*\d+\s*[x×]\s+(?=\S)/i, '').replace(/\d+\s*[x×]\s*\d+(?:\.\d+)?\s*(?:kg|g|ml|cl|l|lt|ltr|litres?|liters?)\b/gi, ' ').replace(new RegExp('\\d+(?:\\.\\d+)?\\s*' + MH_ORD_U + '\\b', 'gi'), ' ').replace(/\((?:[^)]*\d[^)]*)\)/g, ' ');
   t = t.replace(/\(\s*\)/g, ' ').replace(/\b\d+\s*(?:ct|count|pk|pack|pcs?|pieces?|rl|rolls?)\b/gi, ' ').replace(/(^|\s)\d+(?=\s+[a-z])/gi, ' ').replace(/^\s*(exceptional by asda|just essentials by asda|cook by asda|asda|kirkland signature|kirkland|ks|tesco finest|tesco|sainsbury'?s|morrisons|waitrose|lidl|aldi|iceland|co-op|costco)\s+/i, '').replace(/^\s*cook by\s+/i, '').replace(/\s+/g, ' ').trim();
-  return t.replace(/\b([a-z])([a-z']*)/gi, (w, a, b) => a.toUpperCase() + b.toLowerCase()).slice(0, 60);
+  return t.replace(/(^|[^\p{L}'’])(\p{L})([\p{L}'’]*)/gu, (w, pre, a, b) => pre + a.toUpperCase() + b.toLowerCase()).slice(0, 60);
 }
-const MH_ORD_NOISE = /^(write a review|you saved|any \d+ for|rest of order|substitutes( & unavailable)?|your order|order:|total|shopping total|delivery cost|multibuy|payment method|hide|show|print order|back to|order again|problem with|search for|learn more|terms)|^[£$€]|^\d+(\.\d+)?\s?(kg|g|lt|l|ml|ea|m)$|\(\d+ items?\)\s*$/i;
+const MH_ORD_NOISE = /^(rate your|how would you rate|please help us improve|back to your orders|write a review|you saved|any \d+ for|rest of order|substitutes( & unavailable)?|your order|order:|total|shopping total|delivery cost|multibuy|payment method|hide|show|print order|back to|order again|problem with|search for|learn more|terms)|^[£$€]|^\d+(\.\d+)?\s?(kg|g|lt|l|ml|ea|m)$|\(\d+ items?\)\s*$/i;
 // ── Receipts and tables (v3.10.1123) ─────────────────────────────────────────────────────────────────────────────────────────
 // A receipt is read three ways, whichever fits: (1) a TABLE (CSV, tab, | or ; separated) with the columns found from the headings or the
 // values, or chosen by you when it cannot tell; (2) a TILL RECEIPT, where an item line is a name with a price on the end (item codes, tax
@@ -29673,8 +29673,16 @@ function mhRcpTableLines(tb, roles, hasHead) {
   return out;
 }
 // Text of an order into [{qty, name, qtyGuess}]. "You ordered" lines are skipped (they were substituted: "We sent" is what arrived).
+// An order page ("1 x Cheddar 400g" lines) saved as a PDF comes out with each item's price in a second tab-separated column, which looks like a table
+// and skips every order-page rule (headings became items, "1 x" stayed in the name, weight lines became foods). Two or more "N x name" lines mean an
+// order page: the price column is taken off and the page is read as an order (v3.10.1290). Null when it is not one.
+function mhOrdPageText(text) {
+  text = String(text || '').replace(/^﻿/, ''); if ((text.match(/^[ \t]*\d+[ \t]*[x×][ \t]+[a-z]/gim) || []).length < 2) return null;
+  return text.replace(/\t+[ \t]*[£$€][ \t]?\d[\d.,]*[ \t]*$/gm, '').replace(/\t+/g, ' ');
+}
 function mhOrdLines(text, map) {
-  text = String(text || '').replace(/^﻿/, ''); const out = [], tb = mhRcpTable(text);
+  text = String(text || '').replace(/^﻿/, ''); const pg = map && map.roles ? null : mhOrdPageText(text); if (pg) text = pg;
+  const out = [], tb = pg ? null : mhRcpTable(text);
   if (tb && ((map && map.roles && map.roles.length === tb.n) || tb.sure)) return mhRcpTableLines(tb, map && map.roles && map.roles.length === tb.n ? map.roles : tb.roles, map && map.roles && map.roles.length === tb.n ? !!map.hasHead : tb.hasHead);
   const rc = mhRcpLines(text); if (rc) return rc;
   let skipNext = false, sect = '';
@@ -29839,7 +29847,7 @@ function mhOrdHash(text) { const t = String(text || '').toLowerCase().replace(/\
 function mhOrdDupOk(on) { if (_shopUi.ord) { _shopUi.ord.dupOk = !!on; mhShopRender(); } }
 function mhOrdLoad(text, label, map) {
   const s = mhShopLoad(), g = mhOrdShopGuess(text, s), shop = g ? g.name : s.shop, kind = _shopUi.ordKind === 'receipt' ? 'receipt' : _shopUi.ordKind === 'list' ? 'list' : 'start';
-  const tb = map ? null : mhRcpTable(text);
+  const tb = map || mhOrdPageText(text) ? null : mhRcpTable(text);
   if (tb && !tb.sure) { _shopUi.ord = { stage: 'map', text, label: label || 'receipt', tb, roles: tb.roles.slice(), hasHead: tb.hasHead, kind }; mhShopView('orderimport'); return true; }
   const rows = mhOrdParse(text, shop, map);
   if (!rows.length) { _shopUi.msg = 'I could not find any items in that. Paste lines like "2 x Cheddar 400g" or a till receipt, one item per line, or choose a CSV or PDF.'; mhShopRender(); return false; }
