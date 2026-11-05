@@ -176,3 +176,9 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] Sleep overstated (v3.10.1291, 5 Nov): launcher <=1.7.0 sent time-in-bed as sleep (6h29 shown as 7h42, efficiency 100%). Pipeline guard in extractors/health_connect.py; p397. Launcher 1.7.1 source fix prepared (HealthConnectBridge.kt, 3-file zip) but NOT installed: the phone's 1.7.0 is release-signed and the key location is unknown (RELEASE_BUILD.md). Old nights keep the old figure. Open: find or recreate the release key before any launcher update reaches other users.
 - [x] Order-page PDF import fixed (v3.10.1290, 5 Nov): headings no longer become items, "N x" stripped. Seen rendered on Pete's real Asda PDF (not committed: has address/order no.). Full sweep not re-run.
 - [x] Docs brought up to v3.10.1289 (5 Nov): public changelog pages (new 1257-1289 block), README, user guide (duplicate check, polyols boxes, oncology adviser wording). Premium full guide gets the adviser wording only; it has no shopping section. Still to do: tour floor for timing, sharing, recipes and the duplicate check (the three published shorts become its clips).
+
+## PC browser use (Pete, 5 Nov)
+- [ ] Notice for PC/browser users: data stays in that browser, backups and security of the device are the user's own responsibility (plain wording, in Settings and the user guide).
+- [ ] Watch/sleep/activity data on a PC: a CSV import and export routine (same shape both ways) so people can add data by hand or move it by downloads; no launcher or pipeline needed. Check what the app already imports first; this is NOT the old shopping CSV screen listed for retirement above.
+- [ ] Desktop layout: a wide-screen stylesheet (centred column or two-pane) applied by screen width, phone layout untouched.
+- [ ] Camera features on desktop: left as they are (best effort, not our problem); say so in the guide.
