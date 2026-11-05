@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # 1 chooser
     ev("mhOrdCreate(0)"); page.wait_for_timeout(300)
     labs = ev("[...document.querySelectorAll('[data-create] button')].map(b=>b.textContent.trim())")
-    if len(labs) != 4 or not labs[0].startswith('🔍') or not labs[1].startswith('✨') or not labs[2].startswith('📷') or not labs[3].startswith('⌨'): f.add('BUG', f'1: chooser order, typing last: {labs}')
+    if len(labs) != 5 or not labs[0].startswith('🔍') or not labs[1].startswith('✨') or not labs[2].startswith('📷') or not labs[3].startswith('📸') or not labs[4].startswith('⌨'): f.add('BUG', f'1: chooser order, typing last: {labs}')
     if ev("document.getElementById('addFoodModal').classList.contains('open')||getComputedStyle(document.getElementById('addFoodModal')).display!=='none'&&document.getElementById('addFoodModal').offsetParent!==null"): f.add('BUG', '2: Create new no longer opens the typed form straight away')
     same = ev("(()=>{const a=document.querySelector('[data-create] button'),b=[...document.querySelectorAll('[data-ord=\"0\"] button')].find(x=>/Match/.test(x.textContent));return a.className===b.className&&getComputedStyle(a).fontSize===getComputedStyle(b).fontSize})()")
     if not same: f.add('BUG', '3: chooser buttons look like the row buttons')
@@ -57,5 +57,21 @@ with fresh_server() as root, sync_playwright() as pw:
     # 6 scan sets target
     ev("closeAddFoodModal()"); ev("mhOrdFind(1,'scan')"); page.wait_for_timeout(300)
     if not ev("_ordSearchTarget"): f.add('BUG', '20: scan sets the target')
+    # 7 label photo: AI stub, only printed values, missing stays missing, library only
+    ev("closeAddFoodModal()"); ev("_ordSearchTarget=null; mhOrdCreate(1)")
+    ev("window.callHealthAI=async()=>({ok:true,text:'{\"name\":\"x\",\"kcal\":520,\"protein\":6,\"carbs\":50,\"fat\":null,\"fibre\":null,\"salt\":0.4}'})")
+    ev("_ordSearchTarget={i:1}")
+    ev("mhOrdLabelRead({files:[new File([new Uint8Array([1,2,3])],'l.jpg',{type:'image/jpeg'})]})"); page.wait_for_timeout(800)
+    it = ev("_selectedFoodItem")
+    if not it or it['kcal'] != 520 or it['fat'] != 0 or it['fibre'] != 0: f.add('BUG', f'21: label values as printed, missing ones left at 0 not guessed: {it}')
+    if not vis('.food-amount-save') or vis('.food-amount-log'): f.add('BUG', '22: label result uses the import panel')
+    b2 = snap(); ev("saveFoodToLibraryFromPanel()"); page.wait_for_timeout(500)
+    if snap() != b2 or 'saved' not in (ev("_shopUi.ord.rows[1].from") or ''): f.add('BUG', '23: label result saved to library, line linked, nothing logged')
+    ev("window.callHealthAI=async()=>({ok:true,text:'{}'})"); ev("_ordSearchTarget={i:0}")
+    ev("mhOrdLabelRead({files:[new File([new Uint8Array([1])],'l.jpg',{type:'image/jpeg'})]})"); page.wait_for_timeout(500)
+    if ev("_ordSearchTarget") is not None or ev("document.getElementById('foodSearchOverlay').classList.contains('open')"): f.add('BUG', '24: unreadable label leaves nothing behind')
+    # 8 scanner message reaches the import page while a line owns the scan
+    ev("_ordSearchTarget={i:0}; settleBubble(document.createElement('div'),'⚠ Not found test')"); page.wait_for_timeout(200)
+    if 'Not found test' not in ev("document.body.innerText"): f.add('BUG', '25: scanner message shows as a toast on the import page')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)

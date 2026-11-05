@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1294
+
+- Import "Create new" now also offers 📸 Read a label: take a photo of the pack and the AI reads the per 100 g column only. Anything not printed stays missing (nothing is estimated), you see the values and can check them against the pack, and it saves to the library only, back to your list.
+- A scanner message such as "not found" now also shows as a toast while an import line is scanning, instead of only in the Log chat behind the list.
+- p399 extended (label values, unreadable label, scanner message); p220, p385 re-run.
+
 ## v3.10.1293
 
 - Shopping import (receipt or order page): "＋ Create new" on an unmatched line no longer opens the typed Add Food form. It offers the same routes as Log: 🔍 Search online, ✨ Try AI and 📷 Scan barcode, with ⌨️ Type it last. The search is prefilled with the line's name.
