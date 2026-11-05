@@ -4,13 +4,21 @@
 
 **Live:** [pete-maxhealth.github.io/maxhealth/maxhealth.html](https://pete-maxhealth.github.io/maxhealth/maxhealth.html)
 **Local:** `http://localhost:5757` (via Termux + server.py)
-**Version:** v3.10.1256
+**Version:** v3.10.1289
 
 ---
 
 ## What it does
 
-**Newest (v3.10.1219 – 1256): one place for each thing, and fewer ways to lose a number.**
+**Newest (v3.10.1257 – 1289): when you eat, advice from your own pattern, and sharing that you control.**
+
+- **When you eat.** A Reports card for protein, carbs and fat by time of day, plus a Meal times card on Trends, Compare Metrics and Statistics measures, a "your usual" line on Fasting, and a timing line in the weekly summary and Clinical report. Measured only from the times on your own logged meals.
+- **Timing advice.** Choose who should advise (coach, PT, dietitian, diabetes team, or oncology nutrition where it applies); every suggestion is labelled Proven, Early Stage or Speculative, and "Write it for my ..." makes a note to copy for a professional. Nothing is sent for you.
+- **You choose what a carer or clinician sees.** Roles are only starting points; every item is your switch, nothing is shared by default, supplements are an option, and you can preview the carer page before sending.
+- **Recipe steps follow the ingredients.** Swap, resize or remove an ingredient and the steps follow, in the builder and in Cook Mode.
+- **"Do I already have this?"** One finder across My cupboards, Filtered, the list and the library, with Possible duplicates and the same check on imports. Polyols have a box wherever Fibre does.
+
+**Earlier (v3.10.1219 – 1256): one place for each thing, and fewer ways to lose a number.**
 
 - **Move is three cards.** *Steps* (your day total), *Exercise today* (one list for walking, cardio and resistance: minutes, distance and effort, calories worked out for you) and *What if…* (pick an exercise or steps, type "40 min", "3 mi" or "3k", choose Easy / Moderate / Hard, see the calories and what it does to your room; nothing is stored until you tap Log it). Exercise over time, Body composition and Your Journey sit below, all with the same date-range chips.
 - **One date range everywhere.** Reports, Trends, Move, Compare Metrics, Treatment and Statistics share the chips 7 Days / 30 Days / 90 Days / All / Custom and the same From / To boxes. Long explanations on report cards sit behind a "?".
