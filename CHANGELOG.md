@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1299
+
+- Fixed: suggestion cards from "Next meal idea" (and the review card for a recipe) now each keep their own slot. Before, every new round restarted the numbering, so on a card from a later round "+ add ingredient", the amount box, swap and remove changed the card from an earlier round higher up the chat (nothing seemed to happen), and "Log this meal" on the older card would log the newer suggestion's food. Found from Pete's "clicked on add an ingredient, didn't save" (Log, Log, Next meal idea, savoury).
+- New test p403 (two rounds, add / remove / log on each card); p161 and p217 re-run alongside.
+
 ## v3.10.1298
 
 - Shopping import review: with more than eight lines the rows are grouped in the same walking-order sections as My cupboards (Fruit & veg, Bread, Meat & fish, Dairy & eggs, Cupboard, Drinks, Other, Non-nutritional). Each section has its own Tick all and Untick (only lines with an amount, like the main Tick all), folds open and shut, and stays where you leave it. Close all and Open all sit above, as in My cupboards.
