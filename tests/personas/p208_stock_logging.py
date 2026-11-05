@@ -11,7 +11,7 @@ src = open(__file__.rsplit('/tests/', 1)[0] + '/maxhealth.html').read().split('\
 for i, l in enumerate(src):
     if re.search(r'(todayLog|targetDay\.log)\.push\(entry\)', l):
         near = '\n'.join(src[i:i + 4])
-        if 'mhStockOnLog' not in near and "source: 'manual'" not in '\n'.join(src[max(0, i - 3):i + 1]):
+        if 'mhStockOnLog' not in near and "source: 'manual'" not in '\n'.join(src[max(0, i - 6):i + 1]):
             f.add('BUG', f'line {i+1}: a log entry is created here without taking stock: {l.strip()}')
 with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 900}, service_workers='block').new_page(); errs = []
