@@ -6617,7 +6617,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1296'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1297'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -30069,6 +30069,30 @@ function mhOrdApply(only) {   // no argument: add everything still ticked. A row
   const o = window[n]; if (typeof o !== 'function') return;
   window[n] = function () { const r = o.apply(this, arguments); mhOrdDraftSave(); return r; };   // saves after every change; clears itself once the import is applied
 });
+// Undo for an import: remembers exactly what the add button changed (cupboard counts, list rows) and the review as it was, so it can be put back without touching anything done since.
+const MH_ORD_UNDO_KEY = 'mh_ord_undo_v1';
+function mhOrdSnap() { const st = mhStockLoad(), sh = mhShopLoad(); return { st: JSON.parse(JSON.stringify(st.items || {})), sh: JSON.parse(JSON.stringify(sh.items || [])), draft: (() => { try { return localStorage.getItem(MH_ORD_DRAFT_KEY); } catch (_) { return null; } })() }; }
+function mhOrdUndoSave(b, label) {
+  try {
+    const st = mhStockLoad(), sh = mhShopLoad(), chS = {}, chL = {}, A = st.items || {};
+    Object.keys(Object.assign({}, b.st, A)).forEach(k => { if (JSON.stringify(b.st[k]) !== JSON.stringify(A[k])) chS[k] = b.st[k] || null; });
+    const bm = {}, am = {}; b.sh.forEach(x => { bm[x.id] = x; }); (sh.items || []).forEach(x => { am[x.id] = x; });
+    Object.keys(Object.assign({}, bm, am)).forEach(id => { if (JSON.stringify(bm[id]) !== JSON.stringify(am[id])) chL[id] = bm[id] || null; });
+    const n = Object.keys(chS).length + Object.keys(chL).length; if (!n) return;
+    localStorage.setItem(MH_ORD_UNDO_KEY, JSON.stringify({ at: Date.now(), label: label || '', st: chS, sh: chL, draft: b.draft, n }));
+    showToast('Import done', 'Undo', () => mhOrdUndo(), 15000);
+  } catch (_) {}
+}
+function mhOrdUndoGet() { try { const j = JSON.parse(localStorage.getItem(MH_ORD_UNDO_KEY) || 'null'); return j && Date.now() - j.at < 86400000 ? j : null; } catch (_) { return null; } }
+function mhOrdUndo() {
+  const u = mhOrdUndoGet(); if (!u) return;
+  const st = mhStockLoad(); st.items = st.items || {}; Object.keys(u.st).forEach(k => { if (u.st[k] === null) delete st.items[k]; else st.items[k] = u.st[k]; });
+  if (Array.isArray(st.imports) && u.at) st.imports = st.imports.filter(x => !(x.at >= u.at - 5000 && x.at <= u.at + 5000)); mhStockSave(st);
+  const sh = mhShopLoad(); Object.keys(u.sh).forEach(id => { const i = sh.items.findIndex(x => String(x.id) === String(id)); if (u.sh[id] === null) { if (i > -1) sh.items.splice(i, 1); } else if (i > -1) sh.items[i] = u.sh[id]; else sh.items.push(u.sh[id]); }); mhShopSave(sh);
+  try { if (u.draft && !localStorage.getItem(MH_ORD_DRAFT_KEY)) localStorage.setItem(MH_ORD_DRAFT_KEY, u.draft); localStorage.removeItem(MH_ORD_UNDO_KEY); } catch (_) {}
+  _shopUi.ord = null; _shopUi.msg = 'Import undone: ' + u.n + ' change' + (u.n === 1 ? '' : 's') + ' put back.' + (u.draft ? ' Press Import to carry on with that list.' : ''); try { mhShopView('list'); } catch (_) { mhShopRender(); }
+}
+['mhOrdApplyList', 'mhOrdApply'].forEach(n => { const o = window[n]; if (typeof o !== 'function') return; window[n] = function () { const b = mhOrdSnap(); const r = o.apply(this, arguments); mhOrdUndoSave(b, n); return r; }; });
 function mhOrdViewHtml(s, esc, btn) {
   const d = _shopUi.ord, kind = (d && d.kind) || _shopUi.ordKind || 'start', rc = kind === 'receipt', ls = kind === 'list', inp = 'width:100%;box-sizing:border-box;padding:9px 8px;font-size:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
   const sel = 'padding:6px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
@@ -30686,6 +30710,7 @@ function mhShopRender(keepFocus) {
   const btn = (label, fn, extra) => '<button class="copy-btn" style="font-size:12px;padding:7px 10px;' + (extra || '') + '" onclick="' + fn + '">' + label + '</button>';
   const head = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;">🛒 Shopping list</div></div>';
   const msg = _shopUi.msg ? '<div id="mhShopMsg" style="font-size:12px;color:var(--green);margin-bottom:6px;">' + esc(_shopUi.msg) + '</div>' : ''; _shopUi.msg = '';
+  const _und = mhOrdUndoGet(); const undoRow = _und && (_shopUi.view === 'list' || !_shopUi.view) ? '<div id="mhOrdUndoRow" style="margin-bottom:8px;">' + btn('↩ Undo the last import (' + _und.n + ' change' + (_und.n === 1 ? '' : 's') + ')', 'mhOrdUndo()') + '</div>' : '';
   let body = '', _isList = false;
   if (_shopUi.view === 'picker') {
     const q = (_shopUi.q || '').toLowerCase(), toU = _shopUi.pickTo === 'usuals', on = toU ? new Set(s.usuals.map(mhShopKey)) : new Set(s.items.filter(i => !i.hidden).map(i => i.key)), all = mhShopKnown().filter(x => !q || x.name.toLowerCase().includes(q));
@@ -30881,7 +30906,7 @@ function mhShopRender(keepFocus) {
   }
   // Redrawing the pane empties it for a moment and the browser clamps the scroll position, so every redraw while scrolled down threw you up the page. Put it back when the view has not changed (v3.10.1258).
   const _sc = document.getElementById('shopScroll'), _st = _sc ? _sc.scrollTop : 0, _same = m.dataset.view === String(_shopUi.view);
-  m.innerHTML = (_isList ? '' : head) + msg + body;
+  m.innerHTML = (_isList ? '' : head) + msg + undoRow + body;
   m.dataset.view = String(_shopUi.view);
   if (_sc && _same) _sc.scrollTop = _st;
   try { mhCardBodyApply(); } catch (_) {}
