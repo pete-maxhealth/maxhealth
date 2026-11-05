@@ -123,7 +123,9 @@ with fresh_server() as root, sync_playwright() as pw:
     if any(v.get('reorder') is not None for v in o['items'].values()): f.add('BUG', '4: reorder levels are never invented')
     msg = ev("(document.getElementById('mhShopMsg')||{}).textContent") or ''
     if 'Stock started for' not in msg or 'skipped' not in msg: f.add('BUG', f'4: the result is reported with what was skipped: {msg}')
-    if ev("_shopUi.view") != 'list': f.add('BUG', '4: returns to the list')
+    if ev("_shopUi.view") != 'orderimport': f.add('BUG', '4: with rows left waiting (unticked, skipped) the review stays open')
+    if ev("_shopUi.ord&&_shopUi.ord.rows.filter(r=>!r.done).length") != 2: f.add('BUG', '4: the unticked and the skipped row are kept waiting')  # v3.10.1296
+    ev("_shopUi.ord=null; mhShopView('list')")
     # remembered link
     rows2 = ev("t=>mhOrdParse(t,'Asda')", "1 x STORE Fresh Double Cream 600ml\n1 x STORE Baked Beans in Tomato Sauce 4 x 410g")
     b2 = next((r for r in rows2 if 'Beans' in r['name']), None)
