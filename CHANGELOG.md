@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1292
+
+- The "Oncology team" role in What this link shows (Carer & Clinician) now only appears on a GBM profile, once treatment sessions are logged, or when it is already the chosen role, the same rule as the Oncology adviser on the When you eat card (they now share one check, so they cannot drift apart). A standard profile sees Carer or family, Clinician, Diabetes team and PT or coach. A role chosen earlier stays shown and active.
+- User guide (and the Premium guide) list the roles with that condition.
+- New test p398; p386, p384, p363, p392, p371 and p394 re-run alongside.
+
 ## v3.10.1291
 
 - Sleep total corrected when the launcher (up to 1.7.0) reports the whole time in bed as sleep: if a night has deep/light/REM minutes and the stated total exceeds them by an amount explained by the recorded awake time, the total becomes deep + light + REM and efficiency becomes asleep / time in bed (a night read as 7h42 with efficiency 100% now reads 6h29 and 84%). Normal nights, nights with an unexplained gap, and nights with no stage data are left exactly as sent. Done in the pipeline (extractors/health_connect.py) so no launcher reinstall is needed; launcher 1.7.1 carries the matching fix at source.
