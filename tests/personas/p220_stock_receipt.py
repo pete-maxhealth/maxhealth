@@ -151,6 +151,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if r0['t'] != 'Yeast Spread' or r0['f'] != 'picked by you' or r0['p']: f.add('BUG', f'7: picking a food sets the line and closes the list: {r0}')
     before = ev("JSON.stringify(state)"); nlib = ev("loadLibrary().length")
     page.locator('[data-ord="%d"] button:has-text("Create new")' % i1).click(); page.wait_for_timeout(300)
+    page.locator('[data-ord="%d"] [data-create] button:has-text("Type it")' % i1).click(); page.wait_for_timeout(300)  # v3.10.1293: Create new offers the Log routes first, typing is the last one
     if not ev("document.getElementById('addFoodModal').classList.contains('open')"): f.add('BUG', '7: Create new opens the Add Food form')
     if ev("document.getElementById('addFoodName').value") != 'Nut Loaf (Asda)': f.add('BUG', f'7: Add Food starts with the name and shop suffix: {ev("document.getElementById(%s).value" % repr("addFoodName"))}')
     if ev("document.getElementById('addFoodKcal').value") != '': f.add('BUG', '7: nutrition is never filled in for you')
@@ -165,7 +166,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not page.locator('[data-ord="%d"]' % i1).count(): f.add('BUG', '7: the import list is on screen again')
     if ev("mhOrdName(_shopUi.ord.rows[%d], _shopUi.ord)" % i1) != 'Nut Loaf (Asda)': f.add('BUG', '7: a food now in the library is not given a second suffix')
     # cancelling Add Food leaves the line alone
-    ev("mhOrdCreate(%d)" % i0); ev("closeAddFoodModal()")
+    ev("mhOrdTyped(%d)" % i0); ev("closeAddFoodModal()")
     if ev("_addFoodOrdContext") is not None: f.add('BUG', '7: cancelling Add Food forgets the import context')
     ev("mhOrdApply()"); page.wait_for_timeout(300)
     if not ev("mhStockLoad().items[mhShopKey('Nut Loaf (Asda)')]"): f.add('BUG', '7: the created food is tracked when the import is applied')

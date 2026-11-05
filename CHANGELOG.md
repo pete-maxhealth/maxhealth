@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1293
+
+- Shopping import (receipt or order page): "＋ Create new" on an unmatched line no longer opens the typed Add Food form. It offers the same routes as Log: 🔍 Search online, ✨ Try AI and 📷 Scan barcode, with ⌨️ Type it last. The search is prefilled with the line's name.
+- Whichever route you use saves to your library only (nothing is logged as a meal) and brings you straight back to the import list with the line linked. While an import line owns the panel there is no amount box or Log button, and Save reads "Save to library". Cancelling leaves the ordinary Log panel exactly as it was.
+- Not yet wired: reading a nutrition label from a photo (the Log chat does this; it is not offered from the import yet).
+- New test p399; p220 updated (typing is now the last button); p396, p218, p314, p319, p320, p382 and p385 re-run alongside.
+
 ## v3.10.1292
 
 - The "Oncology team" role in What this link shows (Carer & Clinician) now only appears on a GBM profile, once treatment sessions are logged, or when it is already the chosen role, the same rule as the Oncology adviser on the When you eat card (they now share one check, so they cannot drift apart). A standard profile sees Carer or family, Clinician, Diabetes team and PT or coach. A role chosen earlier stays shown and active.
