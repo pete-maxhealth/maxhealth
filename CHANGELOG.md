@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1298
+
+- Shopping import review: with more than eight lines the rows are grouped in the same walking-order sections as My cupboards (Fruit & veg, Bread, Meat & fish, Dairy & eggs, Cupboard, Drinks, Other, Non-nutritional). Each section has its own Tick all and Untick (only lines with an amount, like the main Tick all), folds open and shut, and stays where you leave it. Close all and Open all sit above, as in My cupboards.
+- The count choice on a line you already have is clearer: "You already have 500 g. After adding: Keep my count / Add to my count / Set my count to this" (was Leave it as it is / Add this on top / Replace with this).
+- New test p402; p213, p218, p220, p223, p400, p401 re-run alongside.
+
 ## v3.10.1297
 
 - Shopping import: every add (to your cupboards or to your list) can now be undone. A toast offers Undo for 15 seconds, and an "↩ Undo the last import" button stays on the Shopping screen for 24 hours. Undo puts back exactly what the import changed (counts, list rows) and brings the review list back, and leaves anything you have done since untouched.
