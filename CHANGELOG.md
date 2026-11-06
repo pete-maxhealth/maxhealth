@@ -6,6 +6,7 @@
 
 - Fixed: the top-left back arrow (the ← that appears after you scroll down, to return to the previous screen) could not be clicked on a PC window under about 1000px wide, nor on a phone. The page header (layer 100) sat on top of it (layer 60) and took the click. The arrow is now above the header (layer 110); modals still sit above it.
 - p416 checks the arrow is the top element and a real click returns to the previous screen at 400, 900, 1000 and 1440 wide; it fails on 1311 at 400 and 900. p417 is a mouse-only click-everything walk on a PC window (1000 and 1440 wide, demo persona): every visible control on 13 screens must be uncovered, and about 400 safe controls were clicked with no page errors. Controls that delete, clear, reset, restore, send or change language are listed but not clicked.
+- p417 also has a destructive mode (`DESTRUCTIVE=1`, demo persona only): about 405 clicks including delete, clear, reset and remove, no covered controls, no page errors. p418 runs the 1305-1312 changes with the network cut (PC wording, Import list, phone-only notes, CSV upload and sleep minutes, reload, back arrow): no findings; p27, p43, p165, p361, p414 re-run alongside, all clean. Tests only, no app change.
 - Not done: p417 stops at a 520-second cap, so not every control on every screen is clicked; destructive controls are only checked for being covered.
 
 ## v3.10.1311

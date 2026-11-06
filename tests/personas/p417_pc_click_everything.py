@@ -6,7 +6,8 @@ from harness import *
 from playwright.sync_api import sync_playwright
 f = Findings()
 SCREENS = [('today','dash'),('today','move'),('today','supplements'),('log','log'),('log','hist'),('log','library'),('log','shop'),('insights','trends'),('insights','reports'),('insights','stats'),('settings','manage'),('settings','customise'),('settings','import')]
-SKIP = r"language|idioma|lang|globe|delete|clear|reset|remove|wipe|erase|restore|sign out|log out|send|import|upload|share|download|export|push|empty|undo|forget|cancel|start fresh|demo|stop|close all|premium"
+import os
+SKIP = (r"language|idioma|lang|globe|exit|leave|salir|premium|download|export|share|upload|import|send|push" if os.environ.get("DESTRUCTIVE") else r"language|idioma|lang|globe|delete|clear|reset|remove|wipe|erase|restore|sign out|log out|send|import|upload|share|download|export|push|empty|undo|forget|cancel|start fresh|demo|stop|close all|premium")
 LIST = """(skip)=>{const out=[];const re=new RegExp(skip,'i');
  for(const e of document.querySelectorAll('button,[onclick],a[href],select,input[type=checkbox],summary')){
   const r=e.getBoundingClientRect(); const cs=getComputedStyle(e);
@@ -24,10 +25,10 @@ with fresh_server() as root, sync_playwright() as pw:
         ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay').style.display='none'"); ev("startDemoMode('doris')"); page.wait_for_timeout(1500)
         for tab, sub in SCREENS:
             def go():
-                ev("document.querySelectorAll('[id$=Modal],.modal-overlay').forEach(m=>{if(m.id==='mhPackModal'||m.id==='mhLangModal')m.remove()})")
+                ev("document.querySelectorAll('[id$=Modal],.modal-overlay').forEach(m=>{if(m.id==='mhPackModal'||m.id==='mhLangModal')m.remove()}); document.querySelectorAll('.app-modal-overlay').forEach(m=>m.remove())")
                 ev(f"document.getElementById('maintab-{tab}').click()"); page.wait_for_timeout(250)
                 ev(f"try{{switchSubTab('{tab}','{sub}')}}catch(e){{}}"); page.wait_for_timeout(350)
-            go()
+            go(); ev("document.querySelectorAll('.app-modal-overlay').forEach(m=>m.remove())")
             items = ev(LIST, SKIP)
             for it in items[:70]:
                 loc = page.locator('button,[onclick],a[href],select,input[type=checkbox],summary').nth(it['i']) if False else None
