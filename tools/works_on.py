@@ -41,6 +41,8 @@ PREMIUM = [
 def score(col):
     v = [r[col] for r in FREE]; n = len(v)
     return round(100*sum({'F':1,'L':.5,'N':0}[x] for x in v)/n), round(100*v.count('F')/n), round(100*(n-v.count('N'))/n), n
+PREMIUM_STEPS, SECS = 5, 30
+PREMIUM_MIN = round(PREMIUM_STEPS*SECS/60, 1); PREMIUM_HRS = round(PREMIUM_MIN*365/60)
 S = {name: score(i) for name, i in (('Android',2),('iPhone',3),('PC',4))}
 if __name__ == '__main__':
     for k, (sc, full, part, n) in S.items(): print(f'{k}: score {sc}%  fully {full}%  at least partly {part}%  of {n} features')
@@ -54,6 +56,7 @@ if __name__ == '__main__':
     <div class="tradeoffs" id="works-on">
       <div class="tradeoffs-label">Where it works</div>
       <div class="tradeoff">Of the {S['Android'][3]} everyday features of the free app, counting a feature with a limit as half: <strong>Android {S['Android'][0]}%</strong>, <strong>PC browser {S['PC'][0]}%</strong>, <strong>iPhone {S['iPhone'][0]}%</strong>. Fully working with no limit: Android {S['Android'][1]}%, PC {S['PC'][1]}%, iPhone {S['iPhone'][1]}%. The iPhone figures come from checking what the app needs against what Safari offers; they have not yet been tested on a real iPhone.</div>
+      <div class="tradeoff">Premium, coming soon, does the daily typing for you: weight, steps, sleep, heart rate and the daily backup. At an estimated 30 seconds each, that is about {PREMIUM_MIN} minutes a day, or roughly {PREMIUM_HRS} hours a year. It is an estimate, and it depends on how much you log.</div>
       <details style="margin-top:12px;"><summary style="cursor:pointer;color:var(--accent);">See every feature</summary>
       <div class="compare-wrap"><table><thead><tr><th>Feature</th><th>Android</th><th>iPhone</th><th>PC</th></tr></thead><tbody>
 {rows}{pr}</tbody></table></div>
