@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1309
+
+- New: "Phone only" notes on a PC browser. Three places that only make sense on an Android phone show a yellow "Phone only" line with a "?" saying why, on a PC only: Settings, Pipeline & Health Connect Log; Data, Run a device by hand (Advanced, the Termux commands); and Settings, About, Health Connect sync. Phones, tablets and touch screens do not see the notes (a PC is a non-Android, non-iOS browser without a coarse pointer).
+- Changed: the "add this page to your Home Screen" tip no longer appears on a PC.
+- p413 checks the notes show with a working "?" on a PC, stay hidden on an Android phone and on a touch screen at desktop size, the card open/close is unchanged, and the Home Screen tip. p406, p408 and p412 re-run alongside (p406 failed once on a Spanish-language timing check, then passed twice, with and without this change).
+- Not done: the notes are English only for now; camera and barcode features are left as they are (best effort on a PC), as agreed.
+
 ## v3.10.1308
 
 - Fixed: the "Your data lives in browser storage" notice on Settings, Data. On a PC or any non-local host the app rewrote its heading and deleted the "?" text, so tapping "?" did nothing. The heading and text now stay as they are.
