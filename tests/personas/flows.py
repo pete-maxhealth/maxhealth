@@ -16,6 +16,8 @@ def setup(page, name):
     ev = page.evaluate
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1000)
     ev("state.onboarded=true; saveState()"); ev("document.getElementById('onboardingOverlay')&&(document.getElementById('onboardingOverlay').style.display='none')")
+    ev("startDemoMode('doris')"); page.wait_for_timeout(1800)   # Pete 6 Nov: destructive tests run in the demo persona, where nothing real is saved
+    ev("document.getElementById('onboardingOverlay')&&(document.getElementById('onboardingOverlay').style.display='none')")
     ev("l=>{const lib=loadLibrary(); l.forEach(([n,c])=>lib.push({name:n,kcal:100,protein:5,carbs:5,fat:5,categories:[c],portion:'100g',per100g:true})); saveLibrary(lib)}", FOODS)
     if name == 'import_review':
         ev("switchTabById('shop'); mhOrdOpen('order')"); page.wait_for_timeout(300); ev("t=>mhOrdLoad(t,'p404')", ORDER); page.wait_for_timeout(500)

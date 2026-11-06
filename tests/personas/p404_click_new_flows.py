@@ -5,7 +5,7 @@ cards, shopping list, My cupboards, the Log search panel opened from an import l
 that its click opened.
 After every click it checks: no page error, no NaN / undefined / [object Object] in visible text, no duplicate element ids (the v3.10.1299 bug:
 two suggestion cards both called combo-card-0), every mh_ storage key that holds JSON still parses, and the shopping list / stock / library
-did not silently lose items unless the control was a remove/clear one. Destructive controls are skipped (same list as p362) and confirms are dismissed.
+did not silently lose items unless the control was a remove/clear one. Destructive controls (delete / clear / reset / erase ...) ARE clicked, but only inside the demo persona (Pete, 6 Nov), with the app's own confirm answered yes; outside demo they are skipped.
 Also: a section must not open/shut by itself when something else is done (collapse), and any full-screen panel a click opens must have a way out (navigation).
 Usage: python3 p404_click_new_flows.py [scenario ...]   (no argument = all). Invented data only.
 Findings are for review; a duplicate id or a JS error is always a bug."""
@@ -29,7 +29,7 @@ def check(page, where, before, was_remove):
         f.add('BUG', f'{where}: library/stock shrank without a remove control ({before} -> {after})')
 
 ALL = ['import_review', 'import_after_partial_add', 'suggestion_cards', 'shopping_list', 'my_cupboards', 'log_search_from_import']
-want = sys.argv[1:] or ALL; clicked = 0; skipped = 0
+want = sys.argv[1:] or ALL; clicked = 0; skipped = 0; destructive = 0
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); ctx = b.new_context(viewport={'width': 390, 'height': 900}, service_workers='block'); page = ctx.new_page()
     page.on('pageerror', lambda e: f.add('JS-exception', str(e)[:200])); page.on('dialog', lambda d: d.dismiss())
@@ -39,12 +39,14 @@ with fresh_server() as root, sync_playwright() as pw:
         print(f'{name}: {len(first)} controls')
         for it in first[:45]:
             label = it['t'] or it['oc']
-            if SKIP.search(it['t'] + ' ' + it['oc']): skipped += 1; continue
+            dest = bool(SKIP.search(it['t'] + ' ' + it['oc']))
             setup(page, name)
+            if dest and not ev("typeof _demoMode !== 'undefined' && !!_demoMode"): skipped += 1; continue   # destructive controls only ever run inside the demo persona
             cur = ev(SCAN)
             m = [c for c in cur if c['t'] == it['t'] and c['oc'] == it['oc']]
             if not m: continue
-            before = ev(COUNTS); rm = bool(REMOVES.search(it['t'] + ' ' + it['oc'])); fold0 = ev(FOLD); ov0 = ev(OVERLAYS)
+            before = ev(COUNTS); rm = dest or bool(REMOVES.search(it['t'] + ' ' + it['oc'])); fold0 = ev(FOLD); ov0 = ev(OVERLAYS)
+            if dest: ev("window.appConfirm = (m, ok) => { ok && ok(); }"); destructive += 1   # say yes to the app's own confirm
             sig_before = {(c['t'], c['oc']) for c in cur}
             ev(f"(() => {{ const e = document.querySelectorAll('button, [onclick], summary, [role=button], .tab-btn, input[type=checkbox], select')[{m[0]['i']}]; if (e) e.click(); }})()")
             page.wait_for_timeout(250); clicked += 1; n1 += 1
@@ -58,13 +60,15 @@ with fresh_server() as root, sync_playwright() as pw:
             new = [c for c in ev(SCAN) if (c['t'], c['oc']) not in sig_before][:8]
             for c2 in new:
                 l2 = c2['t'] or c2['oc']
-                if SKIP.search(c2['t'] + ' ' + c2['oc']): skipped += 1; continue
-                b2 = ev(COUNTS); rm2 = rm or bool(REMOVES.search(c2['t'] + ' ' + c2['oc']))
+                d2 = bool(SKIP.search(c2['t'] + ' ' + c2['oc']))
+                if d2 and not ev("typeof _demoMode !== 'undefined' && !!_demoMode"): skipped += 1; continue
+                b2 = ev(COUNTS); rm2 = rm or d2 or bool(REMOVES.search(c2['t'] + ' ' + c2['oc']))
+                if d2: ev("window.appConfirm = (m, ok) => { ok && ok(); }"); destructive += 1
                 ev(f"(() => {{ const all = [...document.querySelectorAll('button, [onclick], summary, [role=button], .tab-btn, input[type=checkbox], select')]; const e = all.find(x => ((x.innerText || x.getAttribute('aria-label') || x.title || x.value || '') + '').trim().slice(0, 50) === {json.dumps(c2['t'])} && (x.getAttribute('onclick') || '').slice(0, 80) === {json.dumps(c2['oc'])}); if (e) e.click(); }})()")
                 page.wait_for_timeout(200); clicked += 1
                 check(page, f'{name} > {label} > {l2}', b2, rm2)
         print(f'  clicked {n1} first-level controls')
-print(f'clicked {clicked} controls, skipped {skipped} destructive ones')
+print(f'clicked {clicked} controls ({destructive} of them destructive, run inside the demo persona), skipped {skipped}')
 seen = set(); uniq = []
 for x in f:
     if x[1] not in seen: seen.add(x[1]); uniq.append(x)
