@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1317
+
+- Fixed: on a phone the up scroll tab could still sit over the "▾ hide" hint at the right end of a card header (p419 on Today, 400 wide, scrolled to y1400). The scroll tabs are now 20px wide instead of 28px. p419 passes; p416 and p418 pass; the tab was looked at in a rendered crop at 400 wide, not in dark theme or on a real phone.
+- Not done: the up/down tabs are narrower to tap; say if that is too small.
+
 ## v3.10.1316
 
 - Fixed: phone-leaning wording on a PC (Pete's list, 6 Nov). Messages now say "local server", "this device" or "the app" instead of "phone server", "phone storage" and "teach the phone": the server health check, the "still waiting" toast, the Downloads lookup, the save-failed messages, the storage-full hint, the camera-tilt hint and the "photo stays on your device" line. The "Local server found" banner says "computer" on a PC and no longer points to a home screen shortcut; the cloud-mode banner drops "in Termux" on a PC (both unchanged on Android).
