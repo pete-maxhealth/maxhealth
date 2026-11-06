@@ -181,7 +181,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 ## PC browser use (Pete, 5 Nov)
 - [x] Notice for PC/browser users (v3.10.1308, 6 Nov): the Settings, Data storage notice and the user guide now say it (and the notice's "?" works again on non-local hosts). Translation still to add.
-- [ ] Watch/sleep/activity data on a PC: a CSV import and export routine (same shape both ways) so people can add data by hand or move it by downloads; no launcher or pipeline needed. Check what the app already imports first; this is NOT the old shopping CSV screen listed for retirement above.
+- [x] Watch/sleep/activity data on a PC (v3.10.1310, 6 Nov): the existing Manual Entry CSV template and upload now work with no server and round-trip with the exported combined.csv (p414). Open: a bulk undo, and a line in the help text about minutes.
 - [x] Desktop layout, step 1 (v3.10.1306, 6 Nov): 880 px centred column from 900 px up, phones untouched (p410). Still to do: look at every sub-tab, picker and pop-up at desktop width; a two-pane layout is optional later.
 - [ ] Camera features on desktop: left as they are (best effort, not our problem); say so in the guide.
 - [ ] PC: default folder paths configurable (inbox, backups, exports), with sensible per-platform defaults.

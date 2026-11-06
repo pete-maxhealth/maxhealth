@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1310
+
+- New: the "Upload filled CSV" on Data, Manual Entry now works with no server (a PC browser or the cloud page). Before, it only talked to the server and failed there with nothing saved; a single manual entry already worked. The days are saved into this browser the same way a single entry is, merged by date, and the result line says "Stored in this browser (no server here)".
+- Fixed: round trip. The template holds sleep in hours but an exported combined.csv holds minutes, so re-uploading an export would have multiplied sleep by 60. A sleep figure over 24 is now taken as minutes (no night is over 24 hours), so the export goes back in unchanged. Exported file, template and upload now share the same column names.
+- p414 checks a filled template with ISO and UK dates, hours and minutes, a blank row and a bad date; the exported file re-uploading unchanged; and a reload. p414 fails on the previous version. p12 (500-row upload on the server), p59 re-run alongside.
+- Not done: there is no one-tap "undo this upload" for a bulk upload (a single day can be cleared in Manual Entry); the help text does not yet mention that sleep may be in minutes.
+
 ## v3.10.1309
 
 - New: "Phone only" notes on a PC browser. Three places that only make sense on an Android phone show a yellow "Phone only" line with a "?" saying why, on a PC only: Settings, Pipeline & Health Connect Log; Data, Run a device by hand (Advanced, the Termux commands); and Settings, About, Health Connect sync. Phones, tablets and touch screens do not see the notes (a PC is a non-Android, non-iOS browser without a coarse pointer).

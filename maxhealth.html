@@ -6627,7 +6627,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1309'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1310'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -46543,6 +46543,19 @@ function _csvNumber(raw, delim) {
   else t = t.replace(/,(?=\d{3}(\D|$))/g, '');                                                                      // 6,007
   return /^-?\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
 }
+// v3.10.1310: bulk CSV rows saved into this browser when there is no server. Same storage and same merge as mhSaveManualEntryCloud, once for the whole batch.
+function mhManualCsvCloud(entries, badDates, out) {
+  const keys = []; entries.forEach(e => Object.keys(e).forEach(k => { if (k !== 'date' && !keys.includes(k)) keys.push(k); }));
+  let full = '';
+  entries.forEach(e => { const vals = {}; keys.forEach(k => { if (e[k] != null) vals[k] = e[k]; }); full = mhCloudUpsertCsv(e.date, vals); try { localStorage.setItem('mh_combined_csv_cache', full.slice(0, 4900000)); } catch (_) {} });
+  const mini = ['date,' + keys.join(','), ...entries.map(e => [e.date, ...keys.map(k => e[k] != null ? e[k] : '')].join(','))].join('\n');
+  processCombinedText(mini, true, null);
+  try { updateDashboard(); } catch (_) {}
+  const notes = [];
+  if (badDates.length) notes.push(`${badDates.length} row(s) had a date I couldn't read (e.g. "${badDates[0]}")`);
+  if (out) { out.style.display = 'block'; out.className = badDates.length ? 'output-box' : 'output-box success'; out.textContent = `✓ Saved ${entries.length} day(s)${notes.length ? ' — ' + notes.join(' · ') : ''}. Stored in this browser (no server here).`; }
+  showToast(`${entries.length} day(s) imported ✓`);
+}
 function handleManualCsvFileSelected(input) {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -46577,7 +46590,8 @@ function handleManualCsvFileSelected(input) {
           } else {
             const n = _csvNumber(raw, delim);
             if (isNaN(n)) continue;
-            entry[field] = meta.store === 'minutes-to-hours' ? Math.round(n * 60) : n;
+            // v3.10.1310: the template holds sleep in hours, but an exported combined.csv holds minutes. No night is over 24 hours, so a bigger number is already minutes.
+            entry[field] = meta.store === 'minutes-to-hours' ? (n > 24 ? Math.round(n) : Math.round(n * 60)) : n;
           }
           hasValue = true;
         }
@@ -46586,6 +46600,9 @@ function handleManualCsvFileSelected(input) {
         entries.push(entry);
       }
       if (!entries.length) throw new Error(badDates.length ? `No usable rows — couldn't read the date "${badDates[0]}" (use 2026-10-05 or 05/10/2026)` : 'No filled-in rows found — every row was blank or unrecognised');
+
+      // v3.10.1310: no server (a PC browser or the cloud page) - save the rows into this browser, the same way a single manual entry is saved there.
+      if (!_serverOnline) { mhManualCsvCloud(entries, badDates, out); return; }
 
       // Chunked: a long history (e.g. a year or two of daily rows) used to be refused outright
       // by the server's 400-row ceiling.
