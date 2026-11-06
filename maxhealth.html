@@ -6619,7 +6619,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1301'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1302'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -28219,6 +28219,20 @@ function mhStockRestoreRemoved(key) {
   try { localStorage.setItem('mh_stock_removed', JSON.stringify(list.filter(x => x.it.key !== key))); } catch (_) {}
   try { mhStockSweep(); } catch (_) {} _shopUi.cbRemOpen = _shopUi.cbRemOpen; try { mhShopRender(); } catch (_) {} return true;
 }
+// Remove every non-nutritional item in one go (v3.10.1302): for imports made before Undo existed that filled the cupboards with toilet roll and bin bags.
+// Same safety as removing one: each is kept in "Recently removed" and one Undo on the message puts them all back. Foods are never touched.
+function mhCbNonFoodKeys() { try { return Object.values(mhStockLoad().items).filter(it => it && it.nonFood).map(it => it.key); } catch (_) { return []; } }
+function mhCbRemoveNonFood() {
+  const keys = mhCbNonFoodKeys(); if (!keys.length) { showToast('No non-nutritional items to remove'); return; }
+  appConfirm('Remove all ' + keys.length + ' non-nutritional item' + (keys.length === 1 ? '' : 's') + ' from My cupboards? Foods are not touched, and Undo puts them back.', () => {
+    const o = mhStockLoad(), list = mhStockRemovedLoad().filter(x => !keys.includes(x.it.key)), now = Date.now();
+    keys.slice().reverse().forEach(k => { const it = o.items[k]; if (it) list.unshift({ at: now, it: JSON.parse(JSON.stringify(it)), ledger: o.ledger.filter(l => l.k === k) }); });
+    try { localStorage.setItem('mh_stock_removed', JSON.stringify(list.slice(0, Math.max(30, keys.length + 10)))); } catch (_) {}
+    keys.forEach(k => mhStockUntrack(k));
+    showToast(keys.length + ' non-nutritional item' + (keys.length === 1 ? '' : 's') + ' removed from my cupboards', 'Undo', () => { keys.forEach(k => mhStockRestoreRemoved(k)); try { mhShopRender(); } catch (_) {} }, 10000);
+    try { mhShopRender(); } catch (_) {}
+  }, null, true, { confirm: 'Remove all' });
+}
 function mhStockRemovedToggle() { _shopUi.cbRemOpen = !_shopUi.cbRemOpen; mhShopRender(); }
 function mhStockRemovedHtml() {
   const l = mhStockRemovedLoad(); if (!l.length) return '';
@@ -30546,6 +30560,7 @@ function mhStockCardHtml(s) {
     rowsH = '<div id="mhCbFoldAll" style="display:flex;gap:6px;margin-top:8px;"><button class="copy-btn" onclick="mhCbFoldAll(true)" style="font-size:12px;padding:7px 10px;">▸ Close all</button><button class="copy-btn" onclick="mhCbFoldAll(false)" style="font-size:12px;padding:7px 10px;">▾ Open all</button></div>' + Object.keys(groups).map(Number).sort((a, b) => a - b).map(sec => { const g = groups[sec], shut = mhCbIsShut('a' + sec);   // closed until you open one, then remembered (v3.10.1172)
       return '<div data-cb-aisle="' + sec + '" onclick="mhCbFold(\'a' + sec + '\')" style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 6px;background:var(--surface2);border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);cursor:pointer;"><span>' + (shut ? '▸ ' : '▾ ') + esc(mhShopSectionName(sec)) + ' ' + g.length + '</span></div>' + (shut ? '' : g.map(row).join('')); }).join('');
   } else rowsH = shownIt.map(row).join('');
+  if (cb.tab === 'nonfood' && tabCount > 0) rowsH = '<div id="mhCbBulkNonFood" style="display:flex;gap:6px;margin-top:8px;"><button class="copy-btn" onclick="mhCbRemoveNonFood()" style="font-size:12px;padding:7px 10px;">🗑 Remove all ' + tabCount + ' non-nutritional</button></div>' + rowsH;
   let hitsH = '';
   if (cq.length >= 2) {
     const hits = mhShopKnown().filter(x => !o.items[x.key] && x.name.toLowerCase().includes(cq)).slice(0, 6), typed = cb.q.trim(), tk = mhShopKey(typed), exact = hits.some(x => x.key === tk) || !!o.items[tk];

@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1302
+
+- New: My cupboards, Non-nutritional tab: "🗑 Remove all N non-nutritional" for imports made before Undo existed. It asks first, only touches non-nutritional items (foods stay), keeps each one in Recently removed, and one Undo on the message brings them all back with their counts. Same button style as Close all / Open all. User guide updated. Test p407; p207, p221, p224, p225, p226, p401 and p403 re-run alongside.
+
 ## v3.10.1301
 
 - Changed: long explanatory text now sits behind the standard "?" (your 26 Oct rule), with a one-line summary left visible. Done on Stats and Reports intros, the language note, Settings (activity level history, carb method, net carbs, exercise energy, TDEE multiplier, MET values, walking pace bands, activity auto-switch, carb ceilings, daily step baseline, weather, idle pause, reset layout, symptoms, treatments, report profiles, fibre target, fasting, bug report hint, Layout & Starter Packs, Where AI is used), Import (manual entry and bulk CSV), Trends (not-enough-data message, photo compare notes) and the import review line.
