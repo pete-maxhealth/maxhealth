@@ -20,7 +20,7 @@ errs = []
 def add(kind, where, detail): rev.append((kind, where, detail))
 
 LONG = """() => { const out = [];
-  const skip = e => e.closest('.help-slot, [class*=help], input, textarea, select, script, style, [contenteditable], .bubble, [id*=chat], [id*=Chat], #ytC, #ytH, [id^=combo-card], pre, code, [class*=bubble]');
+  const skip = e => getComputedStyle(e).fontFamily.includes('Space Mono') || e.closest('[id^=help-], #supplementListInner, .help-slot, [class*=help], input, textarea, select, script, style, [contenteditable], .bubble, [id*=chat], [id*=Chat], #ytC, #ytH, [id^=combo-card], pre, code, [class*=bubble]');
   document.querySelectorAll('body *').forEach(e => {
     if (skip(e)) return; const r = e.getBoundingClientRect(); if (r.width < 40 || r.height < 10) return;
     const s = getComputedStyle(e); if (s.display === 'none' || s.visibility === 'hidden') return;
@@ -49,7 +49,7 @@ def look(page, where):
     ctl = ev(CTL); seen = {}
     for c in ctl:
         k = (c['t'], c['oc'])
-        if c['t'] and c['oc'] and k in seen and not re.match(r'^[\d\W]+$', c['t']): add('dup-control', where, f'"{c["t"]}" appears twice ({c["oc"][:40]})')
+        if c['t'] and c['oc'] and k in seen and not re.match(r'^[\d\W]+$', c['t']) and not re.search(r'Supplement', c['oc']): add('dup-control', where, f'"{c["t"]}" appears twice ({c["oc"][:40]})')
         seen[k] = 1
         if COMMON.match(c['t'] or ''):
             sig = f'{c["fs"]}/{c["br"]}/{round(c["h"] / 4) * 4}px/{c["bg"]}'

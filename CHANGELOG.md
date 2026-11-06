@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1301
+
+- Changed: long explanatory text now sits behind the standard "?" (your 26 Oct rule), with a one-line summary left visible. Done on Stats and Reports intros, the language note, Settings (activity level history, carb method, net carbs, exercise energy, TDEE multiplier, MET values, walking pace bands, activity auto-switch, carb ceilings, daily step baseline, weather, idle pause, reset layout, symptoms, treatments, report profiles, fibre target, fasting, bug report hint, Layout & Starter Packs, Where AI is used), Import (manual entry and bulk CSV), Trends (not-enough-data message, photo compare notes) and the import review line.
+- Fixed: tapping the "?" beside the Incidental Steps Baseline note would also have flipped the Automatic switch (the note sat inside its label). The note now sits below the switch.
+- Changed: the tableware "Add" button now looks like the other "Add next to a box" buttons (same class as Shopping and the Never-list).
+- Language packs: the split lines were added to all 8 languages (tools/lang_split_help.py cuts the existing translations at the same point, so nothing went back to English). Seven explainers that had no translation yet stay in English.
+- Not changed on purpose: formula lines in Settings (they are the reference itself), the two Trends insight sentences (the insight is the card), and the supplement list showing "Edit / On" once per period for a supplement taken in two periods.
+- New test p406 (every moved text: hidden by default, one tap shows, second tap hides, nothing long left on those screens, Spanish lines, import review). p404 and p405 (click-everything and house-rules audit) are now part of the tool set; p44, p51, p77, p146, p166, p195, p234, p328 re-run alongside.
+
 ## v3.10.1300
 
 - Fixed: v3.10.1299 was released with its version written as "3.10.1299" instead of "v3.10.1299", so the version shown on screen, in the bug report and in the Health check was wrong. Corrected; devices on 1299 will see this as the next update. Found by the full sweep (p52, p99, p346), which all pass again.
