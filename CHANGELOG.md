@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1303
+
+- Changed: the Data screen is grouped by what you want to do. The Filter chips are now "Bring data in" (Sync Wearable Data, Manual Entry), "Move or back up" (Export, import & backup, Restore from backup) and "Check it's complete" (Missing Data & Coverage), and the cards start in that order. Anyone with their own saved order or hidden cards keeps it; an old saved chip falls back to All. Chip names added to all 8 languages. Test p408; p50, p119, p195, p25, p338, p342 re-run alongside.
+- Not done: the single "Move & back up" card with a chooser. QR, export/import, restore and the wearable cards already sit in one card each, so the chips do the sorting; a chooser on top would hide things you now see at a glance.
+
 ## v3.10.1302
 
 - New: My cupboards, Non-nutritional tab: "🗑 Remove all N non-nutritional" for imports made before Undo existed. It asks first, only touches non-nutritional items (foods stay), keeps each one in Recently removed, and one Undo on the message brings them all back with their counts. Same button style as Close all / Open all. User guide updated. Test p407; p207, p221, p224, p225, p226, p401 and p403 re-run alongside.
