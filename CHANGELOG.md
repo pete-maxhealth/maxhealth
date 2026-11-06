@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1312
+
+- Fixed: the top-left back arrow (the ← that appears after you scroll down, to return to the previous screen) could not be clicked on a PC window under about 1000px wide, nor on a phone. The page header (layer 100) sat on top of it (layer 60) and took the click. The arrow is now above the header (layer 110); modals still sit above it.
+- p416 checks the arrow is the top element and a real click returns to the previous screen at 400, 900, 1000 and 1440 wide; it fails on 1311 at 400 and 900. p417 is a mouse-only click-everything walk on a PC window (1000 and 1440 wide, demo persona): every visible control on 13 screens must be uncovered, and about 400 safe controls were clicked with no page errors. Controls that delete, clear, reset, restore, send or change language are listed but not clicked.
+- Not done: p417 stops at a 520-second cap, so not every control on every screen is clicked; destructive controls are only checked for being covered.
+
 ## v3.10.1311
 
 - Fixed: on a PC browser the Data screen still said "phone" in a few places ("Check the phone's daily backups", "saves one to the phone's server each day", the push-to-server button and the restore note). They now say "computer" / "the server" on a PC and keep "phone" on a phone. New helper `mhDeviceWord()`; text is set at load and when the Import cards are redrawn.
