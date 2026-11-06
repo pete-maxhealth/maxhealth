@@ -1,4 +1,4 @@
-"""Persona 234: "Add this one now" on an import row (v3.10.1127). One food goes into the cupboards straight away and its row locks as done; the bottom button then adds only
+"""Persona 234: saving one import row ahead of the rest (v3.10.1127; the per-row button was removed in v3.10.1304, the engine stays). One food goes into the cupboards straight away and its row locks as done; the bottom button then adds only
 what is left, so nothing is counted twice; a reload in the middle keeps the done rows done; the import is logged once. Invented data only."""
 import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
@@ -18,7 +18,8 @@ with fresh_server() as root, sync_playwright() as pw:
     if len(rows) != 3: f.add('BUG', f'0: three lines read: {rows}')
     ev("mhOrdSet(0,'amount','400 g'); mhOrdSet(1,'amount','1000 g'); mhOrdSet(2,'amount','1000 ml'); mhShopRender()"); page.wait_for_timeout(200)
     if not ev("!!document.querySelector('[data-ord=\"0\"] button')") : f.add('BUG', '1: rows have buttons')
-    page.click('[data-ord="0"] button:has-text("Add this one now")'); page.wait_for_timeout(400)
+    if ev("document.querySelectorAll('[data-ord=\"0\"] button').length && [...document.querySelectorAll('[data-ord=\"0\"] button')].some(b=>/Add this one now/.test(b.innerText))"): f.add('BUG', '0: the per-row "Add this one now" button is gone (v3.10.1304); the bottom button is the one way to add')
+    ev("mhOrdApply(0)"); page.wait_for_timeout(400)   # the engine behind the old button still saves one row and locks it, so a reload in the middle stays safe
     if lvl(rows[0][0]) != 400: f.add('BUG', f'2: the first food is in the cupboards at once: {lvl(rows[0][0])}')
     if lvl(rows[1][0]) is not None: f.add('BUG', f'3: the others are untouched: {lvl(rows[1][0])}')
     if not ev("!!document.querySelector('[data-ord=\"0\"][data-done]')"): f.add('BUG', '4: the added row shows as done')

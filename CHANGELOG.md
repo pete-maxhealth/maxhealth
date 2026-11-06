@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1304
+
+- Changed: Shopping import review had two ways to do one job. The per-row "✓ Add this one now" button is gone; the one button at the bottom adds everything still ticked, and the list is saved as you go. The code behind it stays (a row already added still locks as done and is never counted twice). User guide updated.
+- Kept on purpose: Match… (pick one of your foods), Ask AI (my foods) (let the AI pick from your foods) and Create new (a new food) are three different jobs, and Tick all on the import review and the section Tick all in Add foods sit on different screens.
+- p234 now checks the button is gone and the engine still saves one row; p218, p219, p220, p226, p232, p237, p240, p400 and p401 re-run alongside.
+
 ## v3.10.1303
 
 - Changed: the Data screen is grouped by what you want to do. The Filter chips are now "Bring data in" (Sync Wearable Data, Manual Entry), "Move or back up" (Export, import & backup, Restore from backup) and "Check it's complete" (Missing Data & Coverage), and the cards start in that order. Anyone with their own saved order or hidden cards keeps it; an old saved chip falls back to All. Chip names added to all 8 languages. Test p408; p50, p119, p195, p25, p338, p342 re-run alongside.
