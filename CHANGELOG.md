@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1308
+
+- Fixed: the "Your data lives in browser storage" notice on Settings, Data. On a PC or any non-local host the app rewrote its heading and deleted the "?" text, so tapping "?" did nothing. The heading and text now stay as they are.
+- Changed: that notice names the real backup route (tick "Full app backup" under Settings, Data, Export; it used to say "Export All Data on the Import tab" and "Full App State"), says the data is on this computer or phone, and says that on a PC keeping the computer secure and the backup file safe is down to you. The "tick at least one item" message and the user guide use the same name. Not translated yet (the notice had no translation before).
+- p412 checks the wording, that the "?" opens, and that the Full app backup tick box exists; p59, p408, p409 and p410 re-run alongside.
+
 ## v3.10.1307
 
 - Fixed: seven buttons used a style class that does not exist (class "btn"), so they showed as plain browser buttons: Settings, Premium licence Activate / Start 14-day trial / Remove, the Ko-fi "Buy me a Ko-fi" link, "See a day of..." on the Premium preview, and Close on the Premium preview and flow. All now use the standard copy-btn like their neighbours. Spotted on the PC-width screenshots.
