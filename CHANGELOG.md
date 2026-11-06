@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1315
+
+- Fixed: the floating up / down scroll buttons covered the right-hand end of values on Trends, Today and Log on a phone (Pete's screenshot: "4h45m" and the Deep figure cut off). They are now slim tabs on the screen edge, 28px wide, so they no longer sit over any text. Same position vertically, same arrows and colours; the Library keeps its own pair (p301 unchanged).
+- p419 checks no visible text sits under either button at 400 and 1280 wide on Trends, Today and Log, scrolled two depths, and that the up button still returns to the top. It fails on 1314 (text under the buttons on Today and Log). p81, p232, p301, p416 re-run alongside.
+- Not done: Distance 0.4 km against 10,683 steps still looks low; waiting on what the watch itself shows.
+
 ## v3.10.1314
 
 - Fixed: with the back arrow now clickable (1312) it sat on top of the "MA" of the logo on a phone (Pete's screenshot, 6 Nov). While the arrow shows, the logo moves 52px right and moves back when it hides. p416 now also fails if the arrow overlaps the logo.
