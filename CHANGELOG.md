@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1305
+
+- New: Settings, Data, Export/Import now says what Import can bring in. Under Import, "Can bring in: everything in the Export list above." with a "?" that lists every set by name, built from the same rows as the Export ticks so the two cannot drift apart. Spanish, German, French, Turkish, Portuguese, Italian, Polish and Dutch lines added (the list itself shows the set names as they are).
+- p409 checks every exported set is named in the Import list, the "?" opens, the list is not inside a label, it survives a reload and the Spanish lead shows; p406, p408 and p404 re-run alongside.
+
 ## v3.10.1304
 
 - Changed: Shopping import review had two ways to do one job. The per-row "✓ Add this one now" button is gone; the one button at the bottom adds everything still ticked, and the list is saved as you go. The code behind it stays (a row already added still locks as done and is never counted twice). User guide updated.
