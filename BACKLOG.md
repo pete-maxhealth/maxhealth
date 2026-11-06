@@ -182,7 +182,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 ## PC browser use (Pete, 5 Nov)
 - [ ] Notice for PC/browser users: data stays in that browser, backups and security of the device are the user's own responsibility (plain wording, in Settings and the user guide).
 - [ ] Watch/sleep/activity data on a PC: a CSV import and export routine (same shape both ways) so people can add data by hand or move it by downloads; no launcher or pipeline needed. Check what the app already imports first; this is NOT the old shopping CSV screen listed for retirement above.
-- [ ] Desktop layout: a wide-screen stylesheet (centred column or two-pane) applied by screen width, phone layout untouched.
+- [x] Desktop layout, step 1 (v3.10.1306, 6 Nov): 880 px centred column from 900 px up, phones untouched (p410). Still to do: look at every sub-tab, picker and pop-up at desktop width; a two-pane layout is optional later.
 - [ ] Camera features on desktop: left as they are (best effort, not our problem); say so in the guide.
 - [ ] PC: default folder paths configurable (inbox, backups, exports), with sensible per-platform defaults.
 - [ ] PC: anything that does not apply on a PC (launcher, Health Connect, Termux, camera-only features) is hidden or marked "phone only" with a "?" explaining why.

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1306
+
+- New: PC-width layout. On a window 900 px wide or more the page column is 880 px instead of the 480 px phone column, centred, so the app no longer sits as a thin strip with empty margins on a PC. Phones and narrow windows (under 900 px) are exactly as before. First step of the PC browser list; the notice, "phone only" marking, CSV routine and folder paths are still to do.
+- Checked in rendered screenshots at 1440x900: Today, Log (the input bar lines up with the column), Insights, Settings and a confirm pop-up. p410 checks the column width at 390, 480, 899, 900 and 1440, that it is centred, that no screen scrolls sideways, and that the Log input stays on screen. p404 re-run in full (0 findings) after the 1305 release.
+- Not checked yet: every sub-tab, picker and pop-up at desktop width.
+
 ## v3.10.1305
 
 - New: Settings, Data, Export/Import now says what Import can bring in. Under Import, "Can bring in: everything in the Export list above." with a "?" that lists every set by name, built from the same rows as the Export ticks so the two cannot drift apart. Spanish, German, French, Turkish, Portuguese, Italian, Polish and Dutch lines added (the list itself shows the set names as they are).
