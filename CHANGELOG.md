@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1316
+
+- Fixed: phone-leaning wording on a PC (Pete's list, 6 Nov). Messages now say "local server", "this device" or "the app" instead of "phone server", "phone storage" and "teach the phone": the server health check, the "still waiting" toast, the Downloads lookup, the save-failed messages, the storage-full hint, the camera-tilt hint and the "photo stays on your device" line. The "Local server found" banner says "computer" on a PC and no longer points to a home screen shortcut; the cloud-mode banner drops "in Termux" on a PC (both unchanged on Android).
+- p420 checks the PC and Android banner wording and that the old phrases are gone from the app. Its banner check evaluates the same template text rather than the live banner, so the banner was not seen rendered. Neighbouring tests p412, p413, p415, p416, p418 pass. p419 reports one overlap (400 wide, Today, scrolled to y1400: the up button over a "▾ hide" label); it fails the same way on 1315 without this change, so it is not caused by 1316 and is logged in BACKLOG.
+- Not done: translations for the changed strings (they fall back to English; three translated strings were left unchanged on purpose), the remaining Termux help text that is already phone-only, the full sweep (runs overnight).
+
 ## v3.10.1315
 
 - Fixed: the floating up / down scroll buttons covered the right-hand end of values on Trends, Today and Log on a phone (Pete's screenshot: "4h45m" and the Deep figure cut off). They are now slim tabs on the screen edge, 28px wide, so they no longer sit over any text. Same position vertically, same arrows and colours; the Library keeps its own pair (p301 unchanged).
