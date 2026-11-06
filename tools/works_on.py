@@ -65,3 +65,9 @@ if __name__ == '__main__':
         else:
             k = s.index('<p class="prose">If you need hand-held onboarding'); s = s[:k] + block + '\n\n    ' + s[k:]
         open(p, 'w').write(s); print('written', p)
+        g = 'docs/user-guide.html'; u = open(g).read()
+        line = f'<!-- WORKS-ON-GUIDE:START --><p style="margin:14px 0;"><strong>Where it works.</strong> Of the {S["Android"][3]} everyday features of the free app, counting a feature with a limit as half: Android {S["Android"][0]}%, PC browser {S["PC"][0]}%, iPhone {S["iPhone"][0]}%. The few limits (live barcode scan, QR reading, voice and notifications on iPhone) are listed feature by feature on the <a href="story.html#works-on">story page</a>.</p><!-- WORKS-ON-GUIDE:END -->'
+        if 'WORKS-ON-GUIDE:START' in u: u = re.sub(r'<!-- WORKS-ON-GUIDE:START.*?WORKS-ON-GUIDE:END -->', lambda m: line, u, flags=re.S)
+        else:
+            k = u.index('<h3 style="margin:22px 0 8px;">Free web app</h3>'); u = u[:k] + line + '\n\n  ' + u[k:]
+        open(g, 'w').write(u); print('written', g)
