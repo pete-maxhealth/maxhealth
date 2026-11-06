@@ -6124,6 +6124,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
           <button class="copy-btn" style="flex:1;" onclick="triggerManualCsvUpload()">📤 Upload filled CSV</button>
         </div>
         <input type="file" id="manualCsvUploadInput" accept=".csv" style="display:none;" onchange="handleManualCsvFileSelected(this)">
+        <div id="manualCsvUndoRow" style="display:none;margin-top:8px;"></div>
       </div>
       </div>
     </div>
@@ -6629,7 +6630,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1318'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1319'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -46327,6 +46328,7 @@ async function mhSaveManualEntryCloud(date, values, out, btn) {
 }
 
 async function loadManualEntryForDate(date) {
+  try { mhCsvUndoRender(); } catch (_) {}
   const wrap = document.getElementById('manualEntryFieldsWrap');
   const note = document.getElementById('manualEntrySourceNote');
   if (!date) { if (wrap) wrap.style.display = 'none'; return; }
@@ -46557,18 +46559,77 @@ function _csvNumber(raw, delim) {
   else t = t.replace(/,(?=\d{3}(\D|$))/g, '');                                                                      // 6,007
   return /^-?\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
 }
+// v3.10.1319: undo for a CSV upload saved into this browser (no server). Remembers each uploaded day as it was (history entry and cached CSV row) and what the upload made it,
+// so the undo puts back only days still exactly as the upload left them and never touches anything edited since. Kept 24 hours, same as the shopping-import undo.
+const MH_CSV_UNDO_KEY = 'mh_csv_undo';
+function mhCsvIso(h) { const p = String(h.date || '').split('/'); return p.length === 3 ? '20' + p[2] + '-' + p[1] + '-' + p[0] : String(h.date || ''); }
+function mhCsvCacheRows() {
+  let text = ''; try { text = localStorage.getItem('mh_combined_csv_cache') || ''; } catch (_) {}
+  const lines = text.replace(/\r/g, '').split('\n').filter(Boolean);
+  return { header: lines.length ? lines[0].split(',').map(h => h.trim()) : ['date'], rows: lines.slice(1).map(l => l.split(',')) };
+}
+function mhCsvUndoBefore(dates) {
+  const snap = { at: Date.now(), dates: dates.slice(), prior: {}, priorRow: {}, after: {} };
+  (state.history || []).forEach(h => { const iso = mhCsvIso(h); if (dates.includes(iso)) snap.prior[iso] = JSON.stringify(h); });
+  const c = mhCsvCacheRows(); const di = c.header.indexOf('date');
+  c.rows.forEach(r => { const iso = (r[di] || '').trim(); if (dates.includes(iso)) { const o = {}; c.header.forEach((k, i) => { if (k !== 'date' && (r[i] || '') !== '') o[k] = r[i]; }); snap.priorRow[iso] = o; } });
+  return snap;
+}
+function mhCsvUndoAfter(snap) {
+  (state.history || []).forEach(h => { const iso = mhCsvIso(h); if (snap.dates.includes(iso)) snap.after[iso] = JSON.stringify(h); });
+  try { localStorage.setItem(MH_CSV_UNDO_KEY, JSON.stringify(snap)); } catch (_) {}
+  mhCsvUndoRender();
+}
+function mhCsvUndoGet() { try { const j = JSON.parse(localStorage.getItem(MH_CSV_UNDO_KEY) || 'null'); return j && Date.now() - j.at < 86400000 ? j : null; } catch (_) { return null; } }
+function mhCsvUndoRender() {
+  const el = document.getElementById('manualCsvUndoRow'); if (!el) return;
+  const u = mhCsvUndoGet();
+  if (!u) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = '<button class="copy-btn" style="width:100%;" onclick="mhCsvUndo()">↩ Undo the last upload (' + u.dates.length + ' day' + (u.dates.length === 1 ? '' : 's') + ')</button>';
+}
+function mhCsvUndo() {
+  const u = mhCsvUndoGet(); if (!u) { mhCsvUndoRender(); return; }
+  let undone = 0, kept = 0; const restored = [];
+  u.dates.forEach(iso => {
+    const i = (state.history || []).findIndex(h => mhCsvIso(h) === iso);
+    if (i < 0 || JSON.stringify(state.history[i]) !== u.after[iso]) { kept++; return; }   // changed since the upload: leave it alone
+    if (u.prior[iso]) state.history[i] = JSON.parse(u.prior[iso]); else state.history.splice(i, 1);
+    restored.push(iso); undone++;
+  });
+  const c = mhCsvCacheRows(); const di = c.header.indexOf('date');
+  restored.forEach(iso => {
+    const ri = c.rows.findIndex(r => (r[di] || '').trim() === iso); const prior = u.priorRow[iso];
+    if (ri >= 0 && !prior) c.rows.splice(ri, 1);
+    else if (ri >= 0) c.rows[ri] = c.header.map((k, i) => k === 'date' ? iso : (prior[k] != null ? prior[k] : ''));
+    else if (prior) c.rows.push(c.header.map(k => k === 'date' ? iso : (prior[k] != null ? prior[k] : '')));
+  });
+  c.rows.sort((a, b) => (a[di] || '').localeCompare(b[di] || ''));
+  try { localStorage.setItem('mh_combined_csv_cache', [c.header.join(','), ...c.rows.map(r => r.join(','))].join('\n') + '\n'); } catch (_) {}
+  try { localStorage.removeItem(MH_CSV_UNDO_KEY); } catch (_) {}
+  saveState(); try { renderTrends(); } catch (_) {} try { updateDashboard(); } catch (_) {}
+  mhCsvUndoRender();
+  const out = document.getElementById('manualEntryOutput');
+  const msg = 'Upload undone: ' + undone + ' day' + (undone === 1 ? '' : 's') + ' put back' + (kept ? '; ' + kept + ' left as they are because they changed since' : '') + '.';
+  if (out) { out.style.display = 'block'; out.className = 'output-box success'; out.textContent = msg; }
+  showToast(msg);
+}
 // v3.10.1310: bulk CSV rows saved into this browser when there is no server. Same storage and same merge as mhSaveManualEntryCloud, once for the whole batch.
 function mhManualCsvCloud(entries, badDates, out) {
   const keys = []; entries.forEach(e => Object.keys(e).forEach(k => { if (k !== 'date' && !keys.includes(k)) keys.push(k); }));
+  const undoSnap = mhCsvUndoBefore(entries.map(e => e.date));
   let full = '';
   entries.forEach(e => { const vals = {}; keys.forEach(k => { if (e[k] != null) vals[k] = e[k]; }); full = mhCloudUpsertCsv(e.date, vals); try { localStorage.setItem('mh_combined_csv_cache', full.slice(0, 4900000)); } catch (_) {} });
   const mini = ['date,' + keys.join(','), ...entries.map(e => [e.date, ...keys.map(k => e[k] != null ? e[k] : '')].join(','))].join('\n');
   processCombinedText(mini, true, null);
+  // v3.10.1319: processCombinedText caches the text it is given, which here is only the uploaded rows - put the full history text back so the cache, the backup and the AI context keep every day
+  try { localStorage.setItem('mh_combined_csv_cache', full.slice(0, 4900000)); } catch (_) {}
+  mhCsvUndoAfter(undoSnap);
   try { updateDashboard(); } catch (_) {}
   const notes = [];
   if (badDates.length) notes.push(`${badDates.length} row(s) had a date I couldn't read (e.g. "${badDates[0]}")`);
   if (out) { out.style.display = 'block'; out.className = badDates.length ? 'output-box' : 'output-box success'; out.textContent = `✓ Saved ${entries.length} day(s)${notes.length ? ' — ' + notes.join(' · ') : ''}. Stored in this browser (no server here).`; }
-  showToast(`${entries.length} day(s) imported ✓`);
+  showToast(`${entries.length} day(s) imported ✓`, 'Undo', () => mhCsvUndo(), 15000);
 }
 function handleManualCsvFileSelected(input) {
   const file = input.files && input.files[0];

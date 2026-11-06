@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1319
+
+- New: "↩ Undo the last upload (N days)" under the CSV template buttons on Manual Entry, plus an Undo on the "imported" toast (15 seconds), for a CSV saved into the browser (a PC or the cloud page, no server). It puts each uploaded day back as it was before, in the history and in the stored CSV; days that were new are removed. A day you edited after the upload is left alone and the message says how many were left. Kept 24 hours, then the button goes. Same button class as its neighbours; looked at in light and dark.
+- Fixed (found while building it): a no-server CSV upload overwrote the browser's stored combined.csv with only the uploaded rows, so earlier days dropped out of the stored copy (and so out of the backup and AI context). The stored copy now keeps every day (probe: two uploads kept 2 of 3 days before, 3 of 3 now). The in-app history itself was never affected.
+- p421 walks it: upload, undo, upload twice with an overlapping day, undo the second, edited-since, reload, second undo, button class, both themes. p414, p406, p418, p420 pass.
+- Not done: undo for a server-mode upload (needs a server-side snapshot and a restore from the pipeline's backup; design to agree first); the undo is not in the backup file; no user-guide section exists for the CSV template so none was added; no tour clip; translations for the new button text.
+
 ## v3.10.1318
 
 - Changed: the "Filling in many days at once?" help (CSV template) now says sleep columns are in minutes, not hours (7h 30m is 450), closing the open item from 1310.
