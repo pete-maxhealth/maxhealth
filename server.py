@@ -18,6 +18,7 @@ Endpoints:
   GET  /manual-entry?date=YYYY-MM-DD — held (combined.csv) + manual values for a date (Manual Entry screen)
   POST /save-manual-entry — save a manual entry for a date, triggers a pipeline run
   POST /save-manual-entries-bulk — save many dates at once (CSV template upload), one pipeline run
+  POST /undo-manual-bulk — undo the last CSV template upload (24 hours, only what is still as the upload left it)
   POST /clear-manual-entry — undo a manual override (date, fields?) — see its own docstring for real limits
   GET  /manual-entry-log  — audit trail of manual entry saves (capped, self-trimming)
   GET  /sleep-conflicts   — pending sleep-source overlaps awaiting a decision (comparison card)
@@ -959,6 +960,18 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                 saved = []
                 skipped = []
                 rejected = []
+                # v3.10.1320: remember each day's "before" so the upload can be undone (see undo_csv_upload)
+                _undo_pre = {}
+                for raw in raw_entries:
+                    _d = (raw.get('date') or '').strip() if isinstance(raw, dict) else ''
+                    if _d:
+                        _f, _p = prepare_manual_entry(_d, {k: raw.get(k) for k in FIELD_NAMES})
+                        if _f: _undo_pre[_d] = {k: _f[k] for k in FIELD_NAMES if _f.get(k) is not None}
+                _undo_snap = None
+                try:
+                    if _undo_pre: _undo_snap = _csv_undo_snapshot(str(body.get('undo_batch') or ''), _undo_pre)
+                except Exception:
+                    _undo_snap = None   # best-effort: an upload must never fail because the undo record could not be made
                 for raw in raw_entries:
                     date_str = (raw.get('date') or '').strip() if isinstance(raw, dict) else ''
                     if not date_str:
@@ -976,10 +989,38 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
                         continue
                     cleaned = save_manual_entry(date_str, fields)
                     saved.append({'date': date_str, 'saved': cleaned})
+                if _undo_snap is not None and saved:
+                    try:
+                        _saved_dates = {x['date'] for x in saved}
+                        _undo_snap['days'] = {d: r for d, r in _undo_snap['days'].items() if d in _saved_dates or r.get('_kept')}
+                        for r in _undo_snap['days'].values(): r['_kept'] = True   # saved in an earlier chunk of this same upload
+                        _csv_undo_write(_undo_snap)
+                    except Exception:
+                        pass
                 triggered = run_manual_pipeline() if saved else False
                 self.send_json({'status': 'ok', 'saved': saved, 'skipped_count': len(skipped), 'rejected': rejected[:20], 'pipeline_triggered': triggered})
             except Exception as e:
                 self.send_json({'error': str(e)}, 400)
+            return
+
+        # ── POST /undo-manual-bulk — undo the last CSV template upload (v3.10.1320) ──
+        if path == '/undo-manual-bulk':
+            global pipeline_running
+            with pipeline_lock:
+                busy = pipeline_running
+                if not busy:
+                    pipeline_running = True
+            if busy:
+                self.send_json({'error': 'A sync is running — try the undo again in a minute'}, 409)
+                return
+            try:
+                res, code = undo_csv_upload()
+                self.send_json(res, code)
+            except Exception as e:
+                self.send_json({'error': str(e)}, 500)
+            finally:
+                with pipeline_lock:
+                    pipeline_running = False
             return
 
         # ── POST /clear-manual-entry — undo a manual override ──────────────────
@@ -2046,6 +2087,109 @@ def prepare_manual_entry(date_str, fields):
                 continue
         clean[k] = v
     return clean, problems
+
+
+# ── v3.10.1320: undo for a CSV template upload ─────────────────────────────
+# One level, kept 24 hours. At upload time each saved day's "before" is recorded (its manual entry,
+# the combined.csv values of just the fields the upload set, and who owned those fields). The undo puts
+# back only what is still exactly as the upload left it, so a later sync or a hand edit is never overwritten.
+CSV_UNDO_JSON = os.path.join(DATA_DIR, 'csv_upload_undo.json')
+CSV_UNDO_MAX_AGE = 86400
+
+def _csv_undo_load():
+    try:
+        with open(CSV_UNDO_JSON, 'r', encoding='utf-8') as f:
+            j = json.load(f)
+        if isinstance(j, dict) and time.time() - float(j.get('at', 0)) < CSV_UNDO_MAX_AGE:
+            return j
+    except Exception:
+        pass
+    return None
+
+def _csv_undo_same(a, b):
+    try:
+        return abs(float(a) - float(b)) < 1e-6
+    except Exception:
+        return str(a).strip() == str(b).strip()
+
+def _csv_undo_snapshot(batch, dates_cleaned):
+    """dates_cleaned: {date: cleaned_fields} about to be saved. Call BEFORE saving. Returns the new snapshot dict (not yet written)."""
+    import update_health as _uh
+    prior = _csv_undo_load()
+    snap = prior if (prior and batch and prior.get('batch') == batch) else {'batch': batch, 'at': time.time(), 'days': {}}
+    combined = _uh.read_combined()
+    sources = _uh.load_field_sources()
+    manual = {e.get('date'): e for e in load_manual_entries()}
+    for d, cleaned in dates_cleaned.items():
+        rec = snap['days'].get(d)
+        if rec is None:
+            row = combined.get(d)
+            rec = {'prior_manual': manual.get(d), 'had_row': row is not None,
+                   'prior_combined': {k: ((row or {}).get(k) or '') for k in cleaned},
+                   'prior_sources': {k: (sources.get(d) or {}).get(k) for k in cleaned}}
+        else:
+            for k in cleaned:   # a field seen for the first time in this batch: record its before too
+                if k not in rec['prior_combined']:
+                    row = combined.get(d)
+                    rec['prior_combined'][k] = (row or {}).get(k) or ''
+                    rec['prior_sources'][k] = (sources.get(d) or {}).get(k)
+        rec['uploaded'] = cleaned
+        snap['days'][d] = rec
+    return snap
+
+def _csv_undo_write(snap):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    tmp = CSV_UNDO_JSON + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(snap, f)
+    os.replace(tmp, CSV_UNDO_JSON)
+
+def undo_csv_upload():
+    """Put back what the last CSV upload changed. Returns (result dict, http status)."""
+    import update_health as _uh
+    snap = _csv_undo_load()
+    if not snap or not snap.get('days'):
+        return {'error': 'Nothing to undo (an upload can be undone for 24 hours)'}, 404
+    # safety copy of everything about to be touched, outside the rotating backups
+    undo_bak = os.path.join(BACKUP_DIR, 'undo'); os.makedirs(undo_bak, exist_ok=True)
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    for src, nm in ((COMBINED, 'combined.csv'), (MANUAL_ENTRY_JSON, 'manual_entry.json'), (FIELD_SOURCES_JSON, 'field_sources.json')):
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(undo_bak, f'{ts}_pre_undo_{nm}'))
+    manual = load_manual_entries()
+    by_date = {e.get('date'): e for e in manual}
+    combined = _uh.read_combined()
+    sources = _uh.load_field_sources()
+    undone, kept = [], []
+    for d, rec in snap['days'].items():
+        cur = by_date.get(d)
+        up = rec.get('uploaded') or {}
+        if cur is None or any(not _csv_undo_same(cur.get(k), v) for k, v in up.items()):
+            kept.append(d)   # the manual value was changed or removed since the upload
+            continue
+        pm = rec.get('prior_manual')
+        manual = [e for e in manual if e.get('date') != d]
+        if pm: manual.append(pm)
+        row = combined.get(d)
+        if row is not None:
+            for k, v in up.items():
+                if _csv_undo_same(row.get(k), v):
+                    row[k] = rec['prior_combined'].get(k, '')
+                    ds = sources.setdefault(d, {})
+                    ps = (rec.get('prior_sources') or {}).get(k)
+                    if ps: ds[k] = ps
+                    else: ds.pop(k, None)
+            if not sources.get(d): sources.pop(d, None)
+            if not rec.get('had_row') and not any((row.get(k) or '').strip() for k in row if k not in ('date', 'source')):
+                combined.pop(d, None)
+        undone.append(d)
+    with open(MANUAL_ENTRY_JSON, 'w', encoding='utf-8') as f:
+        json.dump(manual, f, indent=2)
+    _uh.write_combined(combined)
+    _uh.save_field_sources(sources)
+    try: os.remove(CSV_UNDO_JSON)
+    except OSError: pass
+    return {'status': 'ok', 'undone': undone, 'kept': kept}, 200
 
 
 def save_manual_entry(date_str, fields, provisional=False):

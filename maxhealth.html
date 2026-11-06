@@ -6630,7 +6630,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1319'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1320'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -46560,7 +46560,7 @@ function _csvNumber(raw, delim) {
   return /^-?\d+(\.\d+)?$/.test(t) ? parseFloat(t) : NaN;
 }
 // v3.10.1319: undo for a CSV upload saved into this browser (no server). Remembers each uploaded day as it was (history entry and cached CSV row) and what the upload made it,
-// so the undo puts back only days still exactly as the upload left them and never touches anything edited since. Kept 24 hours, same as the shopping-import undo.
+// so the undo puts back only days still exactly as the upload left them and never touches anything edited since. Kept 24 hours, same as the shopping-import undo. v3.10.1320: also works for an upload made with the server (the server keeps its own record).
 const MH_CSV_UNDO_KEY = 'mh_csv_undo';
 function mhCsvIso(h) { const p = String(h.date || '').split('/'); return p.length === 3 ? '20' + p[2] + '-' + p[1] + '-' + p[0] : String(h.date || ''); }
 function mhCsvCacheRows() {
@@ -46588,10 +46588,26 @@ function mhCsvUndoRender() {
   el.style.display = 'block';
   el.innerHTML = '<button class="copy-btn" style="width:100%;" onclick="mhCsvUndo()">↩ Undo the last upload (' + u.dates.length + ' day' + (u.dates.length === 1 ? '' : 's') + ')</button>';
 }
-function mhCsvUndo() {
+async function mhCsvUndo() {
   const u = mhCsvUndoGet(); if (!u) { mhCsvUndoRender(); return; }
+  const out0 = document.getElementById('manualEntryOutput');
+  let serverUndone = null;   // dates the server put back; null = no server step (an upload saved in this browser only)
+  if (u.server) {
+    try {
+      const res = await fetch(`${MH_SERVER}/undo-manual-bulk`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Undo failed');
+      serverUndone = data.undone || [];
+      if (res.ok && !serverUndone.length && (data.kept || []).length) { /* all changed since: nothing to put back */ }
+    } catch (err) {
+      if (out0) { out0.style.display = 'block'; out0.className = 'output-box error'; out0.textContent = `✗ ${err.message}`; }
+      showToast('Could not undo the upload');
+      return;
+    }
+  }
   let undone = 0, kept = 0; const restored = [];
   u.dates.forEach(iso => {
+    if (serverUndone && !serverUndone.includes(iso)) { kept++; return; }   // the server left this day alone, so leave it here too
     const i = (state.history || []).findIndex(h => mhCsvIso(h) === iso);
     if (i < 0 || JSON.stringify(state.history[i]) !== u.after[iso]) { kept++; return; }   // changed since the upload: leave it alone
     if (u.prior[iso]) state.history[i] = JSON.parse(u.prior[iso]); else state.history.splice(i, 1);
@@ -46682,11 +46698,13 @@ function handleManualCsvFileSelected(input) {
       // Chunked: a long history (e.g. a year or two of daily rows) used to be refused outright
       // by the server's 400-row ceiling.
       const CHUNK = 200; let savedN = 0, skippedN = 0; const rejected = [];
+      const undoSnap = mhCsvUndoBefore(entries.map(e => e.date)); undoSnap.server = true;
+      const undoBatch = 'u' + Date.now();
       for (let o = 0; o < entries.length; o += CHUNK) {
         if (out) { out.style.display = 'block'; out.className = 'output-box'; out.textContent = `Uploading ${Math.min(o + CHUNK, entries.length)} of ${entries.length} day(s)…`; }
         const res = await fetch(`${MH_SERVER}/save-manual-entries-bulk`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entries: entries.slice(o, o + CHUNK) })
+          body: JSON.stringify({ entries: entries.slice(o, o + CHUNK), undo_batch: undoBatch })
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Upload failed');
@@ -46702,6 +46720,12 @@ function handleManualCsvFileSelected(input) {
         }
       }
       await autoLoadCombined();
+      if (savedN) {
+        // autoLoadCombined hands the rows to the history a moment after it returns: wait until every uploaded day is there, then let it settle, before noting what the upload made them
+        for (let t = 0; t < 25; t++) { const have = new Set((state.history || []).map(mhCsvIso)); if (undoSnap.dates.every(d => have.has(d))) break; await new Promise(r => setTimeout(r, 200)); }
+        await new Promise(r => setTimeout(r, 400));
+        mhCsvUndoAfter(undoSnap);
+      }
       const notes = [];
       if (skippedN) notes.push(`skipped ${skippedN} blank/invalid row(s)`);
       if (badDates.length) notes.push(`${badDates.length} row(s) had a date I couldn't read (e.g. "${badDates[0]}")`);
@@ -46710,7 +46734,7 @@ function handleManualCsvFileSelected(input) {
         out.className = (badDates.length || rejected.length) ? 'output-box' : 'output-box success';
         out.textContent = `✓ Uploaded ${savedN} day(s)${notes.length ? ' — ' + notes.join(' · ') : ''}. Combined data has been refreshed.`;
       }
-      showToast(`${savedN} day(s) imported ✓`);
+      showToast(`${savedN} day(s) imported ✓`, savedN ? 'Undo' : undefined, savedN ? () => mhCsvUndo() : undefined, 15000);
     } catch(err) {
       if (out) { out.style.display = 'block'; out.className = 'output-box error'; out.textContent = `✗ ${err.message}`; }
       showToast('Could not import CSV template');
