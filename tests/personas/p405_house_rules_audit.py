@@ -76,7 +76,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1000); ev("startDemoMode('doris')"); page.wait_for_timeout(1800)
     ev("()=>logFoods([{name:'Zzqx Crosstalk Cake',amount:'100g',kcal:321,protein:7,carbs:11,fat:9,fibre:0,polyols:0}],'Zzqx Crosstalk Cake')"); page.wait_for_timeout(500)
     if 'Zzqx Crosstalk' not in ev("JSON.stringify(state.todayLog)"): add('cross-talk', 'log', 'logged food is not in today\'s log')
-    ev("switchTabById('today')"); page.wait_for_timeout(500)
+    ev("switchTabById('dash')"); page.wait_for_timeout(700)
     if '321' not in ev("document.body.innerText"): add('cross-talk', 'Today', 'logged 321 kcal is not visible on Today')
     ev("switchTabById('chat')"); page.wait_for_timeout(300)
     try:
@@ -95,6 +95,9 @@ names = [k for k, v in labelsets.items() if len(v) >= 6]
 for i, a in enumerate(names):
     for c in names[i + 1:]:
         if a.split(' / ')[0] == c.split(' / ')[0]: continue
+        if a.startswith('screen') != c.startswith('screen'): continue          # a flow always sits on a screen, so it shares its controls by design
+        sa, sc = a.split(' / ')[0], c.split(' / ')[0]
+        if (' / ' in a and sa == c) or (' / ' in c and sc == a): continue     # a screen and one of its own sub-tabs
         u = labelsets[a] | labelsets[c]; j = len(labelsets[a] & labelsets[c]) / max(1, len(u))
         if j > 0.8: add('dup-screen', f'{a} vs {c}', f'{round(j * 100)}% of their controls are the same')
 os.makedirs('/tmp/claude-0/audit', exist_ok=True)
