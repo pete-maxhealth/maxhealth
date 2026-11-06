@@ -55,6 +55,7 @@ with fresh_server() as root, sync_playwright() as pw:
             if ev(OVERLAYS) > ov0:
                 if not ev(CLOSER): page.keyboard.press('Escape')
                 page.wait_for_timeout(250)
+                if ev(OVERLAYS) > ov0: ev("()=>{const o=[...document.querySelectorAll('body *')].filter(e=>{const s=getComputedStyle(e);const r=e.getBoundingClientRect();return s.position==='fixed'&&r.width>innerWidth*.6&&r.height>innerHeight*.4&&s.display!=='none'}).pop(); if(o){const b=[...o.querySelectorAll('button,[onclick]')].find(e=>/close|dismiss|hide|cancel/i.test((e.getAttribute('onclick')||'')+(e.getAttribute('aria-label')||'')+(e.innerText||'')+(e.title||''))); (b||o).click();}}"); page.wait_for_timeout(250)   # tap-to-dismiss panels and x buttons count as a way out
                 if ev(OVERLAYS) > ov0: f.add('navigation', f'{name} > {label}: opened a full-screen panel that has no visible close/back and does not close on Escape')
             # second level: controls that appeared because of that click
             new = [c for c in ev(SCAN) if (c['t'], c['oc']) not in sig_before][:8]

@@ -77,11 +77,11 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("()=>logFoods([{name:'Zzqx Crosstalk Cake',amount:'100g',kcal:321,protein:7,carbs:11,fat:9,fibre:0,polyols:0}],'Zzqx Crosstalk Cake')"); page.wait_for_timeout(500)
     if 'Zzqx Crosstalk' not in ev("JSON.stringify(state.todayLog)"): add('cross-talk', 'log', 'logged food is not in today\'s log')
     ev("switchTabById('dash')"); page.wait_for_timeout(700)
-    if '321' not in ev("document.body.innerText"): add('cross-talk', 'Today', 'logged 321 kcal is not visible on Today')
+    if 'Zzqx Crosstalk' not in ev("document.body.innerText"): add('cross-talk', 'Today', 'the food just logged is not listed on Today')
     ev("switchTabById('chat')"); page.wait_for_timeout(300)
     try:
         with page.expect_download(timeout=8000) as dl: ev("exportAll()")
-        path = dl.value.path(); txt = open(path, encoding='utf-8', errors='ignore').read()
+        import zipfile; z = zipfile.ZipFile(dl.value.path()); txt = ''.join(z.read(n).decode('utf-8', 'ignore') for n in z.namelist() if n.endswith('.json'))   # the backup is a zip; its JSON holds the data
         if 'Zzqx Crosstalk' not in txt: add('cross-talk', 'backup/export', 'the first file downloaded by Export does not contain the food just logged')
     except Exception as e: add('cross-talk', 'backup/export', f'could not capture the export download ({str(e)[:60]})')
     try:
