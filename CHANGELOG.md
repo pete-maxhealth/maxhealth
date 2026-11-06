@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1307
+
+- Fixed: seven buttons used a style class that does not exist (class "btn"), so they showed as plain browser buttons: Settings, Premium licence Activate / Start 14-day trial / Remove, the Ko-fi "Buy me a Ko-fi" link, "See a day of..." on the Premium preview, and Close on the Premium preview and flow. All now use the standard copy-btn like their neighbours. Spotted on the PC-width screenshots.
+- p411 checks none are left, each looks like a copy-btn, the Ko-fi link still goes to ko-fi.com/maxedhealth and Activate still works; p130, p132, p125, p134 re-run alongside. Checked in a rendered phone screenshot (dark theme); light theme not looked at.
+
 ## v3.10.1306
 
 - New: PC-width layout. On a window 900 px wide or more the page column is 880 px instead of the 480 px phone column, centred, so the app no longer sits as a thin strip with empty margins on a PC. Phones and narrow windows (under 900 px) are exactly as before. First step of the PC browser list; the notice, "phone only" marking, CSV routine and folder paths are still to do.
