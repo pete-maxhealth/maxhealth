@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1311
+
+- Fixed: on a PC browser the Data screen still said "phone" in a few places ("Check the phone's daily backups", "saves one to the phone's server each day", the push-to-server button and the restore note). They now say "computer" / "the server" on a PC and keep "phone" on a phone. New helper `mhDeviceWord()`; text is set at load and when the Import cards are redrawn.
+- p415 checks a PC user agent shows no "phone" in those four places, an Android one keeps it, and the helper returns the right word. p25, p409, p412, p413 re-run alongside.
+- Not done: other phone-leaning wording elsewhere (Termux help, "Local server found" banner) is still to be reviewed; phone-to-phone transfer text correctly says phone.
+
 ## v3.10.1310
 
 - New: the "Upload filled CSV" on Data, Manual Entry now works with no server (a PC browser or the cloud page). Before, it only talked to the server and failed there with nothing saved; a single manual entry already worked. The days are saved into this browser the same way a single entry is, merged by date, and the result line says "Stored in this browser (no server here)".
