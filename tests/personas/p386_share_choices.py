@@ -87,6 +87,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # 8 default link on the carer page shows none of the extras
     page.bring_to_front(); ev("mhShareToggle('timing',false); mhShareToggle('meals',false); mhShareToggle('treat',false); mhShareToggle('supps',false)"); pl, url = link()
     p2.goto('http://localhost:5757/carer.html#' + url.split('#', 1)[1]); p2.reload(); p2.wait_for_timeout(1000); t3 = p2.evaluate("document.body.innerText").lower().lower()
+    t3 = re.sub(r"not shown on this page:[^.]*\.", "", t3)   # v3.10.1321: the page now NAMES what it leaves out; that line is not the data
     if any(x in t3 for x in ['grams by time of day', 'treatment sessions', 'meals, last 10 days', 'zzqx']): f.add('BUG', '8: nothing extra on the page when all are off: ' + str([x for x in ['grams by time of day', 'treatment sessions', 'meals, last 10 days', 'zzqx'] if x in t3]) + str(pl.get('shared')))
     go(); page.screenshot(path='/tmp/p386_settings.png')
     if errs: f.add('BUG', f'page errors {errs}')
