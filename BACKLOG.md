@@ -204,3 +204,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] (DONE v3.10.1317) p419 failed on 1315 and 1316: at 400 wide on Today, scrolled to y1400, the up scroll tab sits over a "▾ hide" label. Found 6 Nov while releasing 1316; not yet looked at.
 
 - [x] Docs brought up to v3.10.1320 (6 Nov): public changelog block 1290-1320, user guide (CSV template, minutes, undo). Still to do: tour clips for the CSV undo and the PC changes, translations for the new strings, README only if these become headline features.
+
+- [x] Distance / Health Connect figures confirmed correct by Pete on Trends (7 Nov), launcher 1.7.2 on his phone. Still to do: Jill's phone.
