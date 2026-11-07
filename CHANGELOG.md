@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1322
+
+- Added: translations (es, de, fr, tr, pt, it, pl, nl) for 25 strings from the PC and recent work: the carer-share "share more or less" line and its four steps (naming the buttons the way each pack does), the CSV undo button with its day count, the "imported" pop-up and the Undo label, the four undo result messages, the sleep-minutes line, "Phone only" and its two explanations, the "local server running" banners, "Local server not reachable" and "Saved locally, but the local server couldn't be reached", the storage-full and photo/camera notes, and the "your data stays on your device" row. Added by `tools/lang_add_pc_share.py` (only adds missing keys; keeps each file's existing layout).
+- Machine-assisted wording like the other packs, not checked by a native speaker; the German uses du, French vous, as the packs do.
+- p424 checks eight languages: share hint and steps, undo button (1 and many days), pop-up and Undo, the four result messages, English unchanged. p165 and p114 pass. The pack version bump makes phones fetch the new files.
+- Not done: the carer's page (carer.html) is English only; the "Phone only" notes, data-stays-on-device row and the storage/save toasts were added to the packs but not looked at rendered; about 90 other recent strings (long help paragraphs from earlier days) are still English and listed in BACKLOG.
+
 ## v3.10.1321
 
 - New: sharing more or less with a carer or clinician is spelled out. Under the "What this link shows" summary on Settings, Carer & Clinician, a line "Want to share more or less? Tick or untick above, then make a new link." with a "?" that gives the four steps (tick, Generate, Preview, send yourself) and says a link keeps what you ticked when you made it and lasts 7 days. Defaults unchanged (totals, weight, exercise, sleep on; time of day, meals, treatment sessions, supplements off).

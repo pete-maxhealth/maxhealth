@@ -206,3 +206,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] Docs brought up to v3.10.1320 (6 Nov): public changelog block 1290-1320, user guide (CSV template, minutes, undo). Still to do: tour clips for the CSV undo and the PC changes, translations for the new strings, README only if these become headline features.
 
 - [x] Distance / Health Connect figures confirmed correct by Pete on Trends (7 Nov), launcher 1.7.2 on his phone. Still to do: Jill's phone.
+
+- [ ] Translations still English (found 7 Nov by diffing the app since 5 Nov, about 90 strings, mostly long help paragraphs: step baseline, weather, fibre target, fasting, AI privacy, Clinical narrative, Report package, GitHub report, manual entry, CSV template, shopping import lines, tips/Ko-fi text, Premium "Register interest"). 25 done in v3.10.1322. Also carer.html is English only. Native-speaker review still wanted.
