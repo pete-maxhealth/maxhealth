@@ -25,7 +25,7 @@ if _pu:
             c, _ = _l.accept(); u = socket.create_connection((_pp.hostname, _pp.port))
             threading.Thread(target=_pipe, args=(c, u), daemon=True).start(); threading.Thread(target=_pipe, args=(u, c), daemon=True).start()
     threading.Thread(target=_accept, daemon=True).start()
-SLOW = {'p362_standard_user_crawl': 720, 'p364_destructive_buttons': 720, 'p404_click_new_flows': 900}  # crawls that legitimately take 5-8 min alone
+SLOW = {'p362_standard_user_crawl': 720, 'p364_destructive_buttons': 720, 'p404_click_new_flows': 1800, 'p417_pc_click_everything': 900}  # crawls that legitimately take 5-8 min alone
 def run(f):
     n = os.path.basename(f)[:-3]; t = time.time(); tmo_f = max(tmo, SLOW.get(n, 0))
     p = subprocess.Popen(['unshare', '-n', sys.executable, '-I', '-c',
