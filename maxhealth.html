@@ -6631,7 +6631,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1326'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1327'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -22057,7 +22057,7 @@ function sanitiseFatValues(items) {
     if (fatMissing) {
       for (const [key, val] of Object.entries(FAT_FLOOR_DB)) {
         if (nameLower.includes(key)) {
-          const grams = parseFloat(f.amount) || null;
+          const grams = _amountGrams(f.amount) || null;
           if (grams && grams > 0) {
             f.fat = Math.round(val.fat100 * grams / 100 * 100) / 100;
           } else {
@@ -22091,7 +22091,7 @@ function sanitiseFatValues(items) {
     // Still skipped for a user-edited value - "present-but-wrong" doesn't apply
     // to a number the person just confirmed themselves.
     if (!f._fatSanitised && !f._fatUserEdited) {
-      const grams = parseFloat(f.amount) || null;
+      const grams = _amountGrams(f.amount) || null;
       if (grams && grams > 5) {
         for (const [key, val] of Object.entries(FAT_FLOOR_DB)) {
           if (val.fat100 >= 80 && nameLower.includes(key)) {
@@ -22165,7 +22165,10 @@ function sanitiseFatValues(items) {
     // Catches an obvious fat-finger amount (2500g instead of 250g, a missing
     // decimal point) — not a food-type judgement, just a sanity bound on
     // portion size that no single real food item is likely to fall outside.
-    const amtGrams = parseFloat(f.amount);
+    // v3.10.1327: read the weight from the amount the way a person writes it. parseFloat("5 slices (175g)") gave 5 and parseFloat("2 (90g)") gave 2, so a normal
+    // plate of bacon and sausage was flagged "impossible" (74.4g of macros cannot fit in a 5g food). Now: a plain number or a number with g/ml/kg/l, else the weight
+    // written in brackets or after the count; with no weight at all the checks that need one are skipped rather than guessed.
+    const amtGrams = _amountGrams(f.amount);
     if (amtGrams && (amtGrams > 2000 || amtGrams < 1)) {
       f._implausibleAmountWarning = true;
     }
@@ -22731,6 +22734,13 @@ function _parsePortionGrams(str) {
   return m ? parseFloat(m[0]) : 0;
 }
 
+// Weight in grams from an amount as people write it (v3.10.1327): "175", "175g", "1.5kg", "5 slices (175g)", "2 (90g)". 0 when no weight is written.
+function _amountGrams(amount) {
+  const t = String(amount == null ? '' : amount).trim().toLowerCase();
+  let m = t.match(/^(\d+(?:\.\d+)?)\s*(g|ml|kg|l)?$/); if (m) return parseFloat(m[1]) * ((m[2] === 'kg' || m[2] === 'l') ? 1000 : 1);
+  m = t.match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l)\b/); if (m) return parseFloat(m[1]) * ((m[2] === 'kg' || m[2] === 'l') ? 1000 : 1);
+  return 0;
+}
 function _extractGramsFromAmount(str) {
   const m = (str || '').match(/(\d+(?:\.\d+)?)\s*(g|ml|kg|l)\b/i);
   return m ? parseFloat(m[1]) : 0;
@@ -27477,21 +27487,31 @@ function mhGoFastHistory() {
   setTimeout(() => { const e = document.getElementById('fasting-report-section'); if (e && e.scrollIntoView) e.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
 }
 function mhFibreHistory() {
-  const tgt = mhFibreTarget(), r1 = v => Math.round(v * 10) / 10, days = [];
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(); d.setDate(d.getDate() - i); const iso = localISODate(d);
-    let v = null;
-    if (i === 0) { const t = (state.todayLog || []).filter(e => !mhIsDeviceStub(e)).reduce((a, e) => a + (((e.items && e.items.length) ? e.items : [e]).reduce((b, f) => b + (parseFloat(f.fibre) || 0), 0)), 0); v = t > 0 ? r1(t) : null; }
-    else { const h = (state.history || []).find(x => { try { return isoDate(x.date) === iso; } catch (_) { return false; } }); if (h) { const f = mhFibreDay(h); v = f != null ? r1(f) : null; } }
-    days.push({ iso, label: i === 0 ? 'Today' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), v });
+  const tgt = mhFibreTarget(), r1 = v => Math.round(v * 10) / 10, B = mhRgBounds('fibre', 14), todayISO = localISODate(), days = [];
+  const byIso = {}; (state.history || []).forEach(x => { try { byIso[isoDate(x.date)] = x; } catch (_) {} });
+  let loISO = B.lo; if (!loISO) { const ks = Object.keys(byIso).filter(k => /^\d{4}-/.test(k)).sort(); loISO = ks.length ? ks[0] : todayISO; }
+  for (let d = new Date(B.hi + 'T12:00:00'), n = 0; localISODate(d) >= loISO && n < 1100; d.setDate(d.getDate() - 1), n++) {
+    const iso = localISODate(d); let v = null;
+    if (iso === todayISO) { const t = (state.todayLog || []).filter(e => !mhIsDeviceStub(e)).reduce((a, e) => a + (((e.items && e.items.length) ? e.items : [e]).reduce((b, f) => b + (parseFloat(f.fibre) || 0), 0)), 0); v = t > 0 ? r1(t) : null; }
+    else { const h = byIso[iso]; if (h) { const f = mhFibreDay(h); v = f != null ? r1(f) : null; } }
+    days.push({ iso, label: iso === todayISO ? 'Today' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), v });
   }
   const have = days.filter(x => x.v != null), avg = have.length ? r1(have.reduce((a, x) => a + x.v, 0) / have.length) : null, max = Math.max(tgt, ...have.map(x => x.v), 1);
-  const rows = days.map(x => '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;"><div style="width:74px;color:var(--text3);flex:0 0 auto;">' + x.label + '</div><div style="flex:1;height:10px;background:var(--surface2);border-radius:5px;overflow:hidden;">' + (x.v != null ? '<div style="height:100%;width:' + Math.round(x.v / max * 100) + '%;background:' + (x.v >= tgt ? 'var(--green)' : 'var(--accent)') + ';"></div>' : '') + '</div><div style="width:44px;text-align:right;color:' + (x.v != null ? 'var(--text)' : 'var(--text3)') + ';">' + (x.v != null ? x.v + 'g' : 'none') + '</div></div>').join('');
+  // Past a month the list would be hundreds of lines, so it shows weekly averages (of the days that have a fibre figure); the average above stays per day.
+  let shownRows = days, weekly = false;
+  if (days.length > 31) {
+    weekly = true; const g = {}, order = [];
+    days.forEach(x => { const dt = new Date(x.iso + 'T12:00:00'), back = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - back); const k = localISODate(dt); if (!g[k]) { g[k] = { label: 'w/c ' + dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), vs: [] }; order.push(k); } if (x.v != null) g[k].vs.push(x.v); });
+    shownRows = order.map(k => ({ label: g[k].label, v: g[k].vs.length ? r1(g[k].vs.reduce((a, b) => a + b, 0) / g[k].vs.length) : null }));
+  }
+  const maxShown = Math.max(tgt, ...shownRows.map(x => x.v || 0), 1);
+  const rows = shownRows.map(x => '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;"><div style="width:74px;color:var(--text3);flex:0 0 auto;">' + x.label + '</div><div style="flex:1;height:10px;background:var(--surface2);border-radius:5px;overflow:hidden;">' + (x.v != null ? '<div style="height:100%;width:' + Math.round(x.v / maxShown * 100) + '%;background:' + (x.v >= tgt ? 'var(--green)' : 'var(--accent)') + ';"></div>' : '') + '</div><div style="width:44px;text-align:right;color:' + (x.v != null ? 'var(--text)' : 'var(--text3)') + ';">' + (x.v != null ? x.v + 'g' : 'none') + '</div></div>').join('');
   const old = document.getElementById('mhFibreHistModal'); if (old) old.remove();
   const m = document.createElement('div'); m.id = 'mhFibreHistModal'; m.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
   m.innerHTML = '<div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 28px;max-height:85vh;overflow-y:auto;">'
-    + '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">🌾 Fibre, last 14 days</div>'
-    + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Target ' + tgt + 'g. ' + (avg != null ? 'Average ' + avg + 'g across the ' + have.length + ' day' + (have.length === 1 ? '' : 's') + ' with a fibre figure. ' : 'No days with a fibre figure yet. ') + '"none" means no logged food that day carried a fibre figure, not zero fibre.</div>'
+    + '<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">🌾 Fibre, ' + mhRgText('fibre', 14) + '</div>'
+    + mhRgSelect('fibre', 14, 'mhFibreHistory')
+    + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Target ' + tgt + 'g. ' + (avg != null ? 'Average ' + avg + 'g across the ' + have.length + ' day' + (have.length === 1 ? '' : 's') + ' with a fibre figure. ' : 'No days with a fibre figure yet. ') + '"none" means no logged food that day carried a fibre figure, not zero fibre.' + (weekly ? ' Rows are weekly averages because the range is long.' : '') + '</div>'
     + rows
     + '<button onclick="document.getElementById(\'mhFibreHistModal\').remove(); mhNutrientAudit()" class="copy-btn" style="width:100%;margin-top:14px;padding:11px;font-size:13px;">Add missing fibre figures to your foods</button>'
     + '<button onclick="document.getElementById(\'mhFibreHistModal\').remove()" style="width:100%;margin-top:6px;padding:10px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;">Close</button></div>';
@@ -45399,6 +45419,45 @@ function renderDailyView(data) {
 
 // Standard defaults for any Custom date range: the last 12 months to today, so the boxes are never blank (v3.10.1223).
 function mhRangeDefaults() { const t = new Date(), f = new Date(t); f.setFullYear(f.getFullYear() - 1); f.setDate(f.getDate() + 1); return { from: localISODate(f), to: localISODate(t) }; }
+// ── Standard range for small cards and sheets (v3.10.1327) ────────────────────────────────────────
+// One control and one set of rules for every card or sheet that used to look at a fixed period (last 14 days, last 30 days...).
+// The choice is remembered per card (mh_rg_<key>); the first time, each card starts on the period it always used, so nothing shifts under you.
+// Days are counted including today ("Last 7 days" = today and the six before). Custom dates default to the last 12 months, like the other Custom boxes.
+const MH_RG_PERIODS = [[7, 'Last 7 days'], [14, 'Last 14 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last 12 months'], [0, 'All time'], [-1, 'Custom dates']];
+function mhRgGet(key, defP) { try { const o = JSON.parse(localStorage.getItem('mh_rg_' + key) || 'null'); if (o && MH_RG_PERIODS.some(q => q[0] === o.p)) return o; } catch (_) {} return { p: defP }; }
+function mhRgBounds(key, defP) {
+  const o = mhRgGet(key, defP), today = localISODate();
+  if (o.p === -1) { const d = mhRangeDefaults(); let f = o.from || d.from, t = o.to || d.to; if (f > t) { const x = f; f = t; t = x; } return { lo: f, hi: t, p: -1 }; }
+  if (o.p === 0) return { lo: null, hi: today, p: 0 };
+  const lo = new Date(); lo.setDate(lo.getDate() - (o.p - 1)); return { lo: localISODate(lo), hi: today, p: o.p };
+}
+function mhRgInRange(dateStr, key, defP) { const b = mhRgBounds(key, defP), d = isoDate(String(dateStr || '')); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false; return (!b.lo || d >= b.lo) && d <= b.hi; }
+function mhRgDays(key, defP) { return (state.history || []).filter(h => mhRgInRange(h.date, key, defP)); }
+function mhRgText(key, defP) {
+  const b = mhRgBounds(key, defP), sd = iso => { const q = String(iso).split('-'); return q[2] + '/' + q[1] + '/' + q[0].slice(2); };
+  if (b.p === 0) return 'all time'; if (b.p === -1) return sd(b.lo) + ' to ' + sd(b.hi);
+  return b.p === 365 ? 'the last 12 months' : 'the last ' + b.p + ' days';
+}
+function mhRgSet(key, defP, v, cb) {
+  v = parseInt(v, 10); const o = mhRgGet(key, defP); o.p = v;
+  if (v === -1 && !o.from) { const d = mhRangeDefaults(); o.from = d.from; o.to = d.to; }
+  try { localStorage.setItem('mh_rg_' + key, JSON.stringify(o)); } catch (_) {}
+  try { if (cb && typeof window[cb] === 'function') window[cb](); } catch (_) {}
+}
+function mhRgSetDates(key, defP, which, v, cb) {
+  const o = mhRgGet(key, defP); o.p = -1; const d = mhRangeDefaults(); o.from = o.from || d.from; o.to = o.to || d.to; o[which] = v || (which === 'from' ? d.from : d.to);
+  try { localStorage.setItem('mh_rg_' + key, JSON.stringify(o)); } catch (_) {}
+  try { if (cb && typeof window[cb] === 'function') window[cb](); } catch (_) {}
+}
+// The control itself. cb is the NAME of a global function that redraws the card or sheet.
+function mhRgSelect(key, defP, cb) {
+  const o = mhRgGet(key, defP), b = mhRgBounds(key, defP), q = JSON.stringify;
+  const st = 'background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;padding:7px 8px;font-family:inherit;box-sizing:border-box;';
+  return '<div class="mh-rg" data-rg="' + key + '" style="margin:6px 0 8px;"><select class="mh-rg-sel" style="width:100%;' + st + '" onchange="mhRgSet(' + q(key).replace(/"/g, '&quot;') + ',' + defP + ',this.value,' + q(cb).replace(/"/g, '&quot;') + ')">'
+    + MH_RG_PERIODS.map(p => '<option value="' + p[0] + '"' + (p[0] === o.p ? ' selected' : '') + '>' + p[1] + '</option>').join('') + '</select>'
+    + (o.p === -1 ? '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--text3);">From <input type="date" class="mh-rg-from" value="' + b.lo + '" style="flex:1;min-width:0;' + st + '" onchange="mhRgSetDates(' + q(key).replace(/"/g, '&quot;') + ',' + defP + ',&quot;from&quot;,this.value,' + q(cb).replace(/"/g, '&quot;') + ')"> to <input type="date" class="mh-rg-to" value="' + b.hi + '" style="flex:1;min-width:0;' + st + '" onchange="mhRgSetDates(' + q(key).replace(/"/g, '&quot;') + ',' + defP + ',&quot;to&quot;,this.value,' + q(cb).replace(/"/g, '&quot;') + ')"></div>' : '')
+    + '</div>';
+}
 function setTrendsFilter(days, btn) {
   document.querySelectorAll('.trends-filter-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
