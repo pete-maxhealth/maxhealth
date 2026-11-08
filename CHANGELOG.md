@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1324
+
+- **Fixed: a plan for late last night (e.g. double cream and whey at 23:50) with "Trust my plan" ticked was not logged the next morning.** On the first open of a new day the app checked your plans a moment before it moved yesterday into History; with the day not there yet, it parked the plan for good ("could not find the day") although the day arrived straight after, and auto-log never looked at it again. Now the check waits for yesterday to be in History, runs again straight after the day change, and a plan already parked that way is retried once its day is in History (so a plan stuck on a phone right now frees itself on the update). Plans for a day with no History entry at all are still kept, as in v3.10.1214.
+- p426 reproduces it (3 failures before, none after) and walks both the fresh case and the already-parked case. p313, p105, p149, p171, p215, p288, p113, p18 pass. Full sweep not run (overnight).
+
 ## v3.10.1323
 
 - Changed: in History, a day's Water line and Weight line are now tappable (✏ shows they are). Tapping opens the existing "Edit day totals" form scrolled to and focused on that box, so the checks, the change summary and saving are the ones already there. Water was already editable inside Edit day totals; this makes it direct.

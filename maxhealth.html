@@ -6631,7 +6631,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1323'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1324'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -23677,7 +23677,11 @@ function mhPlanRender() {
   const today = localISODate(), now = nowTime();
   const auto = localStorage.getItem('mh_plan_auto') === '1';
   const due = p => p.date < today || (p.date === today && p.time <= now);
-  if (auto) { const d = plans.find(p => due(p) && !p.noAuto); if (d) { showToast('Logged from your plan: ' + d.text, null, null, 3500); mhPlanEat(d.id); return; } }
+  // v3.10.1324: first open of a new day checks plans BEFORE yesterday is moved into History. A plan for last night (say 23:50) used to be parked for good then ("could not find the day") although the day arrived a moment later. Now it waits for the day, and a plan parked that way is retried once its day is in History.
+  const dayIn = p => p.date >= today || state.history.some(h => h.date === mhPlanISOtoDMY(p.date));
+  const rollPending = !!state.lastDate && state.lastDate !== todayStr();
+  if (auto) { const d = plans.find(p => due(p) && (!p.noAuto || (p.date < today && dayIn(p))) && !(p.date < today && rollPending && !dayIn(p))); if (d) {
+    if (d.noAuto) { delete d.noAuto; mhPlanSave(plans); } showToast('Logged from your plan: ' + d.text, null, null, 3500); mhPlanEat(d.id); return; } }
   const dueList = plans.filter(due);
   if (dueList.length && !window._planToasted) { window._planToasted = {}; }
   dueList.forEach(p => { if (window._planToasted && !window._planToasted[p.id]) { window._planToasted[p.id] = 1; showToast('Time for: ' + p.text + '. Did you eat it? See Today.', null, null, 4500); } });
@@ -26857,6 +26861,7 @@ function _updateDashboardCore(skipActivityRender) {
       setTimeout(() => saveNutritionToServer(_rolloverDate, Math.round(_rt.kcal), Math.round(_rt.protein), Math.round(_rt.carbs), _midNotes, Math.round((_rt.fat||0)*10)/10), 1000);
       saveState();
     }
+    try { mhPlanRender(); } catch (_) {} // yesterday is in History now: a plan waiting for that day can be logged (v3.10.1324)
   }
   const totals = calcTotals(state.todayLog);
   const targets = TARGETS[state.dayMode];
