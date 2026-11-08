@@ -209,5 +209,4 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 - [ ] Translations still English (found 7 Nov by diffing the app since 5 Nov, about 90 strings, mostly long help paragraphs: step baseline, weather, fibre target, fasting, AI privacy, Clinical narrative, Report package, GitHub report, manual entry, CSV template, shopping import lines, tips/Ko-fi text, Premium "Register interest"). 25 done in v3.10.1322. Also carer.html is English only. Native-speaker review still wanted.
 - [x] History: Water/Weight lines tappable, "+ Water" on days with none (v3.10.1323, 8 Nov). Still to do: user guide line, tour clip.
-
-- [x] Fixed periods replaced by the standard range control (v3.10.1327-1329, 8 Nov): fibre sheet, weight trend, Fasting usual, binned, Missing Data, Activity credit, Goal check, Sleep chart. Still to do: translations of the range labels, user guide line, light-theme check; also the Statistics/Trends lists have no 14-day option (the small cards do).\n
+- [x] Fixed periods replaced by the standard range control (v3.10.1327-1329, 8 Nov): fibre sheet, weight trend, Fasting usual, binned, Missing Data, Activity credit, Goal check, Sleep chart. Still to do: translations of the range labels, user guide line, light-theme check; also the Statistics/Trends lists have no 14-day option (the small cards do).
