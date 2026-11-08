@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1330
+
+- **Fixed: the Sleep chart's new weekly/monthly heading ("EACH WEEK, AVERAGE NIGHT") was left in English in the other languages.** Found by the full sweep (p195, Spanish whole-app check). Added it, "EACH MONTH, AVERAGE NIGHT", and the range labels "Last 7 days", "Last 12 months", "Custom dates" and "Next 7 days" in the eight languages (`tools/lang_add_ranges.py`; machine-assisted wording like the other packs). Other new range wording is still English.
+- **Full sweep of v3.10.1329 (8 Nov, run on request): 427 passed, 1 failed (p195, the above), now fixed.** p404 took 1240 s and p417 passed within their raised limits. The overnight p95 failure did not recur after its waits were changed to wait for the request and result (`tests/personas/p95_...`).
+- p195, p165, p424 and p432 pass after the fix.
+
 ## v3.10.1329
 
 - **Date ranges, step 2: the rest of the fixed periods now use the standard range control** (Pete, 8 Nov). Each starts on the period it always used, so nothing shifts under you; the choice is remembered per card, and choosing the usual period again clears it.
