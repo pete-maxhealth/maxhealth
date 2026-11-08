@@ -9,16 +9,20 @@ def worker_reply(route):
     route.fulfill(status=200, content_type='application/json', headers={'Access-Control-Allow-Origin': '*'},
                   body=json.dumps({'claude': mk(400, 80), 'gemini': mk(400, 80), 'openai': mk(400, 80)}))
 bodies = []
+def wait_bodies(page, n, ms=20000):
+    # wait for the request itself (not a fixed pause): under a busy parallel sweep the page can be slow
+    waited = 0
+    while len(bodies) < n and waited < ms: page.wait_for_timeout(200); waited += 200
 with fresh_server() as root, sync_playwright() as pw:
     page = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 800}, service_workers='block').new_page(); errs = []
     page.on('pageerror', lambda e: errs.append(str(e)[:200]))
     page.route(re.compile(r'maxhealth-ai\.bogginsuk\.workers\.dev'), worker_reply)
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500)
-    page.evaluate("localStorage.setItem('mh_onboarded','1')"); page.reload(); page.wait_for_timeout(1800)
+    page.evaluate("localStorage.setItem('mh_onboarded','1')"); page.reload(); page.wait_for_function("typeof runMultiAICheck==='function' && typeof switchTab==='function'", timeout=20000); page.wait_for_timeout(1500)
     page.evaluate("document.querySelectorAll('[id*=nboard]').forEach(e=>{ if(e.style) e.style.display='none'; })")
     # 1) amounts guessed by the first AI, person gave none
     page.evaluate("""()=>{ switchTab('log'); window._pendingMealText='clotted cream with frozen raspberries'; window._pendingMealFoods=[{name:'clotted cream',amount:'90g',kcal:300,protein:2,carbs:2,fat:30},{name:'frozen raspberries',amount:'70g',kcal:30,protein:1,carbs:6,fat:0}]; }""")
-    page.evaluate("runMultiAICheck()"); page.wait_for_timeout(1500)
+    page.evaluate("runMultiAICheck()"); wait_bodies(page, 1); page.wait_for_timeout(300)
     p1 = bodies[-1] if bodies else ''
     if re.search(r'90\s*g|70\s*g', p1.split('The person')[0]): f.add('BUG', f'guessed grams were sent: {p1[:160]}')
     if 'judge the realistic portion yourself' not in p1: f.add('BUG', 'no-amount wording missing')
@@ -26,13 +30,14 @@ with fresh_server() as root, sync_playwright() as pw:
     k = page.evaluate("(()=>{const r=window._multiAIResults; return null})()")
     # 2) person stated the grams
     page.evaluate("""()=>{ window._pendingMealText='90g clotted cream'; window._pendingMealFoods=[{name:'clotted cream',amount:'90g',kcal:300,protein:2,carbs:2,fat:30}]; }""")
-    page.evaluate("runMultiAICheck(0)"); page.wait_for_timeout(1500)
+    page.evaluate("runMultiAICheck(0)"); wait_bodies(page, 2); page.wait_for_timeout(300)
     p2 = bodies[-1]
     if '(90g)' not in p2: f.add('BUG', 'a stated amount was not sent')
     if 'exactly this food and amount' not in p2: f.add('BUG', 'stated-amount wording missing')
     # 3) single guessed item: scaled averaging
     page.evaluate("""()=>{ window._pendingMealText='some clotted cream'; window._pendingMealFoods=[{name:'clotted cream',amount:'160g',kcal:300,protein:2,carbs:2,fat:30}]; }""")
-    page.evaluate("runMultiAICheck(0)"); page.wait_for_timeout(1500)
+    page.evaluate("runMultiAICheck(0)"); wait_bodies(page, 3)
+    page.wait_for_function("(()=>{const r=window._multiAIResults; if(!r) return false; const k=Object.keys(r).pop(); return !!(k && r[k].providers && r[k].providers[0] && r[k].providers[0].cmp)})()", timeout=20000)
     res = page.evaluate("(()=>{const r=window._multiAIResults; const k=Object.keys(r).pop(); const p=r[k].providers[0]; return {raw:p.parsed.kcal, cmp:p.cmp.kcal}})()")
     if res['raw'] != 400 or round(res['cmp']) != 800: f.add('BUG', f'scaling to logged amount wrong {res}')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
