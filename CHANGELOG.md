@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1328
+
+- **Meal preview: when the app knows what is wrong, it now says what would be right, and one tap makes it so.** (Pete, 8 Nov: "if you know what's wrong, you should know what's right", and nothing said that agreeing means the change gets made.) Two flags have a known answer, so they now name it and offer an **Apply** button in a box that says "If you agree, tap Apply and the figures change. Nothing changes until you do; if you disagree, leave it or use ✏ to edit."
+  - *Pure fat (cream, oil, butter) with far too little fat for the amount:* shows the expected fat and the kcal that follows ("expect roughly 50g. If that is right, kcal becomes 470"); Apply sets just those two.
+  - *Per-100g figures sitting against a small amount ("protein may not be scaled to 40g"):* shows the 40g figures; Apply scales every figure to that amount.
+- The other flags (protein low for the calories, fat in plain vegetables, 0g fat in meat, an unusual portion size) have no known right answer, so they still say "check" and the app does not invent one; a figure only changes with your tap. The "impossible macros" flag already states the minimum weight those figures would need.
+- p431 (both suggestions, nothing changes before Apply, Apply changes only what was named, the box disappears once applied, no box when nothing is flagged) passes; p105, p33, p366, p429, p406 pass. Full sweep not run (overnight). Not checked: a live AI answer in the preview; light theme; translations of the new box text.
+
 ## v3.10.1327
 
 - **Fixed: false red "impossible" warnings for amounts written as a count with the weight in brackets.** (Pete, 8 Nov, phone screenshot: "5 slices of bacon, 2 sausage and scrambled eggs".) The sanity checks read the first number in the amount, so "5 slices (175g)" counted as 5 g and "2 (90g)" as 2 g, and 74.4 g of protein, fat and carbs was called impossible in a 5 g food. They now read the weight the way it is written ("175", "175g", "1.5kg", "5 slices (175g)", "2 (90g)"); an amount with no weight at all (just "2 eggs") skips the weight-based alarms instead of guessing. A genuinely impossible one (74 g of macros in a real 5 g food) is still flagged. The same misreading also fed the oil/butter fat-floor checks; fixed together.
