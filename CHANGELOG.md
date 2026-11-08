@@ -2,6 +2,19 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1329
+
+- **Date ranges, step 2: the rest of the fixed periods now use the standard range control** (Pete, 8 Nov). Each starts on the period it always used, so nothing shifts under you; the choice is remembered per card, and choosing the usual period again clears it.
+  - **Weight trend** under the weight tile (was the last 14 weigh-ins, "14d"): tap the line (it now ends ▾) to open a small sheet with the range control. The average per day, "target in ~N days", the label and the intention preview all follow it. Today's live weight counts when the range reaches today.
+  - **Fasting "Your usual"** (was the newest 30 logged days): range control under the line; with too few timed days in the range it says so (3 needed, N so far) instead of vanishing, so the control is never lost.
+  - **Used up or binned** on My cupboards (was 30 days): range control under the line. The record is now kept for 400 days (was 30) so any range up to 12 months has something to show.
+  - **Missing Data & Coverage** (was 14 days): range control; the local server accepts up to 1100 days (was 60).
+  - **Activity credit balance** (was a "Window: N days" number box, default 14): the number box is gone; it is the standard control.
+  - **Goal check banner** (was "your last ~2 weeks"): says "over the last 14 days" (or whatever you chose) and has the control inside it. Once you have chosen your own period it stays as a quiet line ("nothing to flag over the last 12 months") so the control is never lost behind an empty result.
+  - **Sleep report chart** (was the newest 28 nights): up to 28 nights show one column each; a longer range shows one column per week (per month beyond 60 weeks), each the average night, so the chart covers the whole range.
+- Deliberately left as they are, because they are not a view of your data: the weight-phase auto-switch rule (its own days setting), the 7-day link expiry and the share-link data limits, safety-net and undo windows (24 hours, 7 days of the change log), and what is sent to the AI (it follows the range you choose in Reports, or says "last 30 days" in its own words). The weekly summary message (7 days) and "this week vs last week" are weekly by definition.
+- p432 walks all seven (start period, change it, remembered, reload-safe for the data it needs, text and chart follow); p391 updated on purpose (the Fasting line now says "not enough" rather than disappearing, and counts calendar days). p430, p57, p59, p181, p188, p191, p217, p315, p328, p343, p196, p199, p202, p406, p36, p313 pass. Full sweep not run (overnight). Not checked: light theme; translations of the new wording; the user guide.
+
 ## v3.10.1328
 
 - **Meal preview: when the app knows what is wrong, it now says what would be right, and one tap makes it so.** (Pete, 8 Nov: "if you know what's wrong, you should know what's right", and nothing said that agreeing means the change gets made.) Two flags have a known answer, so they now name it and offer an **Apply** button in a box that says "If you agree, tap Apply and the figures change. Nothing changes until you do; if you disagree, leave it or use ✏ to edit."

@@ -1519,7 +1519,7 @@ class MaxHealthHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/data-gaps':
             # v3.10.918: which of the last N finished days (today excluded, it is still in progress) lack
             # steps, heart rate or sleep in combined.csv. Days before the first recorded day are not gaps.
-            try: n = max(1, min(60, int(params.get('days', ['14'])[0])))
+            try: n = max(1, min(1100, int(params.get('days', ['14'])[0])))
             except Exception: n = 14
             rows = {}
             try:

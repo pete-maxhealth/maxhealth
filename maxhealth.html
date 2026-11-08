@@ -6062,7 +6062,8 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
     <div class="import-card card-unit" style="border-color:rgba(245,166,35,0.3);">
       <div class="import-label" id="title-imp-gaps" style="color:var(--yellow,#f5a623);cursor:pointer;" onclick="toggleSection('imp-gaps','imp-gaps-wrap','imp-gaps-icon'); mhLoadDataGaps()">Missing Data &amp; Coverage <span id="imp-gaps-icon" style="font-size:12px;color:var(--text3);font-weight:400;">▾ hide</span></div>
       <div id="imp-gaps-wrap">
-        <p style="font-size:12px;color:var(--text3);margin-bottom:10px;">Finished days in the last two weeks that have no steps, heart rate or sleep recorded. Tap a day to fill it in by hand. Today is left out because it is still in progress.</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:10px;">Finished days in the period you choose below (it starts at the last 14 days) that have no steps, heart rate or sleep recorded. Tap a day to fill it in by hand. Today is left out because it is still in progress.</p>
+        <div id="mhGapsRange"></div>
         <div id="mhGapsList" style="font-size:13px;color:var(--text2);">Checking...</div>
         <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">
           <div style="font-size:12px;color:var(--text3);margin-bottom:8px;line-height:1.6;">How much of your history has meals, steps, sleep, heart rate, HRV, SpO2 and weight, and where the gaps are. Read from what is already in the app.</div>
@@ -6631,7 +6632,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1328'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1329'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -12817,6 +12818,9 @@ function mhSyncBannerDismiss() { try { localStorage.setItem('mh_syncbanner_dismi
 // v3.10.918: Settings > Import > Missing Data. Asks the server which recent finished days lack steps / heart rate / sleep.
 async function mhLoadDataGaps() {
   const el = document.getElementById('mhGapsList'); if (!el) return;
+  // v3.10.1329: the period is the standard range control (was a fixed 14 days)
+  const rgEl = document.getElementById('mhGapsRange'); if (rgEl) rgEl.innerHTML = mhRgSelect('gaps', 14, 'mhLoadDataGaps');
+  const B = mhRgBounds('gaps', 14), nBack = B.lo ? Math.max(1, Math.round((new Date(localISODate() + 'T12:00:00') - new Date(B.lo + 'T12:00:00')) / 864e5)) : 1100;
   try {
     let j;
     if (!_serverOnline) {
@@ -12826,19 +12830,21 @@ async function mhLoadDataGaps() {
       const byDate = {}; let first = null;
       (state.history || []).forEach(h => { const d = iso(h); if (!d) return; byDate[d] = h; if (has(h, 'steps', 'hr_resting', 'hr_avg', 'sleep_duration') && (!first || d < first)) first = d; });
       const gaps = [];
-      if (first) for (let i = 1; i <= 14; i++) {
+      if (first) for (let i = 1; i <= nBack; i++) {
         const dt = new Date(); dt.setDate(dt.getDate() - i);
         const d = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
         if (d < first) break;
+        if (d > B.hi) continue;
         const h = byDate[d]; const miss = [];
         if (!has(h, 'steps')) miss.push('steps'); if (!has(h, 'hr_resting', 'hr_avg')) miss.push('heart rate'); if (!has(h, 'sleep_duration')) miss.push('sleep');
         if (miss.length) gaps.push({ date: d, missing: miss });
       }
       j = { gaps };
     } else {
-      j = await (await fetch(`${MH_SERVER}/data-gaps?days=14`, { signal: AbortSignal.timeout(5000) })).json();
+      j = await (await fetch(`${MH_SERVER}/data-gaps?days=${Math.min(nBack, 1100)}`, { signal: AbortSignal.timeout(5000) })).json();
     }
-    if (!j.gaps || !j.gaps.length) { el.innerHTML = '✅ No gaps in the last 14 days.'; return; }
+    j.gaps = (j.gaps || []).filter(g => g.date <= B.hi && (!B.lo || g.date >= B.lo));
+    if (!j.gaps.length) { el.innerHTML = '✅ No gaps in ' + mhRgText('gaps', 14) + '.'; return; }
     el.innerHTML = j.gaps.map(g => {
       const dt = new Date(g.date + 'T12:00:00');
       const lbl = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -25400,23 +25406,25 @@ function checkGoalMismatch() {
   // different code paths, the same inconsistency found and fixed earlier in
   // getLastKnownWeight). Trusting slice(0,14) here caused a wildly wrong reading
   // by picking up an out-of-place old entry as if it were "2 weeks ago".
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 14);
+  // v3.10.1329: the period is the standard range control (was a fixed 14 days); it starts on 14 days
+  const rg = mhRgBounds('goalcheck', 14);
   const weights = [];
-  if (state.weight) weights.push({ w: parseFloat(state.weight), dt: new Date() });
+  if (state.weight && rg.hi >= localISODate()) weights.push({ w: parseFloat(state.weight), dt: new Date() });
   (state.history || []).forEach(d => {
     if (!d.weight || !d.date) return;
     const parts = d.date.split('/');
     if (parts.length !== 3) return;
     const dt = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
-    if (dt >= cutoff) weights.push({ w: parseFloat(d.weight), dt });
+    if (mhRgInRange(d.date, 'goalcheck', 14)) weights.push({ w: parseFloat(d.weight), dt });
   });
   weights.sort((a, b) => b.dt - a.dt); // newest first, by actual date
 
   // Need enough real data points spanning a real window to say anything meaningful —
   // otherwise this would fire noisy false positives on sparse logging.
   const controlsEl = document.getElementById('goalMismatchBannerControls');
-  if (weights.length < 5) { el.style.display = 'none'; if (controlsEl) controlsEl.style.display = 'none'; return; }
+  // once someone has chosen their own period the banner stays as a quiet line, so the control is never lost behind an empty result
+  const quiet = msg => { let own = false; try { own = !!localStorage.getItem('mh_rg_goalcheck'); } catch (_) {} if (!own) { el.style.display = 'none'; if (controlsEl) controlsEl.style.display = 'none'; return; } el.style.display = 'block'; if (controlsEl) controlsEl.style.display = 'none'; el.innerHTML = `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--text3);line-height:1.6;">📊 <strong>Goal check:</strong> ${msg}${mhRgSelect('goalcheck', 14, 'checkGoalMismatch')}</div>`; };
+  if (weights.length < 5) { quiet('not enough weigh-ins in ' + mhRgText('goalcheck', 14) + ' to say (it needs 5; you have ' + weights.length + ').'); return; }
 
   const newest = weights[0].w;
   const oldest = weights[weights.length - 1].w;
@@ -25425,11 +25433,11 @@ function checkGoalMismatch() {
 
   let mismatch = null;
   if (goal === 'gain' && change < FLAT_THRESHOLD) {
-    mismatch = `Your weight has ${change <= -FLAT_THRESHOLD ? `dropped ${mhWtDeltaAbs(change)}` : 'stayed flat'} over your last ~2 weeks despite a gain-phase target. Worth checking: has your actual activity increased recently, or is the current surplus not big enough?`;
+    mismatch = `Your weight has ${change <= -FLAT_THRESHOLD ? `dropped ${mhWtDeltaAbs(change)}` : 'stayed flat'} over ${mhRgText('goalcheck', 14)} despite a gain-phase target. Worth checking: has your actual activity increased recently, or is the current surplus not big enough?`;
   } else if (goal === 'lose' && change > -FLAT_THRESHOLD) {
-    mismatch = `Your weight has ${change >= FLAT_THRESHOLD ? `risen ${mhWtDeltaAbs(change)}` : 'stayed flat'} over your last ~2 weeks despite a lose-phase target. Worth checking: has activity dropped, or does the deficit need revisiting?`;
+    mismatch = `Your weight has ${change >= FLAT_THRESHOLD ? `risen ${mhWtDeltaAbs(change)}` : 'stayed flat'} over ${mhRgText('goalcheck', 14)} despite a lose-phase target. Worth checking: has activity dropped, or does the deficit need revisiting?`;
   } else if (goal === 'maintain' && Math.abs(change) > 0.5) {
-    mismatch = `Your weight has moved ${mhWtDelta(change)} over your last ~2 weeks despite a maintain-phase target. Worth a look — intentional, or does something need adjusting?`;
+    mismatch = `Your weight has moved ${mhWtDelta(change)} over ${mhRgText('goalcheck', 14)} despite a maintain-phase target. Worth a look — intentional, or does something need adjusting?`;
   }
   // Shown under any of the three messages above - explains WHY this can
   // happen at all rather than just leaving the person to guess. When a
@@ -25449,10 +25457,9 @@ function checkGoalMismatch() {
     }
     el.style.display = 'block';
     if (controlsEl) controlsEl.style.display = 'block';
-    el.innerHTML = `<div style="position:relative;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);border-radius:10px;padding:12px 30px 12px 14px;margin-bottom:12px;font-size:12px;color:var(--yellow);line-height:1.6;">📊 <strong>Goal check:</strong> ${mismatch}${mismatchExplainer}<span onclick="dismissWarning(this)" data-warning-key="${mismatch.replace(/"/g,'&quot;')}" data-rerender="checkGoalMismatch" style="position:absolute;top:8px;right:10px;cursor:pointer;color:var(--yellow);opacity:0.6;font-size:16px;line-height:1;padding:4px;">×</span></div>`;
+    el.innerHTML = `<div style="position:relative;background:rgba(245,197,66,0.1);border:1px solid rgba(245,197,66,0.3);border-radius:10px;padding:12px 30px 12px 14px;margin-bottom:12px;font-size:12px;color:var(--yellow);line-height:1.6;">📊 <strong>Goal check:</strong> ${mismatch}${mismatchExplainer}${mhRgSelect('goalcheck', 14, 'checkGoalMismatch')}<span onclick="dismissWarning(this)" data-warning-key="${mismatch.replace(/"/g,'&quot;')}" data-rerender="checkGoalMismatch" style="position:absolute;top:8px;right:10px;cursor:pointer;color:var(--yellow);opacity:0.6;font-size:16px;line-height:1;padding:4px;">×</span></div>`;
   } else {
-    el.style.display = 'none';
-    if (controlsEl) controlsEl.style.display = 'none';
+    quiet('nothing to flag over ' + mhRgText('goalcheck', 14) + '.');
   }
 }
 
@@ -25467,18 +25474,9 @@ function checkGoalMismatch() {
 // tracks that cumulative pattern using real stored history (day.exercises
 // already has precomputed kcal per exercise, day.totals has real intake),
 // not an estimate.
-function getUnclaimedActivityCredit(windowDays) {
-  windowDays = windowDays || parseInt(localStorage.getItem('mh_activity_credit_window')) || 14;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - windowDays);
-
-  const days = (state.history || []).filter(d => {
-    if (!d.date) return false;
-    const parts = d.date.split('/');
-    if (parts.length !== 3) return false;
-    const dt = new Date(`20${parts[2]}-${parts[1]}-${parts[0]}`);
-    return dt >= cutoff;
-  });
+function getUnclaimedActivityCredit() {
+  // v3.10.1329: the period is the standard range control (was a "Window: N days" box, default 14)
+  const days = mhRgDays('actcredit', 14);
 
   let totalCredit = 0, totalUnclaimed = 0, daysWithActivity = 0;
   const targets = TARGETS || {};
@@ -25498,7 +25496,7 @@ function getUnclaimedActivityCredit(windowDays) {
   });
 
   return {
-    windowDays,
+    windowDays: mhRgBounds('actcredit', 14).p, windowText: mhRgText('actcredit', 14),
     daysWithActivity,
     totalCredit: Math.round(totalCredit),
     totalUnclaimed: Math.round(totalUnclaimed),
@@ -25514,7 +25512,8 @@ function renderActivityCreditBalance() {
   if (!el) return;
   const data = getUnclaimedActivityCredit();
   if (data.daysWithActivity === 0) {
-    el.innerHTML = `<div style="font-size:12px;color:var(--text3);">No logged exercise in the last ${data.windowDays} days to compare against.</div>`;
+    el.innerHTML = `<div style="font-size:12px;color:var(--text3);">No logged exercise in ${data.windowText} to compare against.</div>`;
+    el.innerHTML += mhRgSelect('actcredit', 14, 'renderActivityCreditBalance');
     return;
   }
   const goal = localStorage.getItem('mh_goal') || 'gain';
@@ -25538,7 +25537,7 @@ function renderActivityCreditBalance() {
     <div style="display:flex;justify-content:space-between;margin-bottom:10px;">
       <div>
         <div style="font-size:20px;font-weight:700;color:var(--accent);">${data.totalCredit}<span style="font-size:12px;color:var(--text3);"> kcal earned</span></div>
-        <div style="font-size:11px;color:var(--text3);">across ${data.daysWithActivity} active day${data.daysWithActivity===1?'':'s'} in the last ${data.windowDays}</div>
+        <div style="font-size:11px;color:var(--text3);">across ${data.daysWithActivity} active day${data.daysWithActivity===1?'':'s'} in ${data.windowText}</div>
       </div>
       <div style="text-align:right;">
         <div style="font-size:20px;font-weight:700;color:${data.pctUnclaimed >= 25 ? 'var(--yellow)' : 'var(--accent)'};">${data.totalUnclaimed}<span style="font-size:12px;color:var(--text3);"> kcal unclaimed</span></div>
@@ -25547,7 +25546,7 @@ function renderActivityCreditBalance() {
     </div>
     <div style="font-size:12px;color:var(--text2);line-height:1.6;">${interpretation}</div>
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);">
-      Window: <input type="number" id="activityCreditWindowInput" value="${data.windowDays}" min="7" max="90" style="width:50px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:11px;" onchange="localStorage.setItem('mh_activity_credit_window', this.value); renderActivityCreditBalance();"> days
+      ${mhRgSelect('actcredit', 14, 'renderActivityCreditBalance')}
     </div>`;
 }
 
@@ -26106,7 +26105,7 @@ function computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChan
   // matches whatever the caller's own recent-entries slice actually used
   // (both current callers pass 14), rather than a separate hardcoded
   // number here that could silently drift out of sync with it.
-  const period = windowDays ? ` (last ${windowDays} days)` : '';
+  const period = windowDays ? (typeof windowDays === 'string' ? ` (${windowDays})` : ` (last ${windowDays} days)`) : '';
 
   let color, label;
 
@@ -26132,8 +26131,7 @@ function computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChan
 // look like" check.
 function previewWeightIntention(hypotheticalGoal) {
   const displayWeight = state.weight || getLastKnownWeight();
-  const recentWeightEntries = (state.history || []).slice(0, 14)
-    .filter(d => d.weight && d.weight > 0);
+  const recentWeightEntries = mhWtTrendEntries();
   let avgDailyChange = null;
   if (recentWeightEntries.length >= 3) {
     const oldest = recentWeightEntries[recentWeightEntries.length - 1];
@@ -26145,7 +26143,7 @@ function previewWeightIntention(hypotheticalGoal) {
     const daySpan = Math.max(1, Math.round((parseHistDate(newest.date) - parseHistDate(oldest.date)) / 86400000));
     avgDailyChange = (newest.weight - oldest.weight) / daySpan;
   }
-  const status = computeWeightIntentionStatus(displayWeight, null, null, avgDailyChange, hypotheticalGoal, 14);
+  const status = computeWeightIntentionStatus(displayWeight, null, null, avgDailyChange, hypotheticalGoal, mhRgLabelArg('wtrend', 14));
   const el = document.getElementById('weightIntentionPreview');
   if (!el) return;
   if (!status) {
@@ -26161,7 +26159,7 @@ function previewWeightIntention(hypotheticalGoal) {
 function renderWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange) {
   const el = document.getElementById('weightIntentionStatus');
   if (!el) return;
-  const status = computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange, undefined, 14);
+  const status = computeWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange, undefined, mhRgLabelArg('wtrend', 14));
   if (!status) { el.style.display = 'none'; return; }
   el.innerHTML = `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${status.color};margin-right:5px;vertical-align:middle;"></span><span style="color:${status.color};">${status.label}</span>`;
   el.style.display = 'block';
@@ -27176,8 +27174,7 @@ function _updateDashboardCore(skipActivityRender) {
   }
   // Weight trend prediction
   const trendEl = document.getElementById('weightTrendPrediction');
-  const recentWeightEntries = (state.history || []).slice(0, 14)
-    .filter(d => d.weight && d.weight > 0);
+  const recentWeightEntries = mhWtTrendEntries(); // v3.10.1329: the weigh-ins in the chosen range (standard range control), today's live reading included
   // state.history only finalizes at day-rollover — a weight logged live
   // today (state.weight, already shown as the headline "kg" figure above)
   // wasn't being folded into this window at all, so the trend/status label
@@ -27185,10 +27182,6 @@ function _updateDashboardCore(skipActivityRender) {
   // under today's fresh number. Splice today's live reading in as the
   // newest point whenever it's genuinely newer than what's already in
   // history, then re-cap at 14 so the "(14d)" label stays honest.
-  if (state.weight && state.weight > 0 && (!recentWeightEntries.length || recentWeightEntries[0].date !== csvDate)) {
-    recentWeightEntries.unshift({ date: csvDate, weight: state.weight });
-    if (recentWeightEntries.length > 14) recentWeightEntries.length = 14;
-  }
   let avgDailyChange = null;
   if (recentWeightEntries.length >= 3) {
     const oldest = recentWeightEntries[recentWeightEntries.length - 1];
@@ -27218,18 +27211,20 @@ function _updateDashboardCore(skipActivityRender) {
           trendEl.textContent = `${direction} ${changeStr} avg · target in ~${daysToTarget} days`;
           trendEl.style.color = 'var(--accent)';
         } else {
-          trendEl.textContent = `${direction} ${changeStr} avg (14d)`;
+          trendEl.textContent = `${direction} ${changeStr} avg (${mhRgShort('wtrend', 14)})`;
           trendEl.style.color = avgDailyChange > 0 ? 'var(--green)' : 'var(--yellow)';
         }
         trendEl.style.display = 'block';
       } else {
-        trendEl.textContent = '→ Weight stable';
+        trendEl.textContent = '→ Weight stable (' + mhRgShort('wtrend', 14) + ')';
         trendEl.style.color = 'var(--text3)';
         trendEl.style.display = 'block';
       }
     } else {
       trendEl.style.display = 'none';
     }
+    // tap the line to change the period; the same standard range control as the other cards
+    if (trendEl.style.display !== 'none') { if (!/▾$/.test(trendEl.textContent)) trendEl.textContent += ' ▾'; trendEl.style.cursor = 'pointer'; trendEl.title = 'Change the period'; trendEl.onclick = mhWtTrendOpen; }
   }
   renderWeightIntentionStatus(displayWeight, wtLow, wtHigh, avgDailyChange);
 
@@ -28461,7 +28456,7 @@ function mhCookedFreezeToggle(id) {
   else { o.cookedFrozen[id] = true; o.cookedBy[id] = mhAddDaysISO(r.frozen); showToast('Frozen: keeps ' + r.frozen + ' days'); }
   mhStockSave(o); try { mhShopRender(); } catch (_) {} try { if (typeof renderRecipeList === 'function') renderRecipeList(); } catch (_) {}
 }
-function mhWasteNote(o, rec) { o.waste = (o.waste || []).concat(rec).filter(w => Date.now() - w.t < 30 * 86400000).slice(-300); }
+function mhWasteNote(o, rec) { o.waste = (o.waste || []).concat(rec).filter(w => Date.now() - w.t < 400 * 86400000).slice(-1500); } // kept for 400 days so any range up to 12 months can be shown (v3.10.1329; was 30)
 // Used up or binned: base = amount in the item's own unit (null = all of it). Returns the amount taken off.
 function mhStockWaste(key, base) {
   const o = mhStockLoad(), it = o.items[key]; if (!it || it.level == null || !(it.level > 0)) return 0;
@@ -28487,7 +28482,7 @@ function mhCookedBinAsk(id) {
   }, null, true, { confirm: 'Bin them' });
 }
 function mhWasteSummary(o) {
-  const m = {}; (o.waste || []).forEach(w => { if (Date.now() - w.t >= 30 * 86400000) return; const k = w.k; m[k] = m[k] || { n: w.n, b: w.b, a: 0 }; m[k].a += w.a; });
+  const m = {}; (o.waste || []).forEach(w => { if (!mhRgInRangeMs(w.t, 'waste', 30)) return; const k = w.k; m[k] = m[k] || { n: w.n, b: w.b, a: 0 }; m[k].a += w.a; });
   return Object.values(m).sort((x, y) => y.a - x.a);
 }
 // What planned meals will use (base units per stock key). Plans older than yesterday are treated as not happening.
@@ -28567,7 +28562,7 @@ function mhStockExtrasHtml(o) {
   if (ids.length) h += '<div data-leftovers="1" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">🍲 Leftovers</div>' + ids.map(id => { const r = recs.find(x => x.id === id), fz = o.cookedFrozen && o.cookedFrozen[id];
     return '<div data-cooked="' + esc(id) + '" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:140px;font-size:14px;color:var(--text);">' + esc(r ? r.name : 'Cooked batch') + '<div style="font-size:12px;color:var(--text3);">' + o.cooked[id] + ' serving' + (o.cooked[id] === 1 ? '' : 's') + esc(mhCookedByText(o, id)) + '</div></div>'
       + '<button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedFreezeToggle(this.dataset.id)" style="' + sm + '">' + (fz ? '☀ Thawed it' : '❄ Freeze') + '</button><button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedBinAsk(this.dataset.id)" style="' + sm + '">🗑 Bin</button></div>'; }).join('') + '</div>';
-  if (waste.length) h += '<div data-waste="1" style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">🗑 Used up or binned in the last 30 days: ' + waste.slice(0, 6).map(w => esc(w.n) + ' ' + (w.b === 'each' ? w.a : w.b === 'servings' ? w.a + ' serving' + (w.a === 1 ? '' : 's') : mhStockNum(w.a) + ' ' + w.b)).join(', ') + '</div>';
+  if (waste.length || (o.waste || []).length) h += '<div data-waste="1" style="font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px;">🗑 Used up or binned in ' + mhRgText('waste', 30) + ': ' + (!waste.length ? 'nothing' : waste.slice(0, 6).map(w => esc(w.n) + ' ' + (w.b === 'each' ? w.a : w.b === 'servings' ? w.a + ' serving' + (w.a === 1 ? '' : 's') : mhStockNum(w.a) + ' ' + w.b)).join(', ')) + '</div>' + mhRgSelect('waste', 30, 'mhShopRender');
   return h;
 }
 function mhStockRowExtra(it, res) {
@@ -40628,10 +40623,10 @@ function mhRenderFastPlanLine(now) {
 // "Your usual" line on the Fasting card (v3.10.1283): the person's own pattern from the last 30 logged days (newest first in state.history), 3+ timed days. A fact, not advice.
 function mhFastUsualText() {
   try {
-    const days = (state.history || []).slice(0, 30), rs = days.map(d => mhWhenEatDayRows(d)).filter(r => r.length); if (rs.length < 3) return '';
+    const days = mhRgDays('fastusual', 30), rs = days.map(d => mhWhenEatDayRows(d)).filter(r => r.length); if (rs.length < 3) return 'Your usual: not enough logged meal times in ' + mhRgText('fastusual', 30) + ' yet (3 days needed, ' + rs.length + ' so far).';
     const avg = a => a.reduce((x, y) => x + y, 0) / a.length, clk = m => { const t = Math.round(m) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
     const w = mhWhenEatStats(days);
-    return 'Your usual (last ' + rs.length + ' logged days with times): first meal ' + clk(avg(rs.map(r => r[0].m))) + ', last meal ' + clk(avg(rs.map(r => r[r.length - 1].m))) + (w && w.maxShare != null ? '. Your biggest meal holds about ' + Math.round(w.maxShare * 100) + '% of your protein.' : '.');
+    return 'Your usual (' + rs.length + ' logged days with times, ' + mhRgText('fastusual', 30) + '): first meal ' + clk(avg(rs.map(r => r[0].m))) + ', last meal ' + clk(avg(rs.map(r => r[r.length - 1].m))) + (w && w.maxShare != null ? '. Your biggest meal holds about ' + Math.round(w.maxShare * 100) + '% of your protein.' : '.');
   } catch (_) { return ''; }
 }
 function mhRenderFastingCard() {
@@ -40652,7 +40647,7 @@ function mhRenderFastingCard() {
   const doneWin = [...recs].reverse().find(r => r.date !== todayStr() && r.windowH != null);
   winEl.textContent = doneWin ? `Eating window ${doneWin.date}: ${mhFastFmt(doneWin.windowH)} (${mhFastClock(doneWin.firstMs)}–${mhFastClock(doneWin.lastMs)})` : '';
   mhRenderFastPlanLine(now);
-  { const ue = document.getElementById('fastUsualLine'); if (ue) { const ut = mhFastUsualText(); ue.textContent = ut; ue.style.display = ut ? 'block' : 'none'; } }
+  { const ue = document.getElementById('fastUsualLine'); if (ue) { const ut = mhFastUsualText(), any = (state.history || []).some(d => { try { return mhWhenEatDayRows(d).length; } catch (_) { return false; } }); ue.textContent = ut; ue.style.display = (ut || any) ? 'block' : 'none'; let rg = document.getElementById('fastUsualRange'); if (!rg) { rg = document.createElement('div'); rg.id = 'fastUsualRange'; ue.parentNode.insertBefore(rg, ue.nextSibling); } rg.innerHTML = any ? mhRgSelect('fastusual', 30, 'mhRenderFastingCard') : ''; } }
   const cn = mhFastingConditionNote();
   cEl.style.display = cn ? 'block' : 'none';
   if (cn) { cEl.textContent = cn.text; cEl.style.color = cn.tone === 'caution' ? 'var(--yellow,#f5c542)' : 'var(--text3)'; }
@@ -45452,6 +45447,7 @@ function mhRgText(key, defP) {
 }
 function mhRgSet(key, defP, v, cb) {
   v = parseInt(v, 10); const o = mhRgGet(key, defP); o.p = v;
+  if (v === defP) { try { localStorage.removeItem('mh_rg_' + key); } catch (_) {} try { if (cb && typeof window[cb] === 'function') window[cb](); } catch (_) {} return; } // back on the usual period: nothing to remember
   if (v === -1 && !o.from) { const d = mhRangeDefaults(); o.from = d.from; o.to = d.to; }
   try { localStorage.setItem('mh_rg_' + key, JSON.stringify(o)); } catch (_) {}
   try { if (cb && typeof window[cb] === 'function') window[cb](); } catch (_) {}
@@ -45470,6 +45466,26 @@ function mhRgSelect(key, defP, cb) {
     + (o.p === -1 ? '<div style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;color:var(--text3);">From <input type="date" class="mh-rg-from" value="' + b.lo + '" style="flex:1;min-width:0;' + st + '" onchange="mhRgSetDates(' + q(key).replace(/"/g, '&quot;') + ',' + defP + ',&quot;from&quot;,this.value,' + q(cb).replace(/"/g, '&quot;') + ')"> to <input type="date" class="mh-rg-to" value="' + b.hi + '" style="flex:1;min-width:0;' + st + '" onchange="mhRgSetDates(' + q(key).replace(/"/g, '&quot;') + ',' + defP + ',&quot;to&quot;,this.value,' + q(cb).replace(/"/g, '&quot;') + ')"></div>' : '')
     + '</div>';
 }
+function mhRgShort(key, defP) { const b = mhRgBounds(key, defP); return b.p === 0 ? 'all' : b.p === -1 ? 'custom' : b.p === 365 ? '12m' : b.p + 'd'; }
+// For places that take "a number of days or a piece of text" in a label: the days when it is a plain count, else the words.
+function mhRgLabelArg(key, defP) { const b = mhRgBounds(key, defP); return (b.p > 0 && b.p !== 365) ? b.p : mhRgText(key, defP).replace(/^the /, ''); }
+function mhRgInRangeMs(t, key, defP) { const b = mhRgBounds(key, defP), lo = b.lo ? new Date(b.lo + 'T00:00:00').getTime() : 0, hi = new Date(b.hi + 'T23:59:59').getTime(); return t >= lo && t <= hi; }
+// Weight entries for the trend under the weight tile and the intention preview: weigh-ins inside the chosen range, newest first, with today's live reading as the newest when the range reaches today.
+function mhWtTrendEntries() {
+  const e = mhRgDays('wtrend', 14).filter(d => d.weight && d.weight > 0), b = mhRgBounds('wtrend', 14);
+  if (state.weight && state.weight > 0 && b.hi >= localISODate() && (!e.length || e[0].date !== todayStr())) e.unshift({ date: todayStr(), weight: state.weight });
+  return e;
+}
+function mhWtTrendOpen() {
+  const old = document.getElementById('mhWtTrendModal'); if (old) old.remove();
+  const n = mhWtTrendEntries().length, m = document.createElement('div'); m.id = 'mhWtTrendModal'; m.style.cssText = 'position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;';
+  m.innerHTML = '<div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;padding:20px 16px 28px;max-height:85vh;overflow-y:auto;"><div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">⚖️ Weight trend, ' + mhRgText('wtrend', 14) + '</div>'
+    + mhRgSelect('wtrend', 14, 'mhWtTrendRedraw')
+    + '<div style="font-size:12px;color:var(--text3);margin:6px 0 10px;">The average change per day under your weight, and the days to target, use the weigh-ins in this range (' + n + ' now; it needs at least 3).</div>'
+    + '<button onclick="document.getElementById(\'mhWtTrendModal\').remove()" style="width:100%;padding:10px;background:transparent;border:none;color:var(--text3);font-size:13px;cursor:pointer;">Close</button></div>';
+  document.body.appendChild(m);
+}
+function mhWtTrendRedraw() { try { updateDashboard(true); } catch (_) {} mhWtTrendOpen(); }
 function setTrendsFilter(days, btn) {
   document.querySelectorAll('.trends-filter-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
@@ -50218,8 +50234,17 @@ function renderSleepReport() {
       '<div style="font-size:11px;color:var(--text2);margin:6px 0 12px;line-height:1.6;"><span style="color:#7048e8;">■</span> Deep ' + mhSleepFmt(st.deep) + ' (' + st.deepPct + '%) <span style="color:#38bdf8;margin-left:6px;">■</span> REM ' + mhSleepFmt(st.rem) + ' (' + st.remPct + '%) <span style="color:#94a3b8;margin-left:6px;">■</span> Light ' + mhSleepFmt(st.light) + (st.wake ? ' <span style="color:#fbbf24;margin-left:6px;">■</span> Awake ' + mhSleepFmt(st.wake) : '') + '</div>';
   }
   // nights, newest 28 as columns
-  const nights = st.list.slice(-28), max = Math.max(480, ...nights.map(x => x.s.min));
-  h += '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin:4px 0 6px;">EACH NIGHT (LINE = 7 HOURS)</div><div style="position:relative;display:flex;align-items:flex-end;gap:2px;height:84px;margin-bottom:12px;"><div style="position:absolute;left:0;right:0;bottom:' + Math.round(420 / max * 76) + 'px;border-top:1px dashed var(--border);"></div>' +
+  // Up to 28 nights show one column each; a longer range shows one column per week (monthly past a year), each the average night, so the chart always covers the whole range (v3.10.1329).
+  let nights = st.list.slice(), grouped = '';
+  if (nights.length > 28) {
+    const byWk = (() => { const g = {}, order = []; nights.forEach(x => { const dt = parseDateStr(x.d.date); if (!dt) return; const w = new Date(dt.getTime() + 12 * 3600e3), back = (w.getUTCDay() + 6) % 7; w.setUTCDate(w.getUTCDate() - back); const k = w.toISOString().slice(0, 10); if (!g[k]) { g[k] = []; order.push(k); } g[k].push(x.s.min); }); return order.map(k => ({ k, v: g[k] })); })();
+    const monthly = byWk.length > 60;
+    const buckets = monthly ? (() => { const g = {}, order = []; byWk.forEach(b => { const k = b.k.slice(0, 7); if (!g[k]) { g[k] = []; order.push(k); } g[k] = g[k].concat(b.v); }); return order.map(k => ({ k, v: g[k] })); })() : byWk;
+    nights = buckets.map(b => ({ d: { date: (monthly ? 'month of ' : 'week of ') + b.k }, s: { min: Math.round(b.v.reduce((a, c) => a + c, 0) / b.v.length) } }));
+    grouped = monthly ? 'month' : 'week';
+  }
+  const max = Math.max(480, ...nights.map(x => x.s.min));
+  h += '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin:4px 0 6px;">' + (grouped ? 'EACH ' + grouped.toUpperCase() + ', AVERAGE NIGHT' : 'EACH NIGHT') + ' (LINE = 7 HOURS)</div><div style="position:relative;display:flex;align-items:flex-end;gap:2px;height:84px;margin-bottom:12px;"><div style="position:absolute;left:0;right:0;bottom:' + Math.round(420 / max * 76) + 'px;border-top:1px dashed var(--border);"></div>' +
     nights.map(x => '<div title="' + x.d.date + ': ' + mhSleepFmt(x.s.min) + '" style="flex:1;height:' + Math.max(3, Math.round(x.s.min / max * 76)) + 'px;border-radius:2px;background:' + (x.s.min >= 420 ? '#34d399' : x.s.min >= 360 ? '#fbbf24' : '#fb7185') + ';"></div>').join('') + '</div>';
   const lines = [];
   if (st.nWk >= 3 && st.nWe >= 2 && Math.abs(st.wkend - st.wkday) >= 20) lines.push('You sleep about ' + Math.round(Math.abs(st.wkend - st.wkday)) + ' min ' + (st.wkend > st.wkday ? 'longer' : 'shorter') + ' at weekends than on weekdays.');
