@@ -71,6 +71,62 @@ async function adminLimits(request, env) {
 	} catch (e) { return json({ ok: false, error: 'KV unavailable: ' + e.message }, 503); }
 }
 
+// ── Anonymous active-install count (added v3.10.1331) ──────────────────────────────
+// Each install of the app says "I'm here" at most once a day: GET /ping with its random device code
+// (the same one used for the AI starter allowance) and the app version number. The Worker keeps ONE
+// small record per code in KV: first day seen, last day seen, version. No IP address, no health data,
+// no name, nothing the app logs. A GET is used on purpose: an older Worker answers GET with 405, so
+// an app that pings an old Worker is harmless. Read the totals with POST /admin/usage (same secret
+// as /admin/limits).
+const PING_TTL = 60 * 60 * 24 * 400;
+async function pingHandler(request, env) {
+	const hdr = { ...CORS_HEADERS, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Cache-Control': 'no-store' };
+	const done = () => new Response(null, { status: 204, headers: hdr });
+	try {
+		if (!env.RATE_LIMIT_KV) return done();
+		const dev = request.headers.get('X-MH-Device') || '';
+		if (!/^[A-Za-z0-9_-]{16,64}$/.test(dev)) return done();
+		const today = new Date().toISOString().slice(0, 10);
+		let v = new URL(request.url).searchParams.get('v') || '';
+		if (!/^[0-9.]{1,14}$/.test(v)) v = '';
+		const k = 'act:' + dev;
+		const cur = await env.RATE_LIMIT_KV.getWithMetadata(k);
+		const m = cur && cur.metadata;
+		if (m && m.l === today && (m.v || '') === v) return done();   // already counted today: no write
+		await env.RATE_LIMIT_KV.put(k, '1', { metadata: { f: (m && m.f) || today, l: today, v }, expirationTtl: PING_TTL });
+	} catch (e) { /* a failed ping must never matter to anyone */ }
+	return done();
+}
+async function adminUsage(request, env) {
+	const json = (o, st = 200) => new Response(JSON.stringify(o, null, 1), { status: st, headers: { 'Content-Type': 'application/json' } });
+	if (request.method !== 'POST') return json({ ok: false, error: 'POST only' }, 405);
+	const given = request.headers.get('X-MH-Admin') || '';
+	if (!env.ADMIN_SECRET || !given || !(await sameSecret(given, env.ADMIN_SECRET))) return json({ ok: false, error: 'Not allowed' }, 403);
+	if (!env.RATE_LIMIT_KV) return json({ ok: false, error: 'KV not bound' }, 503);
+	try {
+		const day = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+		const t0 = day(0), t6 = day(6), t29 = day(29);
+		const out = { ok: true, asOf: t0, installsEverSeen: 0, activeToday: 0, active7d: 0, active30d: 0, new7d: 0, new30d: 0, byVersion7d: {}, truncated: false };
+		let cursor, pages = 0;
+		do {
+			const r = await env.RATE_LIMIT_KV.list({ prefix: 'act:', cursor, limit: 1000 });
+			for (const key of r.keys) {
+				const m = key.metadata; if (!m) continue;
+				out.installsEverSeen++;
+				if (m.l === t0) out.activeToday++;
+				if (m.l >= t6) { out.active7d++; const vv = m.v || 'unknown'; out.byVersion7d[vv] = (out.byVersion7d[vv] || 0) + 1; }
+				if (m.l >= t29) out.active30d++;
+				if (m.f >= t6) out.new7d++;
+				if (m.f >= t29) out.new30d++;
+			}
+			cursor = r.list_complete ? null : r.cursor; pages++;
+		} while (cursor && pages < 20);
+		if (cursor) out.truncated = true;
+		out.note = 'An "install" is one browser/app copy with its own random code. Reinstalling or clearing site data makes a new one, so counts can run a little high. Your own phones and Jill\'s are included.';
+		return json(out);
+	} catch (e) { return json({ ok: false, error: 'KV unavailable: ' + e.message }, 503); }
+}
+
 function b64uToBytes(s) {
 	s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
 	const bin = atob(s); const out = new Uint8Array(bin.length);
@@ -401,7 +457,10 @@ const handler = {
 
 export default {
 	async fetch(request, env) {
-		if (new URL(request.url).pathname === '/admin/limits') return adminLimits(request, env);
+		const path = new URL(request.url).pathname;
+		if (path === '/admin/limits') return adminLimits(request, env);
+		if (path === '/admin/usage') return adminUsage(request, env);
+		if (path === '/ping' && request.method === 'GET') return pingHandler(request, env);
 		if (request.method !== 'POST') return handler.fetch(request, env);
 		let weight = 1;
 		try { const b = await request.clone().json(); if (b && b.multiCheck) weight = 3; } catch (e) {}
