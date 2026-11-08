@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1323
+
+- Changed: in History, a day's Water line and Weight line are now tappable (✏ shows they are). Tapping opens the existing "Edit day totals" form scrolled to and focused on that box, so the checks, the change summary and saving are the ones already there. Water was already editable inside Edit day totals; this makes it direct.
+- Added: a "💧 + Water" link in the day's footer, only on days with no water recorded, so a missed day can be filled in. Setting water to 0 clears it again.
+- Editing water or weight does not touch that day's calories, macros or meal log.
+- Translations for the new link and the two tooltips in the eight languages (`tools/lang_add_history_edit.py`).
+- p425 walks it at phone and PC width (tap, save, reload, + Water add and clear, weight line, Edit day totals still works, light/dark screenshots). Neighbours p306, p307, p316, p175, p181, p23, p406, p424, p165, p114 pass. Full sweep not run (overnight).
+- Not done: a tour clip; user guide line for this.
+
 ## v3.10.1322
 
 - Added: translations (es, de, fr, tr, pt, it, pl, nl) for 25 strings from the PC and recent work: the carer-share "share more or less" line and its four steps (naming the buttons the way each pack does), the CSV undo button with its day count, the "imported" pop-up and the Undo label, the four undo result messages, the sleep-minutes line, "Phone only" and its two explanations, the "local server running" banners, "Local server not reachable" and "Saved locally, but the local server couldn't be reached", the storage-full and photo/camera notes, and the "your data stays on your device" row. Added by `tools/lang_add_pc_share.py` (only adds missing keys; keeps each file's existing layout).
