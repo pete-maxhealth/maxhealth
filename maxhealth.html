@@ -6631,7 +6631,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1325'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1326'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -58114,14 +58114,15 @@ function mhHold(fn) {
     if(await followGps(!!force)) force=true;
     const loc=J(K_LOC); if(!loc){ mhWxRender(); return; }
     const c=J(K_CACHE);
-    if(!force && c && c.date===today() && c.lat===loc.lat && c.lon===loc.lon && c.hr && c.v===2 && Date.now()-c.at<3600e3){ mhWxRender(); return; }
+    if(!force && c && c.date===today() && c.lat===loc.lat && c.lon===loc.lon && c.hr && c.v===3 && Date.now()-c.at<3600e3){ mhWxRender(); return; }
     try{
-      const u='https://api.open-meteo.com/v1/forecast?latitude='+loc.lat+'&longitude='+loc.lon+'&current=temperature_2m,apparent_temperature,weather_code&daily=apparent_temperature_max,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,uv_index,wind_speed_10m,wind_gusts_10m&wind_speed_unit=mph&timezone=auto&forecast_days=1';
+      const u='https://api.open-meteo.com/v1/forecast?latitude='+loc.lat+'&longitude='+loc.lon+'&current=temperature_2m,apparent_temperature,weather_code&daily=apparent_temperature_max,temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,weather_code,wind_speed_10m_max,wind_gusts_10m_max&hourly=temperature_2m,apparent_temperature,weather_code,precipitation_probability,uv_index,wind_speed_10m,wind_gusts_10m&wind_speed_unit=mph&timezone=auto&forecast_days=8';
       const r=await fetch(u,{signal:AbortSignal.timeout(8000)}); const d=await r.json();
       if(!d||!d.daily||!d.current) throw new Error('bad');
-      W(K_CACHE,{v:2,lat:loc.lat,lon:loc.lon,at:Date.now(),date:today(),temp:d.current.temperature_2m,feelsNow:d.current.apparent_temperature,code:d.current.weather_code,
+      W(K_CACHE,{v:3,lat:loc.lat,lon:loc.lon,at:Date.now(),date:today(),temp:d.current.temperature_2m,feelsNow:d.current.apparent_temperature,code:d.current.weather_code,
         feelsMax:d.daily.apparent_temperature_max[0],hi:d.daily.temperature_2m_max[0],lo:d.daily.temperature_2m_min[0],uv:d.daily.uv_index_max[0],rainPct:d.daily.precipitation_probability_max[0],
-        hr:(d.hourly&&d.hourly.time)?d.hourly.time.slice(0,24).map((_,i)=>({t:d.hourly.temperature_2m[i],f:d.hourly.apparent_temperature[i],c:d.hourly.weather_code[i],r:(d.hourly.precipitation_probability||[])[i],u:(d.hourly.uv_index||[])[i],w:(d.hourly.wind_speed_10m||[])[i],g:(d.hourly.wind_gusts_10m||[])[i]})):null});
+        hr:(d.hourly&&d.hourly.time)?d.hourly.time.slice(0,24).map((_,i)=>({t:d.hourly.temperature_2m[i],f:d.hourly.apparent_temperature[i],c:d.hourly.weather_code[i],r:(d.hourly.precipitation_probability||[])[i],u:(d.hourly.uv_index||[])[i],w:(d.hourly.wind_speed_10m||[])[i],g:(d.hourly.wind_gusts_10m||[])[i]})):null,
+        days:weekDays(d)});
     }catch(e){ /* offline or service down: keep whatever is cached */ }
     mhWxRender(); try{updateDashboard(true);}catch(e){}
   };
@@ -58141,6 +58142,25 @@ function mhHold(fn) {
   // ---- hour-by-hour strip + best time for outdoor exercise ----
   const nowHour=()=>(window.__mhWxHour!=null?window.__mhWxHour:new Date().getHours());
   const hh=(h)=>String(h).padStart(2,'0')+':00';
+  // One rule for "comfortable for outdoor exercise", used for today's best window and for each day of the week ahead (v3.10.1326).
+  function okHour(x,f,dry){ return f<=27&&(dry||(x.r||0)<40)&&(x.u==null||x.u<=5)&&(x.w==null||x.w<=WIND_OK)&&(x.g==null||x.g<=GUST_OK); }
+  // The next 7 days (tomorrow onwards) from the same forecast call: feels-like high, temperatures, rain, UV, wind, and the longest comfortable stretch 06:00-22:00.
+  function weekDays(d){
+    try{
+      const D=d.daily, H=d.hourly; if(!D||!H||!D.time||D.time.length<2) return null; const out=[];
+      for(let k=1;k<D.time.length&&k<=7;k++){
+        let best=null,cur=null,cool=null;
+        for(let h=6;h<=21;h++){ const i=k*24+h; const f=(H.apparent_temperature||[])[i]; if(f==null) continue;
+          const x={r:(H.precipitation_probability||[])[i],u:(H.uv_index||[])[i],w:(H.wind_speed_10m||[])[i],g:(H.wind_gusts_10m||[])[i]};
+          const ok=okHour(x,f,false);
+          if(ok&&cur&&cur.end===h-1){cur.end=h;cur.n++;} else if(ok){cur={start:h,end:h,n:1};} else cur=null;
+          if(cur&&(!best||cur.n>best.n)) best=Object.assign({},cur);
+          if(cool==null||f<cool) cool=f; }
+        out.push({date:D.time[k],code:(D.weather_code||[])[k],hi:D.temperature_2m_max[k],lo:D.temperature_2m_min[k],feels:D.apparent_temperature_max[k],rain:(D.precipitation_probability_max||[])[k],uv:(D.uv_index_max||[])[k],wind:(D.wind_speed_10m_max||[])[k],gust:(D.wind_gusts_10m_max||[])[k],win:best?[best.start,best.end+1]:null});
+      }
+      return out.length?out:null;
+    }catch(e){ return null; }
+  }
   const WIND_OK=20, GUST_OK=35; // mph: up to a fresh breeze is fine; stronger wind or gusts make a run or ride unpleasant and unsafe
   function bestWindow(w){
     const c=w.cache; if(!c||!c.hr) return null;
@@ -58148,7 +58168,7 @@ function mhHold(fn) {
     const delta=(w.ovr&&w.ovr.feels!=null&&c.feelsMax!=null)?(w.ovr.feels-c.feelsMax):0;
     const dry=!!(w.ovr&&w.ovr.wet==='dry'); const nh=nowHour(); const hrs=[];
     for(let h=6;h<=21;h++){ if(h<nh) continue; const x=c.hr[h]; if(!x||x.f==null) continue;
-      const f=x.f+delta; hrs.push({h,f,x,ok:f<=27&&(dry||(x.r||0)<40)&&(x.u==null||x.u<=5)&&(x.w==null||x.w<=WIND_OK)&&(x.g==null||x.g<=GUST_OK)}); }
+      const f=x.f+delta; hrs.push({h,f,x,ok:okHour(x,f,dry)}); }
     let best=null,cur=null;
     hrs.forEach(o=>{ if(o.ok&&cur&&cur.end===o.h-1){cur.end=o.h;cur.items.push(o);} else if(o.ok){cur={start:o.h,end:o.h,items:[o]};} else cur=null; if(cur&&(!best||cur.items.length>best.items.length)) best=cur; });
     if(best){ const fs=best.items.map(o=>o.f); const ws=best.items.map(o=>o.x.w).filter(v=>v!=null); return {best,text:`🟢 Best time left for outdoor exercise: ${hh(best.start)}-${hh(best.end+1)} (feels ${Math.round(Math.min(...fs))}-${Math.round(Math.max(...fs))}°${ws.length?', wind up to '+Math.round(Math.max(...ws))+' mph':''})`}; }
@@ -58172,7 +58192,23 @@ function mhHold(fn) {
     const bi='cursor:pointer;color:var(--text3);font-size:12px;padding:2px 4px;';
     return `<span style="white-space:nowrap;flex:0 0 auto;"><span onclick="moveDashboardSection('weather','up')" style="${b}">▲</span><span onclick="moveDashboardSection('weather','down')" style="${b}">▼</span><span onclick="toggleDashboardSectionHidden('weather')" title="Hide" style="${b}">👁</span><span id="weatherBodyIcon" onclick="mhCardBody('weather')" style="${bi}">▾ hide</span></span>`;
   }
-  const HELP='<strong>What the weather changes in MaxedHealth</strong><br>• <strong>Water target:</strong> +250ml on a 25-29° day, +500ml at 30-34°, +750ml at 35° or more (using the day&#39;s feels-like high), added on top of your base target and the 500ml per exercise hour.<br>• <strong>Suggested effort:</strong> ease about 5% from 25°, 10-15% from 30°, 20% (or go indoors) from 35°; indoors or ease 10% when it&#39;s -5° or colder.<br>• <strong>Tips:</strong> heat, freezing or cold, rain (when the chance is 60%+), and strong UV (7+).<br>• <strong>Hour-by-hour strip and best time:</strong> the day hour by hour (06:00-22:00). The green outline marks the longest stretch still ahead today that is comfortable for outdoor exercise: feels like 27° or under, rain chance under 40%, UV 5 or under, wind 20 mph or less and gusts 35 mph or less. Hours that are too windy show a 💨 with the strongest gust or wind speed (mph). If there is no suitable stretch, it names the coolest hour instead and says if wind is part of the reason.<br><strong>What it does not change:</strong> your calorie, protein or carb targets.<br><strong>Your say wins:</strong> if the forecast is wrong, tap &quot;Not right? Adjust&quot; and your figure replaces it for today. These are rule-of-thumb guides, not measurements. Full detail: Settings → Formulas &amp; Technical Reference.';
+  const HELP='<strong>What the weather changes in MaxedHealth</strong><br>• <strong>Water target:</strong> +250ml on a 25-29° day, +500ml at 30-34°, +750ml at 35° or more (using the day&#39;s feels-like high), added on top of your base target and the 500ml per exercise hour.<br>• <strong>Suggested effort:</strong> ease about 5% from 25°, 10-15% from 30°, 20% (or go indoors) from 35°; indoors or ease 10% when it&#39;s -5° or colder.<br>• <strong>Tips:</strong> heat, freezing or cold, rain (when the chance is 60%+), and strong UV (7+).<br>• <strong>Hour-by-hour strip and best time:</strong> the day hour by hour (06:00-22:00). The green outline marks the longest stretch still ahead today that is comfortable for outdoor exercise: feels like 27° or under, rain chance under 40%, UV 5 or under, wind 20 mph or less and gusts 35 mph or less. Hours that are too windy show a 💨 with the strongest gust or wind speed (mph). If there is no suitable stretch, it names the coolest hour instead and says if wind is part of the reason.<br>• <strong>Next 7 days:</strong> tap &quot;Next 7 days&quot; under the card to open or shut it (it stays as you leave it). Each day shows the feels-like high, the high/low, rain chance and wind when they matter, and the best comfortable stretch with the same rules as today. Later days are less certain.<br><strong>What it does not change:</strong> your calorie, protein or carb targets.<br><strong>Your say wins:</strong> if the forecast is wrong, tap &quot;Not right? Adjust&quot; and your figure replaces it for today. These are rule-of-thumb guides, not measurements. Full detail: Settings → Formulas &amp; Technical Reference.';
+  // "7 days ahead": tucked away behind one line; stays open or shut wherever you leave it (v3.10.1326).
+  const K_WEEK='mh_wx_week_open';
+  window.mhWxWeekToggle=function(){ try{ localStorage.setItem(K_WEEK, localStorage.getItem(K_WEEK)==='1'?'0':'1'); }catch(e){} mhWxRender(); };
+  function weekBlock(c){
+    if(!c||!c.days||!c.days.length) return '';
+    const open=(()=>{ try{ return localStorage.getItem(K_WEEK)==='1'; }catch(e){ return false; } })();
+    const head=`<div onclick="mhWxWeekToggle()" style="font-size:12px;margin-top:8px;cursor:pointer;color:var(--text2);">📅 <span style="text-decoration:underline;">Next 7 days</span> ${open?'▾':'▸'}</div>`;
+    if(!open) return `<div id="mhWxWeek">${head}</div>`;
+    const rows=c.days.map(d=>{
+      const dt=new Date(d.date+'T12:00:00'); const lab=isNaN(dt)?esc(d.date):dt.toLocaleDateString('en-GB',{weekday:'short',day:'numeric'});
+      const windy=(d.wind||0)>WIND_OK||(d.gust||0)>GUST_OK;
+      const verdict=d.win?`🟢 ${hh(d.win[0])}-${hh(d.win[1])}`:`🟡 ${windy?'windy':'no easy window'}`;
+      return `<div style="display:flex;align-items:baseline;gap:6px;font-size:12px;padding:3px 0;border-top:1px solid var(--border);"><span style="flex:0 0 52px;color:var(--text3);">${lab}</span><span style="flex:0 0 22px;">${ICON(d.code==null?0:d.code)}</span><span style="flex:1 1 auto;min-width:0;">feels <strong>${Math.round(d.feels)}°</strong> <span style="color:var(--text3);">(${Math.round(d.hi)}/${Math.round(d.lo)}°)</span>${(d.rain||0)>=40?` <span style="color:var(--blue);">${Math.round(d.rain)}%</span>`:''}${windy?` <span style="color:var(--yellow);">💨${Math.round(Math.max(d.wind||0,d.gust||0))}</span>`:''}</span><span style="flex:0 0 auto;font-size:11px;">${verdict}</span></div>`;
+    }).join('');
+    return `<div id="mhWxWeek">${head}<div style="margin-top:4px;">${rows}</div><div style="font-size:10px;color:var(--text3);margin-top:3px;">Feels-like high, then high/low. 🟢 is the longest comfortable stretch (same rules as today). Forecasts firm up nearer the day.</div></div>`;
+  }
   window.mhWxRender=function(){
     const el=document.getElementById('mhWxCard'); if(!el) return;
     const w=current();
@@ -58187,9 +58223,10 @@ function mhHold(fn) {
     const stripHtml=hourStrip(w,bw);
     const eff=(w.feels!=null||w.wet)?effort(w):null;
     const effHtml=eff?`<div style="font-size:12px;margin-top:6px;font-weight:600;">🏃 Suggested effort today: ${eff.label}</div>`:'';
+    const weekHtml=weekBlock(c);
     const extra=window.mhWeatherWaterExtra().ml;
     const wl=extra?`<div style="font-size:12px;margin-top:4px;">💧 Water target +${extra}ml for the heat (rule of thumb).</div>`:'';
-    el.innerHTML=`<div class="mhwx-box"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;"><div style="font-size:12px;min-width:0;">${head}${helpToggle('wxfactors',HELP)}</div>${ctl()}</div><div id="weatherBody">${ovr}${stripHtml}${bwHtml}${effHtml}${tips}${wl}
+    el.innerHTML=`<div class="mhwx-box"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:4px;"><div style="font-size:12px;min-width:0;">${head}${helpToggle('wxfactors',HELP)}</div>${ctl()}</div><div id="weatherBody">${ovr}${stripHtml}${bwHtml}${effHtml}${tips}${wl}${weekHtml}
       <div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:var(--text3);"><span onclick="mhWxOpenOverride()" style="text-decoration:underline;cursor:pointer;">Not right? Adjust</span><span onclick="mhWxRefresh(true)" style="text-decoration:underline;cursor:pointer;">Refresh</span><span onclick="mhWxOpenSetup()" style="text-decoration:underline;cursor:pointer;">Change place</span><span onclick="mhWxRemove()" style="text-decoration:underline;cursor:pointer;">Remove</span></div></div></div>`;
     try{ const hs=document.getElementById('mhWxHours'), n=hs&&hs.querySelector('[data-now]'); if(n) hs.scrollLeft=Math.max(0,n.offsetLeft-60); }catch(e){}
     try{ mhCardBodyApply(); }catch(e){}
