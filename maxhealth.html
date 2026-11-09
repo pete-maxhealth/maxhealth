@@ -6635,7 +6635,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1336'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1337'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -43181,6 +43181,104 @@ function _mmDateInRange(dateStr) {
 }
 let _mmSelectedMetrics = null; // lazy-loaded from localStorage on first open
 
+// ---- Foods in Compare Metrics (v3.10.1337) ----
+// Individual foods and food categories as lines, taken only from what has been logged: grams a day when the logs carry grams, otherwise times had.
+// A day with meals logged but without the food reads 0; a day with nothing logged is a gap, never a guess.
+const MM_FOOD_MAX = 12;
+const MM_FOOD_COLORS = ['#fb923c', '#a3e635', '#22d3ee', '#f472b6', '#c084fc', '#facc15'];
+let _mmFoodIdx = null;
+function mmFoodPicks() { try { const a = JSON.parse(localStorage.getItem('mh_mm_foods') || '[]'); return Array.isArray(a) ? a.filter(x => x && x.k && x.t).slice(0, MM_FOOD_MAX) : []; } catch (_) { return []; } }
+function mmFoodPicksSave(a) { try { localStorage.setItem('mh_mm_foods', JSON.stringify(a.slice(0, MM_FOOD_MAX))); } catch (_) {} }
+function mmFoodGrams(f) {
+  const m = String((f && f.amount) || '').match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l)\b/i); if (!m) return 0;
+  const n = parseFloat(m[1]), u = m[2].toLowerCase(); return (u === 'kg' || u === 'l') ? n * 1000 : n;
+}
+function mmFoodIndex() {
+  if (_mmFoodIdx) return _mmFoodIdx;
+  const days = new Map(), foods = new Map(), cats = new Map();
+  const addDay = (date, log) => {
+    const items = [];
+    (log || []).forEach(e => {
+      if (!e || mhIsDeviceStub(e)) return;
+      ((e.items && e.items.length) ? e.items : [e]).forEach(f => {
+        const name = String((f && f.name) || (e && e.description) || '').trim(); if (!name) return;
+        const k = (typeof _libNormaliseName === 'function') ? _libNormaliseName(name) : name.toLowerCase(); if (!k) return;
+        let cs = []; try { cs = getItemCategories({ name, categories: f.categories }) || []; } catch (_) {}
+        items.push({ k, name, g: mmFoodGrams(f), cats: cs });
+      });
+    });
+    if (!items.length) return; days.set(date, items);
+    const seenF = new Set(), seenC = new Set();
+    items.forEach(it => {
+      const e = foods.get(it.k) || { k: it.k, t: it.name, days: new Set() }; if (it.name.length > e.t.length) e.t = it.name; e.days.add(date); foods.set(it.k, e); seenF.add(it.k);
+      it.cats.forEach(c => { const ce = cats.get(c) || { k: c, t: c.charAt(0).toUpperCase() + c.slice(1), days: new Set() }; ce.days.add(date); cats.set(c, ce); });
+    });
+  };
+  (state.history || []).forEach(d => { if (d && d.date) addDay(d.date, d.log); });
+  if ((state.todayLog || []).length) addDay(todayStr(), state.todayLog);
+  _mmFoodIdx = { days, foods, cats };
+  return _mmFoodIdx;
+}
+function mmFoodSeries(m) {
+  const idx = mmFoodIndex(), rows = []; let sumN = 0, sumK = 0;
+  idx.days.forEach((items, date) => {
+    if (!_mmDateInRange(date)) return;
+    let g = 0, n = 0, gk = 0;
+    items.forEach(it => { if (m.foodCat ? it.cats.includes(m.foodCat) : it.k === m.foodKey) { n++; if (it.g > 0) { g += it.g; gk++; } } });
+    sumN += n; sumK += gk; rows.push({ date, g, n, gk });
+  });
+  const useG = sumN > 0 && sumK >= sumN * 0.5;
+  const points = rows.map(r => ({ date: r.date, val: r.n === 0 ? 0 : (useG ? (r.gk === r.n ? Math.round(r.g) : null) : r.n) })).filter(x => x.val !== null);
+  return { points, unit: useG ? 'g' : '×' };
+}
+function mmFoodSuggest(q) {
+  const idx = mmFoodIndex(), have = new Set(mmFoodPicks().map(x => (x.c ? 'c:' : 'f:') + x.k)), s = String(q || '').toLowerCase().trim();
+  const sortD = (a, b) => b.days.size - a.days.size || a.t.localeCompare(b.t);
+  let f = [...idx.foods.values()].filter(x => !have.has('f:' + x.k)), c = [...idx.cats.values()].filter(x => !have.has('c:' + x.k));
+  if (s) { f = f.filter(x => x.t.toLowerCase().includes(s)); c = c.filter(x => x.t.toLowerCase().includes(s)); }
+  return { foods: f.sort(sortD).slice(0, s ? 8 : 8), cats: c.sort(sortD).slice(0, 4) };
+}
+function mmFoodChipsHtml(q) {
+  const s = mmFoodSuggest(q), chip = (x, c) => `<button data-k="${_pkEsc(x.k)}" data-t="${_pkEsc(x.t)}" data-c="${c ? 1 : 0}" onclick="mmFoodAdd(this)" style="padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px dashed var(--border);background:var(--surface2);color:var(--text2);">${c ? '🗂 ' : ''}${_pkEsc(x.t)} <span style="opacity:0.6;font-weight:500;">${x.days.size}d</span></button>`;
+  const html = s.cats.map(x => chip(x, true)).join('') + s.foods.map(x => chip(x, false)).join('');
+  return html || `<span style="font-size:11px;color:var(--text3);">${q ? 'Nothing logged matches that.' : 'No more logged foods to add yet.'}</span>`;
+}
+function mmFoodSearchRender() { const el = document.getElementById('mmFoodChips'), i = document.getElementById('mmFoodSearch'); if (el) el.innerHTML = mmFoodChipsHtml(i ? i.value : ''); }
+function mmFoodAdd(btn) {
+  const a = mmFoodPicks(); if (a.length >= MM_FOOD_MAX) { showToast('That is the most foods you can compare at once (' + MM_FOOD_MAX + ')'); return; }
+  const c = btn.dataset.c === '1', k = btn.dataset.k, t = btn.dataset.t;
+  if (a.some(x => !!x.c === c && x.k === k)) return;
+  a.push(c ? { k, t, c: 1 } : { k, t }); mmFoodPicksSave(a);
+  const key = (c ? 'foodcat_' : 'food_') + k; if (!_mmSelectedMetrics.includes(key)) _mmSelectedMetrics.push(key); saveMMSelectedMetrics();
+  if (_mmExpandedGroups) _mmExpandedGroups.add('Foods');
+  renderMMMetricPicker(); renderMMChart();
+}
+function mmFoodRemove(key) {
+  mmFoodPicksSave(mmFoodPicks().filter(x => ((x.c ? 'foodcat_' : 'food_') + x.k) !== key));
+  const i = _mmSelectedMetrics.indexOf(key); if (i > -1) { _mmSelectedMetrics.splice(i, 1); saveMMSelectedMetrics(); }
+  renderMMMetricPicker(); renderMMChart();
+}
+// Days with it against days without it, for each other number line you have ticked. Averages only: it points at something to try, it cannot say why.
+function mmFoodCompareRender(perMetricData) {
+  const el = document.getElementById('mmFoodCompare'); if (!el) return;
+  const foods = perMetricData.filter(pm => pm.metric.isFood), others = perMetricData.filter(pm => !pm.metric.isFood && !pm.metric.isTag && !pm.metric.isTreatment);
+  if (!foods.length) { el.innerHTML = ''; return; }
+  if (!others.length) { el.innerHTML = '<div style="font-size:11px;color:var(--text3);">Tick another line (sleep, weight, a symptom) to see the days you had it against the days you did not.</div>'; return; }
+  const r1 = v => Math.round(v * 10) / 10, lines = [];
+  foods.forEach(fp => {
+    const had = new Set(fp.points.filter(p => p.val > 0).map(p => p.date)), not = new Set(fp.points.filter(p => p.val === 0).map(p => p.date));
+    others.forEach(op => {
+      const a = [], b = []; op.points.forEach(p => { if (p.val == null) return; if (had.has(p.date)) a.push(p.val); else if (not.has(p.date)) b.push(p.val); });
+      if (a.length < 4 || b.length < 4) return;
+      const av = a.reduce((x, y) => x + y, 0) / a.length, bv = b.reduce((x, y) => x + y, 0) / b.length, u = op.metric.unit ? (/^[a-z]/i.test(op.metric.unit) ? ' ' + op.metric.unit : op.metric.unit) : '';
+      lines.push(`<div style="padding:4px 0;">${_pkEsc(fp.metric.title)} days (${a.length}): ${_pkEsc(op.metric.title)} averaged <b>${r1(av)}${u}</b>, against <b>${r1(bv)}${u}</b> on the other ${b.length} days.</div>`);
+    });
+  });
+  el.innerHTML = lines.length
+    ? '<div style="font-size:12px;color:var(--text2);margin-top:8px;border-top:1px solid var(--border);padding-top:6px;">' + lines.join('') + '<div style="font-size:11px;color:var(--text3);margin-top:4px;">Averages only. It shows a pattern worth testing, not a cause, and needs a couple of weeks of days to mean much.</div></div>'
+    : '<div style="font-size:11px;color:var(--text3);margin-top:8px;">Not enough days with and without it yet (at least 4 of each, with the other line logged) to compare.</div>';
+}
+
 function getAllOverlayableMetrics() {
   const base = Object.keys(DRILL_CONFIG).map(key => {
     const cfg = getDrillConfig(key);
@@ -43213,7 +43311,9 @@ function getAllOverlayableMetrics() {
       key: 'tag_' + k, title: td[k].name, color: tagColors[i % tagColors.length], unit: '', icon: '🏷', isTag: true, anchorId: 'tag:' + k,
     }));
   } catch (_) {}
-  return base.concat(symptoms).concat(treatments).concat(tagPills);
+  let foodPills = [];
+  try { foodPills = mmFoodPicks().map((x, i) => ({ key: (x.c ? 'foodcat_' : 'food_') + x.k, title: x.t, color: MM_FOOD_COLORS[i % MM_FOOD_COLORS.length], unit: '', icon: x.c ? '🗂' : '🍽', isFood: true, foodKey: x.c ? null : x.k, foodCat: x.c ? x.k : null })); } catch (_) {}
+  return base.concat(symptoms).concat(treatments).concat(tagPills).concat(foodPills);
 }
 
 function loadMMSelectedMetrics() {
@@ -43231,6 +43331,7 @@ function saveMMSelectedMetrics() {
 let _mmResizeHandler = null;
 
 function openMultiMetricOverlay() {
+  _mmFoodIdx = null;
   if (_mmSelectedMetrics === null) _mmSelectedMetrics = loadMMSelectedMetrics();
   document.getElementById('multiMetricOverlay').style.display = 'block';
   document.getElementById('mmDayPanel').style.display = 'none';
@@ -43344,6 +43445,7 @@ function toggleMMMetric(key) {
 const MM_METRIC_GROUPS = [
   { label: 'Body Composition', match: m => ['weight', 'fat_pct', 'muscle_pct', 'bone_mass', 'hydration'].includes(m.key) },
   { label: 'Exercise', match: m => ['steps', 'distance', 'exercise_kcal', 'exercise_min', 'res_volume', 'active_cal'].includes(m.key) },
+  { label: 'Foods', match: m => m.isFood, always: true },
   { label: 'Lab Results', match: m => m.isLabMarker },
   { label: 'Nutrition', match: m => ['calories', 'protein', 'carbs', 'fat', 'ketosis', 'water', 'fast_h', 'eat_window', 'meal_n', 'meal_first', 'meal_last', 'am_protein', 'eve_carbs'].includes(m.key) },
   { label: 'Symptoms', match: m => m.isSymptom },
@@ -43376,7 +43478,7 @@ function renderMMMetricPicker() {
 
   el.innerHTML = mhCondChipsHtml() + MM_METRIC_GROUPS.map(g => {
     const members = all.filter(g.match);
-    if (!members.length) return ''; // e.g. no treatments defined yet - no empty group header to tap for nothing
+    if (!members.length && !g.always) return ''; // e.g. no treatments defined yet - no empty group header to tap for nothing (Foods stays: it is where foods are added)
     const selectedCount = members.filter(m => _mmSelectedMetrics.includes(m.key)).length;
     const expanded = _mmExpandedGroups.has(g.label);
     return `
@@ -43388,11 +43490,18 @@ function renderMMMetricPicker() {
         ${expanded ? `<div style="display:flex;flex-wrap:wrap;gap:6px;padding-left:4px;">
           ${members.map(m => {
             const on = _mmSelectedMetrics.includes(m.key);
-            return `<button onclick="toggleMMMetric('${m.key}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on ? m.color : 'var(--border)'};background:${on ? m.color + '18' : 'var(--surface2)'};color:${on ? m.color : 'var(--text3)'};">
-              <span style="opacity:${on ? '1' : '0.4'};">${m.icon || '●'}</span>${m.title}
-            </button>`;
+            const rmBtn = m.isFood ? `<button onclick="mmFoodRemove('${m.key}')" title="Remove" aria-label="Remove ${_pkEsc(m.title)}" style="margin-left:-4px;padding:4px 8px;border-radius:20px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text3);">✕</button>` : '';
+            return `${m.isFood ? '<span style="display:inline-flex;align-items:center;gap:4px;">' : ''}<button onclick="toggleMMMetric('${m.key}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid ${on ? m.color : 'var(--border)'};background:${on ? m.color + '18' : 'var(--surface2)'};color:${on ? m.color : 'var(--text3)'};">
+              <span style="opacity:${on ? '1' : '0.4'};">${m.icon || '●'}</span>${m.isFood ? _pkEsc(m.title) : m.title}
+            </button>${rmBtn}${m.isFood ? '</span>' : ''}`;
           }).join('')}
-        </div>` : ''}
+        </div>${g.label === 'Foods' ? `
+        <div style="padding:8px 4px 0;">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Add a food or category you have logged. Amounts come only from your logs: grams where you logged grams, otherwise how many times.</div>
+          <input id="mmFoodSearch" type="search" placeholder="Search your logged foods…" oninput="mmFoodSearchRender()" style="width:100%;box-sizing:border-box;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;">
+          <div id="mmFoodChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${mmFoodChipsHtml('')}</div>
+          <div id="mmFoodCompare"></div>
+        </div>` : ''}` : ''}
       </div>`;
   }).join('');
 }
@@ -43483,6 +43592,10 @@ function renderMMChart() {
       const filtered = days.filter(d => _mmDateInRange(d.date));
       return { metric: m, points: filtered.map(d => ({ date: d.date, val: d.symptoms[m.symptomId] })) };
     }
+    if (m.isFood) {
+      const fs = mmFoodSeries(m);
+      return { metric: { ...m, unit: fs.unit }, points: fs.points };
+    }
     if (m.isTag) {
       const tagDates = new Set(mhAnchorSessions(m.anchorId).map(x => x.date));
       const dayDates = state.history.map(d => d.date).filter(_mmDateInRange);
@@ -43521,6 +43634,7 @@ function renderMMChart() {
     return { metric: mhChartIsWt(m.key) ? { ...m, unit: mhChartUnit(m.key, m.unit) } : m, points: rawPoints.map(d => ({ date: d.date, val: mhChartCv(m.key, d.val) })) };
   });
 
+  try { mmFoodCompareRender(perMetricData); } catch (e) { console.warn('food compare', e); }
   const allDates = [...new Set(perMetricData.flatMap(pm => pm.points.map(p => p.date)))];
   // Sort chronologically - dates are dd/mm/yy strings, not natural sort order.
   allDates.sort((a, b) => {
