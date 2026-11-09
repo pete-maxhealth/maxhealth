@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1334
+
+- **First-run AI step now says plainly that the shared account is the free one** (Pete, 9 Nov: "make it obvious that the AI API is the one to choose to keep it free", then: "She saw the paid for and panicked"). The notice says "This is the free option: no key, no card, nothing to pay", the line under it says to leave Shared account selected to keep it free, and the choices read "Shared account (free)", "Claude (own key, paid)", "OpenAI (own key, paid)". Own keys are described honestly as billed by the provider, and only suggested if you hit the cap.
+- **The daily-limit message no longer says "which Pete Spence pays for directly" or calls an API key "free"** (that wording was the likely source of the scare, and a key is not free). It now says the shared account is free but capped, resets tomorrow, and that an own key is billed by your AI provider.
+- **Test:** p436 (wording, labels, no scary phrases left, own key shows the key box, Start Tracking still finishes; dark and light screenshots checked). p01 passes.
+- **Not done:** the new wording is English only until translated (the old onboarding paragraph had translations); Settings → AI Provider wording already says "billed to you" and was not changed.
+
 ## v3.10.1333
 
 - **Library search and filters are always open and pinned** (Pete, 9 Nov: library search "sticky and non hideable ... it always needs to be open"). The search box, All items / Ingredients only / Recipes only, sort and category filters sat inside the Food Library card, so hiding that card took the search away, and they scrolled off the top of a long list. They now sit in their own box at the top of the Library, outside every hideable section, and stay pinned while the list scrolls under them. Section reorder leaves them on top.
