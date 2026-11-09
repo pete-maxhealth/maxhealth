@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1333
+
+- **Library search and filters are always open and pinned** (Pete, 9 Nov: library search "sticky and non hideable ... it always needs to be open"). The search box, All items / Ingredients only / Recipes only, sort and category filters sat inside the Food Library card, so hiding that card took the search away, and they scrolled off the top of a long list. They now sit in their own box at the top of the Library, outside every hideable section, and stay pinned while the list scrolls under them. Section reorder leaves them on top.
+- **Test:** p435 (not inside the Food Library card, still there with that card hidden, pinned after scrolling 900px, filter and typed search work from the pinned box, reorder keeps it on top; dark theme screenshot checked). Neighbours p101, p103, p11, p301, p98 pass.
+- **Not checked:** the light theme and a real phone.
+
 ## v3.10.1332
 
 - **New: "Others ate" on Use soon and Past use-by** (Pete, 9 Nov: "no way to delete expired portions that other people ate"). A 👪 button on each Use soon food and an "others ate it" link on the Past use-by line take an amount off stock without counting it as your meal or as waste. The box starts with the full amount; change it if only some was eaten. Undo puts it back. "Bin it" now also starts with the full amount filled in.
