@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1335
+
+- **Fixed: the suggested-fix box in the meal preview was unreadable on a phone** (Pete, 9 Nov, screenshot: "Format issue"). The text ran one word per line and the Apply button stretched across it. Cause: the shared button class is full width, and it was squeezing the text to nothing. Apply is now its own size beside the text, and the text is a normal line. The box was built in v3.10.1328 and its test (p431) only checked behaviour, not shape.
+- **Test:** p437 checks the box shape at phone width (text at least 150px, Apply not stretched, not overlapping, box not tall), with one and two suggestions, dark and light screenshots viewed; it fails on the old layout. Neighbours p431 and p429 pass.
+
 ## v3.10.1334
 
 - **First-run AI step now says plainly that the shared account is the free one** (Pete, 9 Nov: "make it obvious that the AI API is the one to choose to keep it free", then: "She saw the paid for and panicked"). The notice says "This is the free option: no key, no card, nothing to pay", the line under it says to leave Shared account selected to keep it free, and the choices read "Shared account (free)", "Claude (own key, paid)", "OpenAI (own key, paid)". Own keys are described honestly as billed by the provider, and only suggested if you hit the cap.
