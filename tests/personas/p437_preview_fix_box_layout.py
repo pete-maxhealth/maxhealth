@@ -15,8 +15,8 @@ with fresh_server() as root, sync_playwright() as pw:
       const lines=Math.round(a.height/parseFloat(getComputedStyle(sp).lineHeight||18));
       return {textW:Math.round(a.width), textH:Math.round(a.height), btnW:Math.round(b.width), boxW:Math.round(bx.width), boxH:Math.round(bx.height), overlap: !(b.right<=a.left||b.left>=a.right||b.bottom<=a.top||b.top>=a.bottom), inside: b.left>=bx.left-1&&b.right<=bx.right+1&&b.bottom<=bx.bottom+1}})()"""
     # Pete's case: whey protein 25g with per-100g figures; also two foods flagged at once
-    for name, foods in [('one', "[{name:'Banana Diet Whey Protein (Applied Nutrition)', amount:'25g', kcal:100, protein:20, fat:2, carbs:1.2, _source:'ai'}]"),
-                        ('two', "[{name:'Banana Diet Whey Protein (Applied Nutrition)', amount:'25g', kcal:100, protein:20, fat:2, carbs:1.2, _source:'ai'},{name:'Double cream', amount:'100g', kcal:60, protein:2, fat:5, carbs:3, _source:'ai'}]")]:
+    for name, foods in [('one', "[{name:'Zzqx Roast Chicken Breast Fillet (Applied Kitchen)', amount:'25g', kcal:165, protein:31, fat:3.6, carbs:0, _source:'ai'}]"),
+                        ('two', "[{name:'Zzqx Roast Chicken Breast Fillet (Applied Kitchen)', amount:'25g', kcal:165, protein:31, fat:3.6, carbs:0, _source:'ai'},{name:'Double cream', amount:'100g', kcal:60, protein:2, fat:5, carbs:3, _source:'ai'}]")]:
         ev(f"window._pendingMealFoods={foods}; renderMealPreview()"); page.wait_for_timeout(400)
         L = ev(LAY)
         if not L: f.add('BUG', f'{name}: no suggestion box shown'); continue
@@ -30,6 +30,6 @@ with fresh_server() as root, sync_playwright() as pw:
     # Apply still works from the new layout
     ev("document.documentElement.removeAttribute('data-theme')")
     page.locator('#previewFixes button').first.click(); page.wait_for_timeout(300)
-    if ev("window._pendingMealFoods[0].protein") != 5: f.add('BUG', f'Apply still scales the whey to 25g: {ev("window._pendingMealFoods[0].protein")}')
+    if ev("window._pendingMealFoods[0].protein") != 7.8: f.add('BUG', f'Apply still scales the chicken to 25g: {ev("window._pendingMealFoods[0].protein")}')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f]; sys.exit(1 if f else 0)

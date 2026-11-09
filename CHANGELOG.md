@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1336
+
+- **Fixed: a false "protein may not be scaled / looks like per-100g" warning on correct barcode figures** (Pete, 9 Nov: whey scanned "directly from the barcode", 80g protein per 100g, 25g = 101kcal, 20g P, was flagged and the suggested Apply would have turned it into 25kcal, 5g P, which is wrong). The check assumed anything over 50g protein per 100g at a small amount was unscaled. It now never second-guesses figures that came from a barcode scan, a label, your library, a manual pick or a per-100g base, and skips protein powders and similar by name (whey, casein, isolate, collagen, jerky and so on). A genuinely unscaled AI figure (e.g. chicken at 40g with per-100g numbers) is still flagged with its Apply.
+- **Why it matters:** this check was added in v3.10.1328 together with the Apply button; a wrong suggestion plus a one-tap Apply is worse than no suggestion. It also explains Pete's "slightly confused?" (the totals above the warning were right, the warning was not).
+- **Test:** p438 (barcode base, library, per-100g flag, manual pick and a whey named by AI are all left alone; unscaled AI chicken is still flagged). p431, p437, p429 and the barcode test p38 pass; p437 now uses an unscaled chicken as its sample.
+
 ## v3.10.1335
 
 - **Fixed: the suggested-fix box in the meal preview was unreadable on a phone** (Pete, 9 Nov, screenshot: "Format issue"). The text ran one word per line and the Apply button stretched across it. Cause: the shared button class is full width, and it was squeezing the text to nothing. Apply is now its own size beside the text, and the text is a normal line. The box was built in v3.10.1328 and its test (p431) only checked behaviour, not shape.
