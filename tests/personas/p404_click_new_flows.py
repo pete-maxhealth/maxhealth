@@ -28,6 +28,9 @@ def check(page, where, before, was_remove):
     if not was_remove and (after['lib'] < before['lib'] or after['stock'] < before['stock']):
         f.add('BUG', f'{where}: library/stock shrank without a remove control ({before} -> {after})')
 
+# Stay-put (Pete 9 Nov 2026: removing a cupboard food brought up the Next meal idea picker): a control that is not a navigator must leave you on the same screen.
+SCREEN = "[...document.querySelectorAll('[id^=maintab-].active,[id^=logtab-].active,[id^=shoptab-].active')].map(e=>e.id).join(',') + '|' + (document.querySelector('.mh-mealpicker-live') ? 'picker' : '')"
+GOES = re.compile(r'idea|suggest|meal|log|today|insights|settings|history|library|shopping|back|open|go to|view|show|edit|add|import|search|barcode|scan|photo|recipe|plan|share|help|tour|switchTab|nav|startNext|mhUseUpIdea|mhSoonGo|mhShopView|mhShopOpen|Fold|Tab|Pane', re.I)
 ALL = ['import_review', 'import_after_partial_add', 'suggestion_cards', 'shopping_list', 'my_cupboards', 'log_search_from_import']
 want = sys.argv[1:] or ALL; clicked = 0; skipped = 0; destructive = 0
 with fresh_server() as root, sync_playwright() as pw:
@@ -45,12 +48,13 @@ with fresh_server() as root, sync_playwright() as pw:
             cur = ev(SCAN)
             m = [c for c in cur if c['t'] == it['t'] and c['oc'] == it['oc']]
             if not m: continue
-            before = ev(COUNTS); rm = dest or bool(REMOVES.search(it['t'] + ' ' + it['oc'])); fold0 = ev(FOLD); ov0 = ev(OVERLAYS)
+            before = ev(COUNTS); rm = dest or bool(REMOVES.search(it['t'] + ' ' + it['oc'])); fold0 = ev(FOLD); ov0 = ev(OVERLAYS); scr0 = ev(SCREEN)
             if dest: ev("window.appConfirm = (m, ok) => { ok && ok(); }"); destructive += 1   # say yes to the app's own confirm
             sig_before = {(c['t'], c['oc']) for c in cur}
             ev(f"(() => {{ const e = document.querySelectorAll('button, [onclick], summary, [role=button], .tab-btn, input[type=checkbox], select')[{m[0]['i']}]; if (e) e.click(); }})()")
             page.wait_for_timeout(250); clicked += 1; n1 += 1
             check(page, f'{name} > {label}', before, rm)
+            if rm and not GOES.search(it['t'] + ' ' + it['oc']) and ev(SCREEN) != scr0: f.add('stay-put', f'{name} > {label}: a remove/clear control moved you to another screen or opened the meal-idea picker ({scr0} -> {ev(SCREEN)})')
             if ev(FOLD) != fold0 and not TOGGLE.search(it['t'] + ' ' + it['oc']): f.add('collapse', f'{name} > {label}: a section opened or shut by itself (Pete 4 Nov: adding or editing must not open or reset sections)')
             if ev(OVERLAYS) > ov0:
                 if not ev(CLOSER): page.keyboard.press('Escape')

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1332
+
+- **New: "Others ate" on Use soon and Past use-by** (Pete, 9 Nov: "no way to delete expired portions that other people ate"). A 👪 button on each Use soon food and an "others ate it" link on the Past use-by line take an amount off stock without counting it as your meal or as waste. The box starts with the full amount; change it if only some was eaten. Undo puts it back. "Bin it" now also starts with the full amount filled in.
+- **Test:** p434 walks it (part, undo, all of an expired food, no waste note, no meal logged, removing another cupboard food leaves you on the same screen). p404 now flags a remove/clear control that moves you to another screen.
+- **Not fixed yet:** removing a cupboard food once opened the Next meal idea picker with a Use soon food in the "Use up" box; could not reproduce it, so the cause is still open.
+
 ## v3.10.1331
 
 - **New: an anonymous count of how many copies of the app are in use** (Pete, 8 Nov: "I wanted to see if anyone has actually started using the free site"). The Worker's AI figures cannot answer that, because the app keeps everything on the phone and only AI features touch the Worker. Now, once a day, each install sends the Worker its random device code (the one the AI starter allowance already uses) and the app version, and nothing else: no health data, no name, no IP address kept. The Worker keeps one small record per code (first day seen, last day seen, version) that expires after about a year.

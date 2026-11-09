@@ -6632,7 +6632,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1331'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1332'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -28483,11 +28483,26 @@ function mhStockWaste(key, base) {
 function mhStockWasteAsk(key) {
   const it = mhStockLoad().items[key]; if (!it) return;
   if (it.level == null || !(it.level > 0)) { showToast('Nothing counted to take off'); return; }
-  appPrompt('How much ' + it.name + ' was used up or binned? Leave empty for all of it (' + mhStockFmt(it, it.level) + ')', 'e.g. 200 g', v => {
+  const all = mhStockFmt(it, it.level);
+  appPrompt('How much ' + it.name + ' was used up or binned? Shown is all of it; change it if only some', 'e.g. 200 g', v => {
     v = String(v == null ? '' : v).trim(); let amt = null;
-    if (v) { const r = mhStockParse(/^[\d.]+$/.test(v) ? (it.base === 'each' ? v : v + ' ' + it.base) : v, it); if (!r.ok) { showToast(r.err); return; } amt = r.base; }
+    if (v && v !== all) { const r = mhStockParse(/^[\d.]+$/.test(v) ? (it.base === 'each' ? v : v + ' ' + it.base) : v, it); if (!r.ok) { showToast(r.err); return; } amt = r.base; }
     const took = mhStockWaste(key, amt); showToast(took ? 'Taken off stock: ' + mhStockFmt(it, took) : 'Nothing taken off'); try { mhShopRender(); } catch (_) {}
-  });
+  }, all);
+}
+// Someone else ate (some of) it: takes it off stock without counting it as your meal or as waste (v3.10.1332).
+// Pete: "no way to delete expired portions that other people ate".
+function mhStockOthersAteAsk(key) {
+  const it = mhStockLoad().items[key]; if (!it) return;
+  if (it.level == null || !(it.level > 0)) { showToast('Nothing counted to take off'); return; }
+  const all = mhStockFmt(it, it.level);
+  appPrompt('How much ' + it.name + ' did someone else eat? Shown is all of it; change it if only some', 'e.g. 200 g', v => {
+    v = String(v == null ? '' : v).trim(); let amt = it.level;
+    if (v && v !== all) { const r = mhStockParse(/^[\d.]+$/.test(v) ? (it.base === 'each' ? v : v + ' ' + it.base) : v, it); if (!r.ok) { showToast(r.err); return; } amt = Math.min(r.base, it.level); }
+    if (!(amt > 0) || !mhStockAdjust(key, -amt, 'others')) { showToast('Nothing taken off'); return; }
+    showToast('Taken off stock (eaten by others): ' + mhStockFmt(it, amt), 'Undo', () => { mhStockAdjust(key, amt, 'manual'); try { mhShopRender(); } catch (_) {} }, 10000);
+    try { mhShopRender(); } catch (_) {}
+  }, all);
 }
 function mhCookedBinAsk(id) {
   const o = mhStockLoad(), r = loadRecipes().find(x => x.id === id); if (!(o.cooked && o.cooked[id] > 0)) return;
@@ -28572,9 +28587,9 @@ function mhStockExtrasHtml(o) {
   const _cbs = mhCbState(), soonShut = !!_cbs.fold.soon, soonShow = (_cbs.soonAll || soon.length <= 6) ? soon : soon.slice(0, 5);
   if (soon.length) h += '<div data-use-soon="1" style="font-size:13px;color:var(--text);background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:8px;"><div onclick="mhCbFold(\'soon\')" style="margin-bottom:4px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;"><span>⏳ <b>Use soon</b> (' + soon.length + ')' + (soonShut ? '' : '. Tap Ideas for a meal built around one; meal ideas lead with these anyway.') + '</span><span style="color:var(--text3);white-space:nowrap;">' + (soonShut ? '▸ show' : '▾ hide') + '</span></div>'
     + (soonShut ? '' : soonShow.map(x => { const it = x.key ? o.items[x.key] : null, when = x.days === 0 ? 'today' : x.days === 1 ? 'tomorrow' : 'in ' + x.days + ' days', amt = it && it.level != null ? ' · ' + esc(mhStockFmt(it, it.level)) : '';
-      return '<div data-soon-row="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:0;line-height:1.35;"><div style="font-size:14px;color:var(--text);">' + (x.kind === 'item' && x.key ? '<span data-soon-go="1" data-k="' + esc(x.key) + '" onclick="mhSoonGo(this.dataset.k)" title="Show it in my cupboards" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;">' + esc(x.name) + '</span>' : esc(x.name)) + (x.kind === 'leftovers' ? ' <span style="font-size:11px;color:var(--text3);">cooked leftovers</span>' : '') + '</div><div style="font-size:12px;color:' + (x.days <= 1 ? 'var(--red)' : 'var(--text3)') + ';">' + when + amt + '</div></div>'
-        + (x.kind === 'item' ? '<button class="copy-btn" data-n="' + esc(x.name) + '" onclick="mhUseUpIdea(this.dataset.n)" style="font-size:12px;padding:8px 10px;white-space:nowrap;">💡 Ideas</button>' : '') + '</div>'; }).join('') + (soon.length > 6 ? '<div onclick="mhCbSoonAll()" style="padding:10px 0 2px;border-top:1px solid var(--border);font-size:13px;color:var(--accent);cursor:pointer;">' + (_cbs.soonAll ? '▴ Show fewer' : '▾ Show all ' + soon.length) + '</div>' : '')) + '</div>';
-  if (expired.length) h += '<div data-expired="1" style="font-size:13px;line-height:1.6;color:var(--red);margin-bottom:8px;">⚠ Past use-by: ' + expired.map(it => esc(it.name) + ' <a data-k="' + esc(it.key) + '" onclick="mhStockWasteAsk(this.dataset.k)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">bin it</a>').join(' · ') + '</div>';
+      return '<div data-soon-row="' + esc(x.name) + '" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:150px;line-height:1.35;"><div style="font-size:14px;color:var(--text);">' + (x.kind === 'item' && x.key ? '<span data-soon-go="1" data-k="' + esc(x.key) + '" onclick="mhSoonGo(this.dataset.k)" title="Show it in my cupboards" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px;">' + esc(x.name) + '</span>' : esc(x.name)) + (x.kind === 'leftovers' ? ' <span style="font-size:11px;color:var(--text3);">cooked leftovers</span>' : '') + '</div><div style="font-size:12px;color:' + (x.days <= 1 ? 'var(--red)' : 'var(--text3)') + ';">' + when + amt + '</div></div>'
+        + (x.kind === 'item' ? '<button class="copy-btn" data-n="' + esc(x.name) + '" onclick="mhUseUpIdea(this.dataset.n)" style="font-size:12px;padding:8px 10px;white-space:nowrap;">💡 Ideas</button>' + (x.key ? '<button class="copy-btn" data-k="' + esc(x.key) + '" onclick="mhStockOthersAteAsk(this.dataset.k)" title="Someone else ate it: take it off stock" style="font-size:12px;padding:8px 10px;white-space:nowrap;">👪 Others ate</button>' : '') : '') + '</div>'; }).join('') + (soon.length > 6 ? '<div onclick="mhCbSoonAll()" style="padding:10px 0 2px;border-top:1px solid var(--border);font-size:13px;color:var(--accent);cursor:pointer;">' + (_cbs.soonAll ? '▴ Show fewer' : '▾ Show all ' + soon.length) + '</div>' : '')) + '</div>';
+  if (expired.length) h += '<div data-expired="1" style="font-size:13px;line-height:1.6;color:var(--red);margin-bottom:8px;">⚠ Past use-by: ' + expired.map(it => esc(it.name) + ' <a data-k="' + esc(it.key) + '" onclick="mhStockWasteAsk(this.dataset.k)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">bin it</a> / <a data-k="' + esc(it.key) + '" onclick="mhStockOthersAteAsk(this.dataset.k)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">others ate it</a>').join(' · ') + '</div>';
   if (ids.length) h += '<div data-leftovers="1" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">🍲 Leftovers</div>' + ids.map(id => { const r = recs.find(x => x.id === id), fz = o.cookedFrozen && o.cookedFrozen[id];
     return '<div data-cooked="' + esc(id) + '" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-top:1px solid var(--border);"><div style="flex:1;min-width:140px;font-size:14px;color:var(--text);">' + esc(r ? r.name : 'Cooked batch') + '<div style="font-size:12px;color:var(--text3);">' + o.cooked[id] + ' serving' + (o.cooked[id] === 1 ? '' : 's') + esc(mhCookedByText(o, id)) + '</div></div>'
       + '<button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedFreezeToggle(this.dataset.id)" style="' + sm + '">' + (fz ? '☀ Thawed it' : '❄ Freeze') + '</button><button class="copy-btn" data-id="' + esc(id) + '" onclick="mhCookedBinAsk(this.dataset.id)" style="' + sm + '">🗑 Bin</button></div>'; }).join('') + '</div>';
