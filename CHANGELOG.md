@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1352
+
+- **Import: the "you added this already" block no longer traps a part-added import, and is no longer hidden (Pete, 10 Nov).** If some lines of an import are already in your cupboards, carrying on with the rest is not a repeat, so it goes ahead. A genuinely repeated import (same receipt as one added before, nothing yet added from this go) is still stopped, because it would count everything twice, but the message now scrolls the warning box at the top into view and shows as a notice, instead of sitting out of sight at the top. To add a repeated receipt anyway, tick "Add it again" in that box, and untick the lines already added the first time.
+- Test: p444 extended (part-added import carries on past the guard); p218, p220, p226, p232, p234, p236, p214 pass.
+
 ## v3.10.1351
 
 - **Import: add as you go (Pete, 10 Nov).** Each ready row has "＋ Add this one" and each section header has "Add ticked": they move into the cupboards at once, the row collapses to a one-line "Added", and the screen stays where it is, so you are not carried to the next row or scrolling back and forth. Settling a row with Match or Use this no longer moves the screen at all. The big Add at the bottom still works, and still finishes the import. Rows held for a closest guess need Use this first. One Undo covers a section add.

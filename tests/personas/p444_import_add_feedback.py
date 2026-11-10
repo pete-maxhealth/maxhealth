@@ -74,4 +74,10 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(()=>{const d=_shopUi.ord; mhOrdApplySec(mhOrdSec(d.rows[1], d))})()"); page.wait_for_timeout(500)
     if not ev("_shopUi.ord.rows[1].done") or ev("_shopUi.ord.rows[3].done") or (ev("mhOrdSec(_shopUi.ord.rows[2], _shopUi.ord)!==mhOrdSec(_shopUi.ord.rows[1], _shopUi.ord)") and ev("_shopUi.ord.rows[2].done")): f.add('BUG', '23: Add ticked adds the ticked rows of its own section only')
     if ev("_shopUi.view") != 'orderimport': f.add('BUG', '24: still on the review after a section add')
+# carrying on with an import that is part-added must not trip the "added this one already" guard
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Smoked Cheddar 400g\n2.00\nBrown Rice 1kg\n1.00\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='400 g'; d.rows[1].amount='1000 g'; d.rows.forEach(r=>{r.on=true; if(r.from==='closest in your library') r.from='picked by you'}); d.dup=true; d.dupOk=true; mhShopRender(); mhOrdApply(0); d.dupOk=false; d.dup=true; mhShopRender()})()"); page.wait_for_timeout(300)
+    page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    if ev("mhStockLoad() && Object.keys(mhStockLoad().items).filter(k=>/brown rice/.test(k)).length") != 1: f.add('BUG', '25: the rest of a part-added import was blocked by the added-already guard')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
