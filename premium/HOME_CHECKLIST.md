@@ -28,7 +28,7 @@ Last updated 13 Oct 2026, app v3.10.1011. Order matters where marked.
 ## D. Android Studio / launcher (Jill's laptop)
 1. DONE (10 Nov): Health Connect step doubling. Launcher 1.7.x already reads the de-duplicated Health Connect total, and 1.7.2 fixed distance.
 2. DONE (10 Nov, Pete): the 2 Oct APK, `debug.keystore` and the release key are backed up.
-3. OPEN: the launcher source is not in a repo. Current source is `Downloads\MaxedHealth-launcher-1.7.0` on the laptop (it is version 1.7.2; the folder name is old). Its `.gitignore` already keeps `keystore.properties`, `*.jks` and `local.properties` out, so it is safe to put in a private repo (suggest `pete-maxhealth/maxhealth-launcher`). A cloud session cannot read the Kotlin files there (too deeply nested for the file bridge): zip the folder without `build/` and `.gradle/` into Downloads, or copy `app\src\main\java` up a level, and a session can take it from there.
+3. DONE (10 Nov): launcher 1.7.2 source is in the private repo `pete-maxhealth/maxhealth-launcher` (49 files; no keys, passwords or local.properties: its `.gitignore` keeps `keystore.properties`, `*.jks` and `local.properties` out). Work from that repo from now on; the old `Downloads\MaxedHealth-launcher-1.7.0` folder is only a copy.
 4. OPEN (needs Jill's phone): `crond` line and Termux battery set to Unrestricted.
 5. OPEN (needs an iPhone): iPhone tester: Safari load, Add to Home Screen, data persistence, camera/voice/barcode.
 
