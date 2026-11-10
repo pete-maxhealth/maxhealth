@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1345
+
+- **90 more strings translated** into Spanish, German, French, Turkish, Portuguese, Italian, Polish and Dutch: short labels and buttons (Add to library, Log lab panel, Go to date, Voice add...), hints, the carer-share "what is shown" lists and a few explanations. Machine translations, like the rest. Debug, formula and mixed text-with-data lines stay in English by design.
+- Test: p111 and p133 (language packs, placeholders, switching); the placeholder check covers the new entries.
+
 ## v3.10.1344
 
 - **Weather card: the "?" explanation opens at the full width of the card.** It used to open inside the narrow title cell beside the show/hide and reorder controls, so the paragraph wrapped into a half-width column (Pete, 10 Nov screenshot). The "?" stays beside the title and the explanation now sits under the header row, like the other cards.
