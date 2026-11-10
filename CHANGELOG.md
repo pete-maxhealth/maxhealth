@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1353
+
+- **Import survives a trip to the camera (Pete, 10 Nov).** Scanning a barcode or taking a label photo can make Android reload the app, which dropped you on the plain shopping list with the import apparently gone (it was saved as a draft, but you had to find Import and the right purpose to get it back). The shopping list now shows "📥 Carry on with your import (N of M lines still to do)" at the top whenever a saved import exists, one tap back to where you were. This is the likely cause of "it puts me back on the list"; not seen happening on a real phone yet.
+- **Repeat receipt, one tap.** The "You added this on ..." warning has "✓ Add only what is not in my cupboards yet": it ticks just the lines with nothing in the cupboards, leaves the rest unticked and lets the import go ahead, so nothing is counted twice.
+- Test: p444 extended (reload then Carry on; repeat receipt one tap); p218, p220, p226, p232, p234, p236, p214, p225 pass. Carry-on wording is not translated yet.
+
 ## v3.10.1352
 
 - **Import: the "you added this already" block no longer traps a part-added import, and is no longer hidden (Pete, 10 Nov).** If some lines of an import are already in your cupboards, carrying on with the rest is not a repeat, so it goes ahead. A genuinely repeated import (same receipt as one added before, nothing yet added from this go) is still stopped, because it would count everything twice, but the message now scrolls the warning box at the top into view and shows as a notice, instead of sitting out of sight at the top. To add a repeated receipt anyway, tick "Add it again" in that box, and untick the lines already added the first time.

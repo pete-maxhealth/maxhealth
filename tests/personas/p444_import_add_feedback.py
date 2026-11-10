@@ -80,4 +80,20 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='400 g'; d.rows[1].amount='1000 g'; d.rows.forEach(r=>{r.on=true; if(r.from==='closest in your library') r.from='picked by you'}); d.dup=true; d.dupOk=true; mhShopRender(); mhOrdApply(0); d.dupOk=false; d.dup=true; mhShopRender()})()"); page.wait_for_timeout(300)
     page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
     if ev("mhStockLoad() && Object.keys(mhStockLoad().items).filter(k=>/brown rice/.test(k)).length") != 1: f.add('BUG', '25: the rest of a part-added import was blocked by the added-already guard')
+# repeat receipt: one tap ticks only lines with nothing in the cupboards, then Add works
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Plain Flour 1kg\n1.00\nCaster Sugar 1kg\n1.00\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='1000 g'; d.rows[1].amount='1000 g'; d.rows.forEach(r=>{r.on=true; if(r.from==='closest in your library') r.from='picked by you'}); mhOrdApply(0); d.dup={at:Date.now(),n:1}; d.logged=false; d.rows[0].done=false; d.rows[0].existing={level:1000,base:'g'}; mhShopRender()})()"); page.wait_for_timeout(300)
+    if not page.get_by_text('Add only what is not in my cupboards yet').count(): f.add('BUG', '26: no one-tap button on a repeat receipt')
+    ev("mhOrdDupNew()"); page.wait_for_timeout(300)
+    if ev("_shopUi.ord.rows[0].on") or not ev("_shopUi.ord.rows[1].on"): f.add('BUG', '27: only the line with nothing in the cupboards is ticked')
+# after the page reloads (camera hand-off) the Shopping list offers to carry on with the saved import, one tap
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Wholemeal Bread 800g\n1.00\nSalted Butter 250g\n1.00\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='800 g'; mhOrdSet(0,'amount','800 g')})()"); page.wait_for_timeout(300)
+    page.reload(); page.wait_for_timeout(1500); ev("document.getElementById('onboardingOverlay')?.remove()"); ev("mhShopOpen()"); page.wait_for_timeout(400)
+    if not page.get_by_text('Carry on with your import').count(): f.add('BUG', '28: no Carry on with your import after a reload')
+    else:
+        page.get_by_text('Carry on with your import').first.click(); page.wait_for_timeout(500)
+        if ev("_shopUi.view") != 'orderimport' or ev("_shopUi.ord.rows.length") != 2: f.add('BUG', '29: Carry on does not bring the import back')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
