@@ -110,4 +110,14 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
     if ev("Object.keys(mhStockLoad().items).filter(k=>/thyme/.test(k)).length") != 1: f.add('BUG', '31: the new line of a repeated receipt is added')
     if ev("Object.values(mhStockLoad().items).filter(i=>/sage|bay/.test(i.key)).some(i=>i.level>20)"): f.add('BUG', '32: the lines added before are not counted twice')
+# an old record with no line names: one tap marks every line as already added
+    ev("(()=>{const o=mhStockLoad(); o.imports.forEach(e=>{delete e.names}); mhStockSave(o)})()")
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(500)
+    lv = ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()")
+    if not page.get_by_text('I added all of these already').count(): f.add('BUG', '33: no all-added button for an old record')
+    else:
+        page.get_by_text('I added all of these already').first.click(); page.wait_for_timeout(300)
+        if ev("_shopUi.ord.rows.some(r=>!r.done||r.on)"): f.add('BUG', '34: not every line marked added')
+        if ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()") != lv: f.add('BUG', '35: stock changed by marking')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1355
+
+- **"✓ I added all of these already" (Pete, 10 Nov).** A receipt imported before v1354 has no remembered line names, so it could not clear itself. Its warning box now has this button: it marks every line as Added, empties the review, changes nothing in your cupboards, and remembers the lines for next time.
+- Test: p444 extended (33-35); p226, p218 pass.
+
 ## v3.10.1354
 
 - **A repeated receipt now remembers which lines were added (Pete, 10 Nov).** The import log used to keep only the receipt fingerprint and a count, so pasting the same list again showed every line as new and nothing cleared. It now keeps the line names too: when the same receipt is loaded again, lines already added are marked Added and unticked, with a message saying when. "Add it again anyway" puts them back. Receipts imported before this version have no line names, so for those use "✓ Add only what is not in my cupboards yet".
