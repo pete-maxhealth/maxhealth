@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1344
+
+- **Weather card: the "?" explanation opens at the full width of the card.** It used to open inside the narrow title cell beside the show/hide and reorder controls, so the paragraph wrapped into a half-width column (Pete, 10 Nov screenshot). The "?" stays beside the title and the explanation now sits under the header row, like the other cards.
+- Test: p443 (width, position, closes again, light and dark screenshots); the other weather tests (p31, p36, p37, p427, p428, p182) pass.
+
 ## v3.10.1343
 
 - **Foods in Compare Metrics now travel with the exports:** the copied data summary, the full report package and anything sent to the AI from Compare Metrics include the food lines (grams a day or times had), and the "days with and without" note with its "not a cause" caution when it is showing. Nothing new is shared by default: this is only what is on your own chart, and only when you export or send it.
