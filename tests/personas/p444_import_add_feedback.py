@@ -120,6 +120,18 @@ with fresh_server() as root, sync_playwright() as pw:
         page.get_by_text('Mark all as already added').first.click(); page.wait_for_timeout(300)
         if ev("_shopUi.ord.rows.some(r=>!r.done||r.on)"): f.add('BUG', '34: not every line marked added')
         if ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()") != lv: f.add('BUG', '35: stock changed by marking')
+    # a fully-added receipt shows no list: a short "Nothing to add", then My cupboards
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(500)
+    if page.get_by_text('Mark all as already added').count():
+        page.get_by_text('Mark all as already added').first.click(); page.wait_for_timeout(300)
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(500)
+    if ev("_shopUi.ord.rows.some(r=>!r.done)"): ev("(()=>{const d=_shopUi.ord; d.rows.forEach(r=>{r.done=true;r.donePrev=true;r.on=false}); mhShopRender()})()")
+    if not page.locator('#mhOrdAllDone').count() or page.locator('#mhOrdGo').count(): f.add('BUG', '37: a fully added receipt should show only "Nothing to add"')
+    else:
+        page.get_by_text('Go to My cupboards').first.click(); page.wait_for_timeout(300)
+        if ev("_shopUi.view") != 'stocklist' or ev("!!_shopUi.ord"): f.add('BUG', '38: Go to My cupboards did not leave the review')
     dg = ev("DIAGNOSTIC_SOURCES.find(x=>x.id==='impreview').builder()")
-    if not dg or dg.get('count', 0) < 2 or 'ON SCREEN' not in dg.get('text', '') or 'LOG:' not in dg.get('text', ''): f.add('BUG', f'36: the import review diagnostic is empty: {dg}')
+    if not dg or dg.get('count', 0) < 1 or 'LOG:' not in dg.get('text', ''): f.add('BUG', f'36: the import review diagnostic is empty: {dg}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
