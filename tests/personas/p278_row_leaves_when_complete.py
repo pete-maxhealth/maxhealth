@@ -35,6 +35,10 @@ with fresh_server() as root, sync_playwright() as pw:
     names = sorted(ev("mhShopLoad().items.map(i=>i.name)"))
     if names != ['Zzqx Alpha', 'Zzqx Beta']: f.add('BUG', f'Shopping list puts only that food on the list: {names}')
     if not ev("!!document.querySelector('[data-sl=\"%s\"]')" % ev("mhShopKey('Zzqx Gamma')")): f.add('BUG', 'the other food is untouched')
+    # a chosen destination survives a redraw: the label says so, not "required" (v3.10.1359)
+    gk0 = ev("mhShopKey('Zzqx Gamma')"); page.click('[data-sl="%s"] [data-dest="cup"]' % gk0); page.wait_for_timeout(300)
+    ev("mhSlF('gaps')"); page.wait_for_timeout(300)
+    if ev("!!document.querySelector('[data-sl=\"%s\"]')" % gk0) and 'required' in page.inner_text('[data-sl="%s"] [data-destreq]' % gk0): f.add('BUG', 'a chosen destination still says required after a redraw')
     # an X takes a food out of the cupboards for good, after asking
     gk = ev("mhShopKey('Zzqx Gamma')")
     page.click('[data-sl="%s"] [title="Remove from my cupboards"]' % gk); page.wait_for_timeout(300); page.click('#appModalConfirm'); page.wait_for_timeout(500)
