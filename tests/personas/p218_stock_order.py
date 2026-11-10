@@ -106,6 +106,7 @@ with fresh_server() as root, sync_playwright() as pw:
         ev("()=>{const i=_shopUi.ord.rows.findIndex(r=>/Lettuce/.test(r.name)); mhOrdSet(i,'amount','1'); mhOrdTick(i,true)}")
         ev("()=>{const i=_shopUi.ord.rows.findIndex(r=>/Beans/.test(r.name)); mhOrdSet(i,'track','Baked Beans')}")
         ev("()=>{const i=_shopUi.ord.rows.findIndex(r=>/Firestick/.test(r.name)); mhOrdSet(i,'amount','banana')}")
+        ev("_shopUi.ord.rows.forEach((r,i)=>{if(r.from==='closest in your library') mhOrdUseGuess(i)})")   # closest guesses are held back until you tick Use this (v3.10.1347)
         page.click('#mhOrdGo'); page.wait_for_timeout(500)
     o = ev("mhStockLoad()"); it = lambda n: o['items'].get(ev("n=>mhShopKey(n)", n))
     ch = it('Cheddar')
@@ -133,13 +134,13 @@ with fresh_server() as root, sync_playwright() as pw:
     # existing counts: leave / add / replace
     if not all(r['mode'] == 'leave' for r in rows2 if r['existing']): f.add('BUG', '5: already-tracked lines default to leave as they are')
     def go(mode):
-        ev("t=>mhOrdLoad(t,'x')", "1 x STORE Fresh Double Cream 600ml"); ev("m=>{_shopUi.ord.rows[0].mode=m; _shopUi.ord.dupOk=true}", mode); ev("mhOrdApply()")
+        ev("t=>mhOrdLoad(t,'x')", "1 x STORE Fresh Double Cream 600ml"); ev("_shopUi.ord.rows.forEach((r,i)=>{if(r.from==='closest in your library') mhOrdUseGuess(i)})"); ev("m=>{_shopUi.ord.rows[0].mode=m; _shopUi.ord.dupOk=true}", mode); ev("mhOrdApply()")
         return ev("mhStockLoad().items[mhShopKey('Double Cream')].level")
     if go('leave') != 3000: f.add('BUG', '5: leave keeps the count')
     if go('add') != 3600: f.add('BUG', '5: add puts 600 ml on top')
     if go('set') != 600: f.add('BUG', '5: replace sets 600 ml')
     ev("()=>{const o=mhStockLoad(); if(o.items[mhShopKey('Cheddar')]) {o.items[mhShopKey('Cheddar')].base='each'; mhStockSave(o)}}")
-    ev("t=>mhOrdLoad(t,'x')", "1 x STORE British Mature Cheddar 400g"); ev("mhOrdApply()")
+    ev("t=>mhOrdLoad(t,'x')", "1 x STORE British Mature Cheddar 400g"); ev("_shopUi.ord.rows.forEach((r,i)=>{if(r.from==='closest in your library') mhOrdUseGuess(i)})"); ev("mhOrdApply()")
     if ev("mhStockLoad().items[mhShopKey('Cheddar')].level") != 800: f.add('BUG', '5: a unit clash is refused, count untouched')
     if 'g' in (ev("_shopUi.msg") or '') is False: pass
     # backups carry nothing new (no new keys)

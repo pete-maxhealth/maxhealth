@@ -6635,7 +6635,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1346'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1347'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -30162,13 +30162,16 @@ function mhOrdApplyList(d) {
   mhShopView('list');
 }
 // When Add leaves you on the review (some rows still waiting, a row skipped, or already added), the message used to sit at the top of the screen, out of sight from the Add button at the bottom: it looked as if nothing happened. Now it is brought into view and shown as a toast.
-function mhOrdStay() { const m = _shopUi.msg; mhShopRender(); if (!m) return; try { showToast(m, null, null, 7000); const e = document.getElementById('mhShopMsg'); if (e) e.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {} }
+function mhOrdUseGuess(i) { const d = _shopUi.ord, r = d && d.rows[i]; if (r && r.track) mhOrdLink(i, r.track, 'picked by you'); }
+// Rows still waiting after Add: the first one that needs you (ticked but a guess or no amount), else the first not done. The screen goes to it and flashes it.
+function mhOrdFirstWaiting() { const d = _shopUi.ord; if (!d) return -1; const w = d.rows.map((r, i) => [r, i]).filter(x => !x[0].done); const need = w.find(x => x[0].on && (x[0].from === 'closest in your library' || !String(x[0].amount || '').trim())); return need ? need[1] : (w.length ? w[0][1] : -1); }
+function mhOrdStay() { const m = _shopUi.msg, ix = mhOrdFirstWaiting(); mhShopRender(); try { if (m) showToast(m, null, null, 7000); let e = ix >= 0 ? document.querySelector('[data-ord="' + ix + '"]') : null; if (!e) e = document.getElementById('mhShopMsg'); if (e) { e.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (ix >= 0) { e.style.transition = 'background .4s'; e.style.background = 'rgba(250,204,21,0.18)'; setTimeout(() => { e.style.background = ''; }, 2500); } } } catch (_) {} }
 function mhOrdApply(only) {   // no argument: add everything still ticked. A row number: add just that one now (it is then locked as done).
   const d = _shopUi.ord, one = typeof only === 'number'; if (!d || d.stage) return; if (d.kind === 'list') return mhOrdApplyList(d);
   if (d.dup && !d.dupOk) { _shopUi.msg = 'You added this one already. Tick "Add it again" if you really mean it.'; mhOrdStay(); return; }
-  const mem = mhMatchLoad(); let n = 0, bad = []; const names = [], ings = [], rc = d.kind === 'receipt';
+  const mem = mhMatchLoad(); let n = 0, held = 0, bad = []; const names = [], ings = [], rc = d.kind === 'receipt';
   d.rows.forEach((r, ix) => {
-    if (!r.on || r.done || (one && ix !== only)) return; const txt = String(r.amount || '').trim(), track = mhOrdName(r, d); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
+    if (!r.on || r.done || (one && ix !== only)) return; if (!one && r.from === 'closest in your library') { held++; return; } const txt = String(r.amount || '').trim(), track = mhOrdName(r, d); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
     const um = txt.toLowerCase().match(/^[\d.]+\s*([a-z]*)/), u = um && um[1] ? mhStockUnitOf(um[1]) : 'each', key = mhShopKey(track), ex = mhStockLoad().items[key];
     const base = ex ? ex.base : (r.kind === 'nonfood' ? 'each' : (r.base || (u === 'g' || u === 'kg' ? 'g' : u === 'ml' || u === 'l' ? 'ml' : 'each')));
     const p = mhStockParse(txt, { base }); if (!p.ok) { bad.push(track + ': ' + p.err); return; } if (!(p.base > 0)) { bad.push(track + ': amount must be above zero'); return; }
@@ -30191,8 +30194,8 @@ function mhOrdApply(only) {   // no argument: add everything still ticked. A row
   // Anything not added (unticked, or skipped for a missing amount) stays here: the list is only cleared once nothing is left waiting.
   const left = d.rows.filter(r => !r.done).length;
   if (left) {
-    if (n) _shopUi.msg = (rc ? 'Added ' + n + ' item' + (n === 1 ? '' : 's') + ' to stock' : 'Stock started for ' + n + ' item' + (n === 1 ? '' : 's')) + (off ? ', ' + off + ' taken off your list' : '') + '. ' + left + ' still waiting below: tick the ones you want and add them, or press Start again to drop the rest.' + (bad.length ? ' ' + bad.length + ' skipped (' + bad.slice(0, 2).join('; ') + ').' : '');
-    else if (!bad.length) _shopUi.msg = 'Nothing is ticked to add. ' + left + ' still waiting below.';
+    if (n) _shopUi.msg = (rc ? 'Added ' + n + ' item' + (n === 1 ? '' : 's') + ' to stock' : 'Stock started for ' + n + ' item' + (n === 1 ? '' : 's')) + (off ? ', ' + off + ' taken off your list' : '') + '. ' + left + ' still waiting below' + (held ? ' (' + held + ' held back to check: tap Use this or Match)' : '') + ': tick the ones you want and add them, or press Start again to drop the rest.' + (bad.length ? ' ' + bad.length + ' skipped (' + bad.slice(0, 2).join('; ') + ').' : '');
+    else if (!bad.length) _shopUi.msg = held ? held + ' held back to check: tap Use this if the closest guess is right, or Match to pick another.' : 'Nothing is ticked to add. ' + left + ' still waiting below.';
     mhOrdStay(); return;
   }
   const doneAll = d.rows.filter(r => r.done).length; _shopUi.ord = null;
@@ -30254,7 +30257,7 @@ function mhOrdViewHtml(s, esc, btn) {
       : '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 0 24px;"><div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Put in my cupboards as</div><input data-i="' + i + '" value="' + esc(r.track) + '" oninput="mhOrdSet(+this.dataset.i,\'track\',this.value)" style="' + inp + '">' + mhOrdMatchBadge(r, esc) + '</div>'
     + '<div><div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">Have' + (r.check ? ' (check)' : '') + (r.hint && !r.amount ? ' (' + esc(r.hint) + ')' : '') + '</div><input data-i="' + i + '" value="' + esc(r.amount) + '" placeholder="e.g. 800 g or 12" oninput="mhOrdSet(+this.dataset.i,\'amount\',this.value)" style="' + inp + '"></div></div>')
     + (mhOrdName(r, d) !== String(r.track || '').trim() ? '<div data-saveas style="margin:4px 0 0 24px;font-size:12px;color:var(--text3);">Will be saved as <b style="color:var(--text);">' + esc(mhOrdName(r, d)) + '</b></div>' : '')
-    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!r.done && r.kind === 'food' && (!r.from || r.from === 'closest in your library') ? btn('✨ Ask AI (my foods)', 'mhOrdAskAI(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
+    + '<div style="margin:6px 0 0 24px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' + (!r.done && r.from === 'closest in your library' ? btn('✓ Use this', 'mhOrdUseGuess(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + btn('🔎 Match…', 'mhOrdPickOpen(' + i + ')', 'font-size:12px;padding:6px 10px;') + (!r.from && r.kind === 'food' ? btn('＋ Create new', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') : '') + (!r.done && r.kind === 'food' && (!r.from || r.from === 'closest in your library') ? btn('✨ Ask AI (my foods)', 'mhOrdAskAI(' + i + ')', 'font-size:12px;padding:6px 10px;') : '')
     + '<select data-i="' + i + '" onchange="mhOrdKindSet(+this.dataset.i,this.value)" style="' + sel + '"><option value="food"' + (r.kind === 'food' ? ' selected' : '') + '>🍎 Food</option><option value="nonfood"' + (r.kind === 'nonfood' ? ' selected' : '') + '>🧻 Non-nutritional</option></select></div>'
     + (d.pick && d.pick.i === i ? '<div data-pick style="margin:8px 0 0 24px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">Which food is this? Pick one, or search.</div>' + mhOrdAiHtml(d.pick) + '<input id="mhOrdPickQ" value="' + esc(d.pick.q) + '" placeholder="Search your foods" oninput="mhOrdPickQ(this.value)" style="' + inp + 'margin-bottom:8px;"><div id="mhOrdPickList">' + mhOrdPickListHtml() + '</div><div style="margin-top:4px;">' + btn('＋ It is not in my library: create it', 'mhOrdCreate(' + i + ')', 'font-size:12px;padding:6px 10px;') + '</div></div>' : '')
     + (d.create === i ? mhOrdChooserHtml(i, btn) : '')

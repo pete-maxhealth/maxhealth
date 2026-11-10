@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1347
+
+- **Import Add now does what is sure and takes you to what is not (Pete, 10 Nov).** Pressing "Add N items to my cupboards" adds every row that is a sure match or a new food, holds back rows marked "Check this: closest guess", then scrolls to the first row that needs you and flashes it, with a notice saying how many are held. A new "✓ Use this" button next to "Match…" accepts the closest guess in one tap; Match picks another. Rows already added stay locked, so pressing again never counts them twice. Before, guesses were added unchecked.
+- Test: p444 extended (guess held back, screen on that row, Use this lets it in); p218 updated for the held-back guesses; p213, p214, p220, p223, p225-p236 pass. Dynamic message text is not translated yet.
+
 ## v3.10.1346
 
 - **Import "Add N items to my cupboards" now tells you what happened where you are.** When some rows were left waiting, a row was skipped (no amount) or it had been added already, the app stays on the review and its message sat at the top of the screen, out of sight from the button at the bottom, so it looked as if nothing happened (Pete, 10 Nov, 65-item receipt). The message is now scrolled into view and shown as a notice. Rows already added stay locked, so pressing again never counts them twice.
