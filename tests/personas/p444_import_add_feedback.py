@@ -120,4 +120,6 @@ with fresh_server() as root, sync_playwright() as pw:
         page.get_by_text('Mark all as already added').first.click(); page.wait_for_timeout(300)
         if ev("_shopUi.ord.rows.some(r=>!r.done||r.on)"): f.add('BUG', '34: not every line marked added')
         if ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()") != lv: f.add('BUG', '35: stock changed by marking')
+    dg = ev("DIAGNOSTIC_SOURCES.find(x=>x.id==='impreview').builder()")
+    if not dg or dg.get('count', 0) < 2 or 'ON SCREEN' not in dg.get('text', '') or 'LOG:' not in dg.get('text', ''): f.add('BUG', f'36: the import review diagnostic is empty: {dg}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
