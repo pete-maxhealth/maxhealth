@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1342
+
+- **Translations:** 50 more strings in es, de, fr, tr, pt, it, pl and nl: the help paragraphs for fibre, fasting, steps baseline, symptoms, treatment sessions, treatment-provider reports, phone-to-phone QR sharing, the missing-days list and the recipe and voice-to-library screens, plus screen labels. Whole sentences only; fragments split around bold or link text are left English until their markup is restructured. Machine-translated; native-speaker review still wanted. Script: tools/lang_add_sweep_g.py.
+- Tests: p195, p111, p133, p139, p193, p424 pass.
+
 ## v3.10.1341
 
 - **Translations:** 42 more user-facing strings now in es, de, fr, tr, pt, it, pl and nl (first-run choices, exercise and weight prompts, the shopping-import note, report wording, add-food form labels, the inactivity pause message). Machine-translated; native-speaker review still wanted. Script: tools/lang_add_sweep_f.py.
