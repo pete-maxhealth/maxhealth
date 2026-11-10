@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1341
+
+- **Translations:** 42 more user-facing strings now in es, de, fr, tr, pt, it, pl and nl (first-run choices, exercise and weight prompts, the shopping-import note, report wording, add-food form labels, the inactivity pause message). Machine-translated; native-speaker review still wanted. Script: tools/lang_add_sweep_f.py.
+- **Still English:** a fresh scan of the static screen text finds about 148 more candidates (many are Formulas reference, debug logs and diagnostics, which stay English by design; the rest are long help paragraphs) listed in BACKLOG.
+- Tests: p195, p111, p133, p139, p193, p424 pass.
+
 ## v3.10.1340
 
 - **System health: the "Overlapping sleep sessions" warning no longer comes back for a night you have already settled** (Pete, 10 Nov: "I've fixed the conflict, but the warning won't go"). The phone launcher logs that overlap again on every sync because it cannot see what you decided, so Dismiss only held until the next sync. System health now skips those log lines for any night you have settled in the app (the same record that stops the sleep card coming back); other nights and other warnings still show. Needs the server restart that the update does.
