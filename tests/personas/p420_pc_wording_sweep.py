@@ -9,7 +9,7 @@ PC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 AND = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36'
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []
-    src = open('/home/claude/maxhealth/maxhealth.html').read()
+    src = open(__import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/maxhealth.html').read()
     for label, ua, w in (('pc', PC, 1280), ('android', AND, 400)):
         page = b.new_context(viewport={'width': w, 'height': 900}, service_workers='block', user_agent=ua).new_page(); ev = page.evaluate
         page.on('pageerror', lambda e: errs.append(str(e)[:200]))

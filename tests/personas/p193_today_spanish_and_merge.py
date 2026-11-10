@@ -39,5 +39,9 @@ with fresh_server() as root, sync_playwright() as pw:
         txt = ev("document.body.innerText")
         for s in STILL_ENGLISH:
             if re.search(r'(?<![A-Za-zÀ-ÿ])' + re.escape(s) + r'(?![A-Za-zÀ-ÿ])', txt, re.I): f.add('BUG', f'Spanish Today ({sub}) still shows English: {s!r}')
+    # v3.10.1338: the weight-trend lines end "(14d) ▾" (any range, plus the tap marker); they must translate whichever branch the data picks
+    for src, want in [('→ Weight stable (14d) ▾', 'Peso estable'), ('→ Weight stable (30d) ▾', 'Peso estable'), ('↑ 0.05kg/day avg (7d) ▾', 'de media')]:
+        got = ev("(src=>{const el=document.createElement('div'); el.textContent=src; document.body.appendChild(el); mhLangWalk(el); const t=el.textContent; el.remove(); return t})", src)
+        if want not in got or 'Weight' in got or 'avg' in got: f.add('BUG', f'Spanish trend line {src!r} came out as {got!r}')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

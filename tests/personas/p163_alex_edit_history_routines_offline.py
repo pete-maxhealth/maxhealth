@@ -1,6 +1,6 @@
 """Persona 163: Alex again, offline, the everyday edit-and-undo side: edit and delete today's entries, past-day History (edit, delete an entry,
 edit totals, delete a day, calendar), exercise routines (create, apply, delete), fasting numbers, symptoms and treatments. Edits last for the demo."""
-import sys,re,json,traceback; sys.path.insert(0,'/home/claude/maxhealth/tests/personas')
+import sys,re,json,traceback; sys.path.insert(0,__import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/tests/personas')
 from harness import *
 from playwright.sync_api import sync_playwright
 PID=sys.argv[1] if len(sys.argv)>1 else 'alex'

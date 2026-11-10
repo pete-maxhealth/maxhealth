@@ -4,7 +4,7 @@ opens to its preview, the Starter packs screen lists and opens one, a Spanish la
 import sys, re, json; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
-f = Findings(); R = '/home/claude/maxhealth/'
+f = Findings(); R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/'
 shipped = json.load(open(R + 'starter_packs/index.json'))['packs']
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []; ext = []

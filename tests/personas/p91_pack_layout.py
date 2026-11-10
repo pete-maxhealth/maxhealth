@@ -41,7 +41,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if 'mh_pills_open' in r['snap']: f.add('BUG', 'snapshot should not carry the Filter open state')
     # shipped packs parse and carry layout
     for fn in ('general_wellbeing','brain_tumour_tracking'):
-        d = json.load(open(f'/home/claude/maxhealth/starter_packs/{fn}.json'))
+        d = json.load(open(__import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+f'/starter_packs/{fn}.json'))
         if 'layout' not in d['sets']: f.add('BUG', f'{fn} has no layout')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
     b.close()

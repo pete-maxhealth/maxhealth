@@ -5,7 +5,7 @@ import sys, re, json, glob, os; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
 f = Findings()
-R = '/home/claude/maxhealth/'
+R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/'
 html = open(R + 'maxhealth.html').read(); ver = re.search(r"const APP_VERSION = '(v[0-9.]+)'", html).group(1)
 idx = json.load(open(R + 'starter_packs/index.json'))['packs']
 files = sorted(os.path.basename(p) for p in glob.glob(R + 'starter_packs/*.json') if not p.endswith('index.json'))

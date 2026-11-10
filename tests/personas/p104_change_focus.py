@@ -3,7 +3,7 @@
 import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
-f = Findings(); R = '/home/claude/maxhealth/starter_packs/'
+f = Findings(); R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/starter_packs/'
 with fresh_server() as root, sync_playwright() as pw:
     ctx = pw.chromium.launch().new_context(viewport={'width': 390, 'height': 800}, service_workers='block'); errs = []
     def route(r):

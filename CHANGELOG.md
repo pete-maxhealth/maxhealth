@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1339
+
+Fixes for the four nightly-sweep failures on v3.10.1338.
+
+- **Spanish (and every language) weight-trend line:** "→ Weight stable (14d) ▾" and the "↑ 0.05kg/day avg (7d) ▾" lines were left in English whenever the range was not 14 days or the tap-to-change marker was present (the failure only showed when the data landed on the "stable" branch, so it came and went). The translator now ignores a trailing " ▾" and the keys take any range label. The range label itself (7d, 30d) is still shown as typed.
+- **User guide, "On a PC":** no longer names Termux (public docs must not).
+- **Two bare "Pete" in code comments** now say Pete Spence (p64).
+- **Tests:** nine tests pointed at /home/claude/maxhealth by absolute path, so a sweep from another checkout tested the wrong files (that is why p420 reported 13 findings last night). They now find the repo from their own location. p193 now checks the trend lines directly, so it no longer depends on the data.
+
 ## v3.10.1338
 
 - **Compare Metrics is now findable in search** (label "Compare Metrics (Trends)", with keywords such as foods, overlay, days with, days without); the Compare Metrics button on Trends has an id so the search lands on it.

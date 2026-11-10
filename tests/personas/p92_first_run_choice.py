@@ -3,7 +3,7 @@ import sys, re, json; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
 f = Findings()
-R = '/home/claude/maxhealth/'
+R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/'
 html = open(R + 'maxhealth.html').read()
 m = re.search(r'const MH_FIRST_RUN_PACKS = (\{.*?\});\n', html)
 emb = json.loads(m.group(1)) if m else {}

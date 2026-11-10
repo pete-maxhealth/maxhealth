@@ -4,7 +4,7 @@ the story links follow `site`, and with no bug-report page configured the bug re
 import sys, re, os, json; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
-R = '/home/claude/maxhealth/'
+R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/'
 f = Findings()
 
 def run(label, edit, block_local=False):

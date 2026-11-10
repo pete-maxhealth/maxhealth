@@ -1,7 +1,7 @@
 """Persona 162: one demo persona (Alex), everything, with no internet: Today (water, weight, day modes, sections, exercise, supplements), Log (typed meal, preview, logging,
 barcode/food search messages, next-meal and balance flows), History, Library (add food, edit, recipe builder + save, review), Insights, Reports,
 Settings (goal, targets, carbs, How I eat, Go Keto, tableware, ruler, language, themes) and Exit demo. Edits made in a demo last for that demo."""
-import sys,re,json,traceback; sys.path.insert(0,'/home/claude/maxhealth/tests/personas')
+import sys,re,json,traceback; sys.path.insert(0,__import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/tests/personas')
 from harness import *
 from playwright.sync_api import sync_playwright
 PID=sys.argv[1] if len(sys.argv)>1 else 'alex'
