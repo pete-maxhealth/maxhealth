@@ -46,7 +46,7 @@ Raised by Pete Spence while simplifying. Tick off as released (see CHANGELOG.md)
 - [x] v3.10.978 Mark app errors as fixed on System health.
 - [x] v3.10.977 Filter toolbar on History/Library/Customise; strict keto, type 1 diabetes, cluster headache packs; test plan + p98/p99.
 - [x] v3.10.976 Layout by voice; AI check no longer sends guessed grams; half-written page guard.
-- [ ] Filter row on Supplements, Log, History, Library and Customise (they have no hide/reorder system today).
+- [x] Filter row on Supplements, Log, History, Library and Customise: History, Library and Customise done (v977). DECIDED 10 Nov (Pete): Supplements and Log stay without a toolbar. Log is a chat with a pinned input (same reason as the Library sticky exception); Supplements only shows periods the person uses, so there is nothing worth filtering for most people.
 - [ ] Starter packs per remaining condition (strict keto, type 1 diabetes, cluster headache).
 
 ## Ideas register (compiled 16 Oct 2026 from this phase, the repo, memory and the earlier phase chats)
