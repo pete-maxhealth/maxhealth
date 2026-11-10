@@ -37,9 +37,10 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("mhWxOpenSetup()"); page.fill('#mhWxCity', 'Izmir'); page.evaluate("mhWxSearch()"); page.wait_for_timeout(600)
     page.evaluate("mhWxPick(0)"); page.wait_for_timeout(1200)
     t = txt()
+    full = page.evaluate("document.getElementById('mhWxCard').textContent")  # advice/effort now sit behind the ?
     if 'Izmir' not in t or 'high 31' not in t: f.add('BUG', 'forecast not shown: ' + t[:200])
-    if 'Hot' not in t and 'hot' not in t: f.add('BUG', 'no hot-day exercise tip: ' + t[:300])
-    if 'Ease about 10-15%' not in t: f.add('BUG', 'no effort suggestion for 33 deg: ' + t[:300])
+    if 'Hot' not in full and 'hot' not in full: f.add('BUG', 'no hot-day exercise tip: ' + full[:300])
+    if 'Ease about 10-15%' not in full: f.add('BUG', 'no effort suggestion for 33 deg: ' + full[:300])
     if 'UV 8' not in t: f.add('BUG', 'UV missing')
     if '+500ml heat' not in wt(): f.add('BUG', 'water target not raised for 33° day: ' + wt())
     # override to a cool day wins

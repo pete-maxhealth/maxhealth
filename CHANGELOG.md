@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1363 — Weather card: back to the short readout, the detail behind the "?"
+
+- **The weather card shows the headline, the hour-by-hour icon strip and the green "Best time left" line, and nothing else, until you tap the "?".** (Pete, 10 Nov: "like it used to be, the hourly icon strip and best time to train, with the detailed 7 day forecast and text advice behind the ?".) Tapping the "?" opens, in order: the text advice (heat, rain, UV), the suggested effort, the water-target line, the detailed seven days, then the explanation of the rules. Not right? Adjust, Refresh, Change place and Remove stay under the readout.
+- The seven days are always open inside the "?" (the separate "Next 7 days" toggle is gone, and its remembered open/shut setting is no longer used). The "?" explanation text was reworded to match.
+- Test: p446 (default readout is headline, strip, Best time and nothing else; the "?" opens the advice, effort, water line, week and explanation below the strip; the strip does not move; closes again; light and dark screenshots); p428 (week) updated; p443 and the other weather tests re-run.
+
 ## v3.10.1362
 
 - **My cupboards: fewer, clearer buttons (Pete, 10 Nov).** The "＋ Add a food" tile is gone (Add foods and the search box already do it). "📋 Check the cupboards" shows only while some foods need details (it used to go back to the same screen when none did). "🔍 Possible duplicates" shows only when there are pairs. The three transfer links are one "📲 Move to another device" that opens Phone to phone (QR), Send stock and list, Receive stock and list. User guide updated.
