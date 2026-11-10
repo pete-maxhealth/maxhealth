@@ -25,6 +25,7 @@ DATA = os.path.join(BASE, 'data')
 COMBINED = os.path.join(DATA, 'tables', 'combined.csv')
 PIPE_LOG = os.path.join(BASE, 'logs', 'pipeline.log')
 ERROR_LOG = os.path.join(DATA, 'error_log.json')
+SLEEP_RESOLVED = os.path.join(DATA, 'sleep_conflicts_resolved.json')   # nights the person has already settled (written by server.py)
 PIPE_DISMISSED = os.path.join(DATA, 'pipeline_dismissed.json')   # {'before': 'YYYY-MM-DD HH:MM:SS'} set by 'Dismiss pipeline warnings'
 BACKUP_DIR = os.path.join(DATA, 'backup')
 OUT = os.path.join(DATA, 'selfcheck.json')
@@ -85,6 +86,10 @@ def check_pipeline_log(items, days=7):
         cutoff = max(cutoff, dis)
     except Exception:
         pass
+    try:   # a night already settled in the app: the launcher still logs its overlap on every sync, so that warning is not news any more
+        settled = set(json.load(open(SLEEP_RESOLVED, encoding='utf-8')).keys())
+    except Exception:
+        settled = set()
     errs, warns = {}, {}
     last24 = 0
     for ln in lines:
@@ -106,6 +111,11 @@ def check_pipeline_log(items, days=7):
             # "No data returned" for a device the person doesn't own is normal noise
             if 'No data returned' in msg or 'No extractor' in msg or 'No ' in parts[4][:3] and 'export found' in parts[4]:
                 continue
+            if settled and 'Overlapping sleep sessions' in msg:
+                import re as _re
+                dts = _re.findall(r'\d{4}-\d{2}-\d{2}', msg)
+                if dts and all(d in settled for d in dts[:1]):
+                    continue
             warns[msg] = warns.get(msg, 0) + 1
     info['errors'], info['warnings'] = sum(errs.values()), sum(warns.values())
     for msg, n in sorted(errs.items(), key=lambda x: -x[1])[:3]:

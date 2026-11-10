@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1340
+
+- **System health: the "Overlapping sleep sessions" warning no longer comes back for a night you have already settled** (Pete, 10 Nov: "I've fixed the conflict, but the warning won't go"). The phone launcher logs that overlap again on every sync because it cannot see what you decided, so Dismiss only held until the next sync. System health now skips those log lines for any night you have settled in the app (the same record that stops the sleep card coming back); other nights and other warnings still show. Needs the server restart that the update does.
+- **Test:** p441 (settled night hidden, another night still shown, other warnings untouched); p138, p15, p137 pass.
+
 ## v3.10.1339
 
 Fixes for the four nightly-sweep failures on v3.10.1338.
