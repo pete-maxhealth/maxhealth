@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1364 — Translations for the My cupboards move menu and the receipt "already added" card
+
+- Nine strings now translated in all eight languages: "Move to another device" and "Turn off" under My cupboards, the three choices that open under Move (Phone to phone (QR), Send stock and list, Receive stock and list), and the receipt "already added" card ("Nothing to add", "Mark all as already added (adds nothing)", "Add it again anyway", "Go to My cupboards"). Machine-assisted wording, not native-speaker checked, same as the other packs. Added by tools/lang_add_cupboard_moves.py (append only).
+- Known gap, found while doing this: most of the shopping list, My cupboards, receipt import, Use by and plan wording has no translation in any pack yet (only a handful of lines do). See BACKLOG.
+- Test: p447 (the real My cupboards card in all eight languages plus English unchanged; the receipt strings through the screen translator).
+
 ## v3.10.1363 — Weather card: back to the short readout, the detail behind the "?"
 
 - **The weather card shows the headline, the hour-by-hour icon strip and the green "Best time left" line, and nothing else, until you tap the "?".** (Pete, 10 Nov: "like it used to be, the hourly icon strip and best time to train, with the detailed 7 day forecast and text advice behind the ?".) Tapping the "?" opens, in order: the text advice (heat, rain, UV), the suggested effort, the water-target line, the detailed seven days, then the explanation of the rules. Not right? Adjust, Refresh, Change place and Remove stay under the readout.
