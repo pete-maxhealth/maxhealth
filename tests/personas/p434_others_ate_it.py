@@ -19,6 +19,11 @@ with fresh_server() as root, sync_playwright() as pw:
     # 1 the button is on each Use soon line, and the link on the Past use-by line, laid out beside Ideas
     if page.locator('[data-soon-row] button:has-text("Others ate")').count() != 2: f.add('BUG', '1a: an Others ate button on each Use soon line')
     if not page.locator('[data-expired] a:has-text("others ate it")').count(): f.add('BUG', '1b: a link on the Past use-by line')
+    # 1c (v3.10.1361) the name on the Past use-by line opens the food to check its amount and use-by date
+    page.locator('[data-expired] [data-expired-go]').first.click(); page.wait_for_timeout(400)
+    if not page.locator('[data-f],#mhStkAmt,[id^="mhStk"]').count() and 'Zzqx Old Ham' not in page.inner_text('body'): f.add('BUG', '1c: tapping an expired name opens the food')
+    if ev("!!_shopUi.stk") is not True: f.add('BUG', '1d: the food edit screen opened from Past use-by')
+    ev("mhStkBack()"); page.wait_for_timeout(300)
     page.locator('[data-use-soon]').screenshot(path='/tmp/claude-0/-home-claude/c032a46b-68f2-5aea-a854-98f1a5b7657c/scratchpad/p434_soon.png')
     # 2 part of it: 150 g
     page.locator('[data-soon-row="Zzqx Pate"] button:has-text("Others ate")').click(); page.wait_for_timeout(300)

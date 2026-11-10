@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1361
+
+- **Past use-by names are tappable (Pete, 10 Nov).** On the "Past use-by" line in My cupboards, tap a food's name to open it and check or correct its amount and use-by date (most just need stock adding or the date checking), alongside the existing "bin it" and "others ate it". Same dotted-underline style as the Use soon names. Test: p434 (1c, 1d).
+
 ## v3.10.1360
 
 - **Clearing "needs details" no longer demands where it goes (Pete, 10 Nov).** A food already in your cupboards is complete once its amount, reorder level and serving are filled in, and it leaves the list then. "Where does it go?" now says "optional, it is already in your cupboards" for those (still required for a food that is not in your cupboards yet). The serving box no longer says "if known" (it is required); it shows "e.g. 30". Tests: p278 rewritten; p237, p251, p272, p273, p275, p276, p279, p312 pass.
