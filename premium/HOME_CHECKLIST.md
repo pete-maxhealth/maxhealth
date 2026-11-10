@@ -26,11 +26,11 @@ Last updated 13 Oct 2026, app v3.10.1011. Order matters where marked.
 5. Public README is `premium/public_README.md`.
 
 ## D. Android Studio / launcher (Jill's laptop)
-1. Health Connect step doubling fix in the launcher (the app and server rules are already done).
-2. Back up the 2 Oct APK and `debug.keystore`.
-3. Launcher source is not in the repo: decide where it lives (private repo).
-4. Jill's phone: `crond` line and Termux battery set to Unrestricted.
-5. iPhone tester: Safari load, Add to Home Screen, data persistence, camera/voice/barcode.
+1. DONE (10 Nov): Health Connect step doubling. Launcher 1.7.x already reads the de-duplicated Health Connect total, and 1.7.2 fixed distance.
+2. DONE (10 Nov, Pete): the 2 Oct APK, `debug.keystore` and the release key are backed up.
+3. OPEN: the launcher source is not in a repo. Current source is `Downloads\MaxedHealth-launcher-1.7.0` on the laptop (it is version 1.7.2; the folder name is old). Its `.gitignore` already keeps `keystore.properties`, `*.jks` and `local.properties` out, so it is safe to put in a private repo (suggest `pete-maxhealth/maxhealth-launcher`). A cloud session cannot read the Kotlin files there (too deeply nested for the file bridge): zip the folder without `build/` and `.gradle/` into Downloads, or copy `app\src\main\java` up a level, and a session can take it from there.
+4. OPEN (needs Jill's phone): `crond` line and Termux battery set to Unrestricted.
+5. OPEN (needs an iPhone): iPhone tester: Safari load, Add to Home Screen, data persistence, camera/voice/barcode.
 
 ## E. Prices and offer (decide, then update the Premium page)
 1. Price for Premium: one-off vs yearly vs monthly; an early-bird figure for the register-interest list.
