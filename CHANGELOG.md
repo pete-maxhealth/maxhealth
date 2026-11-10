@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1346
+
+- **Import "Add N items to my cupboards" now tells you what happened where you are.** When some rows were left waiting, a row was skipped (no amount) or it had been added already, the app stays on the review and its message sat at the top of the screen, out of sight from the button at the bottom, so it looked as if nothing happened (Pete, 10 Nov, 65-item receipt). The message is now scrolled into view and shown as a notice. Rows already added stay locked, so pressing again never counts them twice.
+- Test: p444 (partial add shows the message in view, second press adds nothing twice); p234, p232, p236, p226, p220, p218 pass.
+
 ## v3.10.1345
 
 - **90 more strings translated** into Spanish, German, French, Turkish, Portuguese, Italian, Polish and Dutch: short labels and buttons (Add to library, Log lab panel, Go to date, Voice add...), hints, the carer-share "what is shown" lists and a few explanations. Machine translations, like the rest. Debug, formula and mixed text-with-data lines stay in English by design.
