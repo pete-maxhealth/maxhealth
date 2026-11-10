@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1351
+
+- **Import: add as you go (Pete, 10 Nov).** Each ready row has "＋ Add this one" and each section header has "Add ticked": they move into the cupboards at once, the row collapses to a one-line "Added", and the screen stays where it is, so you are not carried to the next row or scrolling back and forth. Settling a row with Match or Use this no longer moves the screen at all. The big Add at the bottom still works, and still finishes the import. Rows held for a closest guess need Use this first. One Undo covers a section add.
+- Test: p444 extended (Add this one, Add ticked, stays on the review); p218, p220, p226, p230, p232, p234, p236, p214, p225 pass. Seen rendered in the dark theme; the section header button and light theme not seen rendered.
+
 ## v3.10.1350
 
 - **An import can now be finished when only unticked lines are left (Pete, 10 Nov).** Once every line you wanted was added, the button said "Finish" but pressing it only said "Nothing is ticked, N still waiting" because unticked lines (like a banana loaf cake you did not want) kept the import open, and Start again threw you back to the paste screen. Now Finish leaves the unticked lines out, says how many, and takes you to My cupboards. The button reads "Finish: leave the rest out" while some are left. Ticked lines still waiting (no amount, or a guess to check) keep it open as before.
