@@ -18,14 +18,13 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("getComputedStyle(document.getElementById('mhSlBulk')).display") != 'none': f.add('BUG', 'no pop-up bar in Needs details')
     if ev("document.querySelectorAll('#mhSlRows [data-dest]').length") != 9: f.add('BUG', 'every row asks where it goes (3 buttons x 3)')
     k = ev("mhShopKey('Zzqx Alpha')"); sel = '[data-sl="%s"]' % k
-    # fill every amount first: it must NOT leave until a destination is chosen
+    # a food already in the cupboards leaves as soon as it is complete; where it goes is optional (v3.10.1360)
     for fld, val in (('amt', '300'), ('thr', '100'), ('serv', '50')):
         page.fill(sel + ' [data-f="%s"]' % fld, val); page.dispatch_event(sel + ' [data-f="%s"]' % fld, 'change'); page.wait_for_timeout(250)
-    page.wait_for_timeout(1000)
-    if not ev("!!document.querySelector('%s')" % sel): f.add('BUG', 'a food stays until you say where it goes')
-    if 'choose one' not in page.inner_text(sel + ' [data-destreq]'): f.add('BUG', 'the row says a choice is still needed')
-    page.click(sel + ' [data-dest="both"]'); page.wait_for_timeout(1300)
-    if ev("!!document.querySelector('%s')" % sel): f.add('BUG', 'complete and chosen: the food leaves the list')
+    if 'optional' not in page.inner_text(sel + ' [data-destreq]') and ev("!!document.querySelector('%s')" % sel): f.add('BUG', 'a tracked food says the destination is optional, not required')
+    page.wait_for_timeout(1500)
+    if ev("!!document.querySelector('%s')" % sel): f.add('BUG', 'complete: the food leaves the list without a destination')
+    ev("mhShopSave((()=>{const s=mhShopLoad(); mhShopSetAdd(s,'Zzqx Alpha','stock','added by hand',null,{}); return s})())")
     if not ev("mhShopLoad().items.some(i=>i.name==='Zzqx Alpha')"): f.add('BUG', 'Both puts it on the shopping list')
     if ev("mhStockLoad().items[%r].level" % k) != 300: f.add('BUG', 'and it keeps its amounts in the cupboards')
     if ev(rows) != 2 or '2 shown' not in page.inner_text('#mhSlShownN'): f.add('BUG', 'the shown count updates')
