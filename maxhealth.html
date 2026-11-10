@@ -6635,7 +6635,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1348'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1349'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -30081,7 +30081,7 @@ function mhOrdLink(i, name, from) {
 }
 // After you settle one row (Match, Use this, Create new) the screen moves on to the next row that still needs you, so you can work down the list without scrolling back. Nothing to move to: it stays where it is.
 function mhOrdFocusNext(i) {
-  const d = _shopUi.ord; if (!d || !d.rows) return; const need = r => !r.done && r.on && (!r.from || r.from === 'closest in your library'); let nx = -1;
+  const d = _shopUi.ord; if (!d || !d.rows) return; const need = r => !r.done && r.on && r.kind !== 'nonfood' && (!r.from || r.from === 'closest in your library'); let nx = -1;
   for (let k = 1; k <= d.rows.length; k++) { const j = (i + k) % d.rows.length; if (j !== i && need(d.rows[j])) { nx = j; break; } }
   if (nx < 0) return; try { const e = document.querySelector('[data-ord="' + nx + '"]'); if (!e) return; e.scrollIntoView({ block: 'center', behavior: 'smooth' }); e.style.transition = 'background .4s'; e.style.background = 'rgba(250,204,21,0.18)'; setTimeout(() => { e.style.background = ''; }, 2500); } catch (_) {}
 }
@@ -30170,14 +30170,14 @@ function mhOrdApplyList(d) {
 // When Add leaves you on the review (some rows still waiting, a row skipped, or already added), the message used to sit at the top of the screen, out of sight from the Add button at the bottom: it looked as if nothing happened. Now it is brought into view and shown as a toast.
 function mhOrdUseGuess(i) { const d = _shopUi.ord, r = d && d.rows[i]; if (r && r.track) mhOrdLink(i, r.track, 'picked by you'); }
 // Rows still waiting after Add: the first one that needs you (ticked but a guess or no amount), else the first not done. The screen goes to it and flashes it.
-function mhOrdFirstWaiting() { const d = _shopUi.ord; if (!d) return -1; const w = d.rows.map((r, i) => [r, i]).filter(x => !x[0].done); const need = w.find(x => x[0].on && (x[0].from === 'closest in your library' || !String(x[0].amount || '').trim())); return need ? need[1] : (w.length ? w[0][1] : -1); }
+function mhOrdFirstWaiting() { const d = _shopUi.ord; if (!d) return -1; const w = d.rows.map((r, i) => [r, i]).filter(x => !x[0].done); const need = w.find(x => x[0].on && ((x[0].kind !== 'nonfood' && x[0].from === 'closest in your library') || !String(x[0].amount || '').trim())); return need ? need[1] : (w.length ? w[0][1] : -1); }
 function mhOrdStay() { const m = _shopUi.msg, ix = mhOrdFirstWaiting(); mhShopRender(); try { if (m) showToast(m, null, null, 7000); let e = ix >= 0 ? document.querySelector('[data-ord="' + ix + '"]') : null; if (!e) e = document.getElementById('mhShopMsg'); if (e) { e.scrollIntoView({ block: 'center', behavior: 'smooth' }); if (ix >= 0) { e.style.transition = 'background .4s'; e.style.background = 'rgba(250,204,21,0.18)'; setTimeout(() => { e.style.background = ''; }, 2500); } } } catch (_) {} }
 function mhOrdApply(only) {   // no argument: add everything still ticked. A row number: add just that one now (it is then locked as done).
   const d = _shopUi.ord, one = typeof only === 'number'; if (!d || d.stage) return; if (d.kind === 'list') return mhOrdApplyList(d);
   if (d.dup && !d.dupOk) { _shopUi.msg = 'You added this one already. Tick "Add it again" if you really mean it.'; mhOrdStay(); return; }
-  const mem = mhMatchLoad(); let n = 0, held = 0, bad = []; const names = [], ings = [], rc = d.kind === 'receipt';
+  const mem = mhMatchLoad(); let n = 0, held = 0, bad = []; const names = [], ings = [], nfTracks = [], rc = d.kind === 'receipt';
   d.rows.forEach((r, ix) => {
-    if (!r.on || r.done || (one && ix !== only)) return; if (!one && r.from === 'closest in your library') { held++; return; } const txt = String(r.amount || '').trim(), track = mhOrdName(r, d); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
+    if (!r.on || r.done || (one && ix !== only)) return; if (!one && r.kind !== 'nonfood' && r.from === 'closest in your library') { held++; return; } const txt = String(r.amount || '').trim(), track = mhOrdName(r, d); if (!txt || !track) { bad.push(r.name + ': no amount'); return; }
     const um = txt.toLowerCase().match(/^[\d.]+\s*([a-z]*)/), u = um && um[1] ? mhStockUnitOf(um[1]) : 'each', key = mhShopKey(track), ex = mhStockLoad().items[key];
     const base = ex ? ex.base : (r.kind === 'nonfood' ? 'each' : (r.base || (u === 'g' || u === 'kg' ? 'g' : u === 'ml' || u === 'l' ? 'ml' : 'each')));
     const p = mhStockParse(txt, { base }); if (!p.ok) { bad.push(track + ': ' + p.err); return; } if (!(p.base > 0)) { bad.push(track + ': amount must be above zero'); return; }
@@ -30188,12 +30188,13 @@ function mhOrdApply(only) {   // no argument: add everything still ticked. A row
     if (ex && mode === 'leave') { /* counts untouched */ } else if (ex && mode === 'add' && ex.level != null) mhStockAdjust(key, p.base, 'bought', rc ? 'receipt' : 'order'); else mhStockSetLevel(key, p.base);
     if (!(ex && mode === 'leave') && r.store) { const o2 = mhStockLoad(), i2 = o2.items[key]; if (i2 && i2.useByAuto && i2.level > 0) { mhStockAutoDate(i2, d.bought); mhStockSave(o2); } }
     if (mhShopKey(r.name) !== key) mem.link[mhShopKey(r.name)] = track;
-    r.done = true; n++; names.push(track); ings.push(mhNameParts(track).ing);
+    r.done = true; n++; names.push(track); ings.push(mhNameParts(track).ing); if (r.kind === 'nonfood') nfTracks.push(track);
   });
   if (bad.length) { _shopUi.msg = 'Not started: ' + bad.slice(0, 3).join('; ') + (bad.length > 3 ? ' and ' + (bad.length - 3) + ' more' : ''); }
   mhMatchSave(mem);
   if (n && d.shop) { const s0 = mhShopLoad(); if (!s0.shops.some(x => x.toLowerCase() === d.shop.toLowerCase())) { s0.shops.push(d.shop); mhShopSave(s0); } }
-  let off = 0; if (n && rc && d.clearList) { const s1 = mhShopLoad(), before = s1.items.length; s1.items = s1.items.filter(x => !(names.some(nm => mhShopKey(nm) === x.key) || ings.includes(mhNameParts(x.name).ing))); off = before - s1.items.length; if (off) mhShopSave(s1); }
+  let off = 0; if (n && rc && d.clearList) { const s1 = mhShopLoad(), before = s1.items.length; const nfW = nfTracks.map(t => new Set(mhNameWords(mhNameParts(t).ing.toLowerCase()).split(' ')));   // a non-food list line like "Shampoo" comes off when what you bought is "TRESemmé Rich Moisture Shampoo": every word of the list line is in the bought name
+    s1.items = s1.items.filter(x => !(names.some(nm => mhShopKey(nm) === x.key) || ings.includes(mhNameParts(x.name).ing) || (x.nonFood && nfW.some(w => { const xw = mhNameWords(mhNameParts(x.name).ing.toLowerCase()).split(' ').filter(Boolean); return xw.length && xw.every(k => w.has(k)); })))); off = before - s1.items.length; if (off) mhShopSave(s1); }
   if (n && d.hash && !d.logged) { d.logged = true; const o9 = mhStockLoad(); o9.imports.unshift({ h: d.hash, at: Date.now(), n, label: d.label, kind: d.kind }); o9.imports = o9.imports.slice(0, 30); mhStockSave(o9); }
   const added = mhStockSweep();
   if (one) { _shopUi.msg = n ? 'Added ' + names[0] + ' to your cupboards. The rest are still waiting below.' : (_shopUi.msg || 'Nothing added'); mhShopRender(); return; }

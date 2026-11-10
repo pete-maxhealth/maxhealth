@@ -40,4 +40,13 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("_shopUi.view") != 'orderimport': f.add('BUG', f'11: still on the review: {ev("_shopUi.view")}')
     ev("mhOrdUseGuess(1)"); page.wait_for_timeout(300); page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
     if ev("_shopUi.ord") is None and ev("_shopUi.view") != 'stocklist': f.add('BUG', f'12: finished but not on My cupboards: {ev("_shopUi.view")}')
+# non-food lines are never held for a food guess, and a generic non-food list line comes off the shopping list
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()")
+    ev("(()=>{const s=mhShopLoad(); mhShopSetAdd(s,'Shampoo','manual','',null,{nonFood:true}); mhShopSave(s)})()")
+    ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "1 x TRESemme Rich Moisture Shampoo 680ml\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const r=_shopUi.ord.rows[0]; r.kind='nonfood'; r.from='closest in your library'; r.on=true; mhShopRender()})()")
+    page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    if ev("!!_shopUi.ord"): f.add('BUG', '13: a non-food guess row was held back')
+    if ev("mhShopLoad().items.some(i=>/shampoo/i.test(i.name))"): f.add('BUG', '14: the Shampoo list line is still on the shopping list')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
