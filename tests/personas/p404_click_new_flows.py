@@ -31,7 +31,7 @@ def check(page, where, before, was_remove):
 # Stay-put (Pete 9 Nov 2026: removing a cupboard food brought up the Next meal idea picker): a control that is not a navigator must leave you on the same screen.
 SCREEN = "[...document.querySelectorAll('[id^=maintab-].active,[id^=logtab-].active,[id^=shoptab-].active')].map(e=>e.id).join(',') + '|' + (document.querySelector('.mh-mealpicker-live') ? 'picker' : '')"
 GOES = re.compile(r'idea|suggest|meal|log|today|insights|settings|history|library|shopping|back|open|go to|view|show|edit|add|import|search|barcode|scan|photo|recipe|plan|share|help|tour|switchTab|nav|startNext|mhUseUpIdea|mhSoonGo|mhShopView|mhShopOpen|Fold|Tab|Pane', re.I)
-ALL = ['import_review', 'import_after_partial_add', 'suggestion_cards', 'shopping_list', 'my_cupboards', 'log_search_from_import']
+ALL = ['import_review', 'import_after_partial_add', 'suggestion_cards', 'shopping_list', 'my_cupboards', 'log_search_from_import', 'compare_metrics_foods']
 want = sys.argv[1:] or ALL; clicked = 0; skipped = 0; destructive = 0
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); ctx = b.new_context(viewport={'width': 390, 'height': 900}, service_workers='block'); page = ctx.new_page()

@@ -39,6 +39,10 @@ def setup(page, name):
     elif name == 'log_search_from_import':
         ev("switchTabById('shop'); mhOrdOpen('order')"); page.wait_for_timeout(300); ev("t=>mhOrdLoad(t,'p404')", ORDER); page.wait_for_timeout(500)
         ev("()=>{try{_shopUi.ord.rows[0].create=true; mhOrdFind(0,'search')}catch(e){}}"); page.wait_for_timeout(500)
+    elif name == 'compare_metrics_foods':
+        ev("switchTabById('insights')"); page.wait_for_timeout(300)
+        ev("openMultiMetricOverlay()"); page.wait_for_timeout(600); ev("toggleMMGroup('Foods')"); page.wait_for_timeout(300)
+        ev("()=>{const i=mmFoodIndex(); const f=[...i.foods.values()].sort((a,b)=>b.days.size-a.days.size).slice(0,2); const c=[...i.cats.values()][0]; [...f,c].filter(Boolean).forEach((x,n)=>{const b=document.createElement('button'); b.dataset.k=x.k; b.dataset.t=x.t||x.k; b.dataset.c=(x===c)?'1':'0'; mmFoodAdd(b)})}"); page.wait_for_timeout(600)
     page.wait_for_timeout(300)
 
 

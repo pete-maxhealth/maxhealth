@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1338
+
+- **Compare Metrics is now findable in search** (label "Compare Metrics (Trends)", with keywords such as foods, overlay, days with, days without); the Compare Metrics button on Trends has an id so the search lands on it.
+- **Translations:** the v3.10.1334 first-run AI wording (shared account is the free option, own keys are paid) is now in es, de, fr, tr, pt, it, pl and nl (machine-translated, native-speaker review still wanted). The daily-limit message and the "no key added" hint are runtime strings and are still English.
+- **Test:** p404 (press every control, two levels deep, destructive ones in the demo persona) now has a Compare Metrics with Foods state.
+
 ## v3.10.1337
 
 - **New: individual foods and food categories as lines in Compare Metrics** (Pete, 9 Nov). A new **Foods** group (between Exercise and Lab Results) lists the foods and categories you pick; **Search your logged foods** or tap a quick pick (your most-logged foods and categories). Each is a line like any other: grams a day where you logged grams, otherwise how many times you had it; 0 on a logged day without it, a gap on a day with no meals logged. Respects the date range and Include today. Remove with the ✕ (picks are remembered on this device).
