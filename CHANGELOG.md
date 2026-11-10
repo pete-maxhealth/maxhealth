@@ -6,7 +6,8 @@
 
 - **Compare Metrics is now findable in search** (label "Compare Metrics (Trends)", with keywords such as foods, overlay, days with, days without); the Compare Metrics button on Trends has an id so the search lands on it.
 - **Translations:** the v3.10.1334 first-run AI wording (shared account is the free option, own keys are paid) is now in es, de, fr, tr, pt, it, pl and nl (machine-translated, native-speaker review still wanted). The daily-limit message and the "no key added" hint are runtime strings and are still English.
-- **Test:** p404 (press every control, two levels deep, destructive ones in the demo persona) now has a Compare Metrics with Foods state.
+- **Fixed:** the carb drill-down showed "Adherence rate NaN%" (and could print "null%" advice) when there were no days of data; it now shows a dash. Found by the press-everything run around the new Foods state.
+- **Test:** p440 (search finds Compare Metrics and lands on it; empty carb drill-down). p404 (press every control, two levels deep, destructive ones in the demo persona) now has a Compare Metrics with Foods state.
 
 ## v3.10.1337
 
