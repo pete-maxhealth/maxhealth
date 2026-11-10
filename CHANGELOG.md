@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1362
+
+- **My cupboards: fewer, clearer buttons (Pete, 10 Nov).** The "＋ Add a food" tile is gone (Add foods and the search box already do it). "📋 Check the cupboards" shows only while some foods need details (it used to go back to the same screen when none did). "🔍 Possible duplicates" shows only when there are pairs. The three transfer links are one "📲 Move to another device" that opens Phone to phone (QR), Send stock and list, Receive stock and list. User guide updated.
+- Tests: new p445; p221, p382 updated; p207, p214, p225, p237, p239, p278, p282, p283, p338, p342 pass. The new link text is not translated (the old transfer links were not either).
+
 ## v3.10.1361
 
 - **Past use-by names are tappable (Pete, 10 Nov).** On the "Past use-by" line in My cupboards, tap a food's name to open it and check or correct its amount and use-by date (most just need stock adding or the date checking), alongside the existing "bin it" and "others ate it". Same dotted-underline style as the Use soon names. Test: p434 (1c, 1d).

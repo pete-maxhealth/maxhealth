@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
     lvl = lambda: ev("mhStockLoad().items[mhShopKey('Double Cream')].level")
     food = lambda n, a: {'name': n, 'amount': a, 'kcal': 100, 'protein': 1, 'fat': 5, 'carbs': 1}
     if not ev("mhStockOn()"): f.add('BUG', '1: on by default when something is tracked')
-    if 'Check the cupboards' not in ev("mhStockCardHtml(mhShopLoad())") or 'Turn off' not in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '1: the card has its buttons and a Turn off')
+    if 'Add foods' not in ev("mhStockCardHtml(mhShopLoad())") or 'Turn off' not in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '1: the card has its buttons and a Turn off')
     ev("([x,t])=>logFoods(x,t)", [[food('Double Cream', '100 ml')], 'cream']); page.wait_for_timeout(300)
     if lvl() != 400: f.add('BUG', f'1: on: logging takes stock off: {lvl()}')
     # off through the UI
@@ -27,7 +27,7 @@ with fresh_server() as root, sync_playwright() as pw:
     else: page.click('#appModalConfirm'); page.wait_for_timeout(400)
     if ev("mhStockOn()"): f.add('BUG', '2: confirmed: it is off')
     card = ev("mhStockCardHtml(mhShopLoad())")
-    if 'Turn cupboards' not in card or 'Check the cupboards' in card or 'Start stock from an order' in card or 'stockctlCard' not in card or 'stockctlBody' not in card: f.add('BUG', '2: the off card offers only to turn it on, keeps its id and controls')
+    if 'Turn cupboards' not in card or 'Add foods' in card or 'Start stock from an order' in card or 'stockctlCard' not in card or 'stockctlBody' not in card: f.add('BUG', '2: the off card offers only to turn it on, keeps its id and controls')
     if 'mh-ctl' not in card: f.add('BUG', '2: the off card keeps show/hide and reorder controls')
     if ev("Object.keys(mhStockLoad().items).length") != 2 or lvl() != 400: f.add('BUG', '2: counts are kept while off')
     # behaviour off
@@ -46,7 +46,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("mhStockOn()"): f.add('BUG', '4: off survives a reload')
     ev("document.getElementById('onboardingOverlay')?.remove(); mhShopOpen()")
     page.click('[onclick="mhStockSetOn(true)"]'); page.wait_for_timeout(400)
-    if not ev("mhStockOn()") or 'Check the cupboards' not in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '4: turned back on from the card, counts and buttons are back')
+    if not ev("mhStockOn()") or 'Add foods' not in ev("mhStockCardHtml(mhShopLoad())"): f.add('BUG', '4: turned back on from the card, counts and buttons are back')
     ev("([x,t])=>logFoods(x,t)", [[food('Double Cream', '100 ml')], 'cream']); page.wait_for_timeout(300)
     if lvl() != 300: f.add('BUG', f'4: on again: logging takes stock off: {lvl()}')
     if ev("mhSuggestMode()") != 'hide': f.add('BUG', '4: on again: filtering is back')

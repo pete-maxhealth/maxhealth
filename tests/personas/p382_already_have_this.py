@@ -73,13 +73,12 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("Object.keys(mhStockLoad().items).length") != n0: f.add('BUG', '14: adding an existing non-nutritional item makes no second copy')
     if not ev("!!_shopUi.stk && !_shopUi.stk.isNew"): f.add('BUG', '15: it opens the existing one')
     ev("_shopUi.stk=null; _shopUi.view='list'; mhShopRender()")
-    # tile always there
+    # the duplicates tile hides itself when there are none (v3.10.1362); the check itself still answers
     ev("localStorage.setItem('mh_shop_pane','stock'); mhCbTab('all'); mhShopRender()"); page.wait_for_timeout(300)
     lab = ev("[...document.querySelectorAll('#stockctlCard .mh-tiles button')].map(b=>b.innerText.trim()).find(t=>/duplicate/i.test(t))||''")
-    if not lab: f.add('BUG', '16: the duplicates tile shows even when there are none')
-    else:
-        ev("document.getElementById('stockctlCard').scrollIntoView()"); tap('#stockctlCard .mh-tiles button:has-text("duplicates")')
-        if 'no likely duplicates' not in ev("(document.getElementById('toast')?.innerText||'').toLowerCase()"): f.add('BUG', '17: tapping it with none says so')
+    if lab and ev("mhStockDupePairs().length") == 0: f.add('BUG', '16: the duplicates tile hides itself when there are none')
+    ev("mhStockDupeOpen()"); page.wait_for_timeout(300)
+    if ev("mhStockDupePairs().length") == 0 and 'no likely duplicates' not in ev("(document.getElementById('toast')?.innerText||'').toLowerCase()"): f.add('BUG', '17: checking with none says so')
     page.screenshot(path='/tmp/p382.png')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)
