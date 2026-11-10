@@ -115,9 +115,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
     page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(500)
     lv = ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()")
-    if not page.get_by_text('I added all of these already').count(): f.add('BUG', '33: no all-added button for an old record')
+    if not page.get_by_text('Mark all as already added').count(): f.add('BUG', '33: no all-added button for an old record')
     else:
-        page.get_by_text('I added all of these already').first.click(); page.wait_for_timeout(300)
+        page.get_by_text('Mark all as already added').first.click(); page.wait_for_timeout(300)
         if ev("_shopUi.ord.rows.some(r=>!r.done||r.on)"): f.add('BUG', '34: not every line marked added')
         if ev("Object.values(mhStockLoad().items).map(i=>i.key+':'+i.level).join()") != lv: f.add('BUG', '35: stock changed by marking')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

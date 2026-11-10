@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1356
+
+- **Clearer wording on the mark-all button (Pete, 10 Nov).** It now reads "✓ Mark all as already added (adds nothing)" so nobody fears it imports again, and its message says how to undo it (tick "Add it again anyway"). Test: p444.
+
 ## v3.10.1355
 
 - **"✓ I added all of these already" (Pete, 10 Nov).** A receipt imported before v1354 has no remembered line names, so it could not clear itself. Its warning box now has this button: it marks every line as Added, empties the review, changes nothing in your cupboards, and remembers the lines for next time.
