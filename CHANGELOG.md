@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1354
+
+- **A repeated receipt now remembers which lines were added (Pete, 10 Nov).** The import log used to keep only the receipt fingerprint and a count, so pasting the same list again showed every line as new and nothing cleared. It now keeps the line names too: when the same receipt is loaded again, lines already added are marked Added and unticked, with a message saying when. "Add it again anyway" puts them back. Receipts imported before this version have no line names, so for those use "✓ Add only what is not in my cupboards yet".
+- Test: p444 extended; p218 now uses the repeat-anyway tick; p226, p232, p234, p236, p214, p225, p409, p240, p407 pass.
+
 ## v3.10.1353
 
 - **Import survives a trip to the camera (Pete, 10 Nov).** Scanning a barcode or taking a label photo can make Android reload the app, which dropped you on the plain shopping list with the import apparently gone (it was saved as a draft, but you had to find Import and the right purpose to get it back). The shopping list now shows "📥 Carry on with your import (N of M lines still to do)" at the top whenever a saved import exists, one tap back to where you were. This is the likely cause of "it puts me back on the list"; not seen happening on a real phone yet.

@@ -96,4 +96,18 @@ with fresh_server() as root, sync_playwright() as pw:
     else:
         page.get_by_text('Carry on with your import').first.click(); page.wait_for_timeout(500)
         if ev("_shopUi.view") != 'orderimport' or ev("_shopUi.ord.rows.length") != 2: f.add('BUG', '29: Carry on does not bring the import back')
+# the same receipt pasted again knows which lines were added before
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    TXT = "Sage Leaves 20g\n1.00\nBay Leaves 20g\n1.00\nThyme Sprigs 20g\n1.00\n"
+    page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows.forEach(r=>{r.amount='20 g'; r.on=true; if(r.from==='closest in your library') r.from='picked by you'}); d.rows[2].on=false; mhShopRender()})()")
+    page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', TXT); page.click('#mhOrdRead'); page.wait_for_timeout(500)
+    st = ev("_shopUi.ord.rows.map(r=>[!!r.done, !!r.donePrev])")
+    if st[0] != [True, True] or st[1] != [True, True] or st[2][0]: f.add('BUG', f'30: a repeated receipt marks the lines added before: {st}')
+    ev("(()=>{const d=_shopUi.ord; d.rows[2].amount='20 g'; d.rows[2].on=true; if(d.rows[2].from==='closest in your library') d.rows[2].from='picked by you'; mhShopRender()})()")
+    page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    if ev("Object.keys(mhStockLoad().items).filter(k=>/thyme/.test(k)).length") != 1: f.add('BUG', '31: the new line of a repeated receipt is added')
+    if ev("Object.values(mhStockLoad().items).filter(i=>/sage|bay/.test(i.key)).some(i=>i.level>20)"): f.add('BUG', '32: the lines added before are not counted twice')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
