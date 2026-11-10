@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1348
+
+- **Working down an import:** settling a row (Use this, Match, or Create new returning) now moves the screen to the next row that still needs you, flashing it, so you do not scroll back each time. Finishing the import (nothing left waiting) now lands you on **My cupboards**, where the new stock is, instead of the shopping list. Rows still waiting keep you on the review.
+- Not reproduced: Pete's report of being dropped on the shopping list "Add to the list" screen after altering a row. Match, Use this, amount, kind, tick and the Create new return all stay on the review in the tests; asked which control he used.
+- Test: p444 extended (focus moves to the next row, finishing goes to My cupboards); p218, p220, p226, p232, p234, p214, p225 pass.
+
 ## v3.10.1347
 
 - **Import Add now does what is sure and takes you to what is not (Pete, 10 Nov).** Pressing "Add N items to my cupboards" adds every row that is a sure match or a new food, holds back rows marked "Check this: closest guess", then scrolls to the first row that needs you and flashes it, with a notice saying how many are held. A new "✓ Use this" button next to "Match…" accepts the closest guess in one tap; Match picks another. Rows already added stay locked, so pressing again never counts them twice. Before, guesses were added unchecked.

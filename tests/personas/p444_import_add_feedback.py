@@ -31,4 +31,13 @@ with fresh_server() as root, sync_playwright() as pw:
     if not ev("(()=>{const e=document.querySelector('[data-ord=\"2\"]'); if(!e) return false; const r=e.getBoundingClientRect(); return r.bottom>0 && r.top<innerHeight})()"): f.add('BUG', '8: the screen is not on the first row to check')
     ev("mhOrdUseGuess(2)"); page.wait_for_timeout(200); page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
     if lvl('Oat Milk') != 1000: f.add('BUG', f'9: after Use this the row is added: {lvl("Oat Milk")}')
+# settle a row: the screen moves to the next row that needs you; finishing goes to My cupboards
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Cheddar Block 400g\n2.00\nPlain Rice Bag 1kg\n1.00\nOat Drink 1l\n1.20\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows.forEach(r=>{r.done=false}); d.rows[0].from='closest in your library'; d.rows[1].from='closest in your library'; d.rows[0].track='Cheddar'; d.rows[1].track='Plain Rice'; d.rows[0].amount='400 g'; d.rows[1].amount='1000 g'; d.rows[2].amount='1 l'; d.rows[0].on=d.rows[1].on=d.rows[2].on=true; mhShopRender()})()"); page.wait_for_timeout(200)
+    ev("mhOrdUseGuess(0)"); page.wait_for_timeout(900)
+    if not ev("(()=>{const e=document.querySelector('[data-ord=\"1\"]'); if(!e) return false; const r=e.getBoundingClientRect(); return r.bottom>0 && r.top<innerHeight})()"): f.add('BUG', '10: after Use this the screen is not on the next row to check')
+    if ev("_shopUi.view") != 'orderimport': f.add('BUG', f'11: still on the review: {ev("_shopUi.view")}')
+    ev("mhOrdUseGuess(1)"); page.wait_for_timeout(300); page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    if ev("_shopUi.ord") is None and ev("_shopUi.view") != 'stocklist': f.add('BUG', f'12: finished but not on My cupboards: {ev("_shopUi.view")}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
