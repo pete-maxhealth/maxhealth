@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1350
+
+- **An import can now be finished when only unticked lines are left (Pete, 10 Nov).** Once every line you wanted was added, the button said "Finish" but pressing it only said "Nothing is ticked, N still waiting" because unticked lines (like a banana loaf cake you did not want) kept the import open, and Start again threw you back to the paste screen. Now Finish leaves the unticked lines out, says how many, and takes you to My cupboards. The button reads "Finish: leave the rest out" while some are left. Ticked lines still waiting (no amount, or a guess to check) keep it open as before.
+- Test: p444 extended (finish from the same press, and from a second press); p218, p220, p226, p232, p234, p236, p214, p225 pass.
+
 ## v3.10.1349
 
 - **Non-food lines no longer hold the import open (Pete, 10 Nov).** A ticked non-nutritional row (shampoo, toilet roll) is never held back for a "closest food guess", so Add puts it in the cupboards and it leaves the review with the rest; it is not counted as needing a check. Also, a generic non-food line on your shopping list ("Shampoo") now comes off when you add what you bought ("TRESemmé Rich Moisture Shampoo"): every word of the list line has to be in the bought name, and only non-food list lines are touched.

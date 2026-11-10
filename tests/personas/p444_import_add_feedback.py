@@ -49,4 +49,17 @@ with fresh_server() as root, sync_playwright() as pw:
     page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
     if ev("!!_shopUi.ord"): f.add('BUG', '13: a non-food guess row was held back')
     if ev("mhShopLoad().items.some(i=>/shampoo/i.test(i.name))"): f.add('BUG', '14: the Shampoo list line is still on the shopping list')
+# some added, the rest unticked: Finish leaves them out and goes to My cupboards
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Cheddar Block 400g\n2.00\nBanana Loaf Cake\n1.00\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='400 g'; d.rows[0].on=true; d.rows[1].on=false; mhShopRender()})()")
+    page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+    if ev("!!_shopUi.ord") or ev("_shopUi.view") != 'stocklist': f.add('BUG', f'15: with only unticked lines left the import does not finish: ord {ev("!!_shopUi.ord")} view {ev("_shopUi.view")}')
+    ev("mhOrdDiscard && mhOrdDiscard()"); ev("mhShopOpen()"); ev("mhOrdOpen('receipt')"); page.wait_for_timeout(200)
+    page.fill('#mhOrdText', "Cheddar Slice 400g\n2.00\nBanana Loaf Cake\n1.00\n"); page.click('#mhOrdRead'); page.wait_for_timeout(400)
+    ev("(()=>{const d=_shopUi.ord; d.rows[0].amount='400 g'; d.rows[0].on=true; d.rows[1].on=false; mhShopRender(); mhOrdApply(0)})()"); page.wait_for_timeout(500)
+    if not ev("!!_shopUi.ord"): f.add('BUG', '16: setup: one row added, the import should still be open')
+    else:
+        page.evaluate("document.querySelector('#mhOrdGo').scrollIntoView()"); page.click('#mhOrdGo'); page.wait_for_timeout(900)
+        if ev("!!_shopUi.ord") or ev("_shopUi.view") != 'stocklist': f.add('BUG', f'17: a second press with only unticked lines left does not finish: view {ev("_shopUi.view")}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)
