@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1365 — Overnight test triage (comment and tests only, nothing changes in the app)
+
+- A code comment said "Pete" on its own; it now says "Pete Spence" (p64_full_name).
+- p400 and p219 were out of date against deliberate 10 Nov changes, not app bugs: p400 expected unticked import rows to stay waiting after a partial add (v3.10.1350 now leaves them out, with Undo as the way back; the test now checks that and the Undo restores the list); p219 added import rows that are only a closest guess (v3.10.1347 holds those until Use this) and pasted the same order twice (v3.10.1353 treats that as a repeat until Add it again). Both tests now do what a person does. All three pass.
+- Open question for Pete: after v3.10.1350, ticking only the non-food lines and pressing Add leaves the other lines out (with Undo), where his 5 Nov request (v3.10.1296) kept them waiting. The newer rule is in place; say if the first press should keep them waiting and only a second press finish.
+
 ## v3.10.1364 — Translations for the My cupboards move menu and the receipt "already added" card
 
 - Nine strings now translated in all eight languages: "Move to another device" and "Turn off" under My cupboards, the three choices that open under Move (Phone to phone (QR), Send stock and list, Receive stock and list), and the receipt "already added" card ("Nothing to add", "Mark all as already added (adds nothing)", "Add it again anyway", "Go to My cupboards"). Machine-assisted wording, not native-speaker checked, same as the other packs. Added by tools/lang_add_cupboard_moves.py (append only).

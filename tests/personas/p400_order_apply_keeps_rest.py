@@ -1,4 +1,4 @@
-"""Persona 400: adding some of an order to the cupboards keeps the rest of the list (v3.10.1296).
+"""Persona 400: adding some of an order to the cupboards: ticked rows go in; unticked rows are left out with an Undo way back (v3.10.1296, changed by v3.10.1350).
 Pete (5 Nov): imported a shopping list to restock, ticked only the non-nutritional lines, pressed add, and the rest of the list was gone with no way back.
 Covers: partial add keeps the unticked rows waiting, survives a reload, a later add of the rest clears the list, adding everything still clears at once, skipped (no amount) rows stay. Invented data."""
 import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
@@ -17,15 +17,17 @@ with fresh_server() as root, sync_playwright() as pw:
     start()
     ev("mhOrdKindSet(2,'nonfood')"); ev("mhOrdSet(2,'amount','2')")
     ev("mhOrdTick(0,false); mhOrdTick(1,false)"); ev("mhOrdApply()"); page.wait_for_timeout(500)
-    st = ev("_shopUi.ord&&_shopUi.ord.rows.map(r=>[r.on,!!r.done])")
-    if st != [[False, False], [False, False], [True, True]]: f.add('BUG', f'1: the ticked non-food row is added, the others stay waiting: {st}')
+    # v3.10.1350 (Pete, 10 Nov): once everything the person ticked is in, the unticked lines are left out and the import finishes. The way back for them is Undo (v3.10.1296 kept them waiting).
+    if ev("!!_shopUi.ord"): f.add('BUG', '1: with only unticked lines left after the add, the import finishes')
     msg = ev("document.body.innerText")
-    if 'still waiting' not in msg or '2' not in msg: f.add('BUG', f'2: message says how many are waiting: {msg}')
-    if not ev("!!localStorage.getItem('mh_ord_draft_v1')"): f.add('BUG', '3: the waiting rows are saved')
+    if 'Stock started for 1 item' not in msg or '2 left out' not in msg: f.add('BUG', f'2: message says how many were left out: {msg[:400]}')
+    if not ev("(()=>{const u=mhOrdUndoGet();return !!(u&&u.draft)})()"): f.add('BUG', '3: Undo remembers the whole list, so the left-out lines can come back')
+    ev("mhOrdUndo()"); page.wait_for_timeout(400)
+    if not ev("!!localStorage.getItem('mh_ord_draft_v1')"): f.add('BUG', '3b: after Undo the list is saved again')
     page.reload(); page.wait_for_timeout(1500); ev("document.getElementById('onboardingOverlay')&&(document.getElementById('onboardingOverlay').style.display='none')")
     ev("switchTabById('shop'); mhOrdOpen(_shopUi.ordKind||'order')"); page.wait_for_timeout(500)
     names = ev("document.body.innerText")
-    if 'Oat Biscuits' not in names or 'Hazel Spread' not in names: f.add('BUG', '4: after a reload the rest of the list is still there')
+    if 'Oat Biscuits' not in names or 'Hazel Spread' not in names: f.add('BUG', '4: after Undo and a reload the rest of the list is there')
     page.screenshot(path='/tmp/p400.png')
     # now add the rest
     ev("mhOrdTick(0,true); mhOrdTick(1,true); mhOrdSet(0,'amount','300 g'); mhOrdSet(1,'amount','700 g')"); ev("mhOrdApply()"); page.wait_for_timeout(500)
