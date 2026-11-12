@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1375 — Patterns and Your routine are one tile
+
+Pete, 12 Nov: someone looking at patterns would also want their routine; the two go hand in hand.
+
+- **🔍 Patterns & routine** (Trends): "🧭 Your usual" (meal times, sleep, steps, HRV against your own history) now sits at the top of the Patterns tile, with early warnings and what-goes-with-what beneath it. One title, one ▲ ▼ 👁, one fold, one Filter entry, one search entry (find it by "routine" or "patterns"). The separate Your routine card is gone.
+- Your usual is still Premium-sourced (the phone's local server), so a free user sees the Patterns half as before; a Premium user or a demo persona sees both halves. Nothing about where the numbers come from changed.
+- Saved layouts keep working: an order or hidden list saved with the old separate "trends-routine" key is carried over in the same sequence with that key dropped (the tile takes the Patterns tile's place and hidden state).
+- **Also fixed (found while checking this):** the ▲ ▼ 👁 on Trends, Reports, Settings and Import card titles ran right to left (👁 ▼ ▲) because of a leftover CSS reversal; they now read ▲ ▼ 👁 like every other card. New test p460 checks it on all four screens.
+- Translated in the eight language packs (machine-assisted). Tests p136 and p140 rewritten for the merged tile.
+
 ## v3.10.1374 — "Something confused me"
 
 Pete, 12 Nov: a note somewhere easy to reach, so a new user's feedback reaches you without them having to explain it.

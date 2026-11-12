@@ -1,4 +1,4 @@
-"""Persona 140: Your routine looks and folds exactly like Patterns (same section title style, ▾ hide hint), sits straight before Patterns, sleep wording does not repeat itself."""
+"""Persona 140: the Patterns & routine tile folds with a ▾ hide / ▸ show hint, shows the routine part above the patterns, and the sleep wording does not repeat itself (the routine is part of the Patterns tile since v3.10.1375)."""
 import sys; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -11,13 +11,13 @@ with fresh_server() as root, sync_playwright() as pw:
     ev = page.evaluate
     ev("switchTab('insights', document.getElementById('maintab-insights'))"); page.wait_for_timeout(900)
     ev("(()=>{const el=document.getElementById('mcRoutine'); el.dataset.has='1'; el.hidden=false; document.getElementById('mcRoutineBody').innerHTML='<div>x</div>';})()")
-    if ev("document.getElementById('title-trends-routine').className") != ev("document.getElementById('title-trends-patterns').className"): f.add('BUG', 'routine title style differs from Patterns')
-    a = ev("document.getElementById('trends-routine-wrap').style.display !== 'none'")
-    ev("document.getElementById('title-trends-routine').click()"); page.wait_for_timeout(200)
-    b = ev("document.getElementById('trends-routine-wrap').style.display !== 'none'")
-    if a == b: f.add('BUG', 'routine card does not fold')
-    if '▸ show' not in ev("document.getElementById('trends-routine-icon').textContent"): f.add('BUG', 'no show hint when folded')
-    if not ev("getGenericOrder('trends').indexOf('trends-routine') + 1 === getGenericOrder('trends').indexOf('trends-patterns')"): f.add('BUG', 'routine not straight before Patterns')
+    a = ev("document.getElementById('trends-patterns-wrap').style.display !== 'none'")
+    ev("document.getElementById('title-trends-patterns').click()"); page.wait_for_timeout(200)
+    b = ev("document.getElementById('trends-patterns-wrap').style.display !== 'none'")
+    if a == b: f.add('BUG', 'merged tile does not fold')
+    if '▸ show' not in ev("document.getElementById('trends-patterns-icon').textContent"): f.add('BUG', 'no show hint when folded')
+    ev("document.getElementById('title-trends-patterns').click()"); page.wait_for_timeout(200)
+    if not ev("document.getElementById('mcRoutine').compareDocumentPosition(document.getElementById('patternsContent')) & Node.DOCUMENT_POSITION_FOLLOWING"): f.add('BUG', 'the routine part is not above the patterns')
     src = ev("mhRoutineLines.toString()")
     if "Last 3 nights: '" in src: f.add('BUG', 'sleep wording prefix still doubles up')
     if errs: f.add('BUG', f'page errors {errs[:2]}')

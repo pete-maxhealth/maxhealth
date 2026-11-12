@@ -243,3 +243,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - Merges agreed (one release each): Patterns + Your routine (Trends); Fasting + When you eat (Reports); What seems to move what + Insights (Reports). Compare Two Periods + Weight vs Protocol left alone.
 - Open: Reports topic row still has a "Treatment" chip for someone on the Losing weight start.
 - Open: Today/Reports intro lines of exactly three lines (Journey, Compare Two Periods, Make a report, Exercise report) are borderline for "a couple of lines".
+
+- Open (merge 1): someone who had hidden only the old separate Your routine card now sees Your usual inside the merged tile (it follows the Patterns tile's hidden state). Small, Premium-only; add a per-part hide only if anyone asks.
