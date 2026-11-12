@@ -230,7 +230,6 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 - [ ] Cloud sessions cannot push new git tags (HTTP 403 from the egress policy; branches and main are fine). v3.10.1363 went out without its pre-v tag; make tags from Termux: git tag pre-v<ver> origin/main && git push origin pre-v<ver>, or get tag pushes allowed.
 
-- [ ] Translate the shopping list / My cupboards / receipt import / Use by / plan wording: almost none of it is in any lang pack (found 10 Nov, v3.10.1364 did only nine strings). Needs a sweep of the screens like lang_add_sweep_*.py did for the rest of the app.
 - [ ] Lab Results: show non-HDL cholesterol (total minus HDL) calculated from the entered values, next to the chart. Pete 11 Nov: wait until his bloods are back (a few days), then do it.
 
 ## Back / close / cancel audit (Pete, 12 Nov 2026)

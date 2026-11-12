@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1385 — Translation sweep: 49 more sentences in all eight languages
+
+- A Spanish scan of Today, History, Settings, Move and the import screens found whole help paragraphs, tooltips and labels still in English. 49 of them (what-would-it-earn, the AI hint lines, Patterns note, report intro, GBM research note, tips note, history-format help, polyols note, weather help, water target, storage warning, backup note, CSV/import steps, paste-meal text, cupboards, group-check note, coach buttons and more) are now in es, de, fr, tr, pt, it, pl and nl. Machine-assisted; not checked by native speakers.
+- Formulas, debug text and technical wording stay in English on purpose. Still to do: sentences built from fragments (AI-use list, layout help, add-device steps) and the dynamic fasting/sleep report lines.
+- New p469 (all 49 present in every language; lookup resolves in Spanish). Also checked: p424, p406, p467, p466.
+
 ## v3.10.1384 — Move body composition chart: one shared scale, and how much of a loss was muscle
 
 - **Pete (12 Nov): the chart looked far worse than it was.** Each line (muscle, fat) used to be stretched to fill the box on its own, so a 2.7 kg change in 68 kg of muscle looked like a cliff. All lines now share one kg axis and are drawn as change from where the range started, with a dashed zero line and a dashed weight line, so you can see at a glance that weight fell furthest and how the parts compare.
