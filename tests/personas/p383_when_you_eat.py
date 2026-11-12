@@ -56,12 +56,12 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("_rptRange=0; renderReports()")
     # 9. hide / show survives a reload
     ev("document.getElementById('title-rpt-wheneat').scrollIntoView()")
-    bb = page.locator('#title-rpt-wheneat').bounding_box(); page.mouse.click(bb['x'] + 20, bb['y'] + bb['height'] / 2); page.wait_for_timeout(300)
+    page.locator('#title-rpt-wheneat').click(position={'x': 20, 'y': 10}, timeout=15000); page.wait_for_timeout(300)
     if ev("getComputedStyle(document.getElementById('rpt-wheneat-wrap')).display") != 'none': f.add('BUG', '9: tapping the title hides the card body')
     page.reload(); page.wait_for_timeout(1500); show()
     if ev("getComputedStyle(document.getElementById('rpt-wheneat-wrap')).display") != 'none': f.add('BUG', '10: hidden stays hidden after a reload')
     ev("document.getElementById('title-rpt-wheneat').scrollIntoView()")
-    bb = page.locator('#title-rpt-wheneat').bounding_box(); page.mouse.click(bb['x'] + 20, bb['y'] + bb['height'] / 2); page.wait_for_timeout(300)
+    page.locator('#title-rpt-wheneat').click(position={'x': 20, 'y': 10}, timeout=15000); page.wait_for_timeout(300)
     if ev("getComputedStyle(document.getElementById('rpt-wheneat-wrap')).display") == 'none': f.add('BUG', '11: shows again')
     # 12. order, search, AI context
     o = ev("GENERIC_DEFAULT_ORDER.reports")

@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 out = sys.argv[1]; workers = int(sys.argv[2]) if len(sys.argv) > 2 else 3; tmo = int(sys.argv[3]) if len(sys.argv) > 3 else 240
 files = sorted(glob.glob(R + '/tests/personas/p[0-9]*.py'), key=lambda f: int(re.match(r'p(\d+)', os.path.basename(f)).group(1)))
+if os.environ.get('SWEEP_ONLY'): files = [f for f in files if re.search(os.environ['SWEEP_ONLY'], os.path.basename(f))]  # optional filter, e.g. SWEEP_ONLY='p383|p384' (a few tests under the same parallel load as the sweep)
 od = os.environ.get('SWEEP_OUT', '/tmp/claude-0/sweep_out'); os.makedirs(od, exist_ok=True)
 LO = os.path.join(R, 'tools', '_lo_up.py')
 import socket, threading, urllib.parse, tempfile

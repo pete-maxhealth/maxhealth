@@ -22,7 +22,7 @@ with fresh_server() as root, sync_playwright() as pw:
     show = lambda: (ev("switchTab('insights'); switchSubTab('insights','reports'); _rptRange=0; renderReports()"), page.wait_for_timeout(500))
     def tap(sel):
         ev("document.querySelectorAll('.toast').forEach(t=>t.style.display='none')")
-        page.locator(sel).first.scroll_into_view_if_needed(); bb = page.locator(sel).first.bounding_box(); page.mouse.move(bb['x'] + bb['width'] / 2, bb['y'] + bb['height'] / 2); page.mouse.down(); page.mouse.up(); page.wait_for_timeout(500)
+        page.locator(sel).first.click(timeout=15000); page.wait_for_timeout(500)  # real click: waits until the element is stable and not covered (a fixed-spot click missed under a busy sweep)
     ev("state.history = " + json.dumps([day(i) for i in range(1, 3)]) + "; saveState()"); show()
     if ev("!!document.getElementById('wheneat-coach')") and ev("getComputedStyle(document.getElementById('wheneat-report-section')).display") != 'none': f.add('BUG', '1: no advice box with too few days')
     ev("state.history = " + json.dumps([day(i) for i in range(1, 11)]) + "; saveState()"); show()
