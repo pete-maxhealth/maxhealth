@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1383 — Move body composition: the change over a range uses averages, and shows weight too
+
+- **Fixed a misleading figure.** The line under the Move body-composition chart ("Muscle -3.2kg, Fat -5.0kg" over a range) was the last single smart-scale reading minus the first single reading. Those estimates swing by half a kilo or more with hydration and timing, so one high first reading and one low last reading could show a loss that was not there. It is now the average of the last readings minus the average of the first ones (up to a week's worth at each end), and it says so ("averages at each end"). The headline verdict above it already used weekly averages.
+- **Weight change added** beside muscle and fat on the same line, so the three can be checked against each other (muscle, fat and bone should add up to weight).
+- Translated in all eight languages. New test p468 (a stable body with one high first and one low last reading shows about nothing; a real steady 3 kg loss still shows; weight and the averages note are there). Also checked: p46, p323, p424, p467.
+
 ## v3.10.1382 — Nine more three-line hints cut to two
 
 - Cut to two lines, the rest behind the standard "?" (or simply shorter): the kg display note (the stones and pounds tip is behind the ?), the requirements note on the macro split (health-professional line behind the ?), medication with fat or food on Fasting (a short "never delay a dose" stays visible; the example is behind the ?), the update check, the demo card (how to exit is behind the ?), Finished days on Missing data, History coverage, the Move association note, and the body-composition empty text.
