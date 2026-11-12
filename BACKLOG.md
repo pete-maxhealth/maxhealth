@@ -236,3 +236,10 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] About 90 hand-built pop-up buttons still say Back / Cancel / Close / Done in different styles (e.g. `← Back to edit`, `Close`, `Cancel` full-width vs half-width, the report wizard `← Back`, the Ruler `Back`, QR transfer `Back`). Decide per screen: a full screen (reached by a workflow) gets the round ← top left; a pop-up keeps Cancel/Close but in one style. Needs a rendered side-by-side before changing.
 - [ ] Today's "Sun" explanation line and the Statistics undo toasts are English only.
 - [ ] Demo personas: nothing for the Sun theme (a setting, not data).
+
+## "Something confused me" and the merges (Pete, 12 Nov 2026)
+- Done v3.10.1374: Something confused me (Today footer, Settings → About, search). Shared text stays English on purpose.
+- Open: it only shares or copies; a one-tap "send to Pete" needs a destination he chooses (a Tally form or an address). Not set up, so nothing is sent by the app.
+- Merges agreed (one release each): Patterns + Your routine (Trends); Fasting + When you eat (Reports); What seems to move what + Insights (Reports). Compare Two Periods + Weight vs Protocol left alone.
+- Open: Reports topic row still has a "Treatment" chip for someone on the Losing weight start.
+- Open: Today/Reports intro lines of exactly three lines (Journey, Compare Two Periods, Make a report, Exercise report) are borderline for "a couple of lines".

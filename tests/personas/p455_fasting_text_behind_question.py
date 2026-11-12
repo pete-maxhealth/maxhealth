@@ -12,8 +12,9 @@ with fresh_server() as root, sync_playwright() as pw:
     page.on('pageerror', lambda e: f.add('JS-exception', str(e)[:300])); page.on('dialog', lambda d: d.dismiss())
     ev = page.evaluate
     page.goto('http://localhost:5757/'); page.wait_for_timeout(1500); ev("startDemoMode('doris')"); page.wait_for_timeout(2500)
-    ev("localStorage.setItem('mh_condition','gbm'); mhRenderFastingCard(); mhFibreRender(); switchTab('today'); switchSubTab('today','dashboard')"); page.wait_for_timeout(600)
+    ev("localStorage.setItem('mh_condition','gbm'); mhRenderFastingCard(); mhFibreRender(); switchTab('today'); switchSubTab('today','dash')"); page.wait_for_timeout(600)
     for k in ('fasting', 'fibre'):
+        if not ev(f"!!document.getElementById('dashSection-{k}')?.offsetParent"): f.add('BUG', f'0: the {k} card is not on screen, so the check below would prove nothing')
         v = ev(VIS, k)
         if v: f.add('BUG', f'1: {k} card shows text while closed: {v}')
         ev(f"mhCardInfo('{k}')"); page.wait_for_timeout(200)
@@ -22,7 +23,7 @@ with fresh_server() as root, sync_playwright() as pw:
     for need in ('Your usual', 'Proven: fasting raises', 'Longer is not better', 'Last 30 days'):
         if need not in shown: f.add('BUG', f'3: fasting details lack "{need}"')
     if 'Nothing logged yet' not in ev("document.getElementById('dashSection-fibre').innerText") and '14-day' not in ev("document.getElementById('dashSection-fibre').innerText"): f.add('BUG', '3b: fibre details empty')
-    page.reload(); page.wait_for_timeout(2500); ev("switchTab('today'); switchSubTab('today','dashboard')"); page.wait_for_timeout(500)
+    page.reload(); page.wait_for_timeout(2500); ev("switchTab('today'); switchSubTab('today','dash')"); page.wait_for_timeout(500)
     if not ev(HAS, 'fasting'): f.add('BUG', '4: open state lost on reload')
     for k in ('fasting', 'fibre'):
         ev(f"mhCardInfo('{k}')"); page.wait_for_timeout(150)

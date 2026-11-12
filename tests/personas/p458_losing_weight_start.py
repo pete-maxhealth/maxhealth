@@ -29,11 +29,12 @@ with fresh_server() as root, sync_playwright() as pw:
     hid = json.loads(ev("localStorage.getItem('mh_dashboard_hidden')") or '[]')
     for k in ('symptoms', 'treatment', 'ketosis', 'fasting'):
         if k not in hid: f.add('BUG', f'4: {k} card not hidden: {hid}')
-    for name, js in [('today', "switchTab('today'); switchSubTab('today','dashboard')"), ('log', "switchTab('log')"), ('trends', "switchTab('insights'); switchSubTab('insights','trends')")]:
+    for name, js in [('today', "switchTab('today'); switchSubTab('today','dash')"), ('log', "switchTab('log')"), ('trends', "switchTab('insights'); switchSubTab('insights','trends')")]:
         ev(js); page.wait_for_timeout(700); seen = ev(SEE)
+        if not ev("[...document.querySelectorAll('.subview.active, #view-log.active')].some(e=>e.offsetParent)||document.querySelector('.card-unit,.water-card')?.offsetParent!==null"): f.add('BUG', f'5z: {name} is not showing, so the text check proves nothing')
         if seen: f.add('BUG', f'5: {name} still shows symptom/treatment text: {seen}')
     # the cards come back from Filter (nothing is lost): un-hide one
-    ev("localStorage.setItem('mh_dashboard_hidden','[]')"); ev("switchTab('today'); switchSubTab('today','dashboard')"); page.wait_for_timeout(500)
+    ev("localStorage.setItem('mh_dashboard_hidden','[]')"); ev("switchTab('today'); switchSubTab('today','dash')"); page.wait_for_timeout(500)
     if not ev("!!document.getElementById('dashSection-symptoms')"): f.add('BUG', '6: the Symptoms card cannot be brought back')
     p2, e2, pre2, _ = walk(pw, 'lose', 'gbm')
     if pre2 != 'brain': f.add('BUG', f'7: gbm should still pre-select brain, got {pre2}')

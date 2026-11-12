@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1374 — "Something confused me"
+
+Pete, 12 Nov: a note somewhere easy to reach, so a new user's feedback reaches you without them having to explain it.
+
+- **🤔 Something confused me** at the bottom of Today (beside How it works) and under Settings → About; found by search ("confused", "feedback"). It opens a small sheet: the screen and app version, five things to tick (didn't understand, couldn't find something, did something unexpected, a number looked wrong, too much on the screen) and a box for their own words. **Share** (the phone's share sheet) or **Copy**; Close or tapping outside closes it.
+- Private by design: nothing is sent by the app. The text holds only the screen, the app version, what they ticked and typed; nothing from their log or profile. The shared text stays in English whatever the app language, because it goes to the person who gave them the app.
+- Translated in the eight language packs (machine-assisted). User guide has a Q&A.
+- Test hygiene: p451, p455, p458 and p459 were asking for the Today sub-tab as "dashboard" (the real key is "dash"), so some of their checks never saw the Dashboard. Fixed; the audits were redone with it showing.
+
 ## v3.10.1373 — A "Losing weight" start option
 
 Pete, 12 Nov: dieters should not see Symptoms and Treatment at all.

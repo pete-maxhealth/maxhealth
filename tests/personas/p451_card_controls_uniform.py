@@ -30,7 +30,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # order inside every card: ▲ then ▼ then 👁, left to right, on one row
     for scr in {r['screen'] for r in seen}:
         pass
-    ev("switchTab('today'); switchSubTab('today','dashboard')"); page.wait_for_timeout(400)
+    ev("switchTab('today'); switchSubTab('today','dash')"); page.wait_for_timeout(400)
     ev("document.querySelector('#dash-weight-wrap, .dash-wrap')?.scrollIntoView()")
     rows = ev("""() => { const out = []; document.querySelectorAll('.mh-mv').forEach(e => { const p = e.parentElement; if (!p || p.__seen) return; p.__seen = 1; const k = [...p.querySelectorAll('.mh-mv')].filter(x => x.offsetParent).map(x => Array.from(x.textContent.trim())[0]); if (k.length >= 3) out.push(k.join('')); }); return out; }""")
     bad = [r for r in rows if r not in ('▲▼👁', '▲▼👁')]
