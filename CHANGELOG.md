@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1368 — Deletes ask first AND can be undone
+
+Pete, 12 Nov: keep both "are you sure" and Undo, in the appropriate places.
+
+- **Statistics:** Delete asks "are you sure" again (Keep / Delete) and, once confirmed, shows Undo for 8 seconds. Delete on the shelf (Library) does the same. This replaces the 3.10.1367 behaviour (Undo only).
+- **One generic Undo for deleting things you made:** after you confirm, the app notices exactly which stored values the delete changed and Undo puts those back (8 seconds). Now on: a History day, a History entry, a food in the Library, a recipe, a supplement, an activity, a Today log entry, Clear today, a treatment and its sessions, a symptom, a lab panel, a workout, a routine, a report profile, a saved question, a saved AI prompt, a research digest, a shopping list, a library category, and the shopping "My usuals" ✕ (that one with Undo only, being a light remove). Items that already had their own Undo (shopping list ✕, cupboards, import, CSV) are unchanged.
+- **An Undo is no longer replaced by a passing message:** the "Library saved to disk" toast that arrives a moment after a Library delete used to wipe the Undo from the screen. A plain toast now waits while an Undo is on offer; warnings and errors still show.
+- Bulk and reset actions (Clear all, Reset layout, Redo setup, Restore backup) keep "are you sure" only, as before.
+- Tests: p454 (confirm, Keep, delete, Undo puts it back exactly: day, entry, food, log entry, recipe), p452 (Statistics), p364 (destructive crawl).
+
 ## v3.10.1367 — One back arrow, one ✕, one card control; Sun theme; Statistics shelf
 
 Pete, 12 Nov: "Check for occurrences of X to close or delete", "a left facing arrow to go back is needed top left for uniformity", "the up and down buttons only half showing ... make them all slightly smaller", "what if you just wanted to not display it, but keep it?", "Delete is a bit misleading", "follow system theme ... should switch in time with sunset and sunrise".

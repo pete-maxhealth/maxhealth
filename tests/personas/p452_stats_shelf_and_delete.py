@@ -1,4 +1,4 @@
-"""Persona 452: a statistic can be taken off the display and kept (Put back in Library -> shelf in the Library, Put back brings it home), Delete is a real delete with an Undo, shelf survives a reload and is in the backup (v3.10.1367). Invented data."""
+"""Persona 452: a statistic can be taken off the display and kept (Put back in Library -> shelf in the Library, Put back brings it home), Delete asks "are you sure" and can be undone, shelf survives a reload and is in the backup (v3.10.1367). Invented data."""
 import sys, json; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -43,13 +43,15 @@ with fresh_server() as root, sync_playwright() as pw:
     # 8: real delete, Undo comes back at the same place
     ids = ev("mhStatLoad().map(d => d.id)"); i = 1; did = ids[i]; dname = names()[i]
     ev(f"mhStatDelete('{did}')"); page.wait_for_timeout(300)
+    if not ev("!!document.querySelector('.app-modal-overlay')"): f.add('BUG', '8c: delete does not ask "are you sure" first')
+    if dname not in names(): f.add('BUG', '8d: it was deleted before the answer')
+    page.locator('#appModalConfirm').click(timeout=4000); page.wait_for_timeout(300)
     if dname in names() or len(names()) != 2: f.add('BUG', f'8: delete: {names()}')
     if shelf(): f.add('BUG', f'8b: a deleted statistic went to the shelf: {shelf()}')
-    if ev("!!document.querySelector('.app-modal, #appModal')"): f.add('BUG', '8c: delete still asks "are you sure"')
     page.locator('#toast .toast-undo').first.click(timeout=4000); page.wait_for_timeout(300)
     if names()[i] != dname or len(names()) != 3: f.add('BUG', f'9: Undo of delete: {names()}')
     # 10: delete from the shelf, with Undo
-    ev(f"mhStatShelve('{did}')"); page.wait_for_timeout(200); ev(f"mhStatShelfDelete('{did}')"); page.wait_for_timeout(200)
+    ev(f"mhStatShelve('{did}')"); page.wait_for_timeout(200); ev(f"mhStatShelfDelete('{did}')"); page.wait_for_timeout(200); page.locator('#appModalConfirm').click(timeout=4000); page.wait_for_timeout(300)
     if shelf(): f.add('BUG', f'10: shelf delete: {shelf()}')
     page.locator('#toast .toast-undo').first.click(timeout=4000); page.wait_for_timeout(200)
     if len(shelf()) != 1: f.add('BUG', f'10b: Undo of shelf delete: {shelf()}')

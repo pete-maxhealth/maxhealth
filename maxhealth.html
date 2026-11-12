@@ -6638,7 +6638,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1367'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1368'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -39601,6 +39601,54 @@ function appConfirm(message, onConfirm, onCancel, dangerMode=false, labels=null)
   overlay.onclick = e => { if (e.target === overlay) { overlay.remove(); if (onCancel) onCancel(); } };
 }
 
+// ── Undo for deletions (v3.10.1368) ─────────────────────────────────────────────────────────────────────────────
+// Pete, 12 Nov: "are you sure" and Undo are different things, so a delete of something you made asks first AND can be undone.
+// mhUndoable runs a delete, notices which stored values it changed, and offers Undo for 8 seconds that puts exactly those values back.
+const MH_UNDO_SKIP = /(_log$|_trace$|cache|_ts$|_at$|last_|_seen|debug|mh_lang_|_backup$|_b2$)/;
+function mhUndoSnap() {
+  const o = {}; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k.indexOf('maxhealth') === 0 || k.indexOf('mh_') === 0)) o[k] = localStorage.getItem(k); } } catch (_) {}
+  let demoLib = null; try { if (typeof _demoMode !== 'undefined' && _demoMode && window._demoLibSession) demoLib = JSON.stringify(window._demoLibSession); } catch (_) {}
+  return { o, demoLib };
+}
+function mhUndoRefresh() {
+  try { state = loadState(); } catch (_) {}
+  ['renderHistory', 'renderLibrary', 'renderRecipeList', 'renderSupplements', 'renderSupplementSettings', 'renderActivityCard', 'renderLog', 'renderTodayLog', 'updateDashboard', 'renderTreatmentCard', 'renderSymptomCard', 'renderLabResults', 'renderStrengthHistory', 'renderRoutineList', 'mhShopRender', 'renderReports'].forEach(fn => { try { if (typeof window[fn] === 'function') window[fn](); } catch (_) {} });
+}
+function mhUndoable(label, fn, thisArg, args) {
+  const snap = mhUndoSnap(); let r; let threw = null;
+  try { r = fn.apply(thisArg, args || []); } catch (e) { threw = e; }
+  const after = mhUndoSnap(), restore = {};
+  Object.keys(Object.assign({}, snap.o, after.o)).forEach(k => { if (!MH_UNDO_SKIP.test(k) && snap.o[k] !== after.o[k]) restore[k] = snap.o[k] === undefined ? null : snap.o[k]; });
+  const demoChanged = snap.demoLib !== after.demoLib;
+  if (!threw && (Object.keys(restore).length || demoChanged)) {
+    showToast(String(label || 'Deleted').replace(/</g, '&lt;') + ' ✓', 'Undo', () => {
+      try { Object.keys(restore).forEach(k => { if (restore[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, restore[k]); }); } catch (_) {}
+      try { if (demoChanged) window._demoLibSession = snap.demoLib ? JSON.parse(snap.demoLib) : null; } catch (_) {}
+      mhUndoRefresh(); try { saveState(); } catch (_) {} showToast('Put back ✓');
+    }, 8000);
+  }
+  if (threw) throw threw; return r;
+}
+// A function that asks "are you sure" first: its confirm callback becomes undoable.
+function mhUndoConfirm(name, label) {
+  const orig = window[name]; if (typeof orig !== 'function' || orig._mhUndo) return;
+  const w = function () {
+    const oc = window.appConfirm, self = this, args = arguments;
+    window.appConfirm = (m, ok, cancel, danger, labels) => { window.appConfirm = oc; return oc(m, ok ? () => mhUndoable(label, ok) : ok, cancel, danger, labels); };
+    try { return orig.apply(self, args); } finally { window.appConfirm = oc; }
+  };
+  w._mhUndo = true; window[name] = w;
+}
+// A function that does the delete itself (the question was asked by the caller).
+function mhUndoWrap(name, label) {
+  const orig = window[name]; if (typeof orig !== 'function' || orig._mhUndo) return;
+  const w = function () { return mhUndoable(label, orig, this, arguments); }; w._mhUndo = true; window[name] = w;
+}
+[['deleteHistDay', 'Day deleted'], ['deleteHistEntry', 'Entry deleted'], ['deleteRecipe', 'Recipe deleted'], ['deleteTreatment', 'Treatment deleted'], ['deleteSymptom', 'Symptom deleted'], ['deleteLabPanel', 'Lab panel deleted'],
+ ['deleteStrengthSession', 'Workout deleted'], ['deleteRoutine', 'Routine deleted'], ['deleteReportProfile', 'Report profile deleted'], ['deleteLibraryChoiceItem', 'Deleted'], ['deleteSavedQuery', 'Saved question deleted'],
+ ['deleteResearchDigest', 'Digest deleted'], ['mhShopListDelete', 'List deleted'], ['deleteLibraryCategoryFromAll', 'Category deleted'], ['deleteSavedPromptConfirm', 'Prompt deleted']].forEach(a => mhUndoConfirm(a[0], a[1]));
+[['_doDeleteLibraryItem', 'Food deleted'], ['_doRemoveSupplement', 'Supplement removed'], ['_doRemoveActivity', 'Activity removed'], ['_doDeleteLogEntry', 'Entry deleted'], ['_doClearLog', 'Today cleared'], ['deleteTreatmentSession', 'Session deleted'], ['mhShopUsualDelete', 'Usual removed']].forEach(a => mhUndoWrap(a[0], a[1]));
+
 function appPrompt(message, placeholder, onConfirm, defaultVal='', onCancel) {
   const overlay = document.createElement('div');
   overlay.className = 'app-modal-overlay';
@@ -39668,9 +39716,13 @@ function updateDataBackupWarningForMode(isLocal) {
   headline.style.color = 'var(--yellow)';
 }
 
+let _toastUndoUntil = 0;
 function showToast(msg, actionLabel, actionFn, duration = 2000) {
   const t = document.getElementById('toast');
   if (!t) { console.warn('Toast:', msg); return; }
+  // An Undo that is still on offer is not replaced by a plain passing message (for example the "Library saved to disk" that arrives a moment after a delete); warnings and failures still get through (v3.10.1368).
+  if (!(actionLabel && actionFn) && Date.now() < _toastUndoUntil && t.querySelector('.toast-undo') && !/⚠|fail|error|couldn|could not|can.t|cannot|wrong/i.test(String(msg))) return;
+  if (actionLabel && actionFn) _toastUndoUntil = Date.now() + Math.max(duration, 2000);
   if (_toastTimer) clearTimeout(_toastTimer);
   t.innerHTML = `<span>${msg}</span>`;
   if (actionLabel && actionFn) {
@@ -56634,15 +56686,21 @@ function mhStatUnshelve(id) {
   const d = sh.splice(i, 1)[0]; delete d.hidden; const a = mhStatLoad(); a.unshift(d); mhStatSave(a); mhStatShelfSave(sh); mhStatAfterChange(); showToast('Back in your statistics ✓');
 }
 function mhStatShelfDelete(id) {
-  const sh = mhStatShelfLoad(), i = sh.findIndex(x => x.id === id); if (i < 0) return;
-  const before = JSON.stringify(sh), nm = sh[i].name || mhStatTitle(sh[i]); sh.splice(i, 1); mhStatShelfSave(sh); mhStatAfterChange();
-  showToast('"' + mhStatEsc(nm) + '" deleted', 'Undo', () => { mhStatShelfSave(JSON.parse(before)); mhStatAfterChange(); }, 8000);
+  const sh0 = mhStatShelfLoad(), d = sh0.find(x => x.id === id); if (!d) return;
+  appConfirm('Delete "' + mhStatEsc(d.name || mhStatTitle(d)) + '" for good? You can undo it for a few seconds.', () => {
+    const sh = mhStatShelfLoad(), i = sh.findIndex(x => x.id === id); if (i < 0) return;
+    const before = JSON.stringify(sh), nm = sh[i].name || mhStatTitle(sh[i]); sh.splice(i, 1); mhStatShelfSave(sh); mhStatAfterChange();
+    showToast('"' + mhStatEsc(nm) + '" deleted', 'Undo', () => { mhStatShelfSave(JSON.parse(before)); mhStatAfterChange(); }, 8000);
+  }, null, true, { confirm: 'Delete', cancel: 'Keep' });
 }
 function mhStatDelete(id) {
-  const a = mhStatLoad(), i = a.findIndex(x => x.id === id); if (i < 0) return;
-  const before = JSON.stringify(a), nm = a[i].name || mhStatTitle(a[i]);
-  a.splice(i, 1); mhStatSave(a); mhStatAfterChange();
-  showToast('"' + mhStatEsc(nm) + '" deleted. Your food and exercise history is not touched.', 'Undo', () => { try { localStorage.setItem(MH_ST_KEY, before); } catch (_) {} mhStatAfterChange(); }, 8000);
+  const a0 = mhStatLoad(), d = a0.find(x => x.id === id); if (!d) return;
+  appConfirm('Delete "' + mhStatEsc(d.name || mhStatTitle(d)) + '"? Your food and exercise history is not touched, only this saved question. You can undo it for a few seconds.', () => {
+    const a = mhStatLoad(), i = a.findIndex(x => x.id === id); if (i < 0) return;
+    const before = JSON.stringify(a), nm = a[i].name || mhStatTitle(a[i]);
+    a.splice(i, 1); mhStatSave(a); mhStatAfterChange();
+    showToast('"' + mhStatEsc(nm) + '" deleted', 'Undo', () => { try { localStorage.setItem(MH_ST_KEY, before); } catch (_) {} mhStatAfterChange(); }, 8000);
+  }, null, true, { confirm: 'Delete', cancel: 'Keep' });
 }
 
 // ── library ──
