@@ -246,3 +246,6 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 - Open (merge 1): someone who had hidden only the old separate Your routine card now sees Your usual inside the merged tile (it follows the Patterns tile's hidden state). Small, Premium-only; add a per-part hide only if anyone asks.
 - Done v3.10.1376: Fasting + When you eat, and Insights + What seems to move what, are merged (Reports). Open: someone who had hidden only the old separate When you eat or What seems to move what now sees that part inside the merged card (it follows the card's hidden state). Same small caveat as the Patterns merge.
+
+## Sleep conflict: only the total comes across (Pete, 12 Nov)
+- Chose Zepp over Ringconn: only Total sleep saved (labelled "typed in"), Deep/Light/REM/Awake empty. server.py /resolve-sleep-conflict saves sleep_duration only via save_manual_entry. To do: label the source as the chosen device, copy stages if the conflict session carries them. Unknown whether the Kotlin launcher sends stages: get the card's bug report on the next conflict before building.
