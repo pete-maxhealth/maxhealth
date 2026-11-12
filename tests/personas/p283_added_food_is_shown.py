@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
     # add washing up liquid as non-nutritional through Add a food, then Back
     ev("mhShopView('stockadd')"); page.wait_for_timeout(300)
     ev("mhStockAddNonFood('Zzqx Washing up liquid')"); page.wait_for_timeout(400)
-    page.click('button:has-text("Back")'); page.wait_for_timeout(800)
+    page.click('#mhShopPane button:has-text("Save")'); page.wait_for_timeout(800)
     names = ev("[...document.querySelectorAll('#stockctlCard [data-stock]')].map(e=>e.dataset.stock)")
     if not ev("!!mhStockLoad().items[mhShopKey('Zzqx Washing up liquid')]"): f.add('BUG', 'the added food is in My cupboards')
     if 'Zzqx Washing up liquid' in names: f.add('BUG', f'its aisle was shut, so it stays shut: {names}')

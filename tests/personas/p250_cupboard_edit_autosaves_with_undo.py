@@ -17,7 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
     txt = ev("document.getElementById('mhShopPane').innerText")
     if page.locator('#mhStkSave').count(): f.add('BUG', '1: no Save button on an existing item')
     if 'Cancel' in txt: f.add('BUG', '2: no Cancel (it is Back)')
-    if not page.locator('button:has-text("Back")').count(): f.add('BUG', '3: a Back button')
+    if not page.locator('button:has-text("Save")').count(): f.add('BUG', '3: a Save button')
     if page.locator('#mhStkUndo').count(): f.add('BUG', '4: nothing to undo yet, so no Undo')
     # change the stock: saved straight away, Undo appears and says what it will put back
     page.fill('#mhStkLevel', '500'); page.press('#mhStkLevel', 'Tab'); page.wait_for_timeout(300)
@@ -44,7 +44,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if ev("mhStockLoad().items[%s].store || ''" % K) != '': f.add('BUG', '15: Undo restores where it is kept')
     # Back leaves what was saved
     page.fill('#mhStkLevel', '650'); page.press('#mhStkLevel', 'Tab'); page.wait_for_timeout(300)
-    page.click('button:has-text("Back")'); page.wait_for_timeout(300)
+    page.click('#mhShopPane button:has-text("Save")'); page.wait_for_timeout(300)
     if level() != 650: f.add('BUG', f'16: Back keeps what you changed: {level()}')
     # a NEW item still has one explicit button and creates nothing until you press it
     ev("mhStockEditView(mhShopKey('Zzqx Sugar'), 'Zzqx Sugar')"); page.wait_for_timeout(300)
