@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1372 — Weight vs Protocol knows your goal
+
+Pete, 12 Nov: shouldn't weight v protocol have gain, loss and maintain, or the activity scale?
+
+- Found: the tile coloured any weight loss yellow (a warning), whatever the goal, so someone losing weight on purpose saw their progress flagged. The "total change" colour now follows the goal: green when moving the way you want (down for Lose, up for Gain, steady for Maintain), yellow when moving against it.
+- The tile now says your goal and activity level in one line ("Your goal: Losing weight · Activity: Lightly active · moving the way you want ✓").
+- Not changed: the weight-range check, the by-period list, the date range.
+
 ## v3.10.1371 — Weight-loss calorie suggestion has a floor
 
 Pete, 12 Nov: Jill and her friends are starting a diet, so the app was checked as a brand-new general user.
