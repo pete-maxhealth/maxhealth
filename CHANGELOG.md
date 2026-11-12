@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1382 — Nine more three-line hints cut to two
+
+- Cut to two lines, the rest behind the standard "?" (or simply shorter): the kg display note (the stones and pounds tip is behind the ?), the requirements note on the macro split (health-professional line behind the ?), medication with fat or food on Fasting (a short "never delay a dose" stays visible; the example is behind the ?), the update check, the demo card (how to exit is behind the ?), Finished days on Missing data, History coverage, the Move association note, and the body-composition empty text.
+- Left as they are on purpose: the share summary (it is the list of what is shared, so it stays in view) and the step-tier line (a one-line definition).
+- Translated in all eight languages (machine-assisted). New test p467 (each visible line two lines or fewer at 390px, each ? shows and hides, the safety line stays visible, Spanish). Also checked: p406, p424, p72, p383, p466, p374, p61.
+
 ## v3.10.1381 — Timing suggestions: source on view, "summaries, not medical advice" line
 
 - Each timing suggestion now shows its **Source** link on the card itself (it was behind the "?" only), and a standing line under the block says: *Summaries by MaxedHealth of the linked sources. Not medical advice. Check with your care team.* The help text on the block and on the Settings tile now says the summaries and evidence labels are ours, not a doctor's. Wording stays "studies found", never "you should".
