@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1369 — Fasting card: its text sits behind the "?"
+
+Pete, 12 Nov: "Text everywhere!" (Fasting and Fibre cards open, with paragraphs showing).
+
+- **Fasting card:** the "your usual" line, its range picker and the condition note (Proven / Early stage) were outside the details block, so they showed even with the "?" closed. They are inside it now; closed, the card is just the title, time and bar. One tap on "?" shows the lot, a second hides it, and it stays as left after reload.
+- Checked in the demo persona: no other Today, Move, Supplements, Log, Trends, Statistics or Reports screen shows a block of explanatory text longer than about three lines with the "?" closed (the one long block found is a Patterns result, not an explainer).
+- Not changed: if you had already tapped "?" open on a card, it stays open until you tap it again.
+
 ## v3.10.1368 — Deletes ask first AND can be undone
 
 Pete, 12 Nov: keep both "are you sure" and Undo, in the appropriate places.

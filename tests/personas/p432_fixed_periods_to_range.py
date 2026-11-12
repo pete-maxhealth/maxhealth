@@ -31,7 +31,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("document.getElementById('mhWtTrendModal').remove()")
     page.locator('#weightTrendPrediction').scroll_into_view_if_needed(); page.screenshot(path='/tmp/claude-0/p432_weight.png')
     # ---- 2. fasting usual
-    ev("localStorage.removeItem('mh_rg_fastusual'); mhRenderFastingCard()"); page.wait_for_timeout(300)
+    ev("localStorage.removeItem('mh_rg_fastusual'); localStorage.setItem('mh_cardinfo_fasting','open'); mhCardBodyApply(); mhRenderFastingCard()"); page.wait_for_timeout(300)  # the picker sits behind the card's ? (12 Nov 2026)
     u = ev("document.getElementById('fastUsualLine').textContent")
     if '29 logged days' not in u or 'last 30 days' not in u: f.add('BUG', 'fasting usual starts on 30 days: ' + u[:120])
     if not ev("!!document.querySelector('#fastUsualRange select.mh-rg-sel')"): f.add('BUG', 'fasting card has the range control')
