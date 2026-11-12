@@ -6243,6 +6243,10 @@ function obSetCondition(cond) {
   });
 }
 
+// Weight-loss calorie suggestion: TDEE minus 500, but never below the usual no-supervision minimum (1,200 kcal women, 1,500 men),
+// and never above maintenance. Only the SUGGESTION is floored; a target someone has typed or confirmed is never touched (v3.10.1371).
+function mhLoseKcalFloor(sex) { return sex === 'male' ? 1500 : 1200; }
+function mhLoseKcal(tdee, sex) { return Math.min(tdee, Math.max(tdee - 500, mhLoseKcalFloor(sex || localStorage.getItem('mh_sex')))); }
 function calcTDEE() {
   const weightRaw = parseFloat(document.getElementById('onboardWeight').value);
   const weight = getWeightInKg(weightRaw);
@@ -6263,13 +6267,14 @@ function calcTDEE() {
   const tdee = Math.round(bmr * activityFactors[_obActivity]);
 
   const goalAdjust = { lose: -500, maintain: 0, gain: 250 };
-  const target = tdee + goalAdjust[_obGoal];
+  const target = _obGoal === 'lose' ? mhLoseKcal(tdee, _obSex) : tdee + goalAdjust[_obGoal];
+  const flooredLose = _obGoal === 'lose' && target > tdee - 500;
 
   const goalLabels = { lose: '−500 kcal deficit', maintain: 'maintenance', gain: '+250 kcal surplus' };
 
   document.getElementById('tdeeResult').style.display = 'block';
   document.getElementById('tdeeKcal').textContent = target + ' kcal';
-  document.getElementById('tdeeBreakdown').textContent = `BMR ${Math.round(bmr)} kcal · TDEE ${tdee} kcal · ${goalLabels[_obGoal]}`;
+  document.getElementById('tdeeBreakdown').textContent = `BMR ${Math.round(bmr)} kcal · TDEE ${tdee} kcal · ${flooredLose ? 'raised to the lowest we suggest without medical advice (' + mhLoseKcalFloor(_obSex) + ' kcal)' : goalLabels[_obGoal]}`;
 
   // Auto-fill the calories field
   document.getElementById('onboardKcal').value = target;
@@ -6638,7 +6643,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1370'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1371'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -12262,7 +12267,7 @@ function renderSuggestedTargets() {
   const wtHigh = getWeightTargetHigh();
   const isOffTargetMaintain = goal === 'maintain' && wtLow && wtHigh && (weight > wtHigh || weight < wtLow);
   const CORRECTION_KCAL = 150;
-  const calTarget = goal === 'lose'     ? tdee - 500
+  const calTarget = goal === 'lose'     ? mhLoseKcal(tdee, sex)
                   : goal === 'maintain' ? (isOffTargetMaintain ? tdee + (weight > wtHigh ? -CORRECTION_KCAL : CORRECTION_KCAL) : tdee)
                   :                       tdee + 400; // gain
 
@@ -13035,7 +13040,7 @@ function initSettings() {
   // Falling back to the real active target instead of a hardcoded number
   // means switching goals no longer erases what you'd set.
   const kcalMap = {
-    lose:     tdee - 500,
+    lose:     mhLoseKcal(tdee),
     maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
     gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
   };
@@ -13181,7 +13186,7 @@ function setGoal(goal) {
   // active target, then a hardcoded default, for a phase that's never
   // actually been confirmed yet.
   const kcalMap = {
-    lose:     tdee - 500,
+    lose:     mhLoseKcal(tdee),
     maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
     gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
   };
@@ -13855,7 +13860,7 @@ function saveTdee() {
     // input-event-listener on the fat target field each time it's called.
     const currentGoal = localStorage.getItem('mh_goal') || 'gain';
     const kcalMap = {
-      lose:     val - 500,
+      lose:     mhLoseKcal(val),
       maintain: parseInt(localStorage.getItem('mh_target_kcal_maintain')) || parseInt(localStorage.getItem('mh_target_kcal')) || 3200,
       gain:     parseInt(localStorage.getItem('mh_target_kcal_gain'))     || parseInt(localStorage.getItem('mh_target_kcal')) || 3670,
     };

@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1371 — Weight-loss calorie suggestion has a floor
+
+Pete, 12 Nov: Jill and her friends are starting a diet, so the app was checked as a brand-new general user.
+
+- Found: the loss suggestion was always "maintenance minus 500". A small woman (52 kg, 160 cm) was offered 1,162 kcal, below her resting needs. Now the suggestion never goes below 1,200 kcal (women) or 1,500 kcal (men), and never above maintenance. When the floor applies, set-up says so ("raised to the lowest we suggest without medical advice").
+- Same helper in the set-up wizard, the Settings suggested-targets calculator and the goal switcher, so they cannot disagree. A target you have typed or confirmed is never rewritten.
+- Not changed: gain/maintain; the historical-phase and projection maths; "Keep it simple" is already the gentler start for someone who is not tracking a condition.
+
 ## v3.10.1370 — Set-up screen: the own-key buttons no longer say "paid"
 
 Pete, 12 Nov: a friend of Jill's saw "paid" on the AI choices during set-up and panicked.
