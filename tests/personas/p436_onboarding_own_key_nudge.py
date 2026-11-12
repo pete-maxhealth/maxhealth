@@ -17,7 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
     for bad in ('paid for', 'pays for', 'only pay your AI provider', 'free Claude'):
         if bad.lower() in txt.lower(): f.add('BUG', f'1d: scary or wrong wording left on the screen: {bad}')
     labels = ev("[...document.querySelectorAll('[id^=ob-provBtn-]')].map(b=>b.id.replace('ob-provBtn-','')+':'+b.innerText.trim())")
-    if labels != ['claude:Shared account (free)', 'claude-own:Claude (own key, paid)', 'openai:OpenAI (own key, paid)']: f.add('BUG', f'2: free and paid are labelled on the choices: {labels}')
+    if labels != ['claude:Shared account (free)', 'claude-own:Own Claude key (optional)', 'openai:Own OpenAI key (optional)']: f.add('BUG', f'2: free and paid are labelled on the choices (12 Nov 2026: the word paid was dropped from the buttons): {labels}')
     cap = ev("(()=>{ try { localStorage.setItem('mh_test','1'); } catch(_){}; return String(_checkProxyDailyCap.toString()) })()")
     if 'pays for' in cap or 'free Claude or OpenAI' in cap: f.add('BUG', '6: the daily-limit message no longer says someone pays for it or that a key is free')
     if not ev("document.getElementById('ob-provBtn-claude').classList.contains('active')"): f.add('BUG', '3: shared account is still selected by default')
