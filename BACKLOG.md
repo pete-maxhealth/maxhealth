@@ -234,7 +234,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] Shopping screens: top-left ← on every sub-screen; Save on the stock-item screen (v3.10.1367).
 - [x] One ✕ (inline) and one round close ✕; one ▲ ▼ 👁 card control; scroll arrows (v3.10.1367).
 - [x] (v3.10.1378: pop-ups done, 34 buttons; compact inline editors and the Ruler toolbar left on purpose) About 90 hand-built pop-up buttons still said Back / Cancel / Close / Done in different styles (e.g. `← Back to edit`, `Close`, `Cancel` full-width vs half-width, the report wizard `← Back`, the Ruler `Back`, QR transfer `Back`). Decide per screen: a full screen (reached by a workflow) gets the round ← top left; a pop-up keeps Cancel/Close but in one style. Needs a rendered side-by-side before changing.
-- [ ] Today's "Sun" explanation line and the Statistics undo toasts are English only.
+- [x] (v3.10.1379) Today's "Sun" explanation line and the Statistics undo toasts are English only.
 - [ ] Demo personas: nothing for the Sun theme (a setting, not data).
 
 ## "Something confused me" and the merges (Pete, 12 Nov 2026)
@@ -249,3 +249,6 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 ## Sleep conflict: only the total comes across (Pete, 12 Nov)
 - Chose Zepp over Ringconn: only Total sleep saved (labelled "typed in"), Deep/Light/REM/Awake empty. server.py /resolve-sleep-conflict saves sleep_duration only via save_manual_entry. To do: label the source as the chosen device, copy stages if the conflict session carries them. Unknown whether the Kotlin launcher sends stages: get the card's bug report on the next conflict before building.
+
+- Open (measured 12 Nov, v3.10.1379): 12 more explainer texts are exactly three lines at 390px, all on Settings (hints for kg display, requirements split, activity tiers, share summary, medication-with-fat, update check, demo) and Import (finished days, history coverage) plus a Move "association" note and the body-composition empty text. Not yet behind a "?".
+- Done v3.10.1379: Reports Treatment chip follows hidden cards; Losing weight start hides it.

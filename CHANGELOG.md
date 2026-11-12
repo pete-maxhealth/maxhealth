@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1379 — Losing weight start hides Treatment on Reports; shorter intro lines; Sun note and undo toasts translated
+
+- **Reports topic row:** a chip no longer shows when every card under it is hidden, and it comes back when you show one again (the chip you are standing on never vanishes). The **Losing weight** start now also hides the Treatment card on Reports (it already hid Symptoms and Treatment on Today), so a dieter no longer sees a Treatment chip. Test p464.
+- **Three explainer lines shortened to two** (Weight vs Protocol, Patterns & routine, the photo-meal check). The other three-line texts on Settings and Import (hints and explanations, 12 of them) are left, listed in BACKLOG.
+- **Translated (eight languages, machine-assisted):** the Sun theme note (with the sunrise and sunset times filled in, and the polar-day wording) and the Statistics "deleted" and "put back in the Library" toasts. Test p465 (Spanish and German, English unchanged).
+- Also checked: p92, p158, p457, p383, p461, p71, p460, p453, p452, p454, p424, p406, p136, p140, p405, p01.
+
 ## v3.10.1378 — One style for pop-up Close, Cancel and Back
 
 Pete's standard: a control that does the same job looks and acts the same.
