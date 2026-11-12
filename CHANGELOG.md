@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1386 — Move: less text
+
+- Pete (12 Nov): "Lots of text" on Move. "What your own days suggest" now shows only the strongest finding, in one short line without the day counts (they sit behind the "?"). The AI context still gets up to three. The heaviest-set note and the "nothing stands out yet" explanation are one short line each with the rest behind a "?".
+- Translated in all eight languages. Also checked: p467, p177, p176, p198.
+
 ## v3.10.1385 — Translation sweep: 49 more sentences in all eight languages
 
 - A Spanish scan of Today, History, Settings, Move and the import screens found whole help paragraphs, tooltips and labels still in English. 49 of them (what-would-it-earn, the AI hint lines, Patterns note, report intro, GBM research note, tips note, history-format help, polyols note, weather help, water target, storage warning, backup note, CSV/import steps, paste-meal text, cupboards, group-check note, coach buttons and more) are now in es, de, fr, tr, pt, it, pl and nl. Machine-assisted; not checked by native speakers.
