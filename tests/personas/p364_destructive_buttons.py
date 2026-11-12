@@ -60,12 +60,13 @@ with fresh_server() as root, sync_playwright() as pw:
             try: txt = ev("document.body.innerText")
             except Exception: page.wait_for_timeout(800); txt = ev("document.body.innerText")
             undo = bool(re.search(r'undo|restore|put (it )?back|backup', txt, re.I))
+            undo_toast = bool(ev("!!document.querySelector('#toast.show .toast-undo')"))   # a real delete that offers Undo needs no confirm box (Pete 12 Nov)
             row[mode] = dict(asked=conf[:2], changed=changed[:8], undo_mentioned=undo)
-            if mode == 'cancel' and changed: f.add('BUG', f"{tab} / '{label}': CANCEL still changed {changed[:6]}")
+            if mode == 'cancel' and changed and not (undo_toast and not conf): f.add('BUG', f"{tab} / '{label}': CANCEL still changed {changed[:6]}")
             prot = [k for k in changed if PROTECTED.match(k)]
             row[mode]['protected_changed'] = prot
             if mode == 'confirm' and prot and LAYOUT_ONLY.search(label + ' ' + tab) : f.add('BUG', f"{tab} / '{label}': a layout button changed your data/profile keys {prot[:6]}")
-            if mode == 'confirm' and changed and not conf: f.add('review', f"{tab} / '{label}': changed {changed[:5]} with NO confirmation asked")
+            if mode == 'confirm' and changed and not conf and not undo_toast: f.add('review', f"{tab} / '{label}': changed {changed[:5]} with NO confirmation asked")
         report.append(row)
     json.dump(dict(report=report, findings=[list(x) for x in f]), open('/tmp/claude-0/crawl/p364.json', 'w'), indent=1, ensure_ascii=False)
 for r in report: print(r['screen'], '|', r['button'], '| asked:', (r.get('confirm') or {}).get('asked') if isinstance(r.get('confirm'), dict) else r.get('confirm'), '| changed on confirm:', (r.get('confirm') or {}).get('changed') if isinstance(r.get('confirm'), dict) else '-')
