@@ -6657,7 +6657,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1383'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1384'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -41923,10 +41923,12 @@ function renderBodyCompCard() {
   };
   // Over the chosen range (the Move card's chips): fat and muscle mass as two lines, each on its own scale, with the change across the range (v3.10.1216).
   const rr = mhMoveFilter(rows, 'bodycomp'), rLab = ({ 7: 'the last 7 days', 30: 'the last 30 days', 90: 'the last 90 days', 0: 'all your readings', '-1': 'your chosen dates' })[mhMoveRange('bodycomp')];
-  const lineSvg = (vals, col) => {
+  // v3.10.1383: all lines share ONE kg axis, drawn as change from where the range started (dashed zero line), so a 2.7 kg change in 68 kg of muscle no longer looks like a cliff
+  // (each line used to be stretched to fill the box on its own).
+  const lineSvg = (vals, col, mn, mx, dash) => {
     const v = vals.filter(x => x != null && !isNaN(x)); if (v.length < 2) return '';
-    const mn = Math.min(...v), mx = Math.max(...v), sp = (mx - mn) || 1, W = 300, H = 56, pts = vals.map((x, i) => (x == null || isNaN(x)) ? null : [(i / Math.max(1, vals.length - 1)) * W, H - 4 - ((x - mn) / sp) * (H - 8)]).filter(Boolean);
-    return '<polyline fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="' + pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '"/>';
+    const sp = (mx - mn) || 1, W = 300, H = 72, pts = vals.map((x, i) => (x == null || isNaN(x)) ? null : [(i / Math.max(1, vals.length - 1)) * W, H - 4 - ((x - mn) / sp) * (H - 8)]).filter(Boolean);
+    return '<polyline fill="none" stroke="' + col + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"' + (dash ? ' stroke-dasharray="4 3"' : '') + ' points="' + pts.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ') + '"/>';
   };
   let rangeBlock = '';
   if (rr.length >= 2) {
@@ -41936,9 +41938,16 @@ function renderBodyCompCard() {
     const chg = arr => { const v = arr.filter(x => !isNaN(x)); if (v.length < 2) return null; const k = Math.max(1, Math.min(7, Math.floor(v.length / 3))), av = a => a.reduce((x, y) => x + y, 0) / a.length; return av(v.slice(-k)) - av(v.slice(0, k)); };
     const wts = rr.map(r => parseFloat(r.weight)), dWt = chg(wts);
     const dMu = chg(mus), dFa = chg(fat);
+    const base = arr => { const v = arr.filter(x => !isNaN(x)); if (!v.length) return 0; const k = Math.max(1, Math.min(7, Math.floor(v.length / 3))); return v.slice(0, k).reduce((x, y) => x + y, 0) / k; };
+    const rel = arr => { const b0 = base(arr); return arr.map(x => isNaN(x) ? null : x - b0); };
+    const mRel = rel(mus), fRel = rel(fat), wRel = rel(wts);
+    const allRel = [].concat(mRel, fRel, wRel).filter(x => x != null);
+    const sMin = Math.min(0, ...allRel), sMax = Math.max(0, ...allRel), zeroY = 72 - 4 - ((0 - sMin) / ((sMax - sMin) || 1)) * 64;
+    const share = (dWt != null && dMu != null && dWt <= -1 && dMu < 0) ? Math.round(Math.min(1, dMu / dWt) * 100) : null;
     rangeBlock = '<div style="font-size:10px;letter-spacing:0.08em;font-family:Space Mono,monospace;color:var(--text3);margin:14px 0 4px;">OVER THE ' + rLab.toUpperCase() + ' · ' + rr.length + ' READINGS</div>'
-      + '<svg viewBox="0 0 300 56" preserveAspectRatio="none" style="width:100%;height:64px;display:block;">' + lineSvg(mus, '#2deb8f') + lineSvg(fat, '#c4a2f0') + '</svg>'
-      + '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;font-family:\'Space Mono\',monospace;margin-top:4px;"><span style="color:#2deb8f;">Muscle ' + (dMu != null ? mhWtDelta(dMu) : '—') + '</span><span style="color:#c4a2f0;">Fat ' + (dFa != null ? mhWtDelta(dFa) : '—') + '</span>' + (dWt != null ? '<span style="color:var(--text2);">' + mhLangT('Weight') + ' ' + mhWtDelta(dWt) + '</span>' : '') + '<span style="color:var(--text3);">' + rr[0].date + ' to ' + rr[rr.length - 1].date + ' · ' + mhLangT('averages at each end') + '</span></div>';
+      + '<svg viewBox="0 0 300 72" preserveAspectRatio="none" style="width:100%;height:84px;display:block;">' + (zeroY != null ? '<line x1="0" x2="300" y1="' + zeroY.toFixed(1) + '" y2="' + zeroY.toFixed(1) + '" stroke="var(--text3)" stroke-width="1" stroke-dasharray="2 3" opacity="0.6"/>' : '') + lineSvg(wRel, 'var(--text2)', sMin, sMax, true) + lineSvg(mRel, '#2deb8f', sMin, sMax) + lineSvg(fRel, '#c4a2f0', sMin, sMax) + '</svg>'
+      + '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;font-family:\'Space Mono\',monospace;margin-top:4px;"><span style="color:#2deb8f;">Muscle ' + (dMu != null ? mhWtDelta(dMu) : '—') + '</span><span style="color:#c4a2f0;">Fat ' + (dFa != null ? mhWtDelta(dFa) : '—') + '</span>' + (dWt != null ? '<span style="color:var(--text2);">' + mhLangT('Weight') + ' ' + mhWtDelta(dWt) + '</span>' : '') + '<span style="color:var(--text3);">' + rr[0].date + ' to ' + rr[rr.length - 1].date + ' · ' + mhLangT('averages at each end') + '</span></div>'
+      + '<div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.5;">' + mhLangT('Same scale for every line, drawn as change from where the range started.') + (share != null ? ' ' + mhLangT('Muscle was about {0}% of the weight lost.').replace('{0}', share) : '') + '</div>';
   } else rangeBlock = '<div style="font-size:11px;color:var(--text3);margin-top:14px;">Fewer than two smart-scale readings in ' + rLab + ', so there is no line to draw. Try a longer range.</div>';
   wrap.innerHTML = `
     <div class="mh-qline" style="margin:0 0 6px;">What your weight is made of, and whether that is shifting for better or worse.</div>

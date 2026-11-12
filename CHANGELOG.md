@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1384 — Move body composition chart: one shared scale, and how much of a loss was muscle
+
+- **Pete (12 Nov): the chart looked far worse than it was.** Each line (muscle, fat) used to be stretched to fill the box on its own, so a 2.7 kg change in 68 kg of muscle looked like a cliff. All lines now share one kg axis and are drawn as change from where the range started, with a dashed zero line and a dashed weight line, so you can see at a glance that weight fell furthest and how the parts compare.
+- **"Muscle was about N% of the weight lost"** appears when weight has fallen by a kilo or more and muscle with it, with a caption that says the lines share one scale.
+- Translated in all eight languages. p468 extended (3 lines and a zero line, shared scale, the muscle share, Spanish). Also checked: p46, p323.
+
 ## v3.10.1383 — Move body composition: the change over a range uses averages, and shows weight too
 
 - **Fixed a misleading figure.** The line under the Move body-composition chart ("Muscle -3.2kg, Fat -5.0kg" over a range) was the last single smart-scale reading minus the first single reading. Those estimates swing by half a kilo or more with hydration and timing, so one high first reading and one low last reading could show a loss that was not there. It is now the average of the last readings minus the average of the first ones (up to a week's worth at each end), and it says so ("averages at each end"). The headline verdict above it already used weekly averages.

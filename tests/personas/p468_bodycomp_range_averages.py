@@ -52,6 +52,25 @@ with fresh_server() as root, sync_playwright() as pw:
     t2 = page.evaluate("document.getElementById('trends-bodycomp-wrap').innerText"); t2 = t2[t2.find('READINGS'):]
     m2 = re.search(r'Muscle\s+([+\-\u2212]?[\d.]+)', t2); v2 = float(m2.group(1).replace('\u2212', '-')) if m2 else None
     if v2 is None or not (-3.2 < v2 < -2.0): f.add('BUG', f'a real steady loss of 3 kg shows as {v2}')
+    # v3.10.1383: one shared scale with a zero line, and the muscle share of a real loss (weight -8 kg, muscle -2.7 kg: about a third)
+    rows3 = []
+    for i in range(60):
+        d = today - datetime.timedelta(days=60 - i); w = 92 - 8 * i / 59; mu = 70 - 2.7 * i / 59; fa = 18 - 5.3 * i / 59
+        rows3.append((d.isoformat(), round(w, 2), round(mu, 2), round(fa, 2), round(mu / w * 100, 1), round(fa / w * 100, 1), 3.7))
+    page.evaluate("(t)=>localStorage.setItem('mh_combined_csv_cache',t)", csv2(rows3)); page.evaluate("renderBodyCompCard()")
+    t3 = page.evaluate("document.getElementById('trends-bodycomp-wrap').innerText")
+    m3 = re.search(r'Muscle was about (\d+)% of the weight lost', t3)
+    if not m3 or not (28 <= int(m3.group(1)) <= 38): f.add('BUG', f'muscle share of the loss wrong: {m3.group(0) if m3 else None!r} (expected about a third)')
+    if 'Same scale for every line' not in t3: f.add('BUG', 'the same-scale caption is missing')
+    nl = page.evaluate("document.querySelectorAll('#trends-bodycomp-wrap svg polyline').length"); nz = page.evaluate("document.querySelectorAll('#trends-bodycomp-wrap svg line').length")
+    if nl != 3 or nz != 1: f.add('BUG', f'chart should have 3 lines and a zero line, has {nl} and {nz}')
+    ys = page.evaluate("[...document.querySelectorAll('#trends-bodycomp-wrap svg polyline')].map(p=>{const v=p.getAttribute('points').split(' ').map(q=>+q.split(',')[1]);return [Math.min(...v),Math.max(...v)]})")
+    # the muscle line (2.7 kg) must be shorter than the weight line (8 kg) on a shared axis: before, every line filled the box
+    hts = [round(b-a,1) for a,b in ys]
+    if len(hts) == 3 and not (hts[0] > hts[1] + 10): f.add('BUG', f'lines are not on one scale: weight/muscle/fat heights {hts}')
+    ev = page.evaluate; ev("localStorage.setItem('mh_lang','es')"); page.reload(); page.wait_for_timeout(1500); ev("mhMoveSetRange('bodycomp',0)"); ev("renderBodyCompCard()")
+    t4 = ev("document.getElementById('trends-bodycomp-wrap')?.innerText || ''")
+    if t4 and 'Misma escala' not in t4 and 'La misma escala' not in t4 and 'misma escala' not in t4: f.add('BUG', 'Spanish: same-scale caption not translated')
     if errs: f.add('JS-exception', errs[0])
 print('findings', len(f))
 for x in f: print(x)
