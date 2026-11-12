@@ -245,3 +245,4 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - Open: Today/Reports intro lines of exactly three lines (Journey, Compare Two Periods, Make a report, Exercise report) are borderline for "a couple of lines".
 
 - Open (merge 1): someone who had hidden only the old separate Your routine card now sees Your usual inside the merged tile (it follows the Patterns tile's hidden state). Small, Premium-only; add a per-part hide only if anyone asks.
+- Done v3.10.1376: Fasting + When you eat, and Insights + What seems to move what, are merged (Reports). Open: someone who had hidden only the old separate When you eat or What seems to move what now sees that part inside the merged card (it follows the card's hidden state). Same small caveat as the Patterns merge.

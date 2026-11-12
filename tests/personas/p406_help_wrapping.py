@@ -72,9 +72,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("switchTabById('manage')"); page.wait_for_timeout(400)
     c0 = ev("document.getElementById('settingStepsBaselineAuto').checked"); toggle(page, 'stepsbaselineautohelp'); c1 = ev("document.getElementById('settingStepsBaselineAuto').checked")
     if c0 != c1: f.add('BUG', 'tapping the ? beside the steps baseline note flipped the Automatic switch')
-    # no long plain block left on those screens (hidden help does not count)
+    # no long plain block left on those screens (hidden help does not count; the Patterns findings are results from the person's own data, not explainers, and vary by day: 12 Nov 2026)
     LONG = """() => { const out = []; document.querySelectorAll('body *').forEach(e => {
-      if (e.closest('.bubble, [id*=chat], [id^=help-], pre, code, textarea, select, script, style') || getComputedStyle(e).fontFamily.includes('Space Mono')) return;
+      if (e.closest('.bubble, [id*=chat], [id^=help-], #patternsContent, pre, code, textarea, select, script, style') || getComputedStyle(e).fontFamily.includes('Space Mono')) return;
       const r = e.getBoundingClientRect(); if (r.width < 40 || r.height < 10 || getComputedStyle(e).display === 'none') return;
       const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join(' ').replace(/\\s+/g, ' ').trim();
       if (own.length > 220) out.push(own.slice(0, 60)); }); return out; }"""

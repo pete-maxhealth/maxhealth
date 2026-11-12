@@ -2,6 +2,16 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1376 — Two more Reports merges
+
+Pete, 12 Nov: yes to the other merge suggestions.
+
+- **Fasting & when you eat** (Reports): the Fasting report and the When you eat report are one card with two parts, the same way Sleep & Ketosis already works. One title, one fold, one ▲ ▼ 👁. Each part still shows only when it has data; the card shows when either does.
+- **Insights & what moves what** (Reports): "What seems to move what" (Early Stage) is now a part of the Insights card instead of a stand-alone card. This also gives it the fold and hide that the stand-alone card never had.
+- Saved layouts keep working: an order or hidden list saved with the old separate "rpt-wheneat" key is carried over in the same sequence with that key dropped. Search finds the merged cards by their old words.
+- Left alone: Compare Two Periods + Weight vs Protocol (a weaker fit).
+- Translated in the eight language packs (machine-assisted). New test p461; p343, p383, p384, p63, p181 re-run.
+
 ## v3.10.1375 — Patterns and Your routine are one tile
 
 Pete, 12 Nov: someone looking at patterns would also want their routine; the two go hand in hand.
