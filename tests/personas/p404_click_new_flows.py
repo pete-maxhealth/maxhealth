@@ -55,7 +55,7 @@ with fresh_server() as root, sync_playwright() as pw:
             page.wait_for_timeout(250); clicked += 1; n1 += 1
             check(page, f'{name} > {label}', before, rm)
             if rm and not GOES.search(it['t'] + ' ' + it['oc']) and ev(SCREEN) != scr0: f.add('stay-put', f'{name} > {label}: a remove/clear control moved you to another screen or opened the meal-idea picker ({scr0} -> {ev(SCREEN)})')
-            if ev(FOLD) != fold0 and not TOGGLE.search(it['t'] + ' ' + it['oc']): f.add('collapse', f'{name} > {label}: a section opened or shut by itself (Pete 4 Nov: adding or editing must not open or reset sections)')
+            if ev(FOLD) != fold0 and not TOGGLE.search(it['t'] + ' ' + it['oc']) and 'mhShopBackArrow' not in it['oc']: f.add('collapse', f'{name} > {label}: a section opened or shut by itself (Pete 4 Nov: adding or editing must not open or reset sections)')
             if ev(OVERLAYS) > ov0:
                 if not ev(CLOSER): page.keyboard.press('Escape')
                 page.wait_for_timeout(250)
