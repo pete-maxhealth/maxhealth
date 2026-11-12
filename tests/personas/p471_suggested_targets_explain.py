@@ -1,0 +1,30 @@
+"""Persona 471 (v3.10.1388): the 'Why these figures might differ' explanation in Suggested Targets has no emphasis tags splitting its sentences, and its sentences are translated (Spanish). Invented data."""
+import sys, re, os; sys.path.insert(0, __file__.rsplit('/',1)[0])
+from harness import *
+from playwright.sync_api import sync_playwright
+f = Findings()
+with fresh_server() as root, sync_playwright() as pw:
+    b = pw.chromium.launch(); errs = []
+    ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block')
+    ctx.route(re.compile(r'https://(cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com)/.*'), lambda r: r.abort())
+    page = ctx.new_page(); page.on('pageerror', lambda e: errs.append(str(e)[:160]))
+    page.goto('http://localhost:5757/'); page.wait_for_timeout(1000)
+    page.evaluate("localStorage.setItem('mh_lang','es')"); page.reload(); page.wait_for_timeout(1500)
+    page.evaluate("onboardNext(2)"); page.fill('#onboardName', 'Ola'); page.evaluate("onboardNext(3)")
+    page.evaluate("obSetSex('male')"); page.fill('#onboardAge', '58'); page.fill('#onboardHeight', '176')
+    page.fill('#onboardWeight', '92'); page.fill('#onboardTarget', '90')
+    page.evaluate("onboardNext(4)"); page.evaluate("obSetActivity('light')"); page.evaluate("obSetGoal('lose')")
+    page.evaluate("onboardNext(5)"); page.evaluate("obSetCondition('general')")
+    page.evaluate("onboardNext(6)"); page.evaluate("onboardFinish()"); page.wait_for_timeout(1500)
+    page.evaluate("localStorage.setItem('mh_target_kcal','1234'); localStorage.setItem('mh_target_protein','61'); localStorage.setItem('mh_target_fat','55')")
+    src = page.evaluate("renderSuggestedTargets.toString()")
+    '<em>' in src and f.add('FAIL', 'explanation still has <em> splitting a sentence')
+    page.evaluate("renderSuggestedTargets()")
+    page.evaluate("var e=document.getElementById('suggtargets-explain'); if(e){e.style.display='block'; mhLangFix && mhLangFix(e)}")
+    t = page.evaluate("(document.getElementById('suggtargets-explain')||{}).innerText||''")
+    print(t[:300])
+    t or f.add('FAIL', 'explanation block not rendered')
+    'This calculator' in t and f.add('FAIL', 'explanation still English in Spanish')
+    errs and f.add('FAIL', f'errors {errs}')
+    b.close()
+print('findings', len(f)); sys.exit(1 if f else 0)
