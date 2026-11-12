@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1378 — One style for pop-up Close, Cancel and Back
+
+Pete's standard: a control that does the same job looks and acts the same.
+
+- Pop-up **Close**, **Cancel** and **← Back** were in about seven different styles (grey, outlined, solid green, text-only, different sizes and wordings). Every one in a pop-up is now the same grey button (`.modal-btn.cancel`; a full-width closer adds `.mh-pop-close`): categories, duplicates scan, weight trend, fibre history, audit, shopping duplicates, tags, starter and focus sheets, Premium, carer preview, saved prompts, recipe picker, library portion, voice, restore confirm, report wizard, manual entry, supplement edit, missed day, statistics builder and more (34 buttons). "Close (review the rest later)" is just Close; Back steps read "← Back".
+- The Tags pop-up saves as you go, so its bottom button says **Save** instead of Done.
+- Left alone on purpose: the small in-place editors (log/history/library edit, routine list, strength add, research digest, cook timer) and the Ruler's own toolbar, which are compact inline controls rather than pop-ups.
+- Test p463 (new): every Back/Cancel/Close button in the source is the one style apart from the frozen list above; opened pop-ups show the same colour, corner and height. Checked: p459, p449, p450, p53, p338, p52, p405, p125, p132, p270, p27, p358, p386, p61, p76.
+
 ## v3.10.1377 — Feedback form for "Something confused me"; no Paste button to press
 
 Pete, 12 Nov: use the feedback form we already have; the Paste button is not needed because the Paste Meal screen fills itself.

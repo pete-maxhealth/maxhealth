@@ -233,7 +233,7 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 ## Back / close / cancel audit (Pete, 12 Nov 2026)
 - [x] Shopping screens: top-left ← on every sub-screen; Save on the stock-item screen (v3.10.1367).
 - [x] One ✕ (inline) and one round close ✕; one ▲ ▼ 👁 card control; scroll arrows (v3.10.1367).
-- [ ] About 90 hand-built pop-up buttons still say Back / Cancel / Close / Done in different styles (e.g. `← Back to edit`, `Close`, `Cancel` full-width vs half-width, the report wizard `← Back`, the Ruler `Back`, QR transfer `Back`). Decide per screen: a full screen (reached by a workflow) gets the round ← top left; a pop-up keeps Cancel/Close but in one style. Needs a rendered side-by-side before changing.
+- [x] (v3.10.1378: pop-ups done, 34 buttons; compact inline editors and the Ruler toolbar left on purpose) About 90 hand-built pop-up buttons still said Back / Cancel / Close / Done in different styles (e.g. `← Back to edit`, `Close`, `Cancel` full-width vs half-width, the report wizard `← Back`, the Ruler `Back`, QR transfer `Back`). Decide per screen: a full screen (reached by a workflow) gets the round ← top left; a pop-up keeps Cancel/Close but in one style. Needs a rendered side-by-side before changing.
 - [ ] Today's "Sun" explanation line and the Statistics undo toasts are English only.
 - [ ] Demo personas: nothing for the Sun theme (a setting, not data).
 
