@@ -6641,7 +6641,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1376'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1377'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -11391,6 +11391,7 @@ function mhConfusedOpen() {
     + '<div id="mhConfusedChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' + MH_CONFUSED_CHIPS.map(c => '<button type="button" class="drill-period" data-v="' + _pkEsc(c) + '" style="font-size:12px;">' + _pkEsc(c) + '</button>').join('') + '</div>'
     + '<textarea id="mhConfusedWords" rows="3" maxlength="1000" placeholder="In your own words (optional)" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;margin-bottom:10px;"></textarea>'
     + '<div style="display:flex;gap:8px;"><button class="run-btn" id="mhConfusedShare" style="flex:2;padding:12px;">Share</button><button class="copy-btn" id="mhConfusedCopy" style="flex:1;">Copy</button></div>'
+    + '<button class="copy-btn" id="mhConfusedForm" style="width:100%;margin-top:8px;">Send through the feedback form</button><div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;">Opens the same feedback form as Settings, already filled in. It asks you to sign in to GitHub; Share or Copy do not.</div>'
     + '<button class="copy-btn" id="mhConfusedClose" style="width:100%;margin-top:12px;">Close</button></div>';
   document.body.appendChild(m);
   const chipHost = document.createElement('span'); chipHost.id = 'mhConfusedChip'; chipHost.style.display = 'none'; m.firstChild.appendChild(chipHost);
@@ -11401,6 +11402,11 @@ function mhConfusedOpen() {
   m.onclick = e => { if (e.target === m) m.remove(); };
   document.getElementById('mhConfusedClose').onclick = () => m.remove();
   document.getElementById('mhConfusedCopy').onclick = async () => { try { await navigator.clipboard.writeText(mhConfusedText()); showToast('Copied ✓ Paste it into a message'); } catch (e) { showToast('Copy failed'); } };
+  document.getElementById('mhConfusedForm').onclick = () => {
+    const t = mhConfusedText();
+    if (!MH_HOME.issues) { navigator.clipboard?.writeText(t).then(() => showToast('Copied ✓ Paste it into a message'), () => showToast('Copy failed')); return; }
+    window.open(MH_HOME.issues + '?labels=feedback&title=' + encodeURIComponent('[Confused] ' + (document.getElementById('mhConfusedScreen')?.textContent || '')) + '&body=' + encodeURIComponent(t.slice(0, 4000)), '_blank');
+  };
   document.getElementById('mhConfusedShare').onclick = async () => {
     const t = mhConfusedText();
     if (navigator.share) { try { await navigator.share({ title: 'MaxedHealth feedback', text: t }); } catch (e) {} return; }
@@ -31769,6 +31775,7 @@ function openPasteMealModal() {
   });
   document.getElementById('pasteMealDate').value = todayStr();
   document.getElementById('pasteMealModal').style.display = 'flex';
+  { const rb = document.getElementById('pasteMealRetry'); if (rb) rb.style.display = 'none'; }   // v3.10.1377: the sheet fills itself; the button only appears if that did not work
   // Best-effort auto-fill - this call happens synchronously off the same
   // tap that opened the modal, which counts as the user gesture most
   // browsers require for clipboard reads. The explicit button inside the
@@ -31784,16 +31791,18 @@ function closePasteMealModal() {
 // amount and fat are both optional (fat shows as "—" when never recorded
 // on the original entry).
 function pasteMealFromClipboard(silent) {
+  const retry = show => { const rb = document.getElementById('pasteMealRetry'); if (rb) rb.style.display = show ? '' : 'none'; };
   if (!navigator.clipboard?.readText) {
-    if (!silent) showToast('Clipboard access not available here');
+    if (!silent) showToast('Clipboard access not available here'); else retry(true);
     return;
   }
   navigator.clipboard.readText().then(text => {
     const m = (text || '').trim().match(/^(.+?)(?:\s*\(([^)]+)\))?\s*—\s*([\d.]+)\s*kcal,\s*([\d.]+)\s*g protein,\s*([\d.]+|—)\s*g fat,\s*([\d.]+)\s*g carbs(?:,\s*([\d.]+|—)\s*g fibre)?(?:,\s*([\d.]+)\s*g polyols)?/i);
     if (!m) {
-      if (!silent) showToast("Clipboard doesn't look like a copied meal line");
+      if (!silent) showToast("Clipboard doesn't look like a copied meal line"); else retry(true);
       return;
     }
+    retry(false);
     document.getElementById('pasteMealDesc').value = m[1].trim();
     document.getElementById('pasteMealAmount').value = m[2] || '';
     document.getElementById('pasteMealKcal').value = m[3];
@@ -31804,7 +31813,7 @@ function pasteMealFromClipboard(silent) {
     { const _pb = document.getElementById('pasteMealPolyols'); if (_pb) _pb.value = m[8] || ''; }   // polyols travel the same way; blank when the line has none
     if (!silent) showToast('Pasted ✓ — check the fields, then Add entry');
   }).catch(() => {
-    if (!silent) showToast('Could not read clipboard');
+    if (!silent) showToast('Could not read clipboard'); else retry(true);
   });
 }
 
@@ -57364,7 +57373,7 @@ function mhHold(fn) {
     <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">PASTE MEAL</div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Paste a line copied from Today's Log or History (📋) to add it as a new entry with these exact values — no AI re-estimate, since the numbers are already known.</div>
 
-    <button class="run-btn" onclick="pasteMealFromClipboard()" style="width:100%;margin-bottom:14px;">📋 Paste from clipboard</button>
+    <button class="run-btn" id="pasteMealRetry" onclick="pasteMealFromClipboard()" style="display:none;width:100%;margin-bottom:14px;">📋 Paste from clipboard</button>
 
     <div style="margin-bottom:12px;">
       <div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:Space Mono,monospace;">DESCRIPTION</div>

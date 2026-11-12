@@ -30,6 +30,14 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("document.getElementById('mhConfusedShare').click()"); page.wait_for_timeout(300)
     txt2 = ev("navigator.clipboard.readText()")
     if 'What it was' in txt2: f.add('BUG', '6: an un-ticked choice is still in the text')
+    # v3.10.1377: lands on the existing feedback form (GitHub issue), prefilled
+    ev("document.querySelector('#mhConfusedChips button').click(); window.__op=null; window.open=function(u){window.__op=u; return null}")
+    ev("document.getElementById('mhConfusedForm').click()")
+    u = ev("window.__op || ''")
+    if '/issues' not in u or 'labels=feedback' not in u or 'Confused' not in u or 'I%20did%20not%20understand' not in u: f.add('BUG', f'6b: feedback form link not prefilled: {u!r}')
+    for leak in names + ['kcal']:
+        if leak in u: f.add('BUG', f'6c: feedback link carries log data: {leak}')
+    ev("document.querySelector('#mhConfusedChips button').click()")
     ev("document.getElementById('mhConfusedClose').click()")
     if ev("!!document.getElementById('mhConfusedModal')"): f.add('BUG', '7: Close did not close it')
     ev("mhConfusedOpen()"); ev("document.getElementById('mhConfusedModal').click()")

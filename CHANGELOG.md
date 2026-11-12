@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1377 — Feedback form for "Something confused me"; no Paste button to press
+
+Pete, 12 Nov: use the feedback form we already have; the Paste button is not needed because the Paste Meal screen fills itself.
+
+- **Something confused me** now has "Send through the feedback form": it opens the same GitHub feedback form as Settings, already filled in (screen, app version, what was ticked, their words; nothing from the log). Share and Copy stay for people without a GitHub account.
+- **Paste Meal:** the "📋 Paste from clipboard" button is gone. The sheet reads the copied meal on opening. The button only appears again if that automatic read did not work (browser blocked it, unsupported, or the clipboard is not a copied meal line).
+- Translated in the eight language packs (machine-assisted). Test p459 extended.
+
 ## v3.10.1376 — Two more Reports merges
 
 Pete, 12 Nov: yes to the other merge suggestions.
