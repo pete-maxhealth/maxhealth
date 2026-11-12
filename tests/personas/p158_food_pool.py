@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 f = Findings()
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 packs = [p for p in glob.glob(root_dir + '/starter_packs/*.json') if not p.endswith(('index.json', 'food_pool.json'))]
-if len(packs) != 27: f.add('BUG', f'expected 27 pack files, found {len(packs)}')
+if len(packs) != 28: f.add('BUG', f'expected 28 pack files, found {len(packs)}')
 for p in packs:
     if not json.load(open(p)).get('foodPool'): f.add('BUG', f'{os.path.basename(p)} not flagged foodPool')
 brands = re.compile(r'asda|tesco|heylo|lurpak|lidl|costco|coors|carling|bud light|tennent|marmite|farmfoods|centra|elmlea|optimum|warrior|quorn|müller|muller|alpro|innocent', re.I)

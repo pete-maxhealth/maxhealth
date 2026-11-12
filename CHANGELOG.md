@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1373 — A "Losing weight" start option
+
+Pete, 12 Nov: dieters should not see Symptoms and Treatment at all.
+
+- The first-run "What would you like to start with?" screen has a fourth choice, **⚖️ Losing weight**: food, weight, water and your plan; no symptom or treatment lists; the Symptoms, Treatment, Day mode, Ketosis, Macro ratio, Goal check and Fasting cards and the advanced Trends cards tucked away (all one tap away under Filter, nothing lost).
+- Someone who picked "Lose" as their goal with no condition is pre-selected into it; a brain-tumour user is still pre-selected into Brain, everyone else into Keep it simple. It is also in "Change my focus"'s offline list.
+- New files: starter_packs/losing_weight_start.json (first-run only, not in the Library list). Translated in the eight language packs (machine-assisted).
+- Not changed: the Reports topic row still shows a "Treatment" jump chip.
+
 ## v3.10.1372 — Weight vs Protocol knows your goal
 
 Pete, 12 Nov: shouldn't weight v protocol have gain, loss and maintain, or the activity scale?
