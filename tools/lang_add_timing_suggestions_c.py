@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""12 Nov 2026 (v3.10.1381): Timing suggestions, "summaries of linked sources, not medical advice" line, visible Source on each suggestion, and the two help texts extended with it. Machine-assisted, not native-speaker checked. Columns: es, de, fr, tr, pt, it, pl, nl."""
+import os, sys, json; sys.path.insert(0, os.path.dirname(__file__))
+from lang_lib import apply
+NOTE = ['Resúmenes de MaxedHealth de las fuentes enlazadas. No es consejo médico. Consúltalo con tu equipo de atención.', 'Zusammenfassungen von MaxedHealth der verlinkten Quellen. Keine medizinische Beratung. Sprich mit deinem Behandlungsteam.', 'Résumés de MaxedHealth des sources liées. Ce n’est pas un avis médical. Parlez-en à votre équipe soignante.', 'MaxedHealth’in bağlantılı kaynaklardan özetleri. Tıbbi tavsiye değildir. Bakım ekibinizle konuşun.', 'Resumos da MaxedHealth das fontes ligadas. Não é aconselhamento médico. Fala com a tua equipa de cuidados.', 'Riassunti di MaxedHealth delle fonti collegate. Non è un consiglio medico. Parlane con il tuo team di cura.', 'Streszczenia MaxedHealth powiązanych źródeł. To nie jest porada medyczna. Skonsultuj się z zespołem opieki.', 'Samenvattingen door MaxedHealth van de gelinkte bronnen. Geen medisch advies. Bespreek het met je zorgteam.']
+EXTRA = ['Estos resúmenes y las etiquetas de evidencia son de MaxedHealth, no médicos. Sigue el enlace a la fuente y consúltalo con tu equipo de atención.', 'Diese Zusammenfassungen und die Evidenz-Etiketten stammen von MaxedHealth, nicht von Ärzten. Folge dem Quellenlink und sprich mit deinem Behandlungsteam.', 'Ces résumés et les étiquettes de preuve viennent de MaxedHealth, pas de médecins. Suivez le lien de la source et parlez-en à votre équipe soignante.', 'Bu özetler ve kanıt etiketleri MaxedHealth’e aittir, doktorlara değil. Kaynak bağlantısını izleyin ve bakım ekibinizle konuşun.', 'Estes resumos e as etiquetas de evidência são da MaxedHealth, não de médicos. Segue a ligação da fonte e fala com a tua equipa de cuidados.', 'Questi riassunti e le etichette di evidenza sono di MaxedHealth, non di medici. Segui il link alla fonte e parlane con il tuo team di cura.', 'Te streszczenia i etykiety dowodów pochodzą od MaxedHealth, nie od lekarzy. Przejdź do źródła i skonsultuj się z zespołem opieki.', 'Deze samenvattingen en bewijslabels komen van MaxedHealth, niet van artsen. Volg de bronlink en bespreek het met je zorgteam.']
+EXTRA_EN = ' The summaries and the evidence labels are ours, not a doctor’s. Follow the source link and check with your care team.'
+T1="These come from your own meal times and the goals you switched on in Settings. Each suggestion says how strong the evidence is: Proven means randomised trials or large meta-analyses in humans; Early Stage means small, observational or other-condition human data; Speculative means lab or animal data only. Nothing here is sent anywhere or added to a share."
+T2="Switch on the goals or conditions that apply and each one adds its own suggestions, marked Proven, Early Stage or Speculative, with a reason and a source. They are never merged into one plan: where two pull apart you see both sides. A condition with no reviewed suggestions has no entry here. Nothing is sent anywhere or added to a share."
+langs=['es','de','fr','tr','pt','it','pl','nl']
+def old(t):
+    out=[]
+    for l in langs:
+        d=json.load(open(os.path.join(os.path.dirname(__file__),'..','lang',l+'.json'),encoding='utf-8')); d=d.get('dict',d); out.append(d[t])
+    return out
+T={'Summaries by MaxedHealth of the linked sources. Not medical advice. Check with your care team.': NOTE}
+for t in (T1,T2): T[t+EXTRA_EN]=[o+' '+e for o,e in zip(old(t),EXTRA)]
+apply(T)

@@ -91,6 +91,13 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("saveGenericHidden('manage', getGenericHidden('manage').concat(['set-timingtips'])); applySectionState && 0"); page.wait_for_timeout(300)
     ev("switchTabById('import'); switchTabById('manage')"); page.wait_for_timeout(500)
     if ev("document.getElementById('title-set-timingtips').offsetParent!==null && getComputedStyle(document.getElementById('title-set-timingtips').closest('.card-unit')||document.getElementById('title-set-timingtips')).display!=='none'") and 'set-timingtips' in ev("JSON.stringify(getGenericHidden('manage'))"): f.add('BUG', '31: hiding the tile did not hide it')
+    # v3.10.1381: visible Source on every suggestion, the standing "not medical advice" line, and the Settings help says the summaries are ours
+    show()
+    nr = ev("document.querySelectorAll('#wheneat-tips .mh-tc-rule').length"); ns = ev("document.querySelectorAll('#wheneat-tips .mh-tc-rule .mh-tc-src a[href^=\"http\"], #wheneat-tips .mh-tc-rule .mh-tc-src a[href$=\".html\"]').length")
+    if not nr or nr != ns: f.add('BUG', f'50: {ns} of {nr} suggestions show a visible source link')
+    if 'not medical advice' not in ev("document.getElementById('wheneat-tips-note')?.innerText || ''").lower(): f.add('BUG', '51: the standing "not medical advice" line is missing under the suggestions')
+    if 'ours, not a doctor' not in ev("document.querySelector('[id^=help-tc-all]')?.innerHTML || ''") : f.add('BUG', '52: the block help does not say the summaries and labels are ours')
+    if 'ours, not a doctor' not in ev("document.querySelector('[id^=help-tcsettingshelp]')?.innerHTML || ''"): f.add('BUG', '53: the Settings help does not say the summaries and labels are ours')
     # demo personas carry it: Doris (losing weight) shows the loss rule, Maria (GBM) the GBM layer, Tom (cluster) the diary one; exit restores the real settings
     ev("localStorage.setItem('mh_tc_on','0'); localStorage.setItem('mh_tc_layers','[]')")
     for pid, want, nope in (('doris', 'Protein while you lose weight', 'Fasting windows of 12 to 16 hours'), ('maria', 'Fasting windows of 12 to 16 hours', None), ('tom', 'Keep a headache and sleep diary', None)):

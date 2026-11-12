@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1381 — Timing suggestions: source on view, "summaries, not medical advice" line
+
+- Each timing suggestion now shows its **Source** link on the card itself (it was behind the "?" only), and a standing line under the block says: *Summaries by MaxedHealth of the linked sources. Not medical advice. Check with your care team.* The help text on the block and on the Settings tile now says the summaries and evidence labels are ours, not a doctor's. Wording stays "studies found", never "you should".
+- Translated in all eight languages (machine-assisted). p466 extended (source link on every suggestion, the standing line, both help texts). Also checked: p406, p383, p424, p461, p72, p92.
+
 ## v3.10.1380 — Timing suggestions (rule-based, evidence-labelled) in the When you eat card
 
 - **New: Timing suggestions** under the When you eat card on Reports. It is off until you switch it on in **Settings > Timing suggestions**, where you also pick which goals or conditions apply (Losing weight, Building muscle, Glioblastoma, Cluster headache) and can type what your care team has told you. Each suggestion is a short line with a **Proven / Early Stage / Speculative** chip, your own figure from your logs where there is one, and a **?** holding the plain-English detail, the source and the date the rule was last reviewed. They are suggestions, never targets. Nothing is sent anywhere and nothing is added to a share.
