@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1398 — Tableware, phone-to-phone QR and export help translate
+
+- Four long help texts (tableware sizes, Share by QR, Export, why some rows are not QR) are now whole sentences in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
+- New p480. Also checked: p479, p476.
+
 ## v3.10.1397 — Profile focus line, shopping list line and manual body fat label translate
 
 - Three more whole-sentence texts are now in es, de, fr, tr, pt, it, pl and nl (machine-assisted): the Profile "27 starter packs" line, the shopping-list description and the manual body fat label.
