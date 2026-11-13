@@ -110,7 +110,6 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] Generated voice-over: set up a GitHub-hosted voice (Hugging Face is blocked, pip has no piper-tts/kokoro-onnx), send Pete a short sample for approval before touching any video.
 - [ ] Other open: optional pspence.co.uk redirect to GitHub Pages (GoDaddy is no longer needed for hosting), monthly competitor sweep on the 1st, Premium pricing decision, re-record tours with Move/Sleep/Statistics chapters.
 
-- [ ] (v3.10.1125) Guide and README: mention that a recipe leaves off foods already in the cupboards.
 - [x] v3.10.1246 fixed (fruit words added, pear/peach/peanut moved ahead of 'pea', spear guard). Left for later: other everyday foods that may still fall to Other (check the Library 'Other' chip). Was: The category sorter files Apple, Banana, Grape, Lemon as Other (and Pears as vegetable). It is global (aisles, nutrition groups), so extend CATEGORY_MAP deliberately and run the full sweep. Found 21 Oct 2026 while adding section rules for fridge life.
 
 ## Data and Reports tidy-up (raised by Pete 27 Oct 2026; agreed plan, do after v3.10.1226)
