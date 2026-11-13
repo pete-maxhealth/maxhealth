@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1402 — The fasting "?" help translates as a whole
+
+- The fasting explanation behind the "?" is now one translated text in es, de, fr, tr, pt, it, pl and nl (machine-assisted), built from the same pieces as the paragraphs on the card so the two never disagree. The card's own paragraphs were already translated.
+- Checked the Trends, Today and Settings screens for text shown straight away that should sit behind a "?": the long explanations there are already hidden, nothing to move.
+- New p484. Also checked: p474.
+
 ## v3.10.1401 — Goal start pages, a QR for each, and a landing page built around the goal
 
 - **Start pages** (`start/`): Lose weight, Keep carbs low, Type 2 diabetes, Build muscle, Just see how I am doing. Each has the person's problem, what it does, a demo persona (Doris, Sam, John, Alex, Karen) that opens the app's demo, an optional video slot, a QR that opens the app set up for that goal, and the install steps. On a phone the QR is replaced by an "Open it on this phone" button.
