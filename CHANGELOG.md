@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1405 — Six more help texts translated
+
+- The phone-to-phone share explanation, the meal picker help, the phase-change drift note, the carb-ceiling reference, the holiday-ceiling note and the Ketosis report line now translate in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
+- Not translated on purpose: developer/diagnostic log descriptions and the long Manual Entry / CSV template guides (advanced use); they stay in English for now.
+- New p487 (all six present in every language, lookup resolves). Also checked: p481.
+
 ## v3.10.1404 — Shorter first run
 
 - Someone who arrives from a start link (`?start=...`) already has their goal and condition chosen, so the long medical-condition list is skipped and they go straight to "How do you like to eat?". Everyone else still sees the list. The condition from the link is saved as normal and can be changed in Settings.
