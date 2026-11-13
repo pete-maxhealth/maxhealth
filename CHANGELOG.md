@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1393 — Fasting threshold hint translated
+
+- The "Right now: anything under N kcal is ignored…" line and its medication addition, from v3.10.1392's code change, now have their translations (es, de, fr, tr, pt, it, pl, nl; machine-assisted). p474 extended.
+
 ## v3.10.1392 — Generated report lines translate; a mixed-language slip from v3.10.1386 fixed
 
 - **Fix:** the Move "?" text under "What your own days suggest" (v3.10.1386) joined a translated first sentence to an English second one, so Spanish showed both. Both parts now translate.

@@ -13,13 +13,14 @@ def run(lang):
         page.evaluate(f"localStorage.setItem('mh_lang','{lang}')"); page.reload(); page.wait_for_timeout(1500)
         page.evaluate("startDemoMode('doris')"); page.wait_for_timeout(1500)
         page.evaluate("mhRenderFastingCard()"); page.wait_for_timeout(500)
-        t = page.evaluate("['fastNowSub','fastUsualLine'].map(i=>(document.getElementById(i)||{}).textContent||'').join(' | ')")
+        page.evaluate("localStorage.setItem(MH_FAST_MED_NAME_KEY,'MCT oil'); localStorage.setItem(MH_FAST_MED_KCAL_KEY,'45'); mhFastThrHint()")
+        t = page.evaluate("['fastNowSub','fastUsualLine','settingFastThrHint'].map(i=>(document.getElementById(i)||{}).textContent||'').join(' | ')")
         errs and f.add('FAIL', f'{lang} errors {errs}')
         b.close(); return t
 with fresh_server() as root:
     en = run('en'); print(en)
     es = run('es'); print(es)
     ('since your last meal' in en or 'Log a meal' in en or 'No meal' in en) or f.add('FAIL', 'English line missing')
-    for w in ('since your last', 'goal ', 'Your usual', 'first meal', 'the last', 'biggest meal', 'logged days'):
+    for w in ('since your last', 'goal ', 'Your usual', 'first meal', 'the last', 'biggest meal', 'logged days', 'Right now', 'is also ignored', 'up to about'):
         w in es and f.add('FAIL', f'Spanish still has "{w}": {es[:160]}')
 print('findings', len(f)); sys.exit(1 if f else 0)

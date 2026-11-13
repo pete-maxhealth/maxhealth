@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""13 Nov 2026 (v3.10.1393): fasting threshold hint pieces. Columns: es, de, fr, tr, pt, it, pl, nl. Machine-assisted."""
+import os, sys; sys.path.insert(0, os.path.dirname(__file__))
+from lang_lib import apply
+T = {
+ 'Right now: anything under {0} kcal is ignored; {0} kcal or more starts your eating window.': ['Ahora mismo: lo que tenga menos de {0} kcal se ignora; {0} kcal o más inicia tu ventana de comida.','Aktuell: alles unter {0} kcal wird ignoriert; ab {0} kcal beginnt dein Essensfenster.','Pour l’instant : tout ce qui fait moins de {0} kcal est ignoré ; {0} kcal ou plus ouvre votre fenêtre alimentaire.','Şu an: {0} kcal altındaki her şey yok sayılır; {0} kcal veya daha fazlası yeme pencerenizi başlatır.','Neste momento: tudo o que tenha menos de {0} kcal é ignorado; {0} kcal ou mais inicia a tua janela de refeições.','Per ora: tutto ciò che è sotto {0} kcal viene ignorato; {0} kcal o più avvia la tua finestra alimentare.','Teraz: wszystko poniżej {0} kcal jest ignorowane; {0} kcal lub więcej rozpoczyna okno jedzenia.','Op dit moment: alles onder {0} kcal wordt genegeerd; {0} kcal of meer start je eetvenster.'],
+ 'Your "{0}"{1} is also ignored, because it is taken with medication.': ['Tu «{0}»{1} también se ignora, porque se toma con medicación.','Dein „{0}“{1} wird ebenfalls ignoriert, weil es mit Medikamenten eingenommen wird.','Votre « {0} »{1} est aussi ignoré, car il est pris avec un médicament.','“{0}”{1} de yok sayılır, çünkü ilaçla birlikte alınır.','O teu «{0}»{1} também é ignorado, porque é tomado com medicação.','Anche il tuo «{0}»{1} viene ignorato, perché si assume con i farmaci.','Twoje „{0}”{1} jest również ignorowane, bo przyjmujesz je z lekiem.','Je “{0}”{1} wordt ook genegeerd, omdat je het met medicatie inneemt.'],
+ ' (up to about {0} kcal)': [' (hasta unas {0} kcal)',' (bis etwa {0} kcal)',' (jusqu’à environ {0} kcal)',' (yaklaşık {0} kcal’ye kadar)',' (até cerca de {0} kcal)',' (fino a circa {0} kcal)',' (do około {0} kcal)',' (tot ongeveer {0} kcal)'],
+}
+apply(T)
