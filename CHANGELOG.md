@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1394 — Translation sweep: eight more long help texts
+
+- Sharing choices, "Pause when idle", the data-backup warning, the restore note, Lab Results help, the Daily Steps baseline explanation and its Easy/Moderate/Hard levels, and the export save/send help are now in es, de, fr, tr, pt, it, pl and nl (machine-assisted, not native-checked).
+- New p476. Also checked: p470, p424.
+
 ## v3.10.1393 — Fasting threshold hint translated
 
 - The "Right now: anything under N kcal is ignored…" line and its medication addition, from v3.10.1392's code change, now have their translations (es, de, fr, tr, pt, it, pl, nl; machine-assisted). p474 extended.
