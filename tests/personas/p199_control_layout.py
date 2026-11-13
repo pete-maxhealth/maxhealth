@@ -19,9 +19,9 @@ with fresh_server() as root, sync_playwright() as pw:
         out.push({id:c.id,kinds:kinds.join(','),sizes:sizes.join('/')});}
       return out;})()""")
     if len(res) < 12: f.add('BUG', f'only {len(res)} cards with controls found')
-    for r in res:
+    for r in res:  # one card control (.mh-mv, 11px, v3.10.1367)
         if r['kinds'] != 'up,down,hide': f.add('BUG', f"{r['id']} control order {r['kinds']}")
-        if r['sizes'] != '14px': f.add('BUG', f"{r['id']} control size {r['sizes']}")
+        if r['sizes'] != '11px': f.add('BUG', f"{r['id']} control size {r['sizes']}")
     # the round scroll up/down buttons must follow the Shopping and Library screens too
     for t, sc in (('shop', 'shopScroll'), ('library', 'libraryScroll')):
         ev(f"switchTabById('{t}')"); page.wait_for_timeout(400)

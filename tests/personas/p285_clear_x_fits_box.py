@@ -14,7 +14,9 @@ with fresh_server() as root, sync_playwright() as pw:
         if r['bl'] is not None and r['ir'] > r['bl'] + 1: f.add('BUG', f'the box covers the Add button: {r}')
         if r['w'] < 150: f.add('BUG', f'the box is a sensible width: {r}')
     # one look everywhere: same size, border and radius as the Log box's clear
+    ev("switchTabById('chat')"); page.wait_for_timeout(400)  # the Log box is display:none (computed width auto) unless its tab is showing
     std = ev("(()=>{const l=document.querySelector('span[onclick=\"clearChatInput()\"]');const c=getComputedStyle(l);return {w:c.width,b:c.borderTopWidth,r:c.borderTopLeftRadius,fs:c.fontSize}})()")
+    ev("switchTabById('shop')"); page.wait_for_timeout(400)
     for id_ in ['mhShopOwn']:
         got = ev("(()=>{const x=document.querySelector('[data-clear-for=%s]');const c=getComputedStyle(x);return {w:c.width,b:c.borderTopWidth,r:c.borderTopLeftRadius,fs:c.fontSize}})()" % id_)
         if got != std: f.add('BUG', f'{id_} clear looks like the Log one: {got} vs {std}')

@@ -7,6 +7,7 @@ After every click it checks: no page error, no NaN / undefined / [object Object]
 two suggestion cards both called combo-card-0), every mh_ storage key that holds JSON still parses, and the shopping list / stock / library
 did not silently lose items unless the control was a remove/clear one. Destructive controls (delete / clear / reset / erase ...) ARE clicked, but only inside the demo persona (Pete, 6 Nov), with the app's own confirm answered yes; outside demo they are skipped.
 Also: a section must not open/shut by itself when something else is done (collapse), and any full-screen panel a click opens must have a way out (navigation).
+Takes 15-25 minutes for all scenarios (every click rebuilds its flow from scratch); it is not hung while it prints progress.
 Usage: python3 p404_click_new_flows.py [scenario ...]   (no argument = all). Invented data only.
 Findings are for review; a duplicate id or a JS error is always a bug."""
 import sys, re, json; sys.path.insert(0, __file__.rsplit('/', 1)[0])
@@ -42,6 +43,7 @@ with fresh_server() as root, sync_playwright() as pw:
         print(f'{name}: {len(first)} controls')
         for it in first[:45]:
             label = it['t'] or it['oc']
+            if n1 and n1 % 10 == 0: print(f'  {name}: {n1} of {min(len(first),45)} clicked', flush=True)   # each click rebuilds the flow (about 5 s), so a scenario takes minutes: show it is alive
             dest = bool(SKIP.search(it['t'] + ' ' + it['oc']))
             setup(page, name)
             if dest and not ev("typeof _demoMode !== 'undefined' && !!_demoMode"): skipped += 1; continue   # destructive controls only ever run inside the demo persona

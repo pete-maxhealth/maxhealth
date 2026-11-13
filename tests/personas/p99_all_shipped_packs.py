@@ -8,8 +8,9 @@ f = Findings()
 R = __import__('os').path.abspath(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..'))+'/'
 html = open(R + 'maxhealth.html').read(); ver = re.search(r"const APP_VERSION = '(v[0-9.]+)'", html).group(1)
 idx = json.load(open(R + 'starter_packs/index.json'))['packs']
+FIRSTRUN_ONLY = {'losing_weight_start.json'}  # first-run start option: no symptom list, not offered in the packs index
 files = sorted(os.path.basename(p) for p in glob.glob(R + 'starter_packs/*.json') if not p.endswith('index.json'))
-if sorted(p['file'] for p in idx) != files: f.add('BUG', f'index.json and files differ: {sorted(p["file"] for p in idx)} vs {files}')
+if sorted(p['file'] for p in idx) != [x for x in files if x not in FIRSTRUN_ONLY]: f.add('BUG', f'index.json and files differ: {sorted(p["file"] for p in idx)} vs {files}')
 for p in idx:
     if not p.get('title') or len(p.get('description', '')) < 30 or 'nothing here is advice' not in p['description'].lower() and 'wellbeing' not in p['title'].lower(): f.add('BUG', f'index entry weak {p["file"]}')
 with fresh_server() as root, sync_playwright() as pw:
@@ -24,14 +25,14 @@ with fresh_server() as root, sync_playwright() as pw:
         vt = lambda v: tuple(int(x) for x in re.findall(r'\d+', v or '0'))
         if not d.get('version') or vt(d['version']) > vt(ver): f.add('BUG', f'{tag}: version {d.get("version")} missing or newer than app {ver}')
         sets = d.get('sets', {}); syms = sets.get('symptoms', {}).get('data', [])
-        if not (5 <= len(syms) <= 12): f.add('BUG', f'{tag}: {len(syms)} symptoms')
+        if tag not in FIRSTRUN_ONLY and not (5 <= len(syms) <= 12): f.add('BUG', f'{tag}: {len(syms)} symptoms')
         ids = [s['id'] for s in syms]
         if len(set(ids)) != len(ids) or len({s['name'] for s in syms}) != len(syms): f.add('BUG', f'{tag}: duplicate symptom ids or names')
-        if sets.get('symptoms', {}).get('count') != len(syms): f.add('BUG', f'{tag}: symptom count mismatch')
+        if tag not in FIRSTRUN_ONLY and sets.get('symptoms', {}).get('count') != len(syms): f.add('BUG', f'{tag}: symptom count mismatch')
         lay = sets.get('layout', {}).get('data')
         if not lay: f.add('BUG', f'{tag}: no layout'); continue
         for k, v in lay.items():
-            if not re.match(r'^(mh_collapse_dc_|mh_dashboard_hidden$|mh_trend_cards_hidden$)', k): f.add('BUG', f'{tag}: unexpected layout key {k}'); continue
+            if not re.match(r'^(mh_collapse_dc_|mh_dashboard_hidden$|mh_trend_cards_hidden$|mh_reorder_hidden_reports$)', k): f.add('BUG', f'{tag}: unexpected layout key {k}'); continue
             if k.startswith('mh_collapse_dc_') and (k[len('mh_collapse_dc_'):] not in valid['dc'] or v != 'closed'): f.add('BUG', f'{tag}: bad fold {k}={v}')
             if k == 'mh_dashboard_hidden':
                 for x in json.loads(v):
@@ -45,7 +46,7 @@ with fresh_server() as root, sync_playwright() as pw:
           return { out: String(out), added: after, hidden: localStorage.getItem('mh_dashboard_hidden'), base: Object.keys(mhLayoutBase()).length }; }""", d)
         if r['base'] != len(lay): f.add('BUG', f'{tag}: pack layout base {r["base"]} != {len(lay)}')
         for k in r['added']:
-            if not re.match(r'^(mh_collapse_dc_|mh_dashboard_hidden$|mh_trend_cards_hidden$|mh_layout_base|mh_symptom|mh_treatment_defs|maxhealth|mh_nudge|mh_pack)', k) and 'symp' not in k.lower(): f.add('BUG', f'{tag}: pack wrote unexpected key {k}')
+            if not re.match(r'^(mh_collapse_dc_|mh_dashboard_hidden$|mh_trend_cards_hidden$|mh_reorder_hidden_reports$|mh_layout_base|mh_symptom|mh_treatment_defs|maxhealth|mh_nudge|mh_pack)', k) and 'symp' not in k.lower(): f.add('BUG', f'{tag}: pack wrote unexpected key {k}')
         if lay.get('mh_dashboard_hidden') and r['hidden'] != lay['mh_dashboard_hidden']: f.add('BUG', f'{tag}: hidden list not applied ({r["hidden"]})')
     # embedded first-run packs equal the JSON files
     emb = page.evaluate("MH_FIRST_RUN_PACKS")
