@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1395 — Foods in Compare Metrics and the AI daily-limit messages translate
+
+- The Foods group in Compare Metrics (its explanation, search box, empty messages, the "days with and without" comparison and its notes) and the daily-limit and "no key added" messages are now in es, de, fr, tr, pt, it, pl and nl (machine-assisted). The comparison line is built from one translated sentence instead of bold fragments; English reads the same apart from no longer bolding the two averages.
+- New p477. Also checked: p439, p387, p51, p424.
+
 ## v3.10.1394 — Translation sweep: eight more long help texts
 
 - Sharing choices, "Pause when idle", the data-backup warning, the restore note, Lab Results help, the Daily Steps baseline explanation and its Easy/Moderate/Hard levels, and the export save/send help are now in es, de, fr, tr, pt, it, pl and nl (machine-assisted, not native-checked).
