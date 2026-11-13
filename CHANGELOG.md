@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1396 — "What each feature sends to the AI" and the layout/packs/voice help translate
+
+- Each paragraph of those two help texts is now a whole sentence in es, de, fr, tr, pt, it, pl and nl (machine-assisted). The layout help lost its italic fragments and was cut by about a quarter (same meaning); the AI-use help is unchanged in English.
+- New p478. Also checked: p406, p467, p424, p328.
+
 ## v3.10.1395 — Foods in Compare Metrics and the AI daily-limit messages translate
 
 - The Foods group in Compare Metrics (its explanation, search box, empty messages, the "days with and without" comparison and its notes) and the daily-limit and "no key added" messages are now in es, de, fr, tr, pt, it, pl and nl (machine-assisted). The comparison line is built from one translated sentence instead of bold fragments; English reads the same apart from no longer bolding the two averages.
