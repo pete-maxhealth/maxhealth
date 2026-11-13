@@ -254,3 +254,4 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - Done v3.10.1379: Reports Treatment chip follows hidden cards; Losing weight start hides it.
 
 - [ ] Body composition (v3.10.1383, 12 Nov): range change now uses averages at each end. Pete's real year (27/10/25 to 26/10/26: Muscle -3.2, Fat -5.0) should be looked at on his phone with the new Weight figure beside it: if weight is about flat, the early drop in the line is probably a scale or device change rather than muscle loss. Possible follow-up: a note when muscle + fat + bone drift away from weight, or a way to mark "changed scale" on a date.
+- [ ] **Google Play (Pete asked for it, 13 Nov).** Investigation written up in PLAY_STORE.md. Next: Pete picks personal vs organisation account; then store text, assetlinks hosting, Premium-hiding switch, wrapper build (laptop). Also register the Premium launcher APK for Android developer verification before the UK date (2027).
