@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1401 — Goal start pages, a QR for each, and a landing page built around the goal
+
+- **Start pages** (`start/`): Lose weight, Keep carbs low, Type 2 diabetes, Build muscle, Just see how I am doing. Each has the person's problem, what it does, a demo persona (Doris, Sam, John, Alex, Karen) that opens the app's demo, an optional video slot, a QR that opens the app set up for that goal, and the install steps. On a phone the QR is replaced by an "Open it on this phone" button.
+- The pages are built from `start/pages.json` by `tools/build_start_pages.py`; the QR is drawn with the app's own encoder, so nothing is downloaded. To add a video, put its YouTube link in `pages.json` ("video") and rerun the builder.
+- **Landing page** now leads with the goal ("Pick your goal. Be set up in a minute.") and the five starting points instead of the protocol wording; the broken "Why it exists" link now points at docs/why-free.html.
+- New p483 (every page's start value and demo persona are real, the QR decodes to the right link, no Premium link, no condition named, local links resolve, no sideways scroll, QR hidden on a phone). Also checked: p482, p126, p61, p62, p64. Known and unchanged: p371 flags the owner's own public story for review, p131 fails to build its split on its own.
+
 ## v3.10.1400 — Add to home screen, and start links for the website
 
 - **Add to home screen.** A new button beside Check for updates (Settings, About) and a chip in the welcome box. On Android Chrome it uses the browser's own install prompt; on iPhone and other browsers it shows a two-line how-to for that browser. Hidden once the app is already installed and in demo mode. Translated into es, de, fr, tr, pt, it, pl and nl (machine-assisted). The About search entry also finds "install" and "home screen".
