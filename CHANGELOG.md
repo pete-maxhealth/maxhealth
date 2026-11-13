@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1392 — Generated report lines translate; a mixed-language slip from v3.10.1386 fixed
+
+- **Fix:** the Move "?" text under "What your own days suggest" (v3.10.1386) joined a translated first sentence to an English second one, so Spanish showed both. Both parts now translate.
+- The Move finding line itself ("After walk & hike days, next-day HRV averaged...") is built from translated pieces; the long wording with day counts is unchanged for the AI context.
+- When-you-eat counts and "biggest meal", the weekend sleep line, "moving the way you want ✓" and the fasting threshold hint translate, in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
+- New p475. Also checked: p177, p198, p467, p474, p391.
+
 ## v3.10.1391 — Fasting card: the live lines translate
 
 - "since your last meal at…", "goal…", "goal reached", "Fasting day", "No meal logged for a few days" and the "Your usual (…)" line (including the period wording and the biggest-meal sentence) are built from translated pieces instead of one English string, in es, de, fr, tr, pt, it, pl and nl (machine-assisted). English is unchanged.
