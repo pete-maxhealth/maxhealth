@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1400 — Add to home screen, and start links for the website
+
+- **Add to home screen.** A new button beside Check for updates (Settings, About) and a chip in the welcome box. On Android Chrome it uses the browser's own install prompt; on iPhone and other browsers it shows a two-line how-to for that browser. Hidden once the app is already installed and in demo mode. Translated into es, de, fr, tr, pt, it, pl and nl (machine-assisted). The About search entry also finds "install" and "home screen".
+- **Start links.** `maxhealth.html?start=lose` (also `lowcarb`, `t2d`, `muscle`, `simple`) opens the first-run wizard already pointed at that goal, for a brand-new install only. `?demo=doris` (any persona) opens that demo. Both clean themselves out of the address bar; unknown values do nothing. These are what the website's start pages and QR codes use.
+- New p482 (button looks like Check for updates, prompt path, iPhone / Android / Spanish how-to, standalone and demo hide it, every start link, junk values, a returning user is never changed, demo link leaves real data alone). Also checked: p01, p146, p119, p476.
+
 ## v3.10.1399 — Carb-ceiling offset and exercise energy help translate; five stale tests fixed
 
 - The "going over your carb ceiling" exercise-offset help and the exercise energy (MET) help are whole sentences in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
