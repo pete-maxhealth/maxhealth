@@ -13,7 +13,7 @@ IDS = {  # help id -> screen that shows it, text expected inside, text that must
  'statsintro': ('stats', 'Top foods', 'Ask your own data a question and keep the answer'),
  'reportsintro': ('reports', 'Query Builder', 'Reports is for period analysis'),
  'activitylevelhistory': ('manage', 'One change per line', 'Logs automatically whenever your Activity Level changes'),
- 'carbmethodhelp': ('manage', 'sugar alcohols', 'the default) shows the raw carbs figure'),
+ 'carbmethodhelp': ('manage', 'sugar alcohols', 'the default) shows the carbs exactly'),
  'exenergyhelp': ('manage', 'Compendium', 'Calories = MET'),
  'tdeemulthelp': ('manage', '1.725', 'Activity multiplier comes from'),
  'methelp': ('manage', 'Walking: 2.8', 'MET values by activity and effort'),

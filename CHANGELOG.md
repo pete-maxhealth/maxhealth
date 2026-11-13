@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1389 — Carb counting method note: shorter, and translated
+
+- The "Carb counting method" note was a long paragraph with bold fragments, so it never translated. It is now one short line plus a four-sentence "?" with no markup, in es, de, fr, tr, pt, it, pl and nl (machine-assisted). Wording is simpler; the meaning is the same (Net subtracts polyols, fibre is not subtracted, only today's check is reliable).
+- p406's pinned text updated. New p472. Also checked: p470.
+
 ## v3.10.1388 — Suggested Targets: "Why these figures might differ" translated
 
 - The explanation was built from pieces split by emphasis tags, so it never translated. The tags are gone and each sentence is now whole; seven sentences (including the condition-specific ones) are in es, de, fr, tr, pt, it, pl and nl. Machine-assisted; not native-checked.
