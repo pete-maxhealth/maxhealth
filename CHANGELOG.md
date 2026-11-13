@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1403 — Google Play build switch
+
+- When the app is opened with `?src=play` (what the Play wrapper will use as its start address) it remembers that and hides the Premium card, the Ko-fi card, the demo Premium cards and the Premium search entry, because Google wants digital goods through its own billing. Nothing else changes, and the normal app is untouched. Groundwork for PLAY_STORE.md; no Play listing exists yet.
+- New p485 (normal build unchanged including the demo Premium cards as a control; Play build hides all four things, remembers itself, search and keyword search can't reach Premium). Also checked: p61, p482.
+
 ## v3.10.1402 — The fasting "?" help translates as a whole
 
 - The fasting explanation behind the "?" is now one translated text in es, de, fr, tr, pt, it, pl and nl (machine-assisted), built from the same pieces as the paragraphs on the card so the two never disagree. The card's own paragraphs were already translated.
