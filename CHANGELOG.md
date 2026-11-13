@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1399 — Carb-ceiling offset and exercise energy help translate; five stale tests fixed
+
+- The "going over your carb ceiling" exercise-offset help and the exercise energy (MET) help are whole sentences in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
+- Tests only: p64 (a bare "Pete" in a code comment, now "Pete Spence"), p99 (the Losing weight first-run pack is exempt from the packs index and symptom count), p199 (the shared card control is 11px since v3.10.1367), p285 (it measured the Log clear while that box was hidden). p404 is not hung, it takes 15 to 25 minutes because every click rebuilds its flow; it now prints progress. Its import-review scenario passed (135 clicks, 0 findings).
+- New p481. Also checked: p64, p99, p199, p285.
+
 ## v3.10.1398 — Tableware, phone-to-phone QR and export help translate
 
 - Four long help texts (tableware sizes, Share by QR, Export, why some rows are not QR) are now whole sentences in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
