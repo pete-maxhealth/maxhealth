@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1390 — Activity level, auto-switch and device-order help: shorter and translated
+
+- Four long "?" texts (activity level, auto-switch days, device order, device order save/manage) cut to about half the length, same meaning, and translated into es, de, fr, tr, pt, it, pl and nl (machine-assisted). The generic "Consecutive days outside..." wording is now plain English about days in a row.
+- New p473. Also checked: p406, p10, p04.
+
 ## v3.10.1389 — Carb counting method note: shorter, and translated
 
 - The "Carb counting method" note was a long paragraph with bold fragments, so it never translated. It is now one short line plus a four-sentence "?" with no markup, in es, de, fr, tr, pt, it, pl and nl (machine-assisted). Wording is simpler; the meaning is the same (Net subtracts polyols, fibre is not subtracted, only today's check is reliable).
