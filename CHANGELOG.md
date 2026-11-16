@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1406 — Foods from different shops are separate in the rankings
+
+- The Top foods card and the Statistics rankings (e.g. "Top 10 total fat") treated Asda double cream and Tesco double cream as one food, added their totals together and showed the result under whichever name was longer. They are now separate bars. Case, spacing and plurals (Egg / Eggs) still merge.
+- The library match is unchanged: it still ignores the shop name, so a logged "Asda Double Cream" still finds your "Tesco Double Cream" library entry. The Meal map food picker also still uses that merged name (changing it would alter saved picks), so it is a candidate for a later look.
+- New p488 (fails on the old code, passes now). Also checked: p180, p183, p49, p67, p195.
+
 ## v3.10.1405 — Six more help texts translated
 
 - The phone-to-phone share explanation, the meal picker help, the phase-change drift note, the carb-ceiling reference, the holiday-ceiling note and the Ketosis report line now translate in es, de, fr, tr, pt, it, pl and nl (machine-assisted).
