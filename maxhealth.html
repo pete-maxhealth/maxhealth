@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1415'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1416'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27773,9 +27773,15 @@ function mhShopKnown() {
 // there's no nutrition to size a portion against), and its own section so it never gets grouped in among
 // real, unmatched food aisles ("Other"). Reuses the exact aisle-fold/tick-all section mechanism already
 // built for food aisles, just as one more named section that always sorts last.
+// v3.10.1416: the same food under two names ("Asda Frozen Cauliflower" / "Cauliflower Frozen (Asda)") is one food: made of exactly the same words once shop names, brackets, sizes and plurals are ignored.
+// Only an exact match of the word sets counts (the same rule as Possible duplicates, strict end), two names that point at different shops are never joined, and it only applies to the automatic adds (a recipe or the meal plan): something you pick or type yourself is always added, as before.
+function mhShopSameFood(a, b, shops) {
+  try { if (mhShopKey(a) === mhShopKey(b)) return true; const sa = mhShopFromTitle(a, shops), sb = mhShopFromTitle(b, shops); if (sa && sb && sa !== sb) return false;
+    const wa = mhStockDupeWords({ name: a }, shops), wb = mhStockDupeWords({ name: b }, shops); return wa.length > 0 && wa.length === wb.length && wa.every((w, i) => w === wb[i]); } catch (_) { return false; }
+}
 function mhShopSetAdd(s, name, src, from, cat, opts) {
   const k = mhShopKey(name); if (!k) return false;
-  const exist = s.items.find(i => i.key === k);
+  const exist = s.items.find(i => i.key === k) || ((opts && opts.nonFood) || (src !== 'recipe' && src !== 'plan') ? null : s.items.find(i => !i.nonFood && mhShopSameFood(i.name, name, s.shops)));
   if (exist) {
     // The same ingredient needed by a second planned meal counts twice ("2 x double cream"); counted once per meal, so refreshing again changes nothing (v3.10.1216).
     const pk = opts && opts.planKey;
@@ -27817,7 +27823,7 @@ function mhShopRecipeIngs(mealName, s) {
 }
 // v3.10.1125: a food you hold in your cupboards (switch on, counted, some left, not low, not past its use-by) is left off a recipe's shopping list.
 function mhShopInCupboards(name) {
-  try { if (!mhStockOn()) return false; const it = mhStockLoad().items[mhShopKey(name)]; return !!it && it.level != null && it.level > 0 && !mhStockIsLow(it) && !mhStockExpired(it); } catch (_) { return false; }
+  try { if (!mhStockOn()) return false; const so = mhStockLoad(), sh = (mhShopLoad().shops || []); let it = so.items[mhShopKey(name)]; if (!it) it = Object.values(so.items || {}).find(x => x && x.name && !x.nonFood && mhShopSameFood(x.name, name, sh)); return !!it && it.level != null && it.level > 0 && !mhStockIsLow(it) && !mhStockExpired(it); } catch (_) { return false; }
 }
 function mhShopRefresh(planOnly) {
   const s = mhShopLoad(); let added = 0, fromPlan = 0;

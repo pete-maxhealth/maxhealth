@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1416 — Shopping list: one food under two names is one line (recipes and the meal plan)
+
+- Pete (17 Nov): "Asda Frozen Cauliflower" (a cupboard food) and "Cauliflower Frozen (Asda)" (a recipe ingredient) both sat on the list. The list only ever treated the same **name** as the same item, so the same food under two names became two lines. A recipe or the meal plan now treats a name made of exactly the same words (shop names, brackets, sizes and plurals ignored, the same strict rule as Possible duplicates) as the same food: it adds no second line, and a recipe leaves the ingredient off when you hold it in the cupboards under the other name. Names pointing at different shops are kept apart. Anything you type or pick yourself is still always added (the existing "already have this?" question is unchanged).
+- Lines already on a list are not touched: tap ✕ on the one you do not want.
+- New p497. Also checked: p197, p201, p206, p210, p212, p228, p260, p289, p292, p294, p300, p321, p358, p380, p381, p382, p444, p496.
+
 ## v3.10.1415 — Shopping: a tap lower down now gives visible feedback
 
 - Pete (17 Nov): tapping a recipe in Shopping > Recipe (to put the ingredients you are missing on the list) gave no feedback. It did add them, but the only message was a small green line at the top of the pane, out of sight after scrolling a long recipe list. Every message the shopping pane sets now also shows as a toast and the message line is scrolled into view if it is off screen (recipes, saved lists, import, quick list, and the rest). Messages that already toasted are not doubled. New p496 (recipe tap: toast, message in view, ingredients on the list, one held in the cupboards left off). Also checked: p197, p267, p279, p382, p232, p234, p207, p214, p494, p495.
