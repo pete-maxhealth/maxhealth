@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1415 — Shopping: a tap lower down now gives visible feedback
+
+- Pete (17 Nov): tapping a recipe in Shopping > Recipe (to put the ingredients you are missing on the list) gave no feedback. It did add them, but the only message was a small green line at the top of the pane, out of sight after scrolling a long recipe list. Every message the shopping pane sets now also shows as a toast and the message line is scrolled into view if it is off screen (recipes, saved lists, import, quick list, and the rest). Messages that already toasted are not doubled. New p496 (recipe tap: toast, message in view, ingredients on the list, one held in the cupboards left off). Also checked: p197, p267, p279, p382, p232, p234, p207, p214, p494, p495.
+
 ## v3.10.1414 — New-food routes straight under the search box
 
 - Pete (17 Nov): the routes appeared "way down the screen", below the shop chips, hidden shops and recently removed. On My cupboards search, the Add a food screen and the shopping Add box the row (Search online, Try AI, Scan barcode, Read a label, Enter manually) now sits directly under the search box, with any matching foods below it. The Add foods picker already had it under its box. p494 and p495 now check the gap under the box (under 60px) on all of them. Also checked: p267, p225, p207, p253, p255, p259, p197, p382, p214, p279.
