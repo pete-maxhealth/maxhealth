@@ -258,4 +258,14 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 
 - Play build and the licence box (17 Nov 2026): the Play build hides Premium, but Settings still shows the 'Premium licence' key box. Play may read an unlock key bought elsewhere as an outside payment route. Decide before the Play review: hide the box in the Play build (existing Premium owners would activate on the launcher instead), or keep it.
 
-- New-food routes (online, AI, barcode, label) still missing on the shopping Add box "New food" row and the list picker's "Add as a new food" (done for My cupboards in v3.10.1411).
+
+## Checklist: every place a food can be created (Pete, 17 Nov: "how do we know it has not happened elsewhere"). Routes = Search online, Try AI, Scan barcode, Read a label, typing last.
+- [x] Log screen (search, photo, barcode, voice): the original
+- [x] Shopping import "Create new" (v3.10.1293)
+- [x] My cupboards search box and Add a food screen (v3.10.1411)
+- [x] Shopping Add box "New food" and the Add foods picker (v3.10.1412)
+- [ ] Library "+ Add Food Manually" (labelled manual on purpose; check it offers the routes above it)
+- [ ] Category browse "add new item" (opens the typed form)
+- [ ] Recipe unmatched ingredient (has Search online; check AI, barcode, label)
+- [ ] Meal-map picker, Plan, Recipes ingredient add: not yet walked
+Every new screen that can create a food must be added here and checked before release.

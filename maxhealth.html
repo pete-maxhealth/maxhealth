@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1411'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1412'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27946,6 +27946,7 @@ function mhShopSug() {
   const row = (label, sub, fn, k) => '<button type="button" data-k="' + esc(k) + '" onclick="' + fn + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%;text-align:left;padding:12px 10px;margin-top:4px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;cursor:pointer;"><span style="min-width:0;">' + esc(label) + (sub ? '<span style="display:block;font-size:12px;color:var(--text3);">' + esc(sub) + '</span>' : '') + '</span><span style="flex:0 0 auto;color:var(--accent);font-weight:600;">＋ ' + esc(s.shop) + '</span></button>';
   let h = hits.map(r => row(r.name, mhWhereIs(r, s), 'mhShopSugPick(this.dataset.k)', r.key)).join('');
   if (!hits.some(r => r.name.toLowerCase() === q.toLowerCase())) h += row('New food: ' + q, hits.length ? 'as a separate food, not one of the above' : 'not in my library or cupboards yet', 'mhShopSugNew()', '');
+  if (!hits.some(r => r.name.toLowerCase() === q.toLowerCase())) h += mhStockNewRoutesHtml(q, 'shop');
   box.innerHTML = h;
 }
 function mhShopSugPick(key) {
@@ -30191,15 +30192,21 @@ function mhOrdFind(i, mode) {
 }
 // Label photo: the AI reads only what is printed (per 100 g). Anything it cannot read stays missing; nothing is estimated.
 // v3.10.1411: a brand-new food from My cupboards uses the same routes as Log (online search, AI, barcode, label photo). Each saves to the library only (nothing is logged), then the food continues into the cupboards. Typing is the last resort below.
-function mhStockNewRoutesHtml(name) {
-  const n = esc0(name), b = (lab, mode) => '<button class="copy-btn" data-n="' + n + '" onclick="mhStockNewFind(\'' + mode + '\',this.dataset.n)" style="width:auto;font-size:12px;padding:6px 10px;">' + lab + '</button>';
+function mhStockNewRoutesHtml(name, ctx) {
+  const n = esc0(name), b = (lab, mode) => '<button class="copy-btn" data-n="' + n + '" data-c="' + (ctx || '') + '" onclick="mhStockNewFind(\'' + mode + '\',this.dataset.n,this.dataset.c)" style="width:auto;font-size:12px;padding:6px 10px;">' + lab + '</button>';
   return '<div data-newroutes="1" style="margin:10px 0 4px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">New food: how would you like to add it? Nothing is logged: it goes into your library, then into your cupboards. Already in your library? It is listed above.</div><div style="display:flex;gap:6px;flex-wrap:wrap;">'
     + b('🔍 Search online', 'search') + b('✨ Try AI', 'ai') + b('📷 Scan barcode', 'scan') + b('📸 Read a label', 'label') + '</div></div>';
 }
 function esc0(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function mhStockNewFind(mode, name) {
+function mhStockNewFind(mode, name, ctx) {   // ctx: '' = My cupboards; 'shop' = the shopping Add box (also goes on the list); 'picker' = the Add foods picker (returns to it)
   name = String(name || '').trim(); if (!name) return;
-  const tgt = { name, cb: n => mhStockAddFood({ name: n || name, origin: 'library', ret: () => { try { mhShopView('list'); } catch (_) {} } }) };
+  const y = window.scrollY;
+  const tgt = { name, cb: n => {
+    n = n || name; const s = mhShopLoad(); let shop = mhShopFromTitle(n, s.shops) || '';
+    if (ctx === 'shop') { shop = shop || s.shop; if (mhStockOn() && mhShopSetAdd(s, n, 'own', '', null)) { s.items[s.items.length - 1].shop = shop; mhShopSave(s); } }
+    if (ctx === 'picker') shop = shop || mhSlShop();
+    mhStockAddFood({ name: n, origin: 'library', shop, ret: () => { try { if (ctx === 'picker') { mhShopView('stocklist'); setTimeout(() => window.scrollTo(0, y), 80); } else mhShopView('list'); } catch (_) {} } });
+  } };
   _ordSearchTarget = tgt;
   if (mode === 'label' || mode === 'scan') { setTimeout(() => { const o = document.getElementById('foodSearchOverlay'); if (_ordSearchTarget === tgt && !(o && o.classList.contains('open'))) _ordSearchTarget = null; }, 120000); if (mode === 'label') mhOrdLabelPick(); else openLiveBarcodeScanner(); return; }
   openFoodSearch(); mhOrdPanelSync();
@@ -31066,7 +31073,7 @@ function mhShopRender(keepFocus) {
     const shopChips = '<div id="mhSlShops" style="margin:0 0 10px;"><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Everything below goes to this shop. Tap another to change it:</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + s.shops.filter(n => !offA.includes(n)).map(n => '<button class="hist-filter-btn' + (n === dest ? ' active' : '') + '" data-slshop="' + esc(n) + '" onclick="mhSlShopPick(this.dataset.slshop)">' + esc(n) + '</button>' + (offAv > 1 ? mhShopHideX(n) : '')).join('') + '<button class="hist-filter-btn" data-slshop-add="1" onclick="mhSlAddShop()">＋ Shop</button></div>' + mhShopHiddenHtml(s) + '</div>';
     const chip = (k, t) => '<button class="hist-filter-btn' + (st.f === k ? ' active' : '') + '" data-f="' + k + '" onclick="mhSlF(this.dataset.f)">' + t + '</button>';
     const find = '<div id="mhSlQBox" style="position:sticky;top:-16px;z-index:6;background:var(--bg);padding:22px 0 6px;margin:-16px 0 4px;"><input id="mhSlQ" value="' + esc(st.q) + '" oninput="mhSlQ(this.value)" placeholder="Search your library and cupboards (any words, any order)" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;"></div>'
-      + (mhSlNewName() ? '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
+      + (mhSlNewName() ? mhStockNewRoutesHtml(mhSlNewName(), 'picker') + '<div id="mhSlNew" style="margin:0 0 8px;">' + btn('＋ Add “' + esc(mhSlNewName()) + '” as a new food to ' + esc(dest), 'mhSlNewFood()', 'background:var(--accent);color:#fff;font-size:14px;padding:11px 14px;') + '</div>' : '')
       + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">' + (mhStockGapCount() ? chip('gaps', 'Needs details (' + mhStockGapCount() + ')') : '') + chip('all', 'All') + chip('not', 'Not in my cupboards') + chip('tracked', 'In my cupboards') + chip('low', 'Low') + (mhSlRows().some(r => r.it && r.it.nonFood) ? chip('nonfood', 'Non-nutritional') : '') + '</div>'
       + (() => { if (!mhSlNeverHides(st)) return ''; const hid = mhSlRows().filter(r => !(r.twin && !st.twins) && ((st.f === 'not' && !r.it) || ((st.f === 'gaps' || st.f === 'noamt') && r.it && (!(r.it.level != null)) ) ) && mhIsNever(r.name, null, r.it)).length;
         if (!hid && !st.showNever) return ''; return '<div id="mhSlNeverNote" style="font-size:12px;color:var(--text3);margin:2px 0 6px;line-height:1.5;">' + (st.showNever ? 'Showing herbs, spices and other never-run-out foods. ' + btn('Hide them', 'mhSlNever(false)', 'font-size:12px;padding:5px 9px;') : hid + ' herb' + (hid === 1 ? '' : 's') + ', spice' + (hid === 1 ? '' : 's') + ' and other never-run-out foods hidden (set in Stock rules). ' + btn('Show them', 'mhSlNever(true)', 'font-size:12px;padding:5px 9px;')) + '</div>'; })()

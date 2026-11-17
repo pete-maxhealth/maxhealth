@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1412 — New-food routes on the shopping Add box and the Add foods picker
+
+- The shopping Add box ("New food: ...") and the Add foods picker ("Add ... as a new food") now offer Search online, Try AI, Scan barcode and Read a label, like My cupboards (1411) and the import "Create new" (1293). From the Add box the new food also goes on the list; from the picker you come back to the picker. Typing stays as the last resort.
+- New p495 (routes for a new name only, none for a known food, saving continues correctly in both). The typed button in the picker keeps its own wrapper, so p253, p255, p259 still find it. Also checked: p197, p267, p279, p382, p494.
+
 ## v3.10.1411 — My cupboards: a new food gets the same routes as Log
 
 - Typing a food that is not yet known in My cupboards (the search box, and the Add a food screen) showed only "Add as a new food" (a hand-typed form) and "non-nutritional". It now first offers **Search online, Try AI, Scan barcode, Read a label**, the same routes as Log; each saves to the library only (nothing is logged) and then carries on into the cupboards for that food. Typing is the last resort below. Your library matches were already listed above as you type.
