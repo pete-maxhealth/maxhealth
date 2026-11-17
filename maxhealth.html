@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1416'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1417'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -28007,6 +28007,53 @@ function mhShopLQ(v) { _shopUi.lq = v; mhShopRender('lq'); }
 function mhShopBackArrow() { const v = _shopUi.view; if (v === 'stockedit') mhStkBack(); else if (v === 'recipe') mhShopView('recipes'); else if (v === 'lists' && _shopUi.useList) mhShopListCancelUse(); else mhShopView('list'); }
 function mhShopView(v, r) { _shopUi.view = v; _shopUi.recipe = r || null; _shopUi.q = ''; _shopUi.useList = null; mhShopRender(); }
 function mhShopRecipeToggle(mealKey, ingKey) { const s = mhShopLoad(), ex = new Set(s.recipeEx[mealKey] || []); if (ex.has(ingKey)) ex.delete(ingKey); else ex.add(ingKey); s.recipeEx[mealKey] = [...ex]; mhShopSave(s); mhShopRender(); }
+// v3.10.1417: Undo for Shopping and My cupboards (Pete, 17 Nov). Each tap that changes the list or the cupboards takes a snapshot first; if something changed, the toast carries an Undo that puts the list, the cupboards and the saved lists back as they were.
+// Actions that already had their own Undo (remove, take off the list, filtered, import, duplicates) are left alone. Only the outermost action offers it, so one tap never stacks several.
+const MH_UNDO_FNS = {
+  mhShopQty: 'Quantity changed', mhShopHide: 'Hidden for now', mhShopHave: 'Marked as already have', mhShopMove: 'Moved', mhShopAll: 'Aisle added', mhShopSortAisle: 'Sections changed',
+  mhShopCompleteGo: 'Shop finished', mhStockBoughtSkipAll: 'Stock left as it was', mhStockBoughtDone: 'Stock updated', mhShopSugPick: 'Added to the list', mhShopSugNew: 'Added to the list',
+  mhShopAddOwn: 'Added to the list', mhShopPick: 'List updated', mhShopRecipeAdd: 'Recipe added', mhShopUsualDelete: 'Regular removed', mhShopOff: 'List updated', mhShopDelShop: 'Shop removed',
+  mhShopListApply: 'Saved list applied', mhShopSuggestAdd: 'Added to the list', mhShopSuggestAddSection: 'Added to the list', mhShopUsualToggle: 'Regulars changed', mhShopUsualAddNew: 'Regular added',
+  mhStockSetLevel: 'Stock changed', mhStockSetReorder: 'Reorder level changed', mhStockAdjust: 'Stock changed', mhStockReverse: 'Stock changed',
+  mhStockSetUseBy: 'Use-by changed', mhStockWaste: 'Waste recorded', mhStockAddFood: 'Added to my cupboards', mhStockSweep: 'Cupboards updated', mhStockToList: 'Put on the list',
+  mhStockAddNonFood: 'Added to my cupboards', mhStockFormApply: 'Cupboards updated', mhStockSetOn: 'Stock control changed'
+};
+let _mhUndoDepth = 0;
+function mhUndoRaw() { const g = (k, dflt) => { let v = null; try { v = localStorage.getItem(k); } catch (_) {} if (v != null) return v; try { return JSON.stringify(dflt()); } catch (_) { return null; } };   // nothing saved yet = the defaults, so Undo can put those back
+  return { shop: g(MH_SHOP_KEY, mhShopLoad), stock: g(MH_STOCK_KEY, mhStockLoad), lists: g(MH_SHOP_LISTS_KEY, mhShopListsLoad) }; }
+function mhUndoSame(a, b) {
+  const norm = (t, st) => { if (t == null) return ''; if (!st) return t; try { const o = JSON.parse(t); delete o.rev; delete o.at; return JSON.stringify(o); } catch (_) { return t; } };
+  return norm(a.shop) === norm(b.shop) && norm(a.stock, 1) === norm(b.stock, 1) && norm(a.lists) === norm(b.lists);
+}
+function mhUndoRestore(snap) {
+  try { if (snap.shop != null) mhShopSave(JSON.parse(snap.shop)); } catch (_) {}
+  try { if (snap.stock != null) mhStockSave(JSON.parse(snap.stock)); } catch (_) {}
+  try { if (snap.lists != null) mhShopListsSave(JSON.parse(snap.lists)); } catch (_) {}
+  try { _shopUi.msg = ''; mhShopRender(); } catch (_) {}
+  try { _toastUndoUntil = 0; } catch (_) {}
+  showToast('Undone ✓', null, null, 2500);
+}
+// A tap on anything but the toast ends the protection an Undo gives against passing messages, so the answer to your next tap is never swallowed; only background messages are held back while an Undo is on offer.
+document.addEventListener('click', e => { try { if (!e.target.closest || !e.target.closest('#toast')) _toastUndoUntil = 0; } catch (_) {} }, true);
+(function mhInstallUndo() {
+  Object.keys(MH_UNDO_FNS).forEach(name => {
+    const orig = window[name]; if (typeof orig !== 'function' || orig._mhUndo) return;
+    const wrapped = function () {
+      if (_mhUndoDepth > 0) return orig.apply(this, arguments);
+      const before = mhUndoRaw(), pend = { fn: () => mhUndoRestore(before), shown: false, said: '', before };
+      window._mhUndoPend = pend; _mhUndoDepth++;
+      let r; try { r = orig.apply(this, arguments); } finally { _mhUndoDepth--; }
+      try {
+        const after = mhUndoRaw();
+        if (!mhUndoSame(before, after) && !pend.shown) showToast(pend.said || MH_UNDO_FNS[name], 'Undo', pend.fn, 9000);
+        else if (mhUndoSame(before, after) && pend.shown) { /* a message toast for a no-op: leave it */ }
+      } catch (_) {}
+      if (window._mhUndoPend === pend) window._mhUndoPend = null;
+      return r;
+    };
+    wrapped._mhUndo = true; window[name] = wrapped;
+  });
+})();
 function mhShopRecipeAdd(mealKey) {
   const s = mhShopLoad(), m = mhShopFindMeal(mealKey); if (!m) return; let n = 0;
   let held = 0;
@@ -31201,7 +31248,7 @@ function mhShopRender(keepFocus) {
   const _sc = document.getElementById('shopScroll'), _st = _sc ? _sc.scrollTop : 0, _same = m.dataset.view === String(_shopUi.view);
   m.innerHTML = (_isList ? '' : head) + msg + undoRow + body;
   // v3.10.1415: the green message line sits at the top of the pane, so after a tap lower down (a recipe, a saved list, an import) there was no sign anything happened. Say it in the toast too, and bring the message into view (Pete, 17 Nov).
-  if (saidNow) { try { if (!window._mhShopToasted || window._mhShopToasted.m !== saidNow || Date.now() - window._mhShopToasted.t > 1500) showToast(saidNow, null, null, 3500); window._mhShopToasted = null; const e = document.getElementById('mhShopMsg'); if (e) { const r = e.getBoundingClientRect(); if (r.top < 140 || r.bottom > innerHeight - 20) e.scrollIntoView({ block: 'center' }); } } catch (_) {} }
+  if (saidNow) { try { const up = window._mhUndoPend; if (up) up.said = saidNow; if (!window._mhShopToasted || window._mhShopToasted.m !== saidNow || Date.now() - window._mhShopToasted.t > 1500) { if (up && !mhUndoSame(up.before, mhUndoRaw())) { up.shown = true; showToast(saidNow, 'Undo', up.fn, 9000); } else showToast(saidNow, null, null, 3500); } window._mhShopToasted = null; const e = document.getElementById('mhShopMsg'); if (e) { const r = e.getBoundingClientRect(); if (r.top < 140 || r.bottom > innerHeight - 20) e.scrollIntoView({ block: 'center' }); } } catch (_) {} }
   m.dataset.view = String(_shopUi.view);
   if (_sc && _same) _sc.scrollTop = _st;
   try { mhCardBodyApply(); } catch (_) {}

@@ -77,6 +77,7 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("localStorage.setItem('mh_shop_pane','stock'); mhCbTab('all'); mhShopRender()"); page.wait_for_timeout(300)
     lab = ev("[...document.querySelectorAll('#stockctlCard .mh-tiles button')].map(b=>b.innerText.trim()).find(t=>/duplicate/i.test(t))||''")
     if lab and ev("mhStockDupePairs().length") == 0: f.add('BUG', '16: the duplicates tile hides itself when there are none')
+    ev("_toastUndoUntil=0")   # the tap that opens the check ends any Undo's hold on the toast
     ev("mhStockDupeOpen()"); page.wait_for_timeout(300)
     if ev("mhStockDupePairs().length") == 0 and 'no likely duplicates' not in ev("(document.getElementById('toast')?.innerText||'').toLowerCase()"): f.add('BUG', '17: checking with none says so')
     page.screenshot(path='/tmp/p382.png')
