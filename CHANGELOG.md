@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1410 — Play build: the patient guide is not linked; shopping shelf names readable
+
+- In the Google Play build only (`?src=play`), the GBM patient guide is not linked anywhere in the app: the dashboard and welcome buttons, the inline links (set-up text, GKI note) and the tour-card "Source" (shown as plain text). Reason: the guide carries specific cannabinoid doses, which Play's health-content review could read as promoting an unapproved treatment. The web app and the guide itself are unchanged. New p492 (web keeps every link, Play has none, other tour sources stay links).
+- Shopping > Add > Non-nutritional shelf: item names were squeezed to one or two letters beside two wide buttons. The row now wraps, so the name gets its own line and Regular / Add sit under it, right-aligned. New p493 (360, 390, 430 px; names fully readable, buttons inside the row). Also checked: p243, p373, p491, p131, p32.
+
 ## v3.10.1409 — Ready to be wrapped for Google Play
 
 - `manifest.json`: added an `id` (the same as the start page, so installed copies keep their identity), `lang`, separate "any" and "maskable" icons (they were one icon marked both), new full-bleed maskable icons (`icons/icon-maskable-192.png` and `-512.png`, no transparent corners so Android's round and squircle masks never crop the artwork), dropped the "medical" category (it reads as a medical-device claim to Play), and a plainer description.
