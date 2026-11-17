@@ -21,6 +21,9 @@ with fresh_server() as root, sync_playwright() as pw:
         for need in ('Search online', 'Try AI', 'Scan barcode', 'Read a label', 'Enter manually'):
             any(need in x for x in p['b']) or f.add('FAIL', f'cupboards search: missing {need}: {p["b"]}')
         p['typed'] or f.add('FAIL', 'typing as last resort row is gone')
+    # the routes sit right under the search box (not below the shop chips and lists)
+    gap = ev("(()=>{const q=document.getElementById('mhCbQ').getBoundingClientRect(), r=document.querySelector('[data-newroutes]').getBoundingClientRect(); return Math.round(r.top-q.bottom)})()")
+    gap < 60 or f.add('FAIL', f'cupboards: routes are {gap}px below the search box')
     # existing food: no routes
     ev("mhCbQ('Zzqx Cheese')"); page.wait_for_timeout(300); probe() is None or f.add('FAIL', 'routes shown for a food that is already in the cupboards')
     # online route opens the Log-style panel, library only
@@ -36,6 +39,8 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("_ordSearchTarget") is None or f.add('FAIL', 'target left behind')
     # Add a food screen
     ev("_shopUi.stk=null; mhShopView('stockadd'); mhStockQ('Seeded rolls')"); page.wait_for_timeout(300); probe() or f.add('FAIL', 'Add a food screen: no new-food routes')
+    gap = ev("(()=>{const q=document.getElementById('mhStockQ').getBoundingClientRect(), r=document.querySelector('[data-newroutes]').getBoundingClientRect(); return Math.round(r.top-q.bottom)})()")
+    gap < 60 or f.add('FAIL', f'Add a food screen: routes are {gap}px below the search box')
     # barcode route sets a target and clears if nothing opens
     ev("mhStockNewFind('ai','Seeded rolls')"); page.wait_for_timeout(300)
     ev("document.getElementById('foodSearchOverlay').classList.contains('open')") or f.add('FAIL', 'AI route did not open the panel')

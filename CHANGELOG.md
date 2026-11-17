@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1414 — New-food routes straight under the search box
+
+- Pete (17 Nov): the routes appeared "way down the screen", below the shop chips, hidden shops and recently removed. On My cupboards search, the Add a food screen and the shopping Add box the row (Search online, Try AI, Scan barcode, Read a label, Enter manually) now sits directly under the search box, with any matching foods below it. The Add foods picker already had it under its box. p494 and p495 now check the gap under the box (under 60px) on all of them. Also checked: p267, p225, p207, p253, p255, p259, p197, p382, p214, p279.
+
 ## v3.10.1413 — New-food routes sit beside "Enter manually", not in a box of their own
 
 - Pete (17 Nov): the routes were hard to spot in their own boxed panel with a paragraph of text. On all four screens (My cupboards search, Add a food, shopping Add box, Add foods picker) the buttons are now one row: 🔍 Search online, ✨ Try AI, 📷 Scan barcode, 📸 Read a label, ⌨️ Enter manually. No box, no paragraph. The old "Add ... as a new food" rows are gone (Enter manually is that button). The shopping Add box and picker keep a one-line label ("New food, goes to Asda"); the Add box no longer shows the shop name on the manual button.

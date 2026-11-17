@@ -17,7 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.fill('#mhShopOwn', 'heylo flat'); page.wait_for_timeout(200)
     if 'Heylo Flatbread' not in page.inner_text('#mhShopSug'): f.add('BUG', 'typing shows the library food under the box')
     if 'New food' not in page.inner_text('#mhShopSug'): f.add('BUG', 'and offers New food when it is not exactly there')
-    page.click('#mhShopSug button >> nth=0'); page.wait_for_timeout(500)
+    page.click('#mhShopSug button[data-k]:not([data-manual]) >> nth=0'); page.wait_for_timeout(500)
     row = ev("mhShopLoad().items.filter(i=>i.key===mhShopKey('Heylo Flatbread')).map(i=>i.shop)")
     if row != ['Heylo']: f.add('BUG', f'one tap puts it on the Heylo list: {row}')
     if not ev("!!_shopUi.stk"): f.add('BUG', 'a library food not in the cupboards opens the stock form')
@@ -36,12 +36,12 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhStkBack()")
     # a cupboard food: straight on the list, no form
     ev("mhStockTrack('Heylo Wraps',{base:'g',shop:'Heylo'}); mhShopView('list'); _shopUi.addOpen=true; mhShopRender()"); page.wait_for_timeout(200)
-    page.fill('#mhShopOwn', 'wraps'); page.wait_for_timeout(200); page.click('#mhShopSug button >> nth=0'); page.wait_for_timeout(400)
+    page.fill('#mhShopOwn', 'wraps'); page.wait_for_timeout(200); page.click('#mhShopSug button[data-k]:not([data-manual]) >> nth=0'); page.wait_for_timeout(400)
     if ev("_shopUi.stk") or not ev("mhShopLoad().items.some(i=>i.key===mhShopKey('Heylo Wraps'))"): f.add('BUG', 'a cupboard food goes straight on the list')
     # stock off: library food just goes on the list
     ev("mhStockSetOn(false); mhShopView('list'); _shopUi.addOpen=true; mhShopRender()"); page.wait_for_timeout(200)
     ev("(()=>{const l=loadLibrary(); l.push({name:'Zz Offbread',portion:'50 g',kcal:1,protein:1,fat:1,carbs:1}); localStorage.setItem(LIBRARY_KEY, JSON.stringify(l));})()")
-    page.fill('#mhShopOwn', 'offbread'); page.wait_for_timeout(200); page.click('#mhShopSug button >> nth=0'); page.wait_for_timeout(400)
+    page.fill('#mhShopOwn', 'offbread'); page.wait_for_timeout(200); page.click('#mhShopSug button[data-k]:not([data-manual]) >> nth=0'); page.wait_for_timeout(400)
     if ev("_shopUi.stk") or not ev("mhShopLoad().items.some(i=>i.key===mhShopKey('Zz Offbread'))"): f.add('BUG', 'stock off: the food just goes on the list')
     # removing a mistake: one tap on the row's ✕ (no Edit mode), and Undo brings it back
     ev("mhShopView('list'); const s=mhShopLoad(); mhShopSetAdd(s,'Heylo','own','',null); mhShopSave(s); mhShopRender()"); page.wait_for_timeout(300)

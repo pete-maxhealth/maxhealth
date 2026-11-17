@@ -15,6 +15,8 @@ with fresh_server() as root, sync_playwright() as pw:
     # shopping Add box
     ev("_shopUi.addOpen=true; mhShopAddKind('food')"); page.wait_for_timeout(300)
     ev("document.getElementById('mhShopOwn').value='Wholemeal wraps'; mhShopSug()"); page.wait_for_timeout(300)
+    gap = ev("(()=>{const q=document.getElementById('mhShopOwn').getBoundingClientRect(), r=document.querySelector('[data-newroutes]').getBoundingClientRect(); return Math.round(r.top-q.bottom)})()")
+    gap < 60 or f.add('FAIL', f'Add box: routes are {gap}px below the box')
     r = routes(); len(r) == 5 and all(x.endswith('|shop') for x in r) or f.add('FAIL', f'Add box routes: {r}')
     ev("document.querySelector('[data-newroutes] button:not([data-manual])').click()"); page.wait_for_timeout(500)
     ev("document.getElementById('foodSearchOverlay').classList.contains('open')") or f.add('FAIL', 'Add box: online route did not open the panel')
