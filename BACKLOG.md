@@ -257,3 +257,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] **Google Play (Pete asked for it, 13 Nov).** Investigation written up in PLAY_STORE.md. Next: Pete picks personal vs organisation account; then store text, assetlinks hosting, Premium-hiding switch, wrapper build (laptop). Also register the Premium launcher APK for Android developer verification before the UK date (2027).
 
 - Play build and the licence box (17 Nov 2026): the Play build hides Premium, but Settings still shows the 'Premium licence' key box. Play may read an unlock key bought elsewhere as an outside payment route. Decide before the Play review: hide the box in the Play build (existing Premium owners would activate on the launcher instead), or keep it.
+
+- New-food routes (online, AI, barcode, label) still missing on the shopping Add box "New food" row and the list picker's "Add as a new food" (done for My cupboards in v3.10.1411).

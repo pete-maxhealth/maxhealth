@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1410'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1411'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -30190,6 +30190,22 @@ function mhOrdFind(i, mode) {
   if (input) { input.value = name; if (mode === 'ai' && name) tryAISearchForIngredient(name); else onFoodSearchInput(name); }
 }
 // Label photo: the AI reads only what is printed (per 100 g). Anything it cannot read stays missing; nothing is estimated.
+// v3.10.1411: a brand-new food from My cupboards uses the same routes as Log (online search, AI, barcode, label photo). Each saves to the library only (nothing is logged), then the food continues into the cupboards. Typing is the last resort below.
+function mhStockNewRoutesHtml(name) {
+  const n = esc0(name), b = (lab, mode) => '<button class="copy-btn" data-n="' + n + '" onclick="mhStockNewFind(\'' + mode + '\',this.dataset.n)" style="width:auto;font-size:12px;padding:6px 10px;">' + lab + '</button>';
+  return '<div data-newroutes="1" style="margin:10px 0 4px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">New food: how would you like to add it? Nothing is logged: it goes into your library, then into your cupboards. Already in your library? It is listed above.</div><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+    + b('🔍 Search online', 'search') + b('✨ Try AI', 'ai') + b('📷 Scan barcode', 'scan') + b('📸 Read a label', 'label') + '</div></div>';
+}
+function esc0(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function mhStockNewFind(mode, name) {
+  name = String(name || '').trim(); if (!name) return;
+  const tgt = { name, cb: n => mhStockAddFood({ name: n || name, origin: 'library', ret: () => { try { mhShopView('list'); } catch (_) {} } }) };
+  _ordSearchTarget = tgt;
+  if (mode === 'label' || mode === 'scan') { setTimeout(() => { const o = document.getElementById('foodSearchOverlay'); if (_ordSearchTarget === tgt && !(o && o.classList.contains('open'))) _ordSearchTarget = null; }, 120000); if (mode === 'label') mhOrdLabelPick(); else openLiveBarcodeScanner(); return; }
+  openFoodSearch(); mhOrdPanelSync();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = name; if (mode === 'ai') tryAISearchForIngredient(name); else onFoodSearchInput(name); }
+}
 function mhOrdScanFromPanel() { openLiveBarcodeScanner(); }
 function mhOrdLabelPick(cam) {
   let inp = document.getElementById('mhOrdLabelInput');
@@ -30205,14 +30221,14 @@ function mhOrdLabelParse(text) {
 }
 function mhOrdLabelFail() { const o = document.getElementById('foodSearchOverlay'); if (!(o && o.classList.contains('open'))) _ordSearchTarget = null; mhOrdPanelSync(); }
 async function mhOrdLabelRead(inp) {
-  const t = _ordSearchTarget, d = _shopUi.ord, r = t && d && d.rows[t.i], file = inp.files && inp.files[0]; if (!r || !file) { _ordSearchTarget = null; return; }
+  const t = _ordSearchTarget, d = _shopUi.ord, r = t && (t.cb ? { name: t.name } : d && d.rows[t.i]), file = inp.files && inp.files[0]; if (!r || !file) { _ordSearchTarget = null; return; }
   showToast('✨ Reading the label…');
   try {
     const b64 = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.onerror = no; fr.readAsDataURL(file); });
     const res = await callHealthAI('Read this food nutrition label. Reply with ONLY a JSON object: {"name":"product name if printed","kcal":,"protein":,"carbs":,"fat":,"fibre":,"polyols":,"sat_fat":,"sugars":,"salt":} using the PER 100 g (or per 100 ml) column exactly as printed. Use null for anything not printed or not readable. Never estimate or calculate. If there is no per 100 g column, reply {}.', { maxTokens: 300, image: { base64: b64, mimeType: file.type || 'image/jpeg' } });
     const v = res && res.ok ? mhOrdLabelParse(res.text) : null;
     if (!v) { showToast('⚠ Could not read a per 100 g label. Try again, or use search or typing.'); mhOrdLabelFail(); return; }
-    _selectedFoodItem = { name: mhOrdName(r, d), brand: '', kcal: v.kcal, prot: v.prot, carb: v.carb, fat: v.fat, fibre: v.fibre, polyols: v.polyols, satFat: v.satFat, sugars: v.sugars, salt: v.salt, qty: '' };
+    _selectedFoodItem = { name: t.cb ? t.name : mhOrdName(r, d), brand: '', kcal: v.kcal, prot: v.prot, carb: v.carb, fat: v.fat, fibre: v.fibre, polyols: v.polyols, satFat: v.satFat, sugars: v.sugars, salt: v.salt, qty: '' };
     _lastFoodSourceType = 'search';
     document.getElementById('foodSearchOverlay').classList.add('open'); document.getElementById('foodSearchView').style.display = 'none'; document.getElementById('foodAmountView').classList.add('open');
     document.getElementById('foodAmountName').textContent = _selectedFoodItem.name;
@@ -30221,6 +30237,7 @@ async function mhOrdLabelRead(inp) {
   } catch (_) { showToast('⚠ Label read failed. Try again, or use search or typing.'); mhOrdLabelFail(); }
 }
 function mhOrdSearchDone(t, name) {
+  if (t && t.cb) { closeFoodSearch(); try { t.cb(name); } catch (_) {} return; }   // v3.10.1411: a new food started from My cupboards
   closeFoodSearch(); const d = _shopUi.ord; if (!d || !d.rows || !d.rows[t.i]) return;
   _shopUi.view = 'orderimport'; try { switchTabById('shop'); } catch (_) {} mhOrdLink(t.i, name, 'just saved to your library');
 }
@@ -30794,7 +30811,7 @@ function mhStockCardHtml(s) {
   if (cq.length >= 2) {
     const hits = mhShopKnown().filter(x => !o.items[x.key] && x.name.toLowerCase().includes(cq)).slice(0, 6), typed = cb.q.trim(), tk = mhShopKey(typed), exact = hits.some(x => x.key === tk) || !!o.items[tk];
     const addRow = (k, n, label) => '<div data-add-food="' + esc(n) + '" data-k="' + esc(k) + '" data-n="' + esc(n) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="display:flex;justify-content:space-between;gap:8px;padding:11px 2px;border-top:1px solid var(--border);font-size:14px;color:var(--text);cursor:pointer;"><span>' + esc(label) + '</span><span style="color:var(--accent);white-space:nowrap;">＋ add</span></div>';
-    hitsH = (hits.length ? '<div style="margin-top:12px;font-size:12px;color:var(--text3);">Not in your cupboards yet</div>' + hits.map(x => addRow(x.key, x.name, x.name)).join('') : '') + (!exact && typed ? addRow(tk, typed, 'Add “' + typed + '” as a new food') + '<div data-add-nonfood="1" data-n="' + esc(typed) + '" onclick="mhStockAddNonFood(this.dataset.n)" style="display:flex;justify-content:space-between;gap:8px;padding:11px 2px;border-top:1px solid var(--border);font-size:14px;color:var(--text);cursor:pointer;"><span>🧻 Add “' + esc(typed) + '” as non-nutritional</span><span style="color:var(--accent);white-space:nowrap;">＋ add</span></div>' : '');
+    hitsH = (hits.length ? '<div style="margin-top:12px;font-size:12px;color:var(--text3);">Not in your cupboards yet</div>' + hits.map(x => addRow(x.key, x.name, x.name)).join('') : '') + (!exact && typed ? mhStockNewRoutesHtml(typed) + addRow(tk, typed, 'Add “' + typed + '” as a new food') + '<div data-add-nonfood="1" data-n="' + esc(typed) + '" onclick="mhStockAddNonFood(this.dataset.n)" style="display:flex;justify-content:space-between;gap:8px;padding:11px 2px;border-top:1px solid var(--border);font-size:14px;color:var(--text);cursor:pointer;"><span>🧻 Add “' + esc(typed) + '” as non-nutritional</span><span style="color:var(--accent);white-space:nowrap;">＋ add</span></div>' : '');
   }
   const emptyH = !items.length ? '<div style="font-size:13px;color:var(--text3);padding:8px 2px;line-height:1.5;">Nothing in your cupboards yet. Add a receipt or an order and they fill themselves, or search above to add a food by hand.</div>' : (!shownIt.length && !cq ? '<div style="font-size:13px;color:var(--text3);padding:8px 2px;line-height:1.5;">' + (cb.tab === 'nonfood' ? 'No non-nutritional items yet. Search above and add one, or mark lines Non-nutritional when you import a receipt. Each one then gets a 🛒 button for when it runs low.' : 'Nothing here.') + '</div>' : '');
   const cbHtml = '<div id="mhCbAddRow" style="margin-top:4px;">' + btn('➕ Add foods', 'mhSlOpen()', 'width:100%;padding:12px;font-size:15px;background:var(--accent);color:#fff;') + '</div><input id="mhCbQ" value="' + esc(cb.q) + '" oninput="mhCbQ(this.value)" type="search" enterkeyhint="search" placeholder="🔍 Search, or add a food" style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-top:4px;">' + (items.length ? tabsH : '') + shopsH + rowsH + hitsH + emptyH;
@@ -31016,7 +31033,7 @@ function mhShopRender(keepFocus) {
       + '<input id="mhStockQ" value="' + esc(_shopUi.sq || '') + '" oninput="mhStockQ(this.value)" placeholder="Search your ingredients, or type a new one" style="width:100%;box-sizing:border-box;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;margin-bottom:6px;">'
       + (have.length ? '<div id="mhStockHave" style="font-size:12px;color:var(--text2);font-weight:700;margin:12px 0 2px;">Already in your cupboards</div>' + have.slice(0, 8).map(x => '<div data-have="' + esc(x.key) + '" data-k="' + esc(x.key) + '" onclick="mhStockEditView(this.dataset.k)" style="display:flex;justify-content:space-between;gap:8px;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + '</span><span style="font-size:12px;color:var(--text3);white-space:nowrap;">' + esc(x.where) + '</span></div>').join('') : '')
       + all.map(x => '<div data-k="' + esc(x.key) + '" data-n="' + esc(x.name) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="display:flex;justify-content:space-between;padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--text);cursor:pointer;"><span>' + esc(x.name) + ' <span style="font-size:10px;color:var(--text3);">' + esc(mhShopAisleName(x.cat)) + '</span></span><span style="color:var(--accent);">add</span></div>').join('')
-      + (typedNew ? '<div id="mhStockTypedNew" data-k="' + esc(mhShopKey(q)) + '" data-n="' + esc(q) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">＋ Add "' + esc(q) + '" as typed</div><div id="mhStockTypedNonFood" data-n="' + esc(q) + '" onclick="mhStockAddNonFood(this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">🧻 Add "' + esc(q) + '" as non-nutritional (toilet roll, cleaning, pet food)</div>' : '')
+      + (typedNew ? mhStockNewRoutesHtml(q) + '<div id="mhStockTypedNew" data-k="' + esc(mhShopKey(q)) + '" data-n="' + esc(q) + '" onclick="mhStockEditView(this.dataset.k,this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">＋ Add "' + esc(q) + '" as typed</div><div id="mhStockTypedNonFood" data-n="' + esc(q) + '" onclick="mhStockAddNonFood(this.dataset.n)" style="padding:12px 4px;border-top:1px solid var(--border);font-size:15px;color:var(--accent);cursor:pointer;">🧻 Add "' + esc(q) + '" as non-nutritional (toilet roll, cleaning, pet food)</div>' : '')
       + (!all.length && !typedNew && !have.length ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;">Nothing else to add. Everything matching is already in your cupboards.</div>' : '')
       + '<div style="margin-top:14px;">' + btn('Back to the list', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockedit' && _shopUi.stk) {

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1411 — My cupboards: a new food gets the same routes as Log
+
+- Typing a food that is not yet known in My cupboards (the search box, and the Add a food screen) showed only "Add as a new food" (a hand-typed form) and "non-nutritional". It now first offers **Search online, Try AI, Scan barcode, Read a label**, the same routes as Log; each saves to the library only (nothing is logged) and then carries on into the cupboards for that food. Typing is the last resort below. Your library matches were already listed above as you type.
+- New p494 (routes shown for a new name only, online and AI open the Log-style panel pre-filled, saving continues into the cupboards, the import-row routes still work). Also checked: p225, p214, p239, p237, p243, p232, p234, p207.
+- Not done yet (BACKLOG): the same routes on the shopping Add box "New food" row and the Meal-map / list picker "Add as a new food".
+
 ## v3.10.1410 — Play build: the patient guide is not linked; shopping shelf names readable
 
 - In the Google Play build only (`?src=play`), the GBM patient guide is not linked anywhere in the app: the dashboard and welcome buttons, the inline links (set-up text, GKI note) and the tour-card "Source" (shown as plain text). Reason: the guide carries specific cannabinoid doses, which Play's health-content review could read as promoting an unapproved treatment. The web app and the guide itself are unchanged. New p492 (web keeps every link, Play has none, other tour sources stay links).
