@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1409 — Ready to be wrapped for Google Play
+
+- `manifest.json`: added an `id` (the same as the start page, so installed copies keep their identity), `lang`, separate "any" and "maskable" icons (they were one icon marked both), new full-bleed maskable icons (`icons/icon-maskable-192.png` and `-512.png`, no transparent corners so Android's round and squircle masks never crop the artwork), dropped the "medical" category (it reads as a medical-device claim to Play), and a plainer description.
+- New `android/twa-manifest.json` (package name `uk.co.pspence.maxedhealth`, permanent once on Play; start page `maxhealth.html?src=play`, which hides Premium) and a manual GitHub Actions workflow `.github/workflows/android-wrapper.yml` that builds the Android bundle in the cloud, so no laptop or Android Studio is needed. Without the two signing secrets it makes a TEST build with a throwaway key to prove the pipeline.
+- New p491 (manifest identity, icons full-bleed, wrapper settings match the manifest and addresses, package name pinned). Also checked: p131, p482, p485.
+
 ## v3.10.1408 — Licence keys: copies stop working, household-friendly, change phone without asking
 
 Pete, 17 Nov: stop keys being copied and used elsewhere, but a household with several licences must be recognised.
