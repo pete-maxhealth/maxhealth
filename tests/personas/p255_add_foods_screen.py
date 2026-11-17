@@ -53,7 +53,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('#mhAddfShow_ways'); page.wait_for_timeout(200)
     if not page.locator('#mhAddf_ways').count(): f.add('BUG', '10: Show brings it back')
     # new food goes to the highlighted shop
-    ev("mhSlQ('Zzqx Brand New Thing')"); page.wait_for_timeout(200); page.click('#mhSlNew button'); page.wait_for_timeout(300)
+    ev("mhSlQ('Zzqx Brand New Thing')"); page.wait_for_timeout(200); page.click('#mhSlNew [data-manual]'); page.wait_for_timeout(300)
     if ev("_shopUi.stk && _shopUi.stk.shop") != 'Zzqtesco': f.add('BUG', '11: a new food defaults to the highlighted shop')
     if errs: f.add('BUG', f'page errors: {errs}')
 print('findings', len(f)); [print(v) for v in f] if f else None; sys.exit(1 if f else 0)

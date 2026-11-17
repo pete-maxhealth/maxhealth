@@ -18,14 +18,14 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("mhCbQ('Wholemeal wraps')"); page.wait_for_timeout(300)
     p = probe(); p or f.add('FAIL', 'cupboards search: no new-food routes shown')
     if p:
-        for need in ('Search online', 'Try AI', 'Scan barcode', 'Read a label'):
+        for need in ('Search online', 'Try AI', 'Scan barcode', 'Read a label', 'Enter manually'):
             any(need in x for x in p['b']) or f.add('FAIL', f'cupboards search: missing {need}: {p["b"]}')
         p['typed'] or f.add('FAIL', 'typing as last resort row is gone')
     # existing food: no routes
     ev("mhCbQ('Zzqx Cheese')"); page.wait_for_timeout(300); probe() is None or f.add('FAIL', 'routes shown for a food that is already in the cupboards')
     # online route opens the Log-style panel, library only
     ev("mhCbQ('Wholemeal wraps')"); page.wait_for_timeout(300)
-    ev("document.querySelector('[data-newroutes] button').click()"); page.wait_for_timeout(500)
+    ev("document.querySelector('[data-newroutes] button:not([data-manual])').click()"); page.wait_for_timeout(500)
     ev("document.getElementById('foodSearchOverlay').classList.contains('open')") or f.add('FAIL', 'online route did not open the search panel')
     ev("document.getElementById('foodSearchInput').value") == 'Wholemeal wraps' or f.add('FAIL', 'search not pre-filled with the typed name')
     ev("!!_ordSearchTarget && !!_ordSearchTarget.cb") or f.add('FAIL', 'route not tied to the cupboards')

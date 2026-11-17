@@ -71,7 +71,7 @@ with fresh_server() as root, sync_playwright() as pw:
     page.click('[data-add-food="Smoked Mackerel"]'); page.wait_for_timeout(250)
     if ev("_shopUi.view") != 'stockedit' and 'Smoked Mackerel' not in txt('#mhShopPane'): f.add('BUG', f'the add button opens the form for it: {ev("_shopUi.view")}')
     ev("mhShopView('list')"); ev("mhCbQ('zzqx fruit')"); page.wait_for_timeout(100)
-    if 'Add “zzqx fruit” as a new food' not in txt('#stockctlBody'): f.add('BUG', 'a typed name is offered as a new food')
+    if not ev("!!document.querySelector('#stockctlBody [data-newroutes] [data-manual][data-add-food]')"): f.add('BUG', 'a typed name is offered as a new food')
     ev("mhCbQ('')")
     # open a row, add to list, remove (the list's current shop is Tesco; Cheddar is bought at Asda and must go under Asda)
     ev("()=>{ const s=mhShopLoad(); s.shops.push('Tesco'); s.shop='Tesco'; mhShopSave(s); }")

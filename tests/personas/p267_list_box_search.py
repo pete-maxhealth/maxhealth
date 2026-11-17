@@ -28,9 +28,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("_shopUi.addOpen=true; mhShopRender()"); page.wait_for_timeout(200)
     page.fill('#mhShopOwn', 'Zzqx Brand New'); page.wait_for_timeout(200)
     t = page.inner_text('#mhShopSug')
-    if 'New food: Zzqx Brand New' not in t: f.add('BUG', f'no match offers a new food: {t}')
+    if 'New food' not in t or not ev("document.querySelectorAll('#mhShopSug [data-newroutes] button').length===5"): f.add('BUG', f'no match offers a new food: {t}')
     else:
-        page.click('#mhShopSug button >> nth=0'); page.wait_for_timeout(400)
+        page.click('#mhShopSug [data-manual]'); page.wait_for_timeout(400)
         if ev("mhShopLoad().items.filter(i=>i.key===mhShopKey('Zzqx Brand New')).map(i=>i.shop)") != ['Heylo']: f.add('BUG', 'new food goes on the selected shop')
         if ev("_shopUi.stk && _shopUi.stk.shop") != 'Heylo': f.add('BUG', 'its stock form has the shop')
     ev("mhStkBack()")

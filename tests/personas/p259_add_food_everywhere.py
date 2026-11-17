@@ -48,7 +48,7 @@ with fresh_server() as root, sync_playwright() as pw:
     if not ev("document.getElementById('logtab-library') ? true : false"): f.add('BUG', '12b')
     # cupboard origin: the highlighted shop, back to the search
     ev("(()=>{const st=mhSlState(); st.q='Zzqx Brand New'; st.f='all'; st.shop='Zzqhey'; mhShopView('stocklist');})()"); page.wait_for_timeout(400)
-    page.click('#mhSlNew button'); page.wait_for_timeout(400)
+    page.click('#mhSlNew [data-manual]'); page.wait_for_timeout(400)
     if ev("_shopUi.stk.shop") != 'Zzqhey' or ev("_shopUi.stk.shopAsk"): f.add('BUG', '13: from the cupboard the shop is already known')
     ev("mhStkBase('g')"); ev("mhStockFormSave()"); page.wait_for_timeout(500)
     if ev("_shopUi.view") != 'stocklist' or ev("mhSlState().q") != 'Zzqx Brand New': f.add('BUG', '14: you come back to the search as you left it')

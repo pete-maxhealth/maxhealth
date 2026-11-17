@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1413 — New-food routes sit beside "Enter manually", not in a box of their own
+
+- Pete (17 Nov): the routes were hard to spot in their own boxed panel with a paragraph of text. On all four screens (My cupboards search, Add a food, shopping Add box, Add foods picker) the buttons are now one row: 🔍 Search online, ✨ Try AI, 📷 Scan barcode, 📸 Read a label, ⌨️ Enter manually. No box, no paragraph. The old "Add ... as a new food" rows are gone (Enter manually is that button). The shopping Add box and picker keep a one-line label ("New food, goes to Asda"); the Add box no longer shows the shop name on the manual button.
+- Tests updated for the new layout: p225, p253, p255, p259, p267, p494, p495. Also checked: p207, p197, p214, p279, p382.
+
 ## v3.10.1412 — New-food routes on the shopping Add box and the Add foods picker
 
 - The shopping Add box ("New food: ...") and the Add foods picker ("Add ... as a new food") now offer Search online, Try AI, Scan barcode and Read a label, like My cupboards (1411) and the import "Create new" (1293). From the Add box the new food also goes on the list; from the picker you come back to the picker. Typing stays as the last resort.
