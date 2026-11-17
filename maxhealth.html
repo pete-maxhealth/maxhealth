@@ -4718,8 +4718,9 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
           <input id="licenceKeyInput" type="text" autocomplete="off" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX-XXXX" style="flex:1;min-width:150px;" />
           <button class="copy-btn" style="width:auto;" onclick="mhLicenceActivate()">Activate</button>
         </div>
-        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="copy-btn" id="licenceTrialBtn" style="display:none;width:auto;" onclick="mhLicenceTrial()">Start 14-day trial</button><button class="copy-btn" id="licenceRemoveBtn" style="display:none;width:auto;" onclick="mhLicenceRemove()">Remove</button></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;"><button class="copy-btn" id="licenceTrialBtn" style="display:none;width:auto;" onclick="mhLicenceTrial()">Start 14-day trial</button><button class="copy-btn" id="licenceDevicesBtn" style="display:none;width:auto;" onclick="mhLicenceDevices()">Devices</button><button class="copy-btn" id="licenceRemoveBtn" style="display:none;width:auto;" onclick="mhLicenceRemove()">Remove</button></div>
         <div id="licenceMsg" style="font-size:12px;color:var(--text3);margin-top:6px;"></div>
+        <div id="licenceDevices" style="display:none;margin-top:8px;"></div>
       </div>
     <div class="settings-card">
       <div class="settings-row">
@@ -6663,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1407'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1408'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -52897,7 +52898,8 @@ function mhLicMsg(m, bad) { const e = document.getElementById('licenceMsg'); if 
 function mhLicenceRender() {
   const el = document.getElementById('licenceState'); if (!el) return;
   const tok = localStorage.getItem('mh_licence'); const p = tok ? mhLicPayload(tok) : null;
-  const rm = document.getElementById('licenceRemoveBtn');
+  const rm = document.getElementById('licenceRemoveBtn'), dv = document.getElementById('licenceDevicesBtn');
+  if (dv) dv.style.display = (tok && localStorage.getItem('mh_licence_key')) ? 'inline-block' : 'none';
   if (!p) { el.textContent = 'None'; if (rm) rm.style.display = 'none'; return; }
   const days = Math.max(0, Math.ceil((p.exp * 1000 - Date.now()) / 86400000));
   el.textContent = p.tier === 'trial' ? `Trial: ${days} day${days === 1 ? '' : 's'} left` : (p.tier === 'founder' ? 'Founder licence' : 'Premium licence') + (days > 0 ? '' : ' (renew needed)');
@@ -52913,8 +52915,8 @@ async function mhLicenceActivate() {
   if (!key) { mhLicMsg('Enter your licence key first.', true); return; }
   mhLicMsg('Checking…');
   try {
-    const { j } = await mhLicCall({ action: 'activate', key });
-    if (!j.ok) { mhLicMsg(j.error || 'That did not work. Please try again.', true); return; }
+    const { j } = await mhLicCall({ action: 'activate', key, label: mhLicDeviceLabel() });
+    if (!j.ok) { mhLicMsg(j.error || 'That did not work. Please try again.', true); if (j.code === 'devices_full') mhLicenceDevices(key); return; }
     localStorage.setItem('mh_licence', j.token); localStorage.setItem('mh_licence_key', key);
     mhLicMsg('Licence activated. Thank you!'); mhLicenceRender();
   } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
@@ -52928,7 +52930,41 @@ async function mhLicenceTrial() {
     mhLicMsg('Your 14-day trial has started.'); mhLicenceRender();
   } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
 }
-function mhLicenceRemove() { localStorage.removeItem('mh_licence'); localStorage.removeItem('mh_licence_key'); mhLicMsg('Licence removed from this device.'); mhLicenceRender(); }
+function mhLicenceRemove() { localStorage.removeItem('mh_licence'); localStorage.removeItem('mh_licence_key'); mhLicMsg('Licence removed from this device.'); mhLicenceRender(); const d = document.getElementById('licenceDevices'); if (d) d.style.display = 'none'; }
+// Devices on this licence (v3.10.1408). A key works on a set number of phones. This lists them (by the name each gave itself) and lets the owner free one,
+// e.g. after changing phone, so no one has to ask for help. Freeing is limited (3 in 30 days) so one key cannot be passed round. The key is the proof of ownership.
+function mhLicDeviceLabel() { const ua = navigator.userAgent || '', os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Device'; return os + (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? ' app' : ' browser'); }
+async function mhLicenceDevices(keyIn) {
+  const box = document.getElementById('licenceDevices'); if (!box) return;
+  const key = keyIn || localStorage.getItem('mh_licence_key') || (document.getElementById('licenceKeyInput').value || '').trim().toUpperCase();
+  if (!key) { mhLicMsg('Enter your licence key first.', true); return; }
+  if (!keyIn && box.style.display === 'block' && !box.dataset.stale) { box.style.display = 'none'; return; }
+  mhLicMsg('Checking…');
+  try {
+    const { j } = await mhLicCall({ action: 'devices', key });
+    if (!j.ok) { mhLicMsg(j.error || 'That did not work. Please try again.', true); return; }
+    mhLicMsg(''); box.dataset.stale = '';
+    const here = localStorage.getItem('mh_licence_key') === key && localStorage.getItem('mh_licence');
+    const esc = t => String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const rows = j.devices.map(d => '<div class="settings-row" style="gap:8px;"><div style="min-width:0;font-size:12.5px;">' + esc(d.label || 'Device') + (d.here ? ' · this phone' : '') + '<div style="font-size:11px;color:var(--text3);">' + esc(d.last ? 'last used ' + d.last.slice(0, 10) : '') + '</div></div>' + (d.here ? '' : '<button class="copy-btn" style="width:auto;flex:0 0 auto;" onclick="mhLicenceMove(\'' + esc(key) + '\',\'' + esc(d.id) + '\')">' + (here ? 'Free this slot' : 'Replace with this phone') + '</button>') + '</div>').join('');
+    box.innerHTML = '<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">' + j.devices.length + ' of ' + j.max + ' places used' + helpToggle('licdevhelp', 'Each licence key works on a set number of phones. If you change phone, free the old one here, then enter the key on the new phone. You can do this ' + j.moves_left + ' more time' + (j.moves_left === 1 ? '' : 's') + ' in the next 30 days. A phone you free keeps working until its current licence runs out, at most 30 days, and is not renewed.') + '</div>' + rows;
+    box.style.display = 'block';
+  } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
+}
+async function mhLicenceMove(key, target) {
+  mhLicMsg('Moving…');
+  try {
+    const { j } = await mhLicCall({ action: 'release', key, target });
+    if (!j.ok) { mhLicMsg(j.error || 'That did not work. Please try again.', true); return; }
+    let msg = 'Slot freed.', bad = false;
+    if (!localStorage.getItem('mh_licence') || localStorage.getItem('mh_licence_key') !== key) {   // moving it to this phone: activate straight away
+      const a = await mhLicCall({ action: 'activate', key, label: mhLicDeviceLabel() });
+      if (a.j.ok) { localStorage.setItem('mh_licence', a.j.token); localStorage.setItem('mh_licence_key', key); msg = 'Licence moved to this phone.'; mhLicenceRender(); }
+      else { msg = a.j.error || 'Freed, but this phone could not be activated. Try Activate again.'; bad = true; }
+    }
+    await mhLicenceDevices(key); mhLicMsg(msg, bad);
+  } catch (e) { mhLicMsg('Could not reach the licence server. Check your connection and try again.', true); }
+}
 // Quietly renew a stored key's token when it has under 7 days left (needs a connection; fails silently).
 async function mhLicenceAutoRefresh() {
   try {
@@ -52936,7 +52972,7 @@ async function mhLicenceAutoRefresh() {
     const tok = localStorage.getItem('mh_licence'), key = localStorage.getItem('mh_licence_key');
     const p = tok && mhLicPayload(tok); if (!p || !key) return;
     if (p.exp * 1000 - Date.now() > 7 * 86400000) return;
-    const { j } = await mhLicCall({ action: 'activate', key });
+    const { j } = await mhLicCall({ action: 'activate', key, label: mhLicDeviceLabel() });
     if (j.ok) { localStorage.setItem('mh_licence', j.token); mhLicenceRender(); }
   } catch (e) {}
 }

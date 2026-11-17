@@ -2,6 +2,17 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1408 — Licence keys: copies stop working, household-friendly, change phone without asking
+
+Pete, 17 Nov: stop keys being copied and used elsewhere, but a household with several licences must be recognised.
+
+- **A copied token no longer works.** Each activation now issues a token bound to the phone it was issued to; the AI Worker accepts it only from that phone. Tokens from before the change keep working until they expire (30 days at most). Worker changes in `licence-worker.js` and `worker.js`: **both must be deployed** (AI Worker first, then the licence Worker). The app is compatible with the old Workers.
+- **Households.** Each key is independent and nothing is compared between keys or between internet connections. A key can allow more phones (`max_devices` up to 10 when issued: a household pack). Trials per connection per day went from 3 to 8 so several people on one wifi can each start theirs.
+- **Change phone without asking.** Settings, AI Provider, Premium licence has a **Devices** button: the phones on the key (by the name each gave itself), and a button to free one. A full key shows the list with "Replace with this phone". Limited to 3 moves in 30 days so a key cannot be passed round. Long explanation sits behind a "?".
+- **Developer view:** new `inspect` action (admin secret + key) shows a key's devices and moves. Keys are still stored only as hashes.
+- Not changed: Play build still shows the licence box (see BACKLOG). A phone someone frees keeps working until its token runs out (30 days at most).
+- Tests: new `tests/worker/licence_devices.mjs` (26 checks) and p490 (list, free, move a full key to this phone, limit, wrong key, label, Spanish). Also checked: `tests/worker/licence_worker.mjs`, p130, p411, p462, p463 (p370 reports one existing review item, unchanged).
+
 ## v3.10.1407 — Water "last added", and back arrows on History and the paste sheets
 
 Pete, 17 Nov: "Buttons missing top left to navigate back via history and copy and paste screen." and "Water, last updated time to avoid double booking."

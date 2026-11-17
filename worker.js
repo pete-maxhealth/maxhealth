@@ -136,7 +136,9 @@ function b64uToBytes(s) {
 
 // Licence token = base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, LICENCE_SECRET)).
 // Payload: { id: "<licence id>", tier: "premium"|"trial"|"founder", exp: <unix seconds> }.
-async function verifyLicence(token, env) {
+// device: the request's X-MH-Device. A token issued with a device claim (payload.dev, v3.10.1408) only counts on the phone it was issued to;
+// tokens issued before that have no claim and keep working until they expire (at most 30 days).
+async function verifyLicence(token, env, device) {
 	try {
 		if (!token || !env.LICENCE_SECRET) return null;
 		const [p, sig] = token.split('.');
@@ -146,6 +148,12 @@ async function verifyLicence(token, env) {
 		if (!ok) return null;
 		const payload = JSON.parse(new TextDecoder().decode(b64uToBytes(p)));
 		if (!payload.id || (payload.exp && payload.exp < Date.now() / 1000)) return null;
+		if (payload.dev) {
+			if (!/^[A-Za-z0-9_-]{16,64}$/.test(device || '')) return null;
+			const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(device));
+			const hex = [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+			if (hex.slice(0, 12) !== payload.dev) return null;
+		}
 		return payload;
 	} catch (e) { return null; }
 }
@@ -172,7 +180,7 @@ async function allowance(request, env, weight) {
 	if (!env.RATE_LIMIT_KV) return {};
 	const L = await getLimits(env);
 	const today = new Date().toISOString().slice(0, 10);
-	const lic = await verifyLicence(request.headers.get('X-MH-Licence'), env);
+	const lic = await verifyLicence(request.headers.get('X-MH-Licence'), env, request.headers.get('X-MH-Device'));
 	if (lic) {
 		const k = `lic:${lic.id}:${today}`;
 		const used = parseInt((await env.RATE_LIMIT_KV.get(k)) || '0', 10);
@@ -246,7 +254,7 @@ const handler = {
 			// Licensed users have their own pool and their own daily cap (LICENCE_DAILY,
 			// applied in allowance()), so they skip the per-connection cap and do not
 			// draw on the free/starter pool (and free users cannot use up theirs).
-			const licensed = !!(await verifyLicence(request.headers.get('X-MH-Licence'), env));
+			const licensed = !!(await verifyLicence(request.headers.get('X-MH-Licence'), env, request.headers.get('X-MH-Device')));
 			if (env.RATE_LIMIT_KV && licensed) {
 				const lmKey = `calls:month-lic:${now.toISOString().slice(0,7)}`;
 				const lmN = parseInt((await env.RATE_LIMIT_KV.get(lmKey)) || '0', 10);

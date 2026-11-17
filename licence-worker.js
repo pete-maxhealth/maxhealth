@@ -5,7 +5,7 @@
 //   LICENCE_SECRET  must be exactly the value the AI Worker (worker.js) already uses to verify tokens
 //   ADMIN_SECRET    a long random value only you know; needed to issue/revoke keys and to upload files
 //
-// Same JSON protocol the app already speaks (POST { action: 'activate' | 'trial' | 'download' | 'issue' | 'revoke', ... }),
+// Same JSON protocol the app already speaks (POST { action: 'activate' | 'trial' | 'download' | 'issue' | 'revoke' | 'devices' | 'release' | 'inspect', ... }),
 // so the app only needs its licence address changed. Added on top:
 //   GET  /launcher/version.json   public: what the installed launcher compares against (no download link inside)
 //   GET  /launcher/get            small page: paste a licence key, the APK downloads (the launcher's update banner opens this)
@@ -15,6 +15,7 @@
 
 const TOKEN_DAYS = 30;          // the app re-issues a token automatically while the key stays valid
 const TRIAL_DAYS = 14;
+const MOVES_PER_MONTH = 3;      // how many times a key's device slot can be freed by its owner in 30 days (stops one key being passed round)
 const MAX_DEVICES = 2;          // devices one paid key may be bound to (founder keys: 5)
 const APK_TIERS = ['founder', 'premium'];   // a trial token never gets the launcher
 const BLOBS = {
@@ -41,7 +42,7 @@ document.getElementById('b').onclick=async()=>{m.textContent='Checking…';
 try{const r=await fetch('/',{method:'POST',body:JSON.stringify({action:'activate',key:document.getElementById('k').value,device:d})});const j=await r.json();
 if(!j.ok){m.textContent=j.error||'That did not work.';return}
 if(j.tier!=='founder'&&j.tier!=='premium'){m.textContent='This key cannot download the launcher.';return}
-m.textContent='Starting your download…';location.href='/launcher/download?t='+encodeURIComponent(j.token);setTimeout(()=>{m.textContent='Download started. Check your Downloads. You can close this page.'},2500)}catch(e){m.textContent='No connection. Please try again.'}};
+m.textContent='Starting your download…';location.href='/launcher/download?t='+encodeURIComponent(j.token)+'&d='+encodeURIComponent(d);setTimeout(()=>{m.textContent='Download started. Check your Downloads. You can close this page.'},2500)}catch(e){m.textContent='No connection. Please try again.'}};
 </script></body></html>`;
 
 const enc = new TextEncoder();
@@ -59,12 +60,14 @@ async function sameSecret(a, b) {
 }
 
 // Token format shared with worker.js: base64url(JSON payload) + "." + base64url(HMAC-SHA256(payload, LICENCE_SECRET)).
-async function makeToken(env, id, tier, days) {
-	const p = b64u(enc.encode(JSON.stringify({ id, tier, exp: Math.floor(Date.now() / 1000) + days * 86400 })));
+async function makeToken(env, id, tier, days, dev) {
+	const body = { id, tier, exp: Math.floor(Date.now() / 1000) + days * 86400 }; if (dev) body.dev = dev;   // dev: the first 12 hex of the SHA-256 of the device code, so a copied token only works on the phone it was issued to (v3.10.1408)
+	const p = b64u(enc.encode(JSON.stringify(body)));
 	const sig = await crypto.subtle.sign('HMAC', await hmacKey(env.LICENCE_SECRET, ['sign']), enc.encode(p));
 	return p + '.' + b64u(sig);
 }
-async function verifyToken(env, token) {
+// device (optional): when given and the token carries a device claim, they must match. When omitted the claim is not checked (the launcher's own download calls do not send one).
+async function verifyToken(env, token, device) {
 	try {
 		if (!token || !env.LICENCE_SECRET) return null;
 		const [p, sig] = String(token).split('.');
@@ -73,6 +76,7 @@ async function verifyToken(env, token) {
 		if (!ok) return null;
 		const payload = JSON.parse(new TextDecoder().decode(fromB64u(p)));
 		if (!payload.id || !payload.exp || payload.exp < Date.now() / 1000) return null;
+		if (payload.dev && device && (await sha256hex(String(device))).slice(0, 12) !== payload.dev) return null;
 		return payload;
 	} catch (e) { return null; }
 }
@@ -126,11 +130,43 @@ async function handlePost(request, env) {
 		if (tries.length >= 8) return reply(429, { ok: false, error: 'Too many tries. Please wait a few minutes.' });
 		const e = await kvJson(env, 'k:' + h);
 		if (!e || e.revoked) { await throttleAdd(env, tn, tries, 600); return reply(403, { ok: false, error: 'That key was not recognised.' }); }
+		const label = String(input.label || '').replace(/[\r\n]+/g, ' ').slice(0, 40), nowIso = new Date().toISOString();
+		e.meta = e.meta || {};
 		if (!e.devices.includes(device)) {
-			if (e.devices.length >= e.max) return reply(409, { ok: false, error: 'This key is already in use on ' + e.max + ' devices. Contact support to move it.' });
-			e.devices.push(device); await env.LICENCE_KV.put('k:' + h, JSON.stringify(e));
+			if (e.devices.length >= e.max) return reply(409, { ok: false, code: 'devices_full', max: e.max, error: 'This key is already in use on ' + e.max + ' devices. Open Settings on a phone that has it, or use "Move my licence to this phone" below.' });
+			e.devices.push(device); e.meta[device] = { label, first: nowIso, last: nowIso };
+		} else { const m = e.meta[device] || (e.meta[device] = { first: nowIso }); if (label) m.label = label; m.last = nowIso; }
+		await env.LICENCE_KV.put('k:' + h, JSON.stringify(e));
+		return reply(200, { ok: true, token: await makeToken(env, h.slice(0, 12), e.tier, TOKEN_DAYS, (await sha256hex(device)).slice(0, 12)), tier: e.tier, days: TOKEN_DAYS });
+	}
+	if (action === 'devices' || action === 'release' || action === 'inspect') {
+		// The key itself is the proof of ownership (it is only ever stored hashed). 'inspect' is the developer's view and needs the admin secret.
+		const isAdmin = action === 'inspect';
+		if (isAdmin && !(await sameSecret(env.ADMIN_SECRET, input.admin))) return reply(403, { ok: false, error: 'Not allowed' });
+		if (!isAdmin && !validDevice) return reply(400, { ok: false, error: 'Missing device id' });
+		const h = await sha256hex(String(input.key || '').trim().toUpperCase());
+		if (!isAdmin) {
+			const tn = 'th:' + ip, tries = await throttleCount(env, tn, 600);
+			if (tries.length >= 8) return reply(429, { ok: false, error: 'Too many tries. Please wait a few minutes.' });
+			const chk = await kvJson(env, 'k:' + h);
+			if (!chk || chk.revoked) { await throttleAdd(env, tn, tries, 600); return reply(403, { ok: false, error: 'That key was not recognised.' }); }
 		}
-		return reply(200, { ok: true, token: await makeToken(env, h.slice(0, 12), e.tier, TOKEN_DAYS), tier: e.tier, days: TOKEN_DAYS });
+		const e = await kvJson(env, 'k:' + h);
+		if (!e) return reply(404, { ok: false, error: 'Unknown key' });
+		e.meta = e.meta || {}; const nowS = Math.floor(Date.now() / 1000);
+		e.moves = (e.moves || []).filter(t => t > nowS - 30 * 86400);
+		const short = d => d.slice(0, 6) + '…' + d.slice(-4);
+		const list = e.devices.map(d => ({ id: short(d), label: (e.meta[d] && e.meta[d].label) || '', last: (e.meta[d] && e.meta[d].last) || '', here: d === device }));
+		if (action === 'release') {
+			const target = e.devices.find(d => short(d) === String(input.target || '')) ; const wantHere = String(input.target || '') === 'here' ? e.devices.find(d => d === device) : null;
+			const gone = target || wantHere; if (!gone) return reply(404, { ok: false, error: 'That device is not on this key.' });
+			if (e.moves.length >= MOVES_PER_MONTH) return reply(403, { ok: false, code: 'moves_used', error: 'This key has already been moved ' + MOVES_PER_MONTH + ' times in the last 30 days. Please contact support.' });
+			e.devices = e.devices.filter(d => d !== gone); delete e.meta[gone]; e.moves.push(nowS);
+			await env.LICENCE_KV.put('k:' + h, JSON.stringify(e));
+			return reply(200, { ok: true, devices: e.devices.map(d => ({ id: short(d), label: (e.meta[d] && e.meta[d].label) || '', last: (e.meta[d] && e.meta[d].last) || '', here: d === device })), max: e.max, moves_left: MOVES_PER_MONTH - e.moves.length });
+		}
+		if (isAdmin) return reply(200, { ok: true, tier: e.tier, note: e.note, max: e.max, revoked: !!e.revoked, created: e.created, moves_30d: e.moves.length, devices: list });
+		return reply(200, { ok: true, devices: list, max: e.max, moves_left: MOVES_PER_MONTH - e.moves.length });
 	}
 	if (action === 'trial') {
 		if (!validDevice) return reply(400, { ok: false, error: 'Missing device id' });
@@ -143,13 +179,13 @@ async function handlePost(request, env) {
 			return reply(200, { ok: true, token: await makeToken(env, 't' + dh.slice(0, 11), 'trial', Math.max(1, days)), tier: 'trial', days });
 		}
 		const tn = 'tt:' + ip, tries = await throttleCount(env, tn, 86400);
-		if (tries.length >= 3) return reply(429, { ok: false, error: 'Too many trials from this connection today.' });
+		if (tries.length >= 8) return reply(429, { ok: false, error: 'Too many trials from this connection today.' });   // 8, not 3: a household on one connection can each start their own trial
 		await throttleAdd(env, tn, tries, 86400);
 		await env.LICENCE_KV.put('t:' + dh, String(now), { expirationTtl: 60 * 60 * 24 * 400 });
 		return reply(200, { ok: true, token: await makeToken(env, 't' + dh.slice(0, 11), 'trial', TRIAL_DAYS), tier: 'trial', days: TRIAL_DAYS });
 	}
 	if (action === 'download') {   // the Premium files, same as licence.php: any valid, unexpired token
-		if (!(await verifyToken(env, input.token))) return reply(403, { ok: false, error: 'Licence not valid' });
+		if (!(await verifyToken(env, input.token, validDevice ? device : undefined))) return reply(403, { ok: false, error: 'Licence not valid' });
 		const buf = await env.LICENCE_KV.get('payload:zip', 'arrayBuffer');
 		if (!buf) return reply(404, { ok: false, error: 'Premium files are not published yet' });
 		return new Response(buf, { headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="maxedhealth-premium.zip"', 'Cache-Control': 'private, no-store', ...CORS } });
@@ -171,7 +207,7 @@ export default {
 		if (request.method === 'GET' && path === '/launcher/get') return new Response(GET_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 		if (request.method === 'GET' && path === '/launcher/download') {
 			if (!env.LICENCE_KV || !env.LICENCE_SECRET) return reply(500, { ok: false, error: 'Server not configured' });
-			const lic = await verifyToken(env, request.headers.get('X-MH-Licence') || url.searchParams.get('t'));
+			const lic = await verifyToken(env, request.headers.get('X-MH-Licence') || url.searchParams.get('t'), url.searchParams.get('d') || undefined);
 			if (!lic || !APK_TIERS.includes(lic.tier)) return reply(403, { ok: false, error: 'The launcher is for Premium and founder licences' });
 			const buf = await env.LICENCE_KV.get('launcher:apk', 'arrayBuffer');
 			if (!buf) return reply(404, { ok: false, error: 'No launcher published yet' });
