@@ -1,4 +1,4 @@
-"""Persona 81: a top-left Back button remembers the previous screen and appears once scrolled down; it goes back one screen."""
+"""Persona 81: a top-left Back button remembers the previous screen and is on screen whenever there is a previous screen to go back to (v3.10.1407: no longer waits for a scroll); it goes back one screen."""
 import sys, re; sys.path.insert(0, __file__.rsplit('/',1)[0])
 from harness import *
 from playwright.sync_api import sync_playwright
@@ -13,9 +13,9 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("switchTab('today')"); ev("switchTab('settings'); switchSubTab('settings','manage')"); page.wait_for_timeout(400)
     if not ev("window._navPrev") or ev("window._navPrev.tab") != 'today': f.add('BUG', f'previous screen not remembered: {ev("window._navPrev")}')
     shown = lambda: ev("getComputedStyle(document.getElementById('globalBackBtn')).display")
-    if shown() != 'none': f.add('BUG', 'back button should be hidden at the top of the screen')
+    if shown() == 'none': f.add('BUG', 'back button should show at the top of the screen once you have moved from another screen')
     ev("(() => { const el = document.getElementById('manageScroll'); el.style.paddingBottom='1500px'; el.scrollTop = 400; trackScrollNav(el); })()"); page.wait_for_timeout(300)
-    if shown() == 'none': f.add('BUG', 'back button should appear once scrolled down')
+    if shown() == 'none': f.add('BUG', 'back button should still show once scrolled down')
     ev("document.getElementById('globalBackBtn').click()"); page.wait_for_timeout(400)
     if ev("_navSnap().tab") != 'today': f.add('BUG', 'back did not return to the previous screen')
     # chat gets up/down arrows too (placed up the right side, clear of the docked send button)

@@ -2938,6 +2938,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
             <div class="water-amount" id="waterAmount">0</div>
             <div class="water-amount" style="min-width:0;"><span id="waterTarget" style="word-break:break-word;">/ 2000ml</span></div>
           </div></div>
+        <div id="waterLast" style="display:none;font-size:11px;color:var(--text3);margin:-2px 0 6px;"></div>
       </div>
       <div id="waterBody">
       <div class="water-bar-wrap" title="See your water chart" style="cursor:pointer;" onclick="openChartLightbox('water')"><div class="water-bar" id="waterBar" style="width:0%"></div></div>
@@ -6662,7 +6663,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1406'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1407'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -8478,7 +8479,7 @@ function updateGlobalScrollNav() {
   if (!scrollEl || !topBtn || !bottomBtn) {
     if (topBtn) topBtn.style.display = 'none';
     if (bottomBtn) bottomBtn.style.display = 'none';
-    const bb0 = document.getElementById('globalBackBtn'); if (bb0) bb0.style.display = 'none'; document.body.classList.remove('mh-back-on');
+    const bb0 = document.getElementById('globalBackBtn'); if (bb0) bb0.style.display = window._navPrev ? 'flex' : 'none'; document.body.classList.toggle('mh-back-on', !!bb0 && !!window._navPrev);   // v3.10.1407: no scroll box registered yet (a screen not scrolled yet) must not hide the back arrow
     return;
   }
   // Chat has its composer docked bottom-right (and at large text it is tall), so its arrows sit up the right-hand side instead.
@@ -8486,7 +8487,7 @@ function updateGlobalScrollNav() {
   topBtn.style.bottom = inChat ? 'auto' : '96px'; topBtn.style.top = inChat ? '150px' : 'auto';
   bottomBtn.style.bottom = inChat ? 'auto' : '54px'; bottomBtn.style.top = inChat ? '194px' : 'auto';
   topBtn.style.display = scrollEl.scrollTop > 90 ? 'flex' : 'none';
-  const bb = document.getElementById('globalBackBtn'); if (bb) bb.style.display = (scrollEl.scrollTop > 90 && window._navPrev && scrollEl.id !== 'multiMetricScroll') ? 'flex' : 'none'; document.body.classList.toggle('mh-back-on', !!bb && bb.style.display === 'flex');
+  const bb = document.getElementById('globalBackBtn'); if (bb) bb.style.display = (window._navPrev && scrollEl.id !== 'multiMetricScroll') ? 'flex' : 'none'; document.body.classList.toggle('mh-back-on', !!bb && bb.style.display === 'flex');
   const remaining = scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight;
   bottomBtn.style.display = remaining > 200 ? 'flex' : 'none';
 }
@@ -13802,8 +13803,11 @@ function saveWeightTarget() {
 // Gated per-day (not a persisted "ever celebrated" list like streak
 // milestones) since this is a daily target, not a lifetime one — resets
 // naturally every day because it's keyed on today's date.
+// Last-added stamp (v3.10.1407): the card shows when water was last added and how much, so a second tap or a second device is easy to spot.
+function mhWaterStamp(ml) { const n = new Date(); state.waterLast = { date: todayStr(), time: String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'), ml: ml }; }
 function _addWaterAndCelebrate(ml, toastPrefix) {
   state.waterToday = (state.waterToday || 0) + ml;
+  mhWaterStamp(ml);
   saveState();
   updateDashboard();
   const baseTarget = parseInt(localStorage.getItem('mh_target_water') || '2000') || 2000;
@@ -13831,7 +13835,7 @@ function logWaterCustom() {
 
 function resetWater() {
   appConfirm('Reset today\'s water intake to 0ml?', () => {
-    state.waterToday = 0;
+    state.waterToday = 0; state.waterLast = null;
     saveState();
     updateDashboard();
     showToast('Water reset');
@@ -20735,7 +20739,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
                text.match(/bottle/i) ? 500 :
                text.match(/pint/i) ? 568 :
                250;
-    state.waterToday = (state.waterToday || 0) + ml;
+    state.waterToday = (state.waterToday || 0) + ml; mhWaterStamp(ml);
     saveState();
     updateDashboard();
     addBubble(`💧 ${ml}ml added to water tracker (${state.water_ml}ml today)`, 'system', 'success');
@@ -20865,7 +20869,7 @@ async function processMessage(text, imageBase64, imageMime, skipLibraryChecks = 
     }
     if (result.type === 'water') {
       const ml = result.ml || 250;
-      state.waterToday = (state.waterToday || 0) + ml;
+      state.waterToday = (state.waterToday || 0) + ml; mhWaterStamp(ml);
       saveState();
       updateDashboard();
       addBubble(`💧 ${result.message || ml + 'ml added to water tracker'}`, 'system', 'success');
@@ -24761,7 +24765,7 @@ function logFoods(foods, originalText, aiMessage = null) {
                f.name.match(/glass/i) ? 250 :
                f.name.match(/cup/i) ? 250 :
                f.name.match(/bottle/i) ? 500 : 250;
-      state.waterToday = (state.waterToday || 0) + ml;
+      state.waterToday = (state.waterToday || 0) + ml; mhWaterStamp(ml);
       waterAdded += ml;
     }
   });
@@ -26920,7 +26924,7 @@ function _updateDashboardCore(skipActivityRender) {
     state.notes = '';
     state.tagNotes = {}; // fresh day, fresh notes - yesterday's are safely captured above
     state.dayMode = 'standard';
-    state.waterToday = 0;
+    state.waterToday = 0; state.waterLast = null;
     localStorage.removeItem('mh_steps_today');
     localStorage.removeItem('mh_today_notes');
     saveActivities(getActivities().map(a => ({...a, enabled:false, duration:'', effort: a.effort || 'Moderate'})));
@@ -27026,6 +27030,8 @@ function _updateDashboardCore(skipActivityRender) {
   const waterTargetEl = document.getElementById('waterTarget');
   const remWaterEl = document.getElementById('remWater');
   if (waterAmountEl) waterAmountEl.textContent = waterMl;
+  const waterLastEl = document.getElementById('waterLast');
+  if (waterLastEl) { const wl = state.waterLast; if (wl && wl.date === todayStr() && waterMl > 0) { waterLastEl.style.display = 'block'; waterLastEl.textContent = mhLangT('Last added') + ' ' + wl.time + ' · +' + wl.ml + 'ml'; } else waterLastEl.style.display = 'none'; }
   const waterCardEl = waterBarEl ? waterBarEl.closest('.water-card') : null;
   if (waterBarEl) {
     waterBarEl.style.width = waterPct + '%';
@@ -57526,7 +57532,7 @@ function mhHold(fn) {
 
 <div class="modal-overlay" id="missedDayModal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);align-items:flex-end;">
   <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:90vh;overflow-y:auto;animation:slideUp 0.25s ease;">
-    <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">LOG MISSED DAY</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;"><button class="mh-sheet-back" aria-label="Back" title="Back" onclick="closeMissedDayModal()">←</button><div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">LOG MISSED DAY</div></div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Enter a date you forgot to log. Describe what you ate and the AI will calculate the totals, or enter the numbers directly.</div>
 
     <!-- Date -->
@@ -57596,7 +57602,7 @@ function mhHold(fn) {
 
 <div class="modal-overlay" id="pasteMealModal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.7);align-items:flex-end;">
   <div style="width:100%;background:var(--surface);border-radius:18px 18px 0 0;padding:20px 16px 36px;max-height:90vh;overflow-y:auto;animation:slideUp 0.25s ease;">
-    <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">PASTE MEAL</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;"><button class="mh-sheet-back" aria-label="Back" title="Back" onclick="closePasteMealModal()">←</button><div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;">PASTE MEAL</div></div>
     <div style="font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.6;">Paste a line copied from Today's Log or History (📋) to add it as a new entry with these exact values — no AI re-estimate, since the numbers are already known.</div>
 
     <button class="run-btn" id="pasteMealRetry" onclick="pasteMealFromClipboard()" style="display:none;width:100%;margin-bottom:14px;">📋 Paste from clipboard</button>
@@ -58958,6 +58964,8 @@ function mhHold(fn) {
 </script>
 <style>
 .mhwx-box{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--card,transparent);}
+/* Round ← at the top left of a pop-up sheet (v3.10.1407): same look as the shopping screens' and the floating back arrow; does what the sheet's Cancel does. */
+.mh-sheet-back{flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;padding:0;}
 /* One ✕ everywhere (v3.10.1367): .mh-x removes / clears / dismisses a thing inline; .mh-x-close closes a whole screen or overlay (the same round look as the ← back button). */
 .mh-x{display:inline-flex;align-items:center;justify-content:center;min-width:28px;min-height:28px !important;font-size:16px;line-height:1;color:var(--text3);cursor:pointer;touch-action:manipulation;flex:0 0 auto;font-family:inherit;font-weight:400;background:none;border:none;padding:0;}
 .mh-x-close{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--text2);font-size:18px;line-height:1;cursor:pointer;touch-action:manipulation;flex:0 0 auto;padding:0;}

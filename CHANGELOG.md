@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1407 — Water "last added", and back arrows on History and the paste sheets
+
+Pete, 17 Nov: "Buttons missing top left to navigate back via history and copy and paste screen." and "Water, last updated time to avoid double booking."
+
+- **Water:** the card now shows "Last added 10:14 · +250ml" under the total, set by every way water is added (the five buttons, voice, chat, a meal that contains water) and cleared by Reset and at the new day. It shows only for today. Translated in es, de, fr, tr, pt, it, pl and nl.
+- **Back arrow:** the round ← at the top left now shows as soon as you have moved from another screen, not only after scrolling down, and it no longer disappears on a screen that has not been scrolled yet (that is why History had none). The Paste meal and Log missed day sheets (both reached from History) have the same round ← at their top left; it does what Cancel does.
+- Not done: the other pop-up sheets still have only their bottom Cancel/Close (BACKLOG, about 90 buttons).
+- New p489; p81 updated (the arrow used to be pinned as hidden at the top of a screen). Also checked: p416, p462, p463, p360, p449, p450, p419 (one flake at 1400px on the first run, clean on two re-runs).
+
 ## v3.10.1406 — Foods from different shops are separate in the rankings
 
 - The Top foods card and the Statistics rankings (e.g. "Top 10 total fat") treated Asda double cream and Tesco double cream as one food, added their totals together and showed the result under whichever name was longer. They are now separate bars. Case, spacing and plurals (Egg / Eggs) still merge.
