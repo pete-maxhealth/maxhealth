@@ -1,4 +1,4 @@
-"""Persona 499 (v3.10.1419): Quick list taps (not this time, never, bring back) and deleting a saved list carry an Undo that puts things back exactly;
+"""Persona 499 (v3.10.1419; v3.10.1420 adds food-category headers on Needs details): Quick list taps (not this time, never, bring back) and deleting a saved list carry an Undo that puts things back exactly;
 Needs details rows (single food and several) stay readable at large text: name never under the 'counted in' box, nothing wider than the screen. Invented data."""
 import sys, re; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
@@ -36,6 +36,26 @@ with fresh_server() as root, sync_playwright() as pw:
     else:
         undo()
         if st() != s2: f.add('BUG', 'saved list delete: Undo did not restore the list')
+    # v3.10.1420: Needs details groups foods by food category; header count and fold work; the header goes with the last food
+    ev("(()=>{['Carrots','Chicken breast','Spinach'].forEach(n=>mhStockTrack(n,{base:'g',shop:'Asda'}));})()")
+    ev("switchTabById('shop')"); ev("mhSlOpen()"); page.wait_for_timeout(400); ev("mhSlF('gaps')"); page.wait_for_timeout(400)
+    heads = ev("[...document.querySelectorAll('#mhSlRows [data-slsec]')].map(h=>h.innerText.replace(/\\s+/g,' ').trim())")
+    if len(heads) < 2: f.add('BUG', f'category headers missing in Needs details: {heads}')
+    if ev("[...document.querySelectorAll('#mhSlRows [data-sl]')].some(r=>!r.closest('[data-slgrp]'))"): f.add('BUG', 'a food sits outside its category group')
+    veg = ev("[...document.querySelectorAll('#mhSlRows [data-slsec]')].find(h=>/veg/i.test(h.innerText))?.dataset.slsec")
+    if veg is None: f.add('BUG', 'no fruit and veg header')
+    else:
+        ev(f"mhSlSecToggle({veg})")
+        if ev(f"document.querySelector('[data-slgrp=\"{veg}\"]').style.display") != 'none': f.add('BUG', 'tapping the header does not fold the group')
+        ev(f"mhSlSecToggle({veg})")
+        k = ev("mhShopKey('Carrots')"); sel = '[data-sl="%s"]' % k
+        for fld, val in (('amt', '300'), ('thr', '100'), ('serv', '50')):
+            page.fill(sel + ' [data-f="%s"]' % fld, val); page.dispatch_event(sel + ' [data-f="%s"]' % fld, 'change'); page.wait_for_timeout(250)
+        page.wait_for_timeout(1800)
+        n_after = ev(f"document.querySelectorAll('[data-slgrp=\"{veg}\"] [data-sl]').length")
+        cnt = ev(f"document.querySelector('[data-slsec=\"{veg}\"] [data-slcount]')?.textContent")
+        if n_after and cnt != str(n_after): f.add('BUG', f'header count {cnt} does not follow the rows {n_after}')
+        if not n_after and ev(f"!!document.querySelector('[data-slsec=\"{veg}\"]')"): f.add('BUG', 'empty category header left behind')
     # large text: Needs details rows
     ev("(()=>{['Zzqx Tomato','Zzqx A very long food name for a narrow screen'].forEach(n=>mhStockTrack(n,{base:'g',shop:'Asda'}));})()")
     ev("switchTabById('shop')"); ev("mhSlOpen()"); page.wait_for_timeout(400); ev("mhSlF('gaps')"); page.wait_for_timeout(400)
