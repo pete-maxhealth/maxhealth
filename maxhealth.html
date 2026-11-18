@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1422'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1423'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -8384,7 +8384,28 @@ function substituteCookIngredient(i) {
   }, undefined, { ings: _cookRecipe?.ingredients || [], steps: _cookRecipe?.steps || [], after: () => { try { _renderCookStep(); } catch (_) {} } });
 }
 
+// v3.10.1423: the A–Z strip follows the list you are looking at: the letters of your recipes when Recipes is chosen, of your ingredients otherwise. It uses the whole list, not the filtered view, so letters do not vanish while you type a search.
+function mhLibAlphaBuild() {
+  const nav = document.getElementById('libraryAlphaNav'); if (!nav) return;
+  const rec = (typeof mhLibTopicGet === 'function' ? mhLibTopicGet() : 'all') === 'recipes';
+  let names = [];
+  try { names = rec ? (loadRecipes() || []).map(r => r && r.name) : loadLibrary().filter(f => f && f.name && !isMealEntry(f)).map(f => f.name); } catch (_) {}
+  const letters = [...new Set(names.map(n => String(n || '').trim()[0]?.toUpperCase()).filter(Boolean))].sort();
+  const html = letters.map(l => `<button onclick="jumpToLibraryLetter('${l}')" class="btn-neutral" style="min-width:32px;min-height:32px;padding:6px 8px;border-radius:6px;font-size:13px;font-weight:600;font-family:Space Mono,monospace;touch-action:manipulation;">${l}</button>`).join('');
+  if (nav.dataset.sig !== (rec ? 'r' : 'i') + html) { nav.innerHTML = html; nav.dataset.sig = (rec ? 'r' : 'i') + html; }
+}
 function jumpToLibraryLetter(letter) {
+  if ((typeof mhLibTopicGet === 'function' ? mhLibTopicGet() : 'all') === 'recipes') {   // the same jump, in your recipes
+    for (const row of document.querySelectorAll('#recipeList [id^="recipe-row-"]')) {
+      const nm = row.querySelector('div[style*="font-weight:600"]');
+      if (nm && nm.textContent.trim().toUpperCase().startsWith(letter)) {
+        const w = document.getElementById('lib-recipes-wrap'); if (w && w.style.display === 'none') toggleSection('lib-recipes', 'lib-recipes-wrap', 'lib-recipes-icon');
+        requestAnimationFrame(() => { row.scrollIntoView({ behavior: 'smooth', block: 'start' }); row.style.background = 'var(--accent-dim)'; setTimeout(() => row.style.background = '', 800); });
+        return;
+      }
+    }
+    showToast(`No recipes found starting with "${letter}"`); return;
+  }
   // Find first library item starting with this letter and scroll to it.
   // A-Z only ever jumps within Ingredients (Meals has its own section header
   // and doesn't benefit from letter-jumping the same way) - searches
@@ -9256,16 +9277,7 @@ function renderLibrary() {
   // and don't benefit from letter-jumping in the same way). Uses the full
   // ingredient subset of libWithIdx, not the currently filtered view, so
   // letters don't disappear while typing a search query.
-  const alphaNav = document.getElementById('libraryAlphaNav');
-  if (alphaNav) {
-    const ingredientLetters = [...new Set(
-      libWithIdx.filter(f => !isMealEntry(f)).map(f => f.name[0]?.toUpperCase()).filter(Boolean)
-    )].sort();
-    alphaNav.innerHTML = ingredientLetters.map(l =>
-      `<button onclick="jumpToLibraryLetter('${l}')"
-        class="btn-neutral" style="min-width:32px;min-height:32px;padding:6px 8px;border-radius:6px;font-size:13px;font-weight:600;font-family:Space Mono,monospace;touch-action:manipulation;">${l}</button>`
-    ).join('');
-  }
+  try { mhLibAlphaBuild(); } catch (_) {}
   } catch(err) {
     console.error('[renderLibrary]', err);
     const el2 = document.getElementById('libraryIngredientsList');
@@ -27882,6 +27894,7 @@ function mhShopComplete() {
   ov.querySelector('#appModalCancel').onclick = () => ov.remove();
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
 }
+var _mhNotIn = [];
 function mhShopCompleteGo(keep, leaveStock) {
   const s = mhShopLoad();
   const qtyMap = {}; s.items.forEach(i => { if (i.checked && i.shop === s.shop && i.qty > 1) qtyMap[i.key] = i.qty; });
@@ -27892,7 +27905,10 @@ function mhShopCompleteGo(keep, leaveStock) {
   // With stock counting off there is no reorder level to bring a food back, so every regular stays, food or not. "Keep the whole list" leaves everything on, unticked.
   const stockOn = mhStockOn(); let stayed = 0;
   s.items.forEach(i => { if (i.checked && i.shop === s.shop && (keep || (mhShopUsualFind(s, i.key) && (i.nonFood || !stockOn)))) { i.checked = false; stayed++; } });
-  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = (keep ? 'The whole list is back, ready for next shop' : 'Basket emptied') + (!keep && stayed ? '; ' + stayed + ' regular' + (stayed === 1 ? '' : 's') + ' stay on your list' : '') + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '');
+  // v3.10.1423: a food you bought that is not one of your cupboard foods is not added to the cupboards (nothing is invented), but it used to leave without a word. Now the message names it, and any ticked item at another shop that stayed on the list.
+  const notIn = (stockOn && !leaveStock && !keep) ? Array.from(new Set(s.items.filter(i => i.checked && i.shop === s.shop && !i.nonFood && !so.items[i.key]).map(i => i.name))) : [], otherShop = s.items.filter(i => i.checked && i.shop !== s.shop).length;
+  s.items = s.items.filter(i => !(i.checked && i.shop === s.shop)); s.skip = []; mhShopSave(s); _shopUi.msg = (keep ? 'The whole list is back, ready for next shop' : 'Basket emptied') + (!keep && stayed ? '; ' + stayed + ' regular' + (stayed === 1 ? '' : 's') + ' stay on your list' : '') + (shelved ? '; ' + shelved + ' non-nutritional item' + (shelved === 1 ? '' : 's') + ' put on your shelf' : '') + (notIn.length ? '. Not in your cupboards yet, so not added there: ' + notIn.slice(0, 4).join(', ') + (notIn.length > 4 ? ' and ' + (notIn.length - 4) + ' more' : '') + ' (add each from My cupboards > Add a food)' : '') + (otherShop ? '. ' + otherShop + ' ticked item' + (otherShop === 1 ? '' : 's') + ' at another shop stayed on your list' : '');
+  _mhNotIn = notIn;
   // Tracked things you just bought go to a review step: stock is only added from what you confirm (nothing is assumed about quantity).
   if (track.length) { so.review = Array.from(new Set((so.review || []).concat(track))); so.reviewQty = Object.assign({}, so.reviewQty || {}); qtyMap && Object.keys(qtyMap).forEach(k => { if (track.includes(k)) so.reviewQty[k] = qtyMap[k]; }); mhStockSave(so); _shopUi.bgt = {}; _shopUi.view = 'stockbought'; }
   mhShopRender();
@@ -31192,7 +31208,7 @@ function mhShopRender(keepFocus) {
       + (need.map(rowH).join('')) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhCsvGo" class="copy-btn" onclick="mhShopCsvApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Import ' + c.rows.length + ' items</button>' + (need.some(([r]) => r.link) ? btn('Accept all suggestions', 'mhCsvAcceptAll()') : '') + btn('Cancel', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockbought') {
     const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), er = _shopUi.bgtErr || {}, inp2 = 'width:100%;box-sizing:border-box;padding:11px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
-    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div>' + (_shopUi.bgtDone ? '<div data-bgtdone style="font-size:13px;color:var(--green);margin-bottom:8px;">✓ Stock updated for ' + _shopUi.bgtDone + ' item' + (_shopUi.bgtDone === 1 ? '' : 's') + '. Only the ones below still need you.</div>' : '') + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things in your cupboards and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div>' + (_mhNotIn.length ? '<div data-notin style="font-size:13px;color:var(--text2);margin-bottom:8px;">Not in your cupboards yet, so not listed here: ' + _mhNotIn.map(esc).join(', ') + '. Add each from My cupboards > Add a food.</div>' : '') + (_shopUi.bgtDone ? '<div data-bgtdone style="font-size:13px;color:var(--green);margin-bottom:8px;">✓ Stock updated for ' + _shopUi.bgtDone + ' item' + (_shopUi.bgtDone === 1 ? '' : 's') + '. Only the ones below still need you.</div>' : '') + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things in your cupboards and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
       + (rows.map(k => { const it = o.items[k], unknown = it.level == null, val = (_shopUi.bgt && k in _shopUi.bgt) ? _shopUi.bgt[k] : mhBoughtDefault(it);
         return '<div data-bought="' + esc(it.name) + '" style="padding:10px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(it.name) + ' <span style="font-size:12px;color:var(--text3);">' + (unknown ? 'how much do you have now?' : 'you have ' + esc(mhStockFmt(it, it.level)) + ' now') + '</span></div>'
           + '<div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">' + (unknown ? 'Amount you have' : 'Bought this time (added to what you have)') + '</div>'
@@ -48689,7 +48705,7 @@ function mhSectionsAll(btn, open) {
 }
 // ── Library section chips (v3.10.977): All / Recipes / A-Z / Food / Tools / Ingredients, same Filter panel as every other page ──
 const MH_LIB_GROUPS = { recipes: ['Recipes', 'lib-recipes', 'dashSection-libRecipes', '\uD83C\uDF73'], az: ['A\u2013Z', 'lib-az', 'dashSection-libAZ', '\uD83D\uDD24'], food: ['Food Library', 'lib-food', 'dashSection-libFood', '\uD83E\uDD66'], tools: ['Tools', 'lib-tools', 'dashSection-libTools', '\uD83D\uDEE0\uFE0F'], ingredients: ['Ingredients', 'lib-ingredients', 'dashSection-libIngredients', '\uD83D\uDCCB'] };
-function mhLibTopicGet() { let k = 'all'; try { k = localStorage.getItem('mh_topic_library') || 'all'; } catch (_) {} return MH_LIB_GROUPS[k] ? k : 'all'; }
+function mhLibTopicGet() { let k = 'all'; try { k = localStorage.getItem('mh_topic_library') || 'all'; } catch (_) {} return (k !== 'az' && MH_LIB_GROUPS[k]) ? k : 'all'; }   // v3.10.1423: A–Z is no longer a view of its own (an old saved 'az' means All)
 function mhLibTopicSet(k) { try { localStorage.setItem('mh_topic_library', k); } catch (_) {} mhLibTopicApply(); mhClosePills(); mhScrollTopOf(document.getElementById('mhTopicBar-library')); }
 function mhLibHidden() { try { const a = JSON.parse(localStorage.getItem('mh_library_hidden') || '[]'); return Array.isArray(a) ? a.filter(k => MH_LIB_GROUPS[k]) : []; } catch (_) { return []; } }
 function toggleLibraryHidden(k) {
@@ -48703,7 +48719,7 @@ function mhLibTopicApply() {
   const cur = mhLibTopicGet(), hid = mhLibHidden();
   let bar = document.getElementById('mhTopicBar-library');
   if (!bar) { bar = document.createElement('div'); bar.id = 'mhTopicBar-library'; bar.className = 'mh-topic-bar'; scroll.insertBefore(bar, scroll.firstChild); }
-  const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).map(k => [k, MH_LIB_GROUPS[k][3] + ' ' + MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
+  const html = [['all', 'All']].concat(Object.keys(MH_LIB_GROUPS).filter(k => k !== 'az').map(k => [k, MH_LIB_GROUPS[k][3] + ' ' + MH_LIB_GROUPS[k][0]])).map(([k, l]) => `<span class="mh-grp-chip${k === cur ? ' active' : ''}" onclick="mhLibTopicSet('${k}')">${l}</span>`).join('');
   if (bar.dataset.sig !== html) { bar.innerHTML = html; bar.dataset.sig = html; }
   // A 👁 on every section (same as Today, Reports and Settings): hide it for good; the hidden ones wait under Filter. Choosing a section's chip still shows it.
   Object.keys(MH_LIB_GROUPS).forEach(k => {
@@ -48718,8 +48734,11 @@ function mhLibTopicApply() {
     strip.innerHTML = hid.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;"><span style="font-size:10px;color:var(--text3);">Hidden:</span>${hid.map(k => `<button onclick="toggleLibraryHidden('${k}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--text3);cursor:pointer;touch-action:manipulation;">${MH_LIB_GROUPS[k][0]} +</button>`).join('')}${hid.length > 1 ? `<button data-showall="1" onclick="mhLibShowAll()" style="background:none;border:1px dashed var(--border);border-radius:14px;padding:3px 10px;font-size:11px;color:var(--accent);cursor:pointer;touch-action:manipulation;">Show all</button>` : ''}</div>` : '';
   }
   Object.keys(MH_LIB_GROUPS).forEach(k => { const el = document.getElementById(MH_LIB_GROUPS[k][2]); if (!el) return;
+    // v3.10.1423: A–Z is a way to jump around a list, not a list, so it is not a chip: it rides along with Ingredients and Recipes (and All), and follows whichever of them you are looking at.
+    if (k === 'az') { const withList = cur === 'all' || cur === 'ingredients' || cur === 'recipes'; el.classList.toggle('mh-grp-hide', !withList); el.classList.toggle('mh-lib-off', withList && hid.includes('az')); return; }
     el.classList.toggle('mh-grp-hide', cur !== 'all' && cur !== k);
     el.classList.toggle('mh-lib-off', cur === 'all' && hid.includes(k)); });
+  try { mhLibAlphaBuild(); } catch (_) {}
 }
 (function () { let t = 0; const run = () => { t = 0; try { mhEnsurePillsToolbars(); } catch (_) {} };
   const kick = () => { if (!t) t = requestAnimationFrame(run); };

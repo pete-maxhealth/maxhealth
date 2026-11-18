@@ -29,7 +29,7 @@ with fresh_server() as root, sync_playwright() as pw:
       const ids=['dashSection-libRecipes','dashSection-libAZ','dashSection-libFood','dashSection-libTools','dashSection-libIngredients'];
       const allVis=ids.map(vis); mhLibTopicSet('tools'); const toolsVis=ids.map(vis); const lab=document.querySelector('#view-library .mh-pills-toolbar .main').textContent;
       const stored=localStorage.getItem('mh_topic_library'); return {allVis, toolsVis, lab, stored, chips:document.querySelectorAll('#mhTopicBar-library .mh-grp-chip').length}; }""")
-    if r['chips'] != 6: f.add('BUG', f'library chips {r["chips"]}')
+    if r['chips'] != 5: f.add('BUG', f'library chips {r["chips"]}')
     if not all(r['allVis']): f.add('BUG', f'All should show every section {r}')
     if r['toolsVis'] != [False, False, False, True, False]: f.add('BUG', f'Tools chip wrong {r}')
     if 'Tools' not in r['lab'] or r['stored'] != 'tools': f.add('BUG', f'label/persist wrong {r}')

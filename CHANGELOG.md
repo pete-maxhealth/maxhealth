@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1423 — Library A–Z works with Ingredients and Recipes; bought foods not in the cupboards are named
+
+- Pete (18 Nov): the Library chips made little sense: choosing A–Z hid both Ingredients and Recipes and left only letters. A–Z is a way to jump round a list, not a list, so it is no longer a chip. The letter strip shows with All, Ingredients and Recipes and follows the list in view (your recipes' letters under Recipes, your ingredients' otherwise); a letter jumps to that recipe or ingredient. It still has its own show/hide and reorder, and a saved A–Z view now opens as All.
+- Pete (18 Nov): "the cheese I bought as part of the shopping doesn't appear to have made it to the cupboard". Shopping complete only adds foods that are already cupboard foods (nothing is invented), but a bought food that was not one used to leave without a word. The message and the "What did you buy?" screen now name it and say where to add it, and a ticked item at another shop that stayed on the list is said so. Tests p499, p500.
+
 ## v3.10.1422 — "What did you buy?": one problem row no longer holds back the rest
 
 - Pete (18 Nov): items on the stock review would not go "no matter what I choose", and it was hard to tell whether stock had gone in. Cause: Update stock was all-or-nothing, so one row with a problem (a zero, or "2 packs" for a food with no pack size) stopped every row. Now the rows that are fine go in at once, the screen says "Stock updated for N items. Only the ones below still need you.", and only the rows that still need you stay, each with its reason. This deliberately reverses what p210 pinned in v3.10.1119 ("a bad entry stops everything"); p210 now pins the new behaviour.

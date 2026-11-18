@@ -24,7 +24,7 @@ with fresh_server() as root, sync_playwright() as pw:
     setup()
     if ev("_shopUi.view") != 'stockbought': f.add('BUG', 'Shopping complete with tracked items must go to the review step')
     txt = page.inner_text('#mhShopPane')
-    if 'Milk' in txt: f.add('BUG', 'an untracked item must not be in the stock review')
+    if page.locator('[data-bought] >> text=Milk').count(): f.add('BUG', 'an untracked item must not be in the stock review')
     if box(wk).input_value() != '750 g' or box(ck).input_value() != '300 ml': f.add('BUG', f'known-stock items prefill their usual pack: {box(wk).input_value()!r} {box(ck).input_value()!r}')
     if box(ek).input_value() != '': f.add('BUG', 'an item whose stock is unknown must not be prefilled (never guess)')
     if ev("mhShopLoad().items.some(i=>i.checked)"): f.add('BUG', 'the basket must still be emptied')
