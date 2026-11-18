@@ -39,10 +39,12 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("n => { mhStockAddNonFood(n); }", LONG); page.wait_for_timeout(300)
     ev("(()=>{ _shopUi.edit = false; _shopUi.view = 'list'; _shopUi.addOpen = true; mhShopAddKind('nonfood'); })()"); page.wait_for_timeout(300)
     ev("n => { const s = mhShopLoad(); s.items = s.items.filter(i => i.key !== mhShopKey(n)); mhShopSave(s); mhShopRender(); }", LONG); page.wait_for_timeout(300)
-    shelf = ev("""(()=>{ const r = document.querySelector('[data-nfshelf^="Zz Extra"]'); if (!r) return null; const sp = r.querySelector('span'); const b = r.querySelector('[data-regk]'); const rr = r.getBoundingClientRect(); return {h: Math.round(rr.height), w: Math.round(rr.width), bw: Math.round(b.getBoundingClientRect().width), right: Math.round(b.getBoundingClientRect().right), cls: b.className, fs: getComputedStyle(b).fontSize}; })()""")
+    shelf = ev("""(()=>{ const r = document.querySelector('[data-nfshelf^="Zz Extra"]'); if (!r) return null; const sp = r.querySelector('span'); const b = r.querySelector('[data-regk]'); const rr = r.getBoundingClientRect(); return {h: Math.round(rr.height), sh: Math.round(sp.getBoundingClientRect().height), w: Math.round(rr.width), bw: Math.round(b.getBoundingClientRect().width), right: Math.round(b.getBoundingClientRect().right), cls: b.className, fs: getComputedStyle(b).fontSize}; })()""")
     if shelf is None: f.add('BUG', 'shelf row not found (non-food shelf)')
     else:
-        if shelf['h'] > 90: f.add('BUG', f'long shelf name is clamped to two lines, row {shelf["h"]}px')
+        # v3.10.1410: the buttons wrap under the name, so the row is name (max two lines) + one button row
+        if shelf['sh'] > 48: f.add('BUG', f'long shelf name is clamped to two lines, name {shelf["sh"]}px')
+        if shelf['h'] > 120: f.add('BUG', f'long shelf row stays compact, row {shelf["h"]}px')
         if shelf['right'] > 390: f.add('BUG', 'Regular button stays on screen')
         la = ev("getComputedStyle(document.createElement('button')).fontSize")
     # (3) later tile line clears

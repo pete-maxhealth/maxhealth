@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1418 — Nightly fix: AI prompt no longer mentions ketosis for non-keto users
+
+- The exercise line of the AI prompt (added in v3.10.1380) said "sleep, weight, symptoms or ketosis" for everyone. The word "ketosis" is now added only for a ketogenic user, like the other keto wording. Caught by p156 in the nightly sweep of 18 Nov.
+- Four code comments that named him as "Pete" now read "Pete Spence" (p64 checks the app file has no bare name). No visible change.
+- Test p329 updated (test only): since v3.10.1410 the shelf buttons wrap under a long name, so the row is name (two lines at most) plus a button row, not under 90px.
+
 ## v3.10.1417 — Undo on Shopping and My cupboards
 
 - Pete (17 Nov): the shopping list and My cupboards both need Undo. Only a few actions had one (remove, take off the list, filtered, import, duplicates). Now every action that changes the list or the cupboards takes a snapshot first, and the toast carries **Undo**, in the same style as the existing ones: adding (typed, picked, suggested), quantity, hide, "already have it", move, add a whole aisle, a recipe, a saved list, finishing a shop, "add what you bought", stock level / reorder / use-by / waste, adding a food or non-nutritional item to the cupboards, deleting a shop or a regular. Undo puts the list, the cupboards and the saved lists back exactly as they were, then says "Undone ✓". An action that changes nothing offers no Undo; one tap offers one Undo (an Undo for a recipe removes everything the recipe added).
