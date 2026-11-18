@@ -2,6 +2,13 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1419 — Undo on the Quick list and saved-list delete; Needs details rows at large text
+
+- Pete (18 Nov): "weren't we going to add undo to all screens where delete occurs?" The Quick list taps (not this time, never, bring back, star to My usuals) and deleting a saved shopping list now carry an Undo in the toast, the same one the rest of Shopping uses (v3.10.1417). Deleting a saved list asks first; its Undo is taken when you confirm.
+- Needs details (My cupboards) at large text: the food name was squeezed to nothing beside the "counted in" box, so it ran underneath it. The header row now wraps and the name keeps its own line; the fields stack to one column when they no longer fit, and the Shelves / Shopping list / Both buttons wrap.
+- Not yet covered (next release, shopping first then the rest as agreed): Undo for deletes on the other screens (Today log, History, Library, plans, stats). Listed in BACKLOG.
+- New p499 (Undo for each Quick list tap and saved-list delete; Needs details at 2.3x text: name not clipped, nothing off screen). Failed on v3.10.1418 for both. Also checked: p278 (known 151px font difference only), p329, p382, p498 and 17 other shopping/cupboard tests.
+
 ## v3.10.1418 — Nightly fix: AI prompt no longer mentions ketosis for non-keto users
 
 - The exercise line of the AI prompt (added in v3.10.1380) said "sleep, weight, symptoms or ketosis" for everyone. The word "ketosis" is now added only for a ketogenic user, like the other keto wording. Caught by p156 in the nightly sweep of 18 Nov.

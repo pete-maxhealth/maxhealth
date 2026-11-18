@@ -132,6 +132,10 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [ ] p278 "the bar stays small: 151px" (limit 150): fails identically on builds back to v3.10.1386 in the nightly container, so not a recent regression; likely font metrics there (Google Fonts blocked). Passed in earlier sweeps elsewhere. Left alone; if it keeps appearing, check it on Pete's machine before touching the limit.
 - Note: p404 takes about 24 min alone (limit 1800 s); the sweep only looked stuck.
 
+## Undo everywhere (Pete, 18 Nov 2026)
+- [x] Shopping, My cupboards, Quick list, saved-list delete (v3.10.1417, v3.10.1419).
+- [ ] Undo for deletes on the other screens: Today log, History, Library foods and recipes, plans, tags, stats. Audit every delete/remove function (about 35) and give each the same toast Undo; each with a test. Where a delete asks first, take the snapshot when the person confirms.
+
 ## Moving off GitHub: CLOSED 31 Oct 2026 (Pete): only the Premium payload and the APK needed to leave public GitHub (done, Cloudflare Worker). The free app, `lang/`, `starter_packs/`, docs and README stay on GitHub. v3.10.1251 made starter packs load from the app's own copy first (offline works, testable offline). The items below are kept as history; do not build them unless that decision changes. (Pete and Jill, 29 Oct 2026). v3.10.1246 put the app's own addresses in one `MH_HOME` block; what is left
 - [x] SUPERSEDED (Pete, 4 Nov): the free app, `starter_packs/`, `lang/` and README stay on GitHub, so nothing needs hosting elsewhere or editing in `MH_HOME`. (Original note: host them as plain files and edit `MH_HOME.raw`.)
 - [x] SUPERSEDED (Pete, 4 Nov): the free app stays on GitHub Pages (pete-maxhealth.github.io), so story page, docs, guide, privacy pages and carer.html stay where they are.
