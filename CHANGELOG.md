@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1425 — Add Food offers the same routes as Log
+
+- Pete (17 Nov, standing rule): anywhere a new food is created should follow the Log routes, typing last. The Add Food form (Library "+ Add Food Manually", a category's "add new item", an unmatched recipe ingredient, and an import line's typed fallback) now has Search online, Try AI, Scan barcode and Read a label directly under the name, ahead of the typed values. The form steps aside while the panel is open and comes back, name kept, if you cancel; a saved result closes it and carries on as typing would (category tag, recipe ingredient filled). Search and AI need the name first; barcode and label do not. Test p501; p162, p220, p399, p494, p495 re-run.
+
 ## v3.10.1424 — Library: the empty "Food Library" section and chip are gone
 
 - Pete (18 Nov): "What exactly is Food Library? It appears to be empty and doesn't filter anyway." It was a leftover: Meals, Ingredients and A–Z were each moved out into their own sections, leaving Food Library holding only the "Tap any food to quick-log it" hint, with nothing to filter. The section, its chip, its show/hide and reorder entry and its Settings search entry are removed; the hint now sits at the top of Ingredients. A saved Library order or filter that mentions it keeps the rest as it was.

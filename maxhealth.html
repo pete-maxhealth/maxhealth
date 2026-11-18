@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1424'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1425'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -9839,6 +9839,28 @@ let _ordSearchTarget = null; // import line that opened the Log-style search/AI/
 let _addFoodOrdContext = null; // line of the receipt/order import that opened Add Food: saving returns there (library only, never a log)
 let _addFoodCategoryContext = null; // category name, when Add Food was opened from within a category's browse view
 
+// v3.10.1425: Add Food (Library, a category, a flagged recipe ingredient, an import line) offers the same routes as Log. The form steps aside while the search/scan/label panel is open, and comes back if that is cancelled; a saved result closes it and carries on exactly as typing would (category tag, recipe ingredient, import line).
+let _mhAddFoodPaused = false;
+function mhAddFoodFind(mode) {
+  const name = (document.getElementById('addFoodName').value || '').trim();
+  if ((mode === 'search' || mode === 'ai') && !name) { showToast('Type the food name first, then pick a route'); return; }
+  const rc = _addFoodRecipeContext, cc = _addFoodCategoryContext, oc = _addFoodOrdContext;
+  const tgt = { name, cb: n => {
+    _mhAddFoodPaused = false; n = n || name;
+    const lib = loadLibrary(), e = lib.find(x => String(x.name).toLowerCase() === String(n).toLowerCase());
+    if (e && cc) { e.categories = Array.from(new Set((e.categories || []).concat(cc))); saveLibrary(lib); }
+    _addFoodRecipeContext = rc; _addFoodOrdContext = oc;
+    if (e) { try { _applyPendingLibraryEntryToRecipe(e); } catch (_) {} }
+    closeAddFoodModal(); try { renderLibrary(); } catch (_) {}
+  } };
+  _ordSearchTarget = tgt; _mhAddFoodPaused = true;
+  document.getElementById('addFoodModal').classList.remove('open');
+  if (mode === 'label' || mode === 'scan') { setTimeout(() => { const o = document.getElementById('foodSearchOverlay'); if (_ordSearchTarget === tgt && !(o && o.classList.contains('open'))) { _ordSearchTarget = null; mhAddFoodResume(); } }, 120000); if (mode === 'label') mhOrdLabelPick(); else openLiveBarcodeScanner(); return; }
+  openFoodSearch(); mhOrdPanelSync();
+  const input = document.getElementById('foodSearchInput');
+  if (input) { input.value = name; if (mode === 'ai') tryAISearchForIngredient(name); else onFoodSearchInput(name); }
+}
+function mhAddFoodResume() { if (!_mhAddFoodPaused) return; _mhAddFoodPaused = false; document.getElementById('addFoodModal').classList.add('open'); }
 function openAddFoodModal() {
   document.getElementById('addFoodName').value = '';
   document.getElementById('addFoodKcal').value = '';
@@ -17526,6 +17548,7 @@ function openFoodSearch() {
 }
 
 function closeFoodSearch() {
+  if (_mhAddFoodPaused && _ordSearchTarget && _ordSearchTarget.cb) { setTimeout(() => { if (_mhAddFoodPaused) mhAddFoodResume(); }, 400); }   // cancelled: the Add Food form comes back as it was
   const overlay = document.getElementById('foodSearchOverlay');
   overlay.classList.remove('open');
   overlay.style.zIndex = '';
@@ -57858,6 +57881,13 @@ function mhHold(fn) {
     <div class="save-modal-title">ADD TO LIBRARY</div>
     <div class="save-modal-sub">Enter confirmed macros and save to your library.</div>
     <input class="save-modal-name-input" id="addFoodName" placeholder="Food name (e.g. ASDA Mixed Nuts)" maxlength="80">
+    <!-- v3.10.1425: the same routes as Log, ahead of typing; typing the values is the last resort below -->
+    <div id="addFoodRoutes" data-addroutes="1" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="copy-btn" data-route="search" onclick="mhAddFoodFind('search')" style="width:auto;font-size:12px;padding:6px 10px;">🔍 Search online</button>
+      <button class="copy-btn" data-route="ai" onclick="mhAddFoodFind('ai')" style="width:auto;font-size:12px;padding:6px 10px;">✨ Try AI</button>
+      <button class="copy-btn" data-route="scan" onclick="mhAddFoodFind('scan')" style="width:auto;font-size:12px;padding:6px 10px;">📷 Scan barcode</button>
+      <button class="copy-btn" data-route="label" onclick="mhAddFoodFind('label')" style="width:auto;font-size:12px;padding:6px 10px;">📸 Read a label</button>
+    </div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
       <button class="copy-btn" id="addFoodVoiceBtn" style="font-size:12px;padding:8px 12px;flex-shrink:0;" onclick="toggleAddFoodVoiceInput()">🎤 Voice add</button>
       <div id="addFoodVoiceStatus" style="display:none;font-size:11px;color:var(--text3);"></div>
