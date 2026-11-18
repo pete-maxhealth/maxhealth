@@ -17,7 +17,7 @@ with fresh_server() as root, sync_playwright() as pw:
       label: document.querySelector('#view-library .mh-pills-toolbar .main').textContent.trim(), strip: (document.getElementById('genericRestoreStrip-library')||{}).textContent||'',
       inPanel: !!document.querySelector('#view-library .mh-filter-panel #genericRestoreStrip-library'), store: localStorage.getItem('mh_library_hidden')})""")
     r = st()
-    if r['eyes'] != 5: f.add('BUG', f'eyes {r["eyes"]} != 5')
+    if r['eyes'] != 4: f.add('BUG', f'eyes {r["eyes"]} != 5')
     if 'hidden' in r['label']: f.add('BUG', 'hidden count shown with nothing hidden')
     ev("document.querySelector('[data-libeye=\"ingredients\"]').click()"); page.wait_for_timeout(300)
     r = st()

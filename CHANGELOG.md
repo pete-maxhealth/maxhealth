@@ -2,6 +2,10 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1424 — Library: the empty "Food Library" section and chip are gone
+
+- Pete (18 Nov): "What exactly is Food Library? It appears to be empty and doesn't filter anyway." It was a leftover: Meals, Ingredients and A–Z were each moved out into their own sections, leaving Food Library holding only the "Tap any food to quick-log it" hint, with nothing to filter. The section, its chip, its show/hide and reorder entry and its Settings search entry are removed; the hint now sits at the top of Ingredients. A saved Library order or filter that mentions it keeps the rest as it was.
+
 ## v3.10.1423 — Library A–Z works with Ingredients and Recipes; bought foods not in the cupboards are named
 
 - Pete (18 Nov): the Library chips made little sense: choosing A–Z hid both Ingredients and Recipes and left only letters. A–Z is a way to jump round a list, not a list, so it is no longer a chip. The letter strip shows with All, Ingredients and Recipes and follows the list in view (your recipes' letters under Recipes, your ingredients' otherwise); a letter jumps to that recipe or ingredient. It still has its own show/hide and reorder, and a saved A–Z view now opens as All.

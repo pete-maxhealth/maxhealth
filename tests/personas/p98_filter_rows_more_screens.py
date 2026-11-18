@@ -26,15 +26,15 @@ with fresh_server() as root, sync_playwright() as pw:
     # library chips
     page.evaluate("switchTab('log'); switchSubTab('log','library')"); page.wait_for_timeout(700)
     r = page.evaluate("""()=>{ const vis=id=>{const e=document.getElementById(id); return !!e && !e.classList.contains('mh-grp-hide');};
-      const ids=['dashSection-libRecipes','dashSection-libAZ','dashSection-libFood','dashSection-libTools','dashSection-libIngredients'];
+      const ids=['dashSection-libRecipes','dashSection-libAZ','dashSection-libTools','dashSection-libIngredients'];
       const allVis=ids.map(vis); mhLibTopicSet('tools'); const toolsVis=ids.map(vis); const lab=document.querySelector('#view-library .mh-pills-toolbar .main').textContent;
       const stored=localStorage.getItem('mh_topic_library'); return {allVis, toolsVis, lab, stored, chips:document.querySelectorAll('#mhTopicBar-library .mh-grp-chip').length}; }""")
-    if r['chips'] != 5: f.add('BUG', f'library chips {r["chips"]}')
+    if r['chips'] != 4: f.add('BUG', f'library chips {r["chips"]}')
     if not all(r['allVis']): f.add('BUG', f'All should show every section {r}')
-    if r['toolsVis'] != [False, False, False, True, False]: f.add('BUG', f'Tools chip wrong {r}')
+    if r['toolsVis'] != [False, False, True, False]: f.add('BUG', f'Tools chip wrong {r}')
     if 'Tools' not in r['lab'] or r['stored'] != 'tools': f.add('BUG', f'label/persist wrong {r}')
     page.reload(); page.wait_for_timeout(2000); page.evaluate("switchTab('log'); switchSubTab('log','library')"); page.wait_for_timeout(700)
-    if page.evaluate("document.getElementById('dashSection-libFood').classList.contains('mh-grp-hide')") is not True: f.add('BUG', 'library filter lost on reload')
+    if page.evaluate("document.getElementById('dashSection-libRecipes').classList.contains('mh-grp-hide')") is not True: f.add('BUG', 'library filter lost on reload')
     # Open/Close all respects the group; Default restores
     page.evaluate("mhSectionsAll(document.querySelector('#view-library .mh-pills-toolbar button:nth-of-type(2)'), false)"); page.wait_for_timeout(300)
     page.evaluate("mhDoResetLayout(mhLayoutKeys(document.getElementById('view-library')))") if False else None

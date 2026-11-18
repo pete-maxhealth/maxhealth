@@ -14,14 +14,14 @@ with fresh_server() as root, sync_playwright() as pw:
     ev("saveLibrary(Array.from({length:40},(_,i)=>({id:'l'+i,name:'Zzqx Food '+String(i).padStart(2,'0'),kcal:100+i,protein:5,carbs:3,fat:2,portion:'100g',useCount:i})))")
     ev("saveRecipes([{id:'r1',name:'Zzqx Stew',ingredients:[],servings:2}])")
     ev("switchTab('log', document.getElementById('maintab-log')); switchSubTab('log','library', document.getElementById('logtab-library'))"); page.wait_for_timeout(700)
-    inside = ev("!!document.querySelector('#lib-food-wrap #librarySearch, #lib-food-wrap #libraryFilter')")
+    inside = ev("!!document.querySelector('#lib-ingredients-wrap #librarySearch, #lib-ingredients-wrap #libraryFilter')")
     if inside: f.add('BUG', '1: the search and filter are still inside the hideable Food Library card')
     if not ev("!!document.querySelector('#libraryScroll > #libraryControls #librarySearch') && !!document.querySelector('#libraryControls #libraryFilter')"): f.add('BUG', '2: search and filter are in the pinned box at the top of the Library')
     # 3 hiding the Food Library card does not take the search away
-    ev("toggleSection('lib-food','lib-food-wrap','lib-food-icon')"); page.wait_for_timeout(300)
+    ev("toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')"); page.wait_for_timeout(300)
     vis = lambda: ev("(()=>{const e=document.getElementById('librarySearch'); const r=e.getBoundingClientRect(); return r.height>0 && getComputedStyle(e).visibility!=='hidden'})()")
     if not vis(): f.add('BUG', '3: search stays visible with Food Library hidden')
-    ev("toggleSection('lib-food','lib-food-wrap','lib-food-icon')"); page.wait_for_timeout(300)
+    ev("toggleSection('lib-recipes','lib-recipes-wrap','lib-recipes-icon')"); page.wait_for_timeout(300)
     # 4 pinned while scrolling a long list
     ev("document.getElementById('libraryScroll').scrollTo(0, 900)"); page.wait_for_timeout(400)
     r = ev("(()=>{const c=document.getElementById('libraryControls').getBoundingClientRect(), s=document.getElementById('libraryScroll').getBoundingClientRect(); return [Math.round(c.top-s.top), c.height>0, Math.round(document.getElementById('libraryScroll').scrollTop)]})()")

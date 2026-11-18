@@ -28,6 +28,6 @@ with fresh_server() as root, sync_playwright() as pw:
     page.reload(); page.wait_for_timeout(2000); ev("switchTab('log'); switchSubTab('log','library'); renderLibrary()"); page.wait_for_timeout(500)
     if ev("document.getElementById('libraryCategory').value") != '': f.add('BUG', 'category filter survived a reload')
     chips = ev("[...document.querySelectorAll('#mhTopicBar-library .mh-grp-chip')].map(c=>c.textContent.trim())")
-    if len(chips) != 6 or not all(len(c.split(' ')[0]) >= 1 and not c.split(' ')[0].isalpha() for c in chips[1:]): f.add('BUG', f'chips without icons {chips}')
+    if len(chips) != 4 or not all(len(c.split(' ')[0]) >= 1 and not c.split(' ')[0].isalpha() for c in chips[1:]): f.add('BUG', f'chips without icons {chips}')
     if errs: f.add('BUG', f'page errors {errs[:2]}')
 print('findings', len(f)); [print(x) for x in f] if f else None; sys.exit(1 if f else 0)

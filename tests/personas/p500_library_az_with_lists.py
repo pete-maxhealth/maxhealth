@@ -14,7 +14,7 @@ with fresh_server() as root, sync_playwright() as pw:
       saveRecipes([{id:'r1',name:'Zucchini bake',ingredients:[],steps:[]},{id:'r2',name:'Yoghurt pot',ingredients:[],steps:[]}]);}""")
     ev("switchTab('log'); switchSubTab('log','library')"); page.wait_for_timeout(700)
     chips = ev("[...document.querySelectorAll('#mhTopicBar-library .mh-grp-chip')].map(e=>e.textContent.trim())")
-    if any('A' in c and 'Z' in c for c in chips) or len(chips) != 5: f.add('BUG', f'no A-Z chip: {chips}')
+    if any('A' in c and 'Z' in c for c in chips) or len(chips) != 4 or any('Food Library' in c for c in chips): f.add('BUG', f'no A-Z chip: {chips}')
     vis = lambda id: ev("id=>{const e=document.getElementById(id);return !!e&&!e.classList.contains('mh-grp-hide')}", id)
     letters = lambda: ev("[...document.querySelectorAll('#libraryAlphaNav button')].map(b=>b.textContent.trim()).join('')")
     for t in ('all', 'ingredients', 'recipes'):
