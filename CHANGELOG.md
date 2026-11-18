@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1421 — Receipt import: clearer wording for ticked and unticked lines
+
+- Pete (18 Nov): an unticked line still said "2 bought", which read as if he had bought it. The number is only what the receipt or order lists, so it now says "2 on the receipt" (an order import still says "ordered"). The tick means "add this line to my cupboards", and the summary now reads "N ticked to add".
+- An unticked line now says "Not ticked, so it is not added", and when the food is already in your cupboards it says how much you have and that the "After adding" choice only applies if you tick it.
+- New p500. Also checked the 29 other order/receipt/import tests (all pass) and a rendered screenshot (dark theme).
+
 ## v3.10.1420 — Needs details groups foods by food category
 
 - Pete (18 Nov): the screen where nutritional details are added would benefit from the food categories. Needs details now groups its foods under the same category headers as the Quick list (Fruit & veg, Meat & fish and so on, in shop-walk order), each with a count. Tap a header to fold or open the group; when a food is completed its count drops, and the header goes with the last food. Other lists (All, Not in my cupboards, In my cupboards, Low) are unchanged.
