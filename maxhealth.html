@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1425'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1426'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -32061,6 +32061,10 @@ function confirmPasteMeal() {
   }
 }
 
+// v3.10.1425b: deleting food data keeps "Are you sure" AND now offers Undo (Pete 12 Nov: both). Undo puts the item back where it was; a logged food's cupboard stock, which delete gives back, is put back as it was too.
+function mhDelStockRaw() { try { return mhUndoRaw().stock; } catch (_) { return null; } }
+function mhDelStockRestore(raw) { try { if (raw != null) mhStockSave(JSON.parse(raw)); } catch (_) {} }
+function mhDelUndoToast(msg, fn) { showToast(msg, 'Undo', () => { try { fn(); } catch (e) { console.warn('[undo]', e); } try { _toastUndoUntil = 0; } catch (_) {} showToast('Undone ✓', null, null, 2500); }, 9000); }
 function deleteLogEntry(id) {
   appConfirm('Delete this entry?', () => _doDeleteLogEntry(id), null, true);
 }
@@ -32068,6 +32072,7 @@ function deleteLogEntry(id) {
 function _doDeleteLogEntry(id) {
   const idx = state.todayLog.findIndex(e => e.id == id);
   if (idx === -1) { showToast('Entry not found'); return; }
+  const _stockBefore = mhDelStockRaw();
   const _gone = state.todayLog.splice(idx, 1)[0];
   if (_gone && _gone.id) mhStockReverse(_gone.id);
   if (window._logEditWorkingItems) delete window._logEditWorkingItems[id];
@@ -32079,7 +32084,7 @@ function _doDeleteLogEntry(id) {
     const entry = document.getElementById('log-entry-' + id);
     if (entry) entry.remove();
   }
-  showToast('Entry deleted ✓');
+  mhDelUndoToast('Entry deleted ✓', () => { state.todayLog.splice(Math.min(idx, state.todayLog.length), 0, _gone); mhDelStockRestore(_stockBefore); saveState(); updateDashboard(); try { renderLog && renderLog(); } catch (_) {} });
 }
 
 function saveLogEdit(id) {
@@ -34231,13 +34236,13 @@ function copyHistEntryLine(date, entryIdx) {
 }
 
 function deleteHistDay(date) {
-  appConfirm(`Delete the whole day for ${date}? This can't be undone.`, () => {
+  appConfirm(`Delete the whole day for ${date}?`, () => {
     const idx = state.history.findIndex(d => d.date === date);
     if (idx === -1) return;
-    state.history.splice(idx, 1);
+    const _day = state.history.splice(idx, 1)[0], _stockBefore = mhDelStockRaw();
     saveState();
     renderHistory();
-    showToast('Day removed ✓');
+    mhDelUndoToast('Day removed ✓', () => { state.history.splice(Math.min(idx, state.history.length), 0, _day); mhDelStockRestore(_stockBefore); saveState(); renderHistory(); });
   }, null, true);
 }
 
@@ -34674,6 +34679,7 @@ function deleteHistEntry(dayIdx, entryIdx) {
   if (!day || !day.log || !day.log[entryIdx]) return;
   const entryName = day.log[entryIdx].name || 'this entry';
   appConfirm(`Delete "${entryName}"?`, () => {
+    const _stockBefore = mhDelStockRaw(), _totalsBefore = JSON.parse(JSON.stringify(day.totals || {})), _date = day.date;
     const _gone = day.log.splice(entryIdx, 1)[0];
     if (_gone && _gone.id) mhStockReverse(_gone.id);
     if (window._histEditWorkingItems) delete window._histEditWorkingItems[`${dayIdx}-${entryIdx}`];
@@ -34687,7 +34693,7 @@ function deleteHistEntry(dayIdx, entryIdx) {
     }), { kcal: 0, protein: 0, fat: 0, carbs: 0, fibre: 0, polyols: 0 });
     saveState();
     renderHistory();
-    showToast('Entry removed ✓');
+    mhDelUndoToast('Entry removed ✓', () => { const d = state.history.find(x => x.date === _date); if (!d) return; d.log = d.log || []; d.log.splice(Math.min(entryIdx, d.log.length), 0, _gone); d.totals = _totalsBefore; mhDelStockRestore(_stockBefore); saveState(); renderHistory(); });
   }, null, true);
 }
 
@@ -37813,11 +37819,12 @@ function deleteRecipe(id) {
   const recipe = recipes.find(r => r.id === id);
   if (!recipe) return;
   appConfirm(
-    `Delete "${recipe.name}"? This can't be undone.`,
+    `Delete "${recipe.name}"?`,
     () => {
+      const _before = JSON.parse(JSON.stringify(recipes));
       saveRecipes(recipes.filter(r => r.id !== id));
       renderRecipeList();
-      showToast('Recipe deleted');
+      mhDelUndoToast('Recipe deleted', () => { saveRecipes(_before); renderRecipeList(); });
     },
     null,
     true
@@ -39710,10 +39717,10 @@ let _toastTimer = null;
 // ─── MODAL HELPER IMPLEMENTATIONS ───────────────────────────────────────────
 function _doDeleteLibraryItem(index) {
   const lib = loadLibrary() || [];
-  lib.splice(index, 1);
+  const _gone = lib.splice(index, 1)[0];
   saveLibrary(lib);
   renderLibrary();
-  showToast('Item deleted ✓');
+  mhDelUndoToast('Item deleted ✓', () => { const l = loadLibrary() || []; l.splice(Math.min(index, l.length), 0, _gone); saveLibrary(l); renderLibrary(); });
 }
 function _doRemoveActivity(idx) {
   const acts = getActivities();
