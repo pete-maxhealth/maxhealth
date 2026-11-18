@@ -1,7 +1,7 @@
 """Persona 210: Shopping complete adds what you bought (v3.10.1119). Pete ticks whey, cream, eggs and milk at Asda and taps Shopping
 complete. Covers: only tracked items reach the review; the usual pack size is prefilled for items whose stock is known; an item whose
 stock is unknown gets no prefill (never guessed) and is set from what Pete says he has; typing either units ("2 packs", "500 g") works;
-an empty box leaves that item alone; a bad entry stops everything (no half-applied update) and names the problem; Leave stock as it was
+an empty box leaves that item alone; a bad entry no longer stops the others: the good rows go in, the bad one stays and names the problem (v3.10.1422); 0 bought and Skip this one leave an item alone; Leave stock as it was
 changes nothing; restocking clears the running-low state so it can trigger again later; the review survives a reload via the stock card."""
 import sys; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from harness import *
@@ -28,15 +28,18 @@ with fresh_server() as root, sync_playwright() as pw:
     if box(wk).input_value() != '750 g' or box(ck).input_value() != '300 ml': f.add('BUG', f'known-stock items prefill their usual pack: {box(wk).input_value()!r} {box(ck).input_value()!r}')
     if box(ek).input_value() != '': f.add('BUG', 'an item whose stock is unknown must not be prefilled (never guess)')
     if ev("mhShopLoad().items.some(i=>i.checked)"): f.add('BUG', 'the basket must still be emptied')
-    # bad entry stops everything
-    box(ck).fill('2 packs'); box(wk).fill('5'); page.click('#mhBoughtDone'); page.wait_for_timeout(150)
-    if (lv(wk), lv(ck)) != (100, 50): f.add('BUG', f'a bad entry must stop everything, nothing half-applied: {(lv(wk), lv(ck))}')
+    # v3.10.1422: a bad entry no longer holds back the rest. The good rows go in, only the bad one stays and names its problem (was: stop everything)
+    box(ck).fill('2 packs'); box(wk).fill('5'); box(ek).fill('4'); page.click('#mhBoughtDone'); page.wait_for_timeout(150)
+    if (lv(wk), lv(ck), lv(ek)) != (100, 650, 4): f.add('BUG', f'the good rows go in, the bad one is left alone: {(lv(wk), lv(ck), lv(ek))}')
     if 'Add a unit' not in page.inner_text('#mhShopPane'): f.add('BUG', 'the problem must be named on the row')
-    box(wk).fill(''); box(ek).fill('4'); page.click('#mhBoughtDone'); page.wait_for_timeout(150)
-    if lv(ck) != 650: f.add('BUG', f'50 ml + 2 packs of 300 ml = 650: {lv(ck)}')
-    if lv(wk) != 100: f.add('BUG', f'an emptied box leaves that item alone: {lv(wk)}')
-    if lv(ek) != 4: f.add('BUG', f'unknown stock is set from what Pete says he has: {lv(ek)}')
+    if ev("_shopUi.view") != 'stockbought' or ev("mhStockLoad().review.length") != 1: f.add('BUG', 'only the row that still needs you stays on the screen')
+    if not page.locator('[data-bgtdone]').count(): f.add('BUG', 'the screen says some stock was updated')
+    box(wk).fill('0'); page.click('#mhBoughtDone'); page.wait_for_timeout(150)
+    if lv(wk) != 100: f.add('BUG', f'0 bought leaves that item alone: {lv(wk)}')
     if ev("_shopUi.view") != 'list' or ev("mhStockLoad().review"): f.add('BUG', 'after updating, return to the list and clear the review')
+    # Skip this one takes a row out without touching its stock
+    setup(); page.click('[data-bought] >> nth=0 >> text=Skip this one'); page.wait_for_timeout(150)
+    if ev("mhStockLoad().review.length") != 2 or (lv(wk), lv(ck)) != (100, 50): f.add('BUG', 'Skip this one drops only that row and changes no stock')
     # leave as it was
     setup(); page.click('text=Leave stock as it was'); page.wait_for_timeout(150)
     if (lv(wk), lv(ck)) != (100, 50) or ev("mhStockLoad().review"): f.add('BUG', 'Leave stock as it was must change nothing')

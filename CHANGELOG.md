@@ -2,6 +2,15 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1422 — "What did you buy?": one problem row no longer holds back the rest
+
+- Pete (18 Nov): items on the stock review would not go "no matter what I choose", and it was hard to tell whether stock had gone in. Cause: Update stock was all-or-nothing, so one row with a problem (a zero, or "2 packs" for a food with no pack size) stopped every row. Now the rows that are fine go in at once, the screen says "Stock updated for N items. Only the ones below still need you.", and only the rows that still need you stay, each with its reason. This deliberately reverses what p210 pinned in v3.10.1119 ("a bad entry stops everything"); p210 now pins the new behaviour.
+- 0 bought is no longer an error: that row is simply left alone (for a food whose stock was unknown, 0 means none left).
+- "2 packs" with no pack size set now also says you can type the amount in g (or ml, items) instead.
+- Wording: "bought (now 89 g)" read as if the food had been bought; each row now says "you have 89 g now" above a box labelled "Bought this time (added to what you have)". Typing in a row clears its old error straight away.
+- Every row has "Skip this one" (that food keeps its stock as it was); an erroring row shows it as a button beside the problem.
+- p210 updated and extended (partial apply, 0, Skip). Also checked p212, p249, p260, p261, p263, p264, p295, p498 (all pass) and a rendered screenshot (dark theme).
+
 ## v3.10.1421 — Receipt import: clearer wording for ticked and unticked lines
 
 - Pete (18 Nov): an unticked line still said "2 bought", which read as if he had bought it. The number is only what the receipt or order lists, so it now says "2 on the receipt" (an order import still says "ordered"). The tick means "add this line to my cupboards", and the summary now reads "N ticked to add".

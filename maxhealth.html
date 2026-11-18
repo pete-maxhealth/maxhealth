@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1421'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1422'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -27898,22 +27898,32 @@ function mhShopCompleteGo(keep, leaveStock) {
   mhShopRender();
 }
 function mhBoughtDefault(it) { if (!(it && it.level != null && it.pack > 0)) return ''; let q = 1; try { const n = mhStockLoad().reviewQty; if (n && n[it.key] > 1) q = n[it.key]; } catch (_) {} return (it.pack * q) + (it.base === 'each' ? '' : ' ' + it.base); }   // 2 x a pack on the list = 2 packs bought (v3.10.1216)
-function mhBoughtSet(k, v) { _shopUi.bgt = _shopUi.bgt || {}; _shopUi.bgt[k] = v; }
+function mhBoughtSet(k, v) { _shopUi.bgt = _shopUi.bgt || {}; _shopUi.bgt[k] = v; if (_shopUi.bgtErr && _shopUi.bgtErr[k]) { delete _shopUi.bgtErr[k]; try { const e = [...document.querySelectorAll('[data-bgterr]')].find(x => x.dataset.bgterr === k); if (e) e.remove(); } catch (_) {} } }
 function mhStockBoughtSkipAll() { const o = mhStockLoad(); delete o.review; mhStockSave(o); _shopUi.bgt = null; _shopUi.msg = 'Stock left as it was'; mhShopView('list'); }
 function mhStockBoughtDone() {
-  const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), todo = [], bad = {};
+  const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), todo = [], bad = {}, skip = [];
   rows.forEach(k => {
     const it = o.items[k], typed = (_shopUi.bgt && k in _shopUi.bgt) ? _shopUi.bgt[k] : mhBoughtDefault(it);
-    if (!String(typed).trim()) return;
-    const r = mhStockParse(typed, it); if (!r.ok) { bad[k] = r.err; return; } if (!(r.base > 0) && it.level != null) { bad[k] = 'Type an amount above zero, or leave it empty to skip'; return; }
+    if (!String(typed).trim()) { skip.push(k); return; }
+    if (/^0+(\.0+)?\s*[a-z]*\.?$/i.test(String(typed).trim()) && it.level != null) { skip.push(k); return; }   // 0 bought = nothing to add, not an error (v3.10.1422)
+    let r = mhStockParse(typed, it); if (!r.ok && /^0+(\.0+)?$/.test(String(typed).trim())) r = { ok: true, base: 0 };   // "0" for a food whose stock was unknown = none left
+    if (!r.ok) { bad[k] = r.err + (r.code === 'needs-pack' ? ', or type the amount in ' + (it.base === 'each' ? 'items' : it.base) : ''); return; }
+    if (!(r.base > 0) && it.level != null) { skip.push(k); return; }
     todo.push([k, r.base, it.level == null]);
   });
-  if (Object.keys(bad).length) { _shopUi.bgtErr = bad; mhShopRender(); return; }
-  _shopUi.bgtErr = null;
+  // v3.10.1422: the rows that are fine go in now; only the ones that still need you stay on the screen, each saying why. One bad row no longer holds back the rest.
+  const done = new Set(todo.map(t => t[0]).concat(skip));
   todo.forEach(([k, b, unknown]) => { if (unknown) mhStockSetLevel(k, b); else mhStockAdjust(k, b, 'bought', 'shop'); });
-  const o2 = mhStockLoad(); delete o2.review; mhStockSave(o2); mhStockSweep(); _shopUi.bgt = null;
+  const o2 = mhStockLoad();
+  if (Object.keys(bad).length) { o2.review = (o2.review || []).filter(k => !done.has(k)); mhStockSave(o2); mhStockSweep(); _shopUi.bgtErr = bad; if (_shopUi.bgt) done.forEach(k => { delete _shopUi.bgt[k]; });
+    _shopUi.bgtDone = todo.length; mhShopRender(); return; }
+  _shopUi.bgtErr = null; _shopUi.bgtDone = 0;
+  delete o2.review; mhStockSave(o2); mhStockSweep(); _shopUi.bgt = null;
   _shopUi.msg = todo.length ? 'Stock updated for ' + todo.length + ' item' + (todo.length === 1 ? '' : 's') : 'Stock left as it was'; mhShopView('list');
 }
+// Leave one food out of this review (it keeps its stock as it was).
+function mhBoughtSkip(k) { const o = mhStockLoad(); o.review = (o.review || []).filter(x => x !== k); mhStockSave(o); if (_shopUi.bgt) delete _shopUi.bgt[k]; if (_shopUi.bgtErr) delete _shopUi.bgtErr[k];
+  if (!o.review.length) { delete o.review; mhStockSave(o); _shopUi.msg = 'Stock left as it was for that one'; mhShopView('list'); } else mhShopRender(); }
 function mhShopCopy() {
   const s = mhShopLoad(), txt = mhShopVisible(s).filter(i => !i.hidden && !i.checked).map(i => '- ' + i.name + (i.amount ? ' (' + i.amount + ')' : '')).join('\n');
   try { navigator.clipboard.writeText(txt).then(() => showToast('List copied'), () => showToast('Could not copy')); } catch (_) { showToast('Could not copy'); }
@@ -28005,7 +28015,7 @@ function mhShopBasketToggle() { _shopUi.basketOpen = !_shopUi.basketOpen; mhShop
 function mhShopLQ(v) { _shopUi.lq = v; mhShopRender('lq'); }
 // The ← at the top left of every shopping screen that is not the list itself: goes one step back, the same place the bottom Back / Cancel / Done goes.
 function mhShopBackArrow() { const v = _shopUi.view; if (v === 'stockedit') mhStkBack(); else if (v === 'recipe') mhShopView('recipes'); else if (v === 'lists' && _shopUi.useList) mhShopListCancelUse(); else mhShopView('list'); }
-function mhShopView(v, r) { _shopUi.view = v; _shopUi.recipe = r || null; _shopUi.q = ''; _shopUi.useList = null; mhShopRender(); }
+function mhShopView(v, r) { _shopUi.view = v; _shopUi.bgtDone = 0; _shopUi.bgtErr = null; _shopUi.recipe = r || null; _shopUi.q = ''; _shopUi.useList = null; mhShopRender(); }
 function mhShopRecipeToggle(mealKey, ingKey) { const s = mhShopLoad(), ex = new Set(s.recipeEx[mealKey] || []); if (ex.has(ingKey)) ex.delete(ingKey); else ex.add(ingKey); s.recipeEx[mealKey] = [...ex]; mhShopSave(s); mhShopRender(); }
 // v3.10.1417: Undo for Shopping and My cupboards (Pete Spence, 17 Nov). Each tap that changes the list or the cupboards takes a snapshot first; if something changed, the toast carries an Undo that puts the list, the cupboards and the saved lists back as they were.
 // Actions that already had their own Undo (remove, take off the list, filtered, import, duplicates) are left alone. Only the outermost action offers it, so one tap never stacks several.
@@ -31182,11 +31192,12 @@ function mhShopRender(keepFocus) {
       + (need.map(rowH).join('')) + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhCsvGo" class="copy-btn" onclick="mhShopCsvApply()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Import ' + c.rows.length + ' items</button>' + (need.some(([r]) => r.link) ? btn('Accept all suggestions', 'mhCsvAcceptAll()') : '') + btn('Cancel', "mhShopView('list')") + '</div>';
   } else if (_shopUi.view === 'stockbought') {
     const o = mhStockLoad(), rows = (o.review || []).filter(k => o.items[k]), er = _shopUi.bgtErr || {}, inp2 = 'width:100%;box-sizing:border-box;padding:11px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);';
-    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div><div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things in your cupboards and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
+    body = '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">🛒 What did you buy?</div>' + (_shopUi.bgtDone ? '<div data-bgtdone style="font-size:13px;color:var(--green);margin-bottom:8px;">✓ Stock updated for ' + _shopUi.bgtDone + ' item' + (_shopUi.bgtDone === 1 ? '' : 's') + '. Only the ones below still need you.</div>' : '') + '<div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Check the amounts for the things in your cupboards and tap Update stock. Change any you bought differently (for example 2 packs or 500 g), or empty a box to leave that one alone. Where I did not know how much you had, say how much you have now; nothing is guessed.</div>'
       + (rows.map(k => { const it = o.items[k], unknown = it.level == null, val = (_shopUi.bgt && k in _shopUi.bgt) ? _shopUi.bgt[k] : mhBoughtDefault(it);
-        return '<div data-bought="' + esc(it.name) + '" style="padding:10px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(it.name) + ' <span style="font-size:12px;color:var(--text3);">' + (unknown ? 'how much do you have now?' : 'bought (now ' + esc(mhStockFmt(it, it.level)) + ')') + '</span></div>'
+        return '<div data-bought="' + esc(it.name) + '" style="padding:10px 4px;border-top:1px solid var(--border);"><div style="font-size:15px;color:var(--text);margin-bottom:6px;">' + esc(it.name) + ' <span style="font-size:12px;color:var(--text3);">' + (unknown ? 'how much do you have now?' : 'you have ' + esc(mhStockFmt(it, it.level)) + ' now') + '</span></div>'
+          + '<div style="font-size:11px;color:var(--text3);margin:0 0 2px 2px;">' + (unknown ? 'Amount you have' : 'Bought this time (added to what you have)') + '</div>'
           + '<input data-k="' + esc(k) + '" value="' + esc(val) + '" oninput="mhBoughtSet(this.dataset.k,this.value)" placeholder="' + (unknown ? 'count it, e.g. 750 g' : 'e.g. 1 pack or 500 g') + '" style="' + inp2 + '">'
-          + (er[k] ? '<div style="font-size:12px;color:var(--red);margin-top:4px;">' + esc(er[k]) + '</div>' : '') + '</div>'; }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to review.</div>')
+          + (er[k] ? '<div data-bgterr="' + esc(k) + '" style="font-size:12px;color:var(--red);margin-top:4px;">' + esc(er[k]).replace(/[.]?$/, '.') + ' Fix it, or ' + btn('Skip this one', 'mhBoughtSkip(this.dataset.k)', 'font-size:12px;padding:5px 9px;').replace('<button', '<button data-k="' + esc(k) + '"') + '</div>' : '<div style="margin-top:4px;text-align:right;"><span data-k="' + esc(k) + '" onclick="mhBoughtSkip(this.dataset.k)" style="font-size:12px;color:var(--text3);cursor:pointer;padding:4px 0;">Skip this one</span></div>') + '</div>'; }).join('') || '<div style="font-size:13px;color:var(--text3);padding:10px 0;">Nothing to review.</div>')
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button id="mhBoughtDone" class="copy-btn" onclick="mhStockBoughtDone()" style="font-size:14px;padding:11px 16px;background:var(--accent);color:#fff;">Update stock</button>' + btn('Leave stock as it was', 'mhStockBoughtSkipAll()') + '</div>';
   } else if (_shopUi.view === 'sync') {
     const nS = Object.keys(mhStockLoad().items).length, nL = s.items.length;
