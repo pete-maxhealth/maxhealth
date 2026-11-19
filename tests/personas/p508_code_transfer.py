@@ -29,6 +29,16 @@ with fresh_server() as root, sync_playwright() as pw:
     # flag off: nothing about codes shows
     c0, p0, e0 = boot(br, True, flag=False); p0.evaluate("mhxOpen()"); p0.wait_for_timeout(300)
     'BY CODE' in p0.inner_text('#mhXferOverlay') and f.add('FAIL', 'code buttons visible with the flag off'); c0.close()
+    # demo persona: shown as Premium coming soon with the register-interest link, no working buttons
+    dc = br.new_context(viewport={'width': 390, 'height': 900}, service_workers='block'); dp = dc.new_page(); derr = []
+    dp.on('pageerror', lambda e: derr.append(str(e)[:200])); dp.route(re.compile(r'^https?://(?!localhost)'), lambda r: r.abort())
+    dp.goto('http://localhost:5757/?demo=doris'); dp.wait_for_timeout(3500); dp.evaluate("mhxOpen()"); dp.wait_for_timeout(300)
+    dt = dp.inner_text('#mhXferOverlay'); 'coming soon' in dt or f.add('FAIL', 'demo: no coming-soon line')
+    'Send by code' in dt and f.add('FAIL', 'demo: working Send button shown')
+    dp.locator('#mhXferOverlay a:has-text("Register interest")').count() == 1 or f.add('FAIL', 'demo: no Register interest link')
+    'tally.so' in (dp.get_attribute('#mhXferOverlay a:has-text("Register interest")', 'href') or '') or f.add('FAIL', 'demo: link is not the Tally form')
+    for e in derr: f.add('JS-exception', e)
+    dc.close()
     sc, sp, serr = boot(br, True); rc, rp, rerr = boot(br, False)
     sp.evaluate("var l=loadLibrary(); l.push({name:'Invented Test Loaf',kcal:250,protein:9,carbs:41,fat:3,per100:true}); saveLibrary(l); mhxOpen(); _mhx.sel={library:true}; mhxRender()"); sp.wait_for_timeout(400)
     'Send by code' in sp.inner_text('#mhXferOverlay') or f.add('FAIL', 'sender sees no Send by code button')
