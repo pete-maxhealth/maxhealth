@@ -29725,12 +29725,17 @@ function mhxRender() {
       + '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin-bottom:6px;">WHAT TO SHARE</div>'
       + MHX_SCOPES.map(s => '<label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (_mhx.sel[s[0]] ? 'checked ' : '') + 'onchange="mhxSel(\'' + s[0] + '\',this.checked)" style="width:20px;height:20px;accent-color:var(--accent);"><span style="flex:1;">' + s[1] + '</span><span style="font-size:12px;color:var(--text3);">' + c[s[0]] + '</span></label>').join('') + '</div>'
       + rowBtns(btn('📤 Show codes (send)', 'mhxStartSend()', acc + (any ? '' : 'opacity:.5;')) + btn('📷 Scan codes (receive)', 'mhxStartReceive()') + btn('Back', 'mhxClose()'))
+      + (mhxCodeOn() ? '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin:16px 0 6px;">BY CODE, NO CAMERA</div><div style="font-size:13px;line-height:1.55;color:var(--text2);">Type a code on the other device. Works over the internet, on any phone or PC.</div>' + rowBtns(btn('🔢 Send by code' + (mhxCodePremium() ? '' : ' (Premium)'), 'mhxCodeSend()', mhxCodePremium() ? acc + (any ? '' : 'opacity:.5;') : '') + btn('⌨ Receive by code', 'mhxCodeAsk()')) : '')
       + (u ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);">Last transfer on this phone: ' + esc(new Date(u.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '.</div>' + rowBtns(btn('↩ Undo last transfer', 'appConfirm(\'Undo the last transfer? This phone goes back to how it was just before it.\', mhxUndo, null, false, { confirm: \'Undo transfer\', cancel: \'Keep it\' })')) : '');
   } else if (v === 'send') {
     h = head + '<div class="settings-card" style="padding:12px 14px;"><canvas id="mhxQr" style="width:100%;max-width:440px;height:auto;display:block;margin:8px auto;background:#fff;image-rendering:pixelated;"></canvas><div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;"><i id="mhxSbar" style="display:block;height:100%;background:var(--accent);width:0;"></i></div><div id="mhxSinfo" style="font-size:13px;color:var(--text2);margin:8px 0;">Preparing…</div>'
       + '<label style="font-size:13px;color:var(--text2);">Speed <input id="mhxSpd" type="range" min="2" max="10" value="4" oninput="mhxSpeed()"> <span id="mhxSpdv">4</span> frames a second</label></div>' + rowBtns(btn('Back', 'mhxBackHome()'));
   } else if (v === 'recv') {
     h = head + '<div class="settings-card" style="padding:12px 14px;"><video id="mhxCam" playsinline muted style="width:100%;border-radius:10px;background:#000;"></video><div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;margin-top:8px;"><i id="mhxRbar" style="display:block;height:100%;background:var(--accent);width:0;"></i></div><div id="mhxRinfo" style="font-size:13px;color:var(--text2);margin-top:8px;">Starting the camera…</div></div>' + rowBtns(btn('Back', 'mhxBackHome()'));
+  } else if (v === 'csend') {
+    h = head + '<div class="settings-card" style="padding:14px;text-align:center;"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">TYPE THIS ON THE OTHER DEVICE</div><div id="mhxCode" style="font-family:Space Mono,monospace;font-size:24px;font-weight:700;letter-spacing:0.06em;color:var(--text);word-break:break-all;">' + esc(_mhx.code || '…') + '</div><div id="mhxCodeInfo" style="font-size:13px;color:var(--text2);margin-top:10px;line-height:1.5;">' + esc(_mhx.msg || 'Getting it ready…') + '</div></div>' + rowBtns(btn('Done', 'mhxBackHome()'));
+  } else if (v === 'crecv') {
+    h = head + '<div class="settings-card" style="padding:14px;"><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">THE CODE SHOWN ON THE OTHER DEVICE</div><input id="mhxCodeIn" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX" style="width:100%;box-sizing:border-box;font-family:Space Mono,monospace;font-size:18px;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);letter-spacing:0.05em;" onkeydown="if(event.key===\'Enter\')mhxCodeGet()"><div id="mhxCodeInfo" style="font-size:13px;color:var(--text2);margin-top:10px;line-height:1.5;">' + esc(_mhx.msg || 'You see a preview before anything is added.') + '</div></div>' + rowBtns(btn('Get it', 'mhxCodeGet()', acc) + btn('Back', 'mhxBackHome()'));
   } else if (v === 'review') {
     const p = _mhx.plan, ln = (ic, t) => '<div style="font-size:14px;color:var(--text);padding:6px 0;">' + ic + ' ' + t + '</div>', n = (a, w) => '<b>' + a + '</b> ' + w;
     let body = '';
@@ -29794,6 +29799,54 @@ async function mhxStartReceive() {
     } catch (_) {}
     busy = false;
   }, 120);
+}
+// ── Transfer by code (v3.10.1434, UNRELEASED: off unless MHX code flag is on) ─────────────────────────────────────────────
+// The code is 16 characters: the first 8 find the transfer on the licence Worker, the last 8 are the key and never leave the two devices.
+// The data is squeezed, then sealed with AES-GCM under a key made from those 8 characters (PBKDF2), so the Worker only ever holds ciphertext.
+// Sending needs a current licence; receiving does not (a free user can take a transfer from a Premium friend).
+const MHX_XCH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function mhxCodeOn() { try { return localStorage.getItem('mh_xfer_code') === '1'; } catch (_) { return false; } }
+function mhxCodePremium() { try { const t = localStorage.getItem('mh_licence'), p = t ? mhLicPayload(t) : null; return !!(p && p.exp * 1000 > Date.now()); } catch (_) { return false; } }
+function mhxRandChars(n) { const r = crypto.getRandomValues(new Uint8Array(n)); let o = ''; for (let i = 0; i < n; i++) o += MHX_XCH[r[i] % MHX_XCH.length]; return o; }
+async function mhxCodeKey(chars, salt) { const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(chars), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 300000, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }
+async function mhxSeal(obj, keyChars) {
+  const gz = await mhxStream(new TextEncoder().encode(JSON.stringify(obj)), CompressionStream), salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await mhxCodeKey(keyChars, salt), gz)), out = new Uint8Array(1 + 16 + 12 + ct.length);
+  out[0] = 1; out.set(salt, 1); out.set(iv, 17); out.set(ct, 29); return mhxB64(out);
+}
+// null when the key is wrong or the data was changed on the way (AES-GCM refuses both)
+async function mhxUnseal(b64, keyChars) {
+  try {
+    const u = mhxUnb64(b64); if (u[0] !== 1 || u.length < 45) return null;
+    const gz = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.subarray(17, 29) }, await mhxCodeKey(keyChars, u.subarray(1, 17)), u.subarray(29)));
+    return JSON.parse(new TextDecoder().decode(await mhxStream(gz, DecompressionStream)));
+  } catch (_) { return null; }
+}
+function mhxCodeShow(c) { return c.match(/.{4}/g).join('-'); }
+function mhxCodeParse(txt) { const c = String(txt || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); return c.length === 16 && [...c].every(ch => MHX_XCH.includes(ch)) ? { id: c.slice(0, 8), key: c.slice(8) } : null; }
+async function mhxCodeSend() {
+  if (!mhxCodePremium()) { _mhx.msg = 'Sending by code is a Premium feature. You can still show QR codes, and anyone can receive by code.'; mhxRender(); return; }
+  if (!MHX_SCOPES.some(s => _mhx.sel[s[0]])) { showToast('Tick at least one thing to share'); return; }
+  if (typeof CompressionStream === 'undefined' || !(window.crypto && crypto.subtle)) { _mhx.msg = 'This browser cannot prepare a code transfer. Use the QR codes instead.'; mhxRender(); return; }
+  mhxStop(); _mhx.view = 'csend'; _mhx.code = ''; _mhx.msg = 'Getting it ready…'; mhxRender();
+  try {
+    const key = mhxRandChars(8), blob = await mhxSeal(mhxCollect(_mhx.sel), key);
+    const { status, j } = await mhLicCall({ action: 'xfer_put', token: localStorage.getItem('mh_licence'), blob });
+    if (!j.ok) { _mhx.view = 'home'; _mhx.msg = status === 413 ? 'That is too much for a code. Untick something, or use the QR codes.' : (j.error || 'Could not send. Try again.'); mhxRender(); return; }
+    _mhx.code = mhxCodeShow(j.code + key); _mhx.msg = 'Valid for ' + Math.round((j.ttl || 600) / 60) + ' minutes, and works once. Keep this screen open. The data is locked with the second half of this code, which is never sent anywhere.'; mhxRender();
+  } catch (e) { _mhx.view = 'home'; _mhx.msg = 'Could not reach the server. Check the connection and try again.'; mhxRender(); }
+}
+function mhxCodeAsk() { mhxStop(); _mhx.view = 'crecv'; _mhx.msg = ''; mhxRender(); setTimeout(() => { const i = document.getElementById('mhxCodeIn'); if (i) i.focus(); }, 50); }
+async function mhxCodeGet() {
+  const i = document.getElementById('mhxCodeIn'), info = t => { const e = document.getElementById('mhxCodeInfo'); if (e) e.textContent = t; };
+  const c = mhxCodeParse(i && i.value); if (!c) { info('That is not a full code. It has 16 letters and numbers, shown in four groups.'); return; }
+  if (typeof DecompressionStream === 'undefined' || !(window.crypto && crypto.subtle)) { info('This browser cannot open a code transfer.'); return; }
+  info('Fetching…');
+  let r; try { r = await mhLicCall({ action: 'xfer_get', code: c.id }); } catch (_) { info('Could not reach the server. Check the connection and try again.'); return; }
+  if (!r.j.ok) { info(r.j.error || 'Could not get it. Try again.'); return; }
+  const obj = await mhxUnseal(r.j.blob, c.key), plan = obj && mhxPlan(obj);
+  if (!plan) { info('The code was right for a transfer but the last half did not unlock it. Check the code and ask the sender to send again.'); return; }
+  _mhx.plan = plan; _mhx.view = 'review'; mhxRender();
 }
 let _mhxBusy = false;
 async function mhxDoApply() {
