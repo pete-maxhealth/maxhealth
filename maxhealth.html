@@ -21276,6 +21276,7 @@ async function mhImportFiles(fileList) {
         const obj = JSON.parse(await file.text());
         if (obj && obj.mhpack === 1 && obj.sets) { mhPackPreview(obj); results.push(`📦 ${file.name} — setup pack, check the preview`); }
         else if (obj && obj.v === 1 && obj.scopes && typeof obj.scopes === 'object' && (pl => pl && (pl.stock || pl.list || pl.recipes || pl.library))(mhxPlan(obj))) { mhxOpenWith(mhxPlan(obj)); results.push(`📲 ${file.name} — phone transfer file, check the preview before anything is added`); }
+        else if (obj && obj.mhxsealed === 1) { mhxFileAsk(obj); results.push(`🔒 ${file.name} — locked transfer file, enter its passphrase`); }
         else if (mhBackupObjectLooksValid(obj)) { mhConfirmRestore(obj, file.name); results.push(`♻ ${file.name} — full backup, confirm to restore`); }
         else { showToast("That file isn't from MaxedHealth"); results.push(`✗ ${file.name} — not a MaxedHealth file`); }
         continue;
@@ -29726,7 +29727,7 @@ function mhxRender() {
       + MHX_SCOPES.map(s => '<label style="display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px;color:var(--text);cursor:pointer;"><input type="checkbox" ' + (_mhx.sel[s[0]] ? 'checked ' : '') + 'onchange="mhxSel(\'' + s[0] + '\',this.checked)" style="width:20px;height:20px;accent-color:var(--accent);"><span style="flex:1;">' + s[1] + '</span><span style="font-size:12px;color:var(--text3);">' + c[s[0]] + '</span></label>').join('') + '</div>'
       + rowBtns(btn('📤 Show codes (send)', 'mhxStartSend()', acc + (any ? '' : 'opacity:.5;')) + btn('📷 Scan codes (receive)', 'mhxStartReceive()') + btn('Back', 'mhxClose()'))
       + (!mhxCodeOn() && typeof _demoMode !== 'undefined' && _demoMode ? '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin:16px 0 6px;">BY CODE, NO CAMERA</div><div style="font-size:13px;line-height:1.55;color:var(--text2);">⭐ Premium, coming soon: type a code on the other device to send or receive over the internet, on any phone or PC. Anyone will be able to receive.</div>' + rowBtns('<a class="copy-btn" href="' + MH_PREMIUM_URL + '" target="_blank" rel="noopener" style="font-size:14px;padding:11px 14px;text-decoration:none;text-align:center;">Register interest</a>') : '')
-      + (mhxCodeOn() ? '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin:16px 0 6px;">BY CODE, NO CAMERA</div><div style="font-size:13px;line-height:1.55;color:var(--text2);">Type a code on the other device. Works over the internet, on any phone or PC.</div>' + rowBtns(btn('🔢 Send by code' + (mhxCodePremium() ? '' : ' (Premium)'), 'mhxCodeSend()', mhxCodePremium() ? acc + (any ? '' : 'opacity:.5;') : '') + btn('⌨ Receive by code', 'mhxCodeAsk()')) : '')
+      + (mhxCodeOn() ? '<div style="font-size:10px;letter-spacing:0.07em;font-family:Space Mono,monospace;color:var(--text3);margin:16px 0 6px;">BY CODE, NO CAMERA</div><div style="font-size:13px;line-height:1.55;color:var(--text2);">Type a code on the other device. Works over the internet, on any phone or PC.</div>' + rowBtns(btn('🔢 Send by code' + (mhxCodePremium() ? '' : ' (Premium)'), 'mhxCodeSend()', mhxCodePremium() ? acc + (any ? '' : 'opacity:.5;') : '') + btn('⌨ Receive by code', 'mhxCodeAsk()')) + '<div style="font-size:13px;line-height:1.55;color:var(--text2);margin-top:14px;">No internet, or prefer a file? Lock it with your own passphrase and send it any way you like.</div>' + rowBtns(btn('🔒 Save as locked file' + (mhxCodePremium() ? '' : ' (Premium)'), 'mhxFileSend()', mhxCodePremium() ? '' : '') + btn('📂 Open a locked file', 'document.getElementById(\'mhxFileIn\').click()')) + '<input id="mhxFileIn" type="file" accept=".json,application/json" style="display:none" onchange="mhxFileChosen(this)">' : '')
       + (u ? '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);">Last transfer on this phone: ' + esc(new Date(u.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })) + '.</div>' + rowBtns(btn('↩ Undo last transfer', 'appConfirm(\'Undo the last transfer? This phone goes back to how it was just before it.\', mhxUndo, null, false, { confirm: \'Undo transfer\', cancel: \'Keep it\' })')) : '');
   } else if (v === 'send') {
     h = head + '<div class="settings-card" style="padding:12px 14px;"><canvas id="mhxQr" style="width:100%;max-width:440px;height:auto;display:block;margin:8px auto;background:#fff;image-rendering:pixelated;"></canvas><div style="height:10px;border-radius:5px;background:var(--border);overflow:hidden;"><i id="mhxSbar" style="display:block;height:100%;background:var(--accent);width:0;"></i></div><div id="mhxSinfo" style="font-size:13px;color:var(--text2);margin:8px 0;">Preparing…</div>'
@@ -29848,6 +29849,35 @@ async function mhxCodeGet() {
   const obj = await mhxUnseal(r.j.blob, c.key), plan = obj && mhxPlan(obj);
   if (!plan) { info('The code was right for a transfer but the last half did not unlock it. Check the code and ask the sender to send again.'); return; }
   _mhx.plan = plan; _mhx.view = 'review'; mhxRender();
+}
+// Locked file: the same sealing as the code route, but the key is a passphrase the person chooses and tells the other person themselves.
+// The file can go by any route (share sheet, email, USB, a cloud folder). Sending needs a current licence; opening one does not.
+async function mhxFileSend() {
+  if (!mhxCodePremium()) { _mhx.msg = 'Saving a locked file is a Premium feature. You can still show QR codes, and anyone can open a locked file.'; mhxRender(); return; }
+  if (!MHX_SCOPES.some(s => _mhx.sel[s[0]])) { showToast('Tick at least one thing to share'); return; }
+  if (typeof CompressionStream === 'undefined' || !(window.crypto && crypto.subtle)) { _mhx.msg = 'This browser cannot lock a file. Use the QR codes instead.'; mhxRender(); return; }
+  appPrompt('Choose a passphrase of at least 8 characters. You will need to tell it to whoever opens the file.', 'Passphrase', async pw => {
+    pw = String(pw || '');
+    if (pw.length < 8) { _mhx.msg = 'That passphrase is too short. Use at least 8 characters.'; mhxRender(); return; }
+    let text;
+    try { text = JSON.stringify({ mhxsealed: 1, app: 'MaxedHealth', note: 'Locked transfer file. Open it in MaxedHealth: Settings > Data > Phone to phone > Open a locked file.', at: Date.now(), blob: await mhxSeal(mhxCollect(_mhx.sel), pw) }); }
+    catch (e) { _mhx.msg = 'Could not lock the file: ' + e.message; mhxRender(); return; }
+    const name = 'maxedhealth_locked_' + todayStr().replace(/\//g, '-') + '.json';
+    try { const file = new File([text], name, { type: 'application/json' }); if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'MaxedHealth locked transfer' }); _mhx.msg = 'Locked file shared ✓'; mhxRender(); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click();
+    _mhx.msg = 'Locked file saved to Downloads ✓'; mhxRender();
+  });
+}
+function mhxFileChosen(inp) { const f = inp.files && inp.files[0]; inp.value = ''; if (!f) return; f.text().then(t => { let o = null; try { o = JSON.parse(t); } catch (_) {} mhxFileAsk(o); }).catch(() => showToast('Could not read that file')); }
+// obj: the parsed file. A file that is not a locked transfer is refused; a wrong passphrase adds nothing.
+function mhxFileAsk(obj) {
+  if (!obj || obj.mhxsealed !== 1 || typeof obj.blob !== 'string') { showToast("That isn't a locked MaxedHealth transfer file"); return; }
+  if (typeof DecompressionStream === 'undefined' || !(window.crypto && crypto.subtle)) { showToast('This browser cannot open a locked file'); return; }
+  appPrompt('Enter the passphrase for this locked file.', 'Passphrase', async pw => {
+    const o = await mhxUnseal(obj.blob, String(pw || '')), plan = o && mhxPlan(o);
+    if (!plan) { showToast('That passphrase did not open the file'); return; }
+    mhxOpenWith(plan);
+  });
 }
 let _mhxBusy = false;
 async function mhxDoApply() {
