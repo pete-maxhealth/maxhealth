@@ -3,4 +3,5 @@ Pipeline: Playwright records the demo persona (`?demo=<id>`, sample data only) a
 Setup after a workspace reset: `pip install --break-system-packages piper-tts`; Pete re-attaches `en_GB-alba-medium.onnx` (Hugging Face is blocked here; do not commit the 63 MB file). Paths in the scripts point at /home/claude/voice.
 Clips: `c_pep_logging.py` (type "pep", pick from library, tap a portion, Log). Male voice for voice-entry clips: quieter, about 65-70% of Alba (not needed here).
 `c_voice_logging.py` (voice entry, Alan voice at 0.68), `c_when_you_eat.py` (Reports > When you eat card; builds the mp4 itself)., `c_carer_view.py` (Settings > Carer & Clinician).
+Shared recorder: `clip_lib.py` (run_clip). Scripts using it: `c_move.py`, `c_sleep.py`, `c_statistics.py`, `c_on_your_pc.py` (desktop size).
 Media is never committed; it goes to YouTube via Pete.
