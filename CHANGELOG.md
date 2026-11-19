@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1433 — Translations for the v3.10.1429-1432 strings
+
+- Erase all my data (button, both confirmation questions, help), the three new Undo toasts (workouts, routines, device mapping), Non-HDL Cholesterol (calculated), and the two Settings notes that moved behind a "?" in v3.10.1432 (their merged wording needed new keys). 14 strings x 8 languages, machine-assisted: still wants a native-speaker read, as with the earlier batches.
+- Checked: new p507 (all eight languages: Erase button, first confirmation, Cancel; English unchanged); neighbour p424. The Trends pattern sentences are built from live numbers, so they stay English for now.
+
 ## v3.10.1432 — House rule: long text behind a "?" (Trends patterns, Settings notes)
 
 - p405 audit flagged four long texts. Trends Patterns findings now show the lead sentence with the comparison half behind the standard "?"; the condition-history and AI-proxy notes in Settings keep a one-line summary with the rest behind "?". Wording unchanged, just moved.
