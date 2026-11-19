@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1432 — House rule: long text behind a "?" (Trends patterns, Settings notes)
+
+- p405 audit flagged four long texts. Trends Patterns findings now show the lead sentence with the comparison half behind the standard "?"; the condition-history and AI-proxy notes in Settings keep a one-line summary with the rest behind "?". Wording unchanged, just moved.
+- Checked: p405 (no long-text items left), p135, rendered Trends screenshot (demo). Dark theme only; not on a real phone.
+
 ## v3.10.1431 — Non-HDL cholesterol (total − HDL) beside the lab results chart
 
 - Pete, 11 Nov: bloods are back. Lab Results now calculates Non-HDL Cholesterol for any panel that has both total and HDL: a trend chip and drill chart like the other markers (reference below 4.0 mmol/L), and it reaches the AI summary. It is calculated, never typed into the panel form and never stored. The "?" on the two Trends insight sentences is still to do.
