@@ -23,14 +23,14 @@ Companion to PLAY_STORE_LISTING.md (store text) and PLAY_STORE.md (why and how).
 ## 3. Data safety form, question by question
 Does the app collect or share required user data types? **Yes.**
 Is all of the data encrypted in transit? **Yes** (HTTPS to the Worker and Open Food Facts).
-Do you provide a way for users to request data deletion? **Yes, but CHECK FIRST**: I could not find one single "delete everything" button in Settings (there are per-area Clear buttons, Export and Backup). The developer holds no user records, so deletion is "uninstall the app or clear its storage". Answer in those terms with the privacy policy link, or add a delete-everything button before submitting (Pete's call).
+Do you provide a way for users to request data deletion? **Yes** (v3.10.1429): Settings > Data > More > Erase all my data removes everything on the phone; uninstalling also does. The developer holds no user records. Give the privacy policy link.
 
 | Data type (Play's name) | Collected? | Shared? | Why / notes |
 |---|---|---|---|
 | Health info (food, symptoms, conditions the user types) | Yes, only when the user uses an AI feature | Yes, with the AI provider via the developer's proxy | Purpose: App functionality. Optional. Not stored by the proxy. Processed by Anthropic (and Google/OpenAI only if the user turns on "Verify across 3 AIs"). Mark "processed ephemerally". |
 | Fitness info (activity, steps, sleep) | Same as above | Same as above | Only if included in an AI question or report. |
 | Photos (food, label, barcode photos) | Yes, only on the AI photo features | Yes, with the AI provider via the proxy | App functionality, optional, ephemeral. |
-| Other user-generated content (text and voice transcripts typed or said into chat) | Yes, only on AI features | Yes, same route | App functionality. CHECK: voice logging uses the browser's speech recognition, which on Android Chrome sends the audio to Google for transcription. If Play asks about audio, declare Voice or sound recordings: collected, shared with Google (speech-to-text), App functionality, optional, ephemeral. The privacy policy does not yet say this; add a sentence before submitting. |
+| Other user-generated content (text and voice transcripts typed or said into chat) | Yes, only on AI features | Yes, same route | App functionality. CHECK: voice logging uses the browser's speech recognition, which on Android Chrome sends the audio to Google for transcription. If Play asks about audio, declare Voice or sound recordings: collected, shared with Google (speech-to-text), App functionality, optional, ephemeral. The privacy policy now says this (19 Nov, v3.10.1429). |
 | App activity / other info (barcode numbers and search words) | Yes | Yes, with Open Food Facts | App functionality. Not linked to identity. |
 | Device or other IDs (random device code) | Yes, once a day | No (developer's proxy only) | Analytics (install counts) and fair-use limits. Not linked to the person. Record expires after about a year. |
 | App info and performance (app version) | Yes, once a day | No | Analytics. |
@@ -51,6 +51,6 @@ Do you provide a way for users to request data deletion? **Yes, but CHECK FIRST*
 ## 5. Things to double-check before submitting
 1. The store text says "scan a barcode", "photograph a label" and "speak what you ate": all exist. "Type 2 diabetes" is a goal name in the app; keep the store wording to tracking, never "manage" or "treat".
 2. "Reports you can share with a clinician or carer" is fine: it is a share, not a medical claim.
-3. Premium: the Settings "Premium licence" key box still shows in the Play build (see BACKLOG, 17 Nov). Decide before review.
+3. Premium licence key box: hidden in the Play build since v3.10.1429 (done).
 4. Play review is most likely to object to medical wording: keep to the disclaimer paragraph already in the listing.
 5. If the closed test needs 12 testers, ask for them early; the 14 days only count once the app is live to that test track.

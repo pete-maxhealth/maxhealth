@@ -7,6 +7,11 @@
 - Found by the nightly sweep (19 Nov). A code comment added in v3.10.1425b said "Pete 12 Nov"; p64 requires the full name "Pete Spence" everywhere. Comment reworded only; no behaviour change.
 - Checked: p64 passes. Neighbour p503 also run (comment-only change).
 
+## v3.10.1429 — Play prerequisites: "Erase all my data", Play build hides the licence key box, privacy policy covers voice audio
+
+- Google Play (Pete, 19 Nov: get to testers asap). Three things the Play answers sheet flagged. (1) Settings > Data > More now has ERASE ALL MY DATA (same style as Clear today's log, with a ? beside it): two confirmations, then everything the app keeps on the phone (including the licence key) is removed and the app reloads as new; the first confirmation points at the backup button. Findable in Settings search ("erase", "delete all my data", "wipe", "reset"). (2) In the Play build (?src=play) the Premium licence key box is hidden, so Play cannot read an unlock key bought elsewhere as an outside payment route; existing Premium owners activate on the launcher. The normal build is unchanged. (3) docs/legal.html now says voice logging sends audio to Google's speech service on Android (not recorded or kept by MaxedHealth) and names the erase route.
+- Test: p504_erase_everything_play (cancel at each step keeps data, both steps erase and reload, licence box hidden in Play build and remembered). Neighbours: p130, p408, p485, p342. Rendered dark and light beside Clear today's log: same button style.
+
 ## v3.10.1427 — Voice logging: "done" no longer says "No items captured", and food said with "done" is kept
 
 - Found while filming the voice-logging clip (19 Nov). Saying "done" after logging by voice always flashed "No items captured" over the real "Sending:" message, because the list was emptied before the check. And a short phrase carrying food plus "done" ("2 eggs and toast done", 5 words or fewer) was treated as a bare "done", so the food was dropped.

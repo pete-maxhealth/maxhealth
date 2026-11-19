@@ -5936,9 +5936,11 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
       </div>
     </div>
       <div id="dataImportCardsContainer"></div>
-      <details style="margin-top:14px;"><summary style="font-size:12px;color:var(--text3);cursor:pointer;">More: clear today's log</summary><div style="margin-top:8px;">
+      <details style="margin-top:14px;"><summary style="font-size:12px;color:var(--text3);cursor:pointer;">More: clear today's log, erase all my data</summary><div style="margin-top:8px;">
       <button class="copy-btn" onclick="clearTodayLog()" style="width:100%;margin-bottom:4px;background:rgba(235,80,80,0.08);border-color:rgba(235,80,80,0.25);color:#eb5050;">🗑 CLEAR TODAY'S LOG</button>
       <div class="settings-hint" style="margin-bottom:14px;"><span class="help-slot" data-id="cleartoday" data-text="Wipes today's food entries only — history is untouched. Use if yesterday's log rolled over incorrectly."></span></div>
+      <button class="copy-btn" id="mhEraseAllBtn" onclick="eraseEverythingOnThisPhone()" style="width:100%;margin-bottom:4px;background:rgba(235,80,80,0.08);border-color:rgba(235,80,80,0.25);color:#eb5050;">🗑 ERASE ALL MY DATA</button>
+      <div class="settings-hint" style="margin-bottom:14px;"><span class="help-slot" data-id="eraseall" data-text="Deletes every record MaxedHealth keeps on this phone: meals, history, library, recipes, supplements, settings and your Premium licence key. Nothing is held anywhere else, so afterwards the app is as new. It cannot be undone, so share a backup first if you might want it back."></span></div>
       </div></details>
     </div>
     </div>
@@ -6664,7 +6666,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1428'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1429'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -19555,7 +19557,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Report Profiles', key: 'set-reportprofiles', subtab: 'manage', wrapId: 'reportProfilesContent', keywords: 'pemf clinician coach share provider recurring reminder wizard' },
   { label: '⚖️ Body Comp Debug', key: 'set-bodycompdebug', subtab: 'manage', keywords: 'weight body composition fat muscle bone troubleshooting' },
   { label: '🌙 Rollover Debug Log', key: 'set-rollover', subtab: 'manage', keywords: 'midnight rollover troubleshooting' },
-  { label: 'Export, import & backup', key: 'set-databackup', subtab: 'import', keywords: 'export import backup zip csv select all nutrition history master library recipes routines supplements share pack' },
+  { label: 'Export, import & backup', key: 'set-databackup', subtab: 'import', keywords: 'erase everything delete all my data wipe reset start again remove export import backup zip csv select all nutrition history master library recipes routines supplements share pack' },
   { label: 'Carer / Family Access', key: 'set-carer', subtab: 'manage', keywords: 'share family caregiver clinician view read only role diabetes oncology coach what to share food names timing treatment' },
   { label: 'Copy Diagnostics for Claude', key: 'set-copydiag', subtab: 'manage', keywords: 'debug trace copy claude bug report troubleshooting' },
   { label: '🔍 Log Mutation Debug', key: 'set-logmutation', subtab: 'manage', keywords: 'watch date save troubleshooting' },
@@ -33961,6 +33963,24 @@ function saveSupplementEdit() {
 // Reset supplement log at midnight (called from rollover logic)
 function clearTodayLog() {
   appConfirm('Clear today\'s food log? This cannot be undone.', () => _doClearLog(), null, true);
+}
+
+// v3.10.1429 (Google Play data-safety: a way to delete your data): erases everything the app keeps on this phone, then reloads as a brand-new install.
+// Two confirmations (it cannot be undone), and the first one points at the backup button.
+function eraseEverythingOnThisPhone() {
+  appConfirm('Erase EVERYTHING MaxedHealth has saved on this phone: meals, history, library, recipes, supplements, settings and your Premium licence key? This cannot be undone. If you might want it back, cancel and share a backup first.', () => {
+    appConfirm('Last check: erase everything now?', () => { _doEraseEverything(); }, null, true, { confirm: 'Erase everything', cancel: 'Cancel' });
+  }, null, true, { confirm: 'Continue', cancel: 'Cancel' });
+}
+async function _doEraseEverything() {
+  const play = (function () { try { return localStorage.getItem('mh_play') === '1'; } catch (_) { return false; } })();
+  try { window._mhErased = true; } catch (_) {}
+  try { localStorage.clear(); } catch (_) {}
+  try { sessionStorage.clear(); } catch (_) {}
+  try { if (indexedDB.databases) { const dbs = await indexedDB.databases(); await Promise.all(dbs.map(d => new Promise(r => { try { const q = indexedDB.deleteDatabase(d.name); q.onsuccess = q.onerror = q.onblocked = () => r(); } catch (_) { r(); } }))); } } catch (_) {}
+  try { if (window.caches) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch (_) {}
+  try { if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); } } catch (_) {}
+  location.replace(location.pathname + (play ? '?src=play' : ''));
 }
 
 
@@ -53301,7 +53321,7 @@ window.addEventListener('load', function () { try { mhStartLinkApply(); } catch 
 function mhIsPlayBuild() { try { return localStorage.getItem('mh_play') === '1'; } catch (_) { return false; } }
 (function () {
   try { if (new URLSearchParams(location.search).get('src') === 'play') localStorage.setItem('mh_play', '1'); } catch (_) {}
-  if (mhIsPlayBuild()) { const st = document.createElement('style'); st.textContent = '#title-set-premium,#set-premium-wrap,#mhDonateCard,#demoPremiumLink,#demoPremiumCard,#demoPremiumTrends,.mh-guide-txt,a[href="gbm_patient_guide.html"],#welcomeGbmLink,#dashGbmGuideLink{display:none!important}'; (document.head || document.documentElement).appendChild(st); }
+  if (mhIsPlayBuild()) { const st = document.createElement('style'); st.textContent = '#licenceCard,#title-set-premium,#set-premium-wrap,#mhDonateCard,#demoPremiumLink,#demoPremiumCard,#demoPremiumTrends,.mh-guide-txt,a[href="gbm_patient_guide.html"],#welcomeGbmLink,#dashGbmGuideLink{display:none!important}'; (document.head || document.documentElement).appendChild(st); }
 })();
 
 // Resume a demo that a language change interrupted (see mhLangSet).
