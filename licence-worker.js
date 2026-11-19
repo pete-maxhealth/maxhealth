@@ -17,6 +17,10 @@ const TOKEN_DAYS = 30;          // the app re-issues a token automatically while
 const TRIAL_DAYS = 14;
 const MOVES_PER_MONTH = 3;      // how many times a key's device slot can be freed by its owner in 30 days (stops one key being passed round)
 const MAX_DEVICES = 2;          // devices one paid key may be bound to (founder keys: 5)
+const XCH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // 31 characters: no 0, O, 1, I, L
+const XFER_TTL = 600;            // seconds a code transfer waits to be collected (then it is gone)
+const XFER_MAX = 4000000;        // characters of ciphertext (about 3 MB of data)
+const XFER_PUTS_PER_HOUR = 20, XFER_MISSES_PER_HOUR = 10;
 const APK_TIERS = ['founder', 'premium'];   // a trial token never gets the launcher
 const BLOBS = {
 	'launcher:apk':     { max: 25000000 },
@@ -86,6 +90,8 @@ function newKey() {
 	let s = ''; for (let i = 0; i < 16; i++) s += c[r[i] % 32];
 	return s.match(/.{4}/g).join('-');
 }
+// The part the receiver looks up with: 8 characters (no 0/O/1/I), 40 bits. The app adds a second 8 that stays on the devices and is the key.
+function newXferCode() { const r = crypto.getRandomValues(new Uint8Array(8)); let s = ''; for (let i = 0; i < 8; i++) s += XCH[r[i] % XCH.length]; return s; }
 async function kvJson(env, key) { try { return JSON.parse((await env.LICENCE_KV.get(key)) || 'null'); } catch (e) { return null; } }
 
 // Wrong guesses and trial starts are counted per (hashed) address, expiring on their own.
@@ -189,6 +195,33 @@ async function handlePost(request, env) {
 		const buf = await env.LICENCE_KV.get('payload:zip', 'arrayBuffer');
 		if (!buf) return reply(404, { ok: false, error: 'Premium files are not published yet' });
 		return new Response(buf, { headers: { 'Content-Type': 'application/zip', 'Content-Disposition': 'attachment; filename="maxedhealth-premium.zip"', 'Cache-Control': 'private, no-store', ...CORS } });
+	}
+	// Code transfer (v3.10.1434, unreleased). The app encrypts on the device; the key is the second half of the code and never comes here,
+	// so all this holds is ciphertext, for XFER_TTL seconds, handed out once. SENDING needs a valid Premium token; RECEIVING needs only the code
+	// (a free user can accept a transfer from a Premium friend), so wrong guesses are counted per address and locked out.
+	if (action === 'xfer_put') {
+		if (!(await verifyToken(env, input.token, validDevice ? device : undefined))) return reply(403, { ok: false, error: 'Licence not valid' });
+		const blob = typeof input.blob === 'string' ? input.blob : '';
+		if (!/^[A-Za-z0-9+/=_-]+$/.test(blob) || blob.length < 16) return reply(400, { ok: false, error: 'Nothing to send' });
+		if (blob.length > XFER_MAX) return reply(413, { ok: false, error: 'Too big for a code transfer. Use a file instead.' });
+		const tn = 'xp:' + ip, recent = await throttleCount(env, tn, 3600);
+		if (recent.length >= XFER_PUTS_PER_HOUR) return reply(429, { ok: false, error: 'Too many transfers this hour. Try again later.' });
+		let code = '';
+		for (let tries = 0; tries < 8 && !code; tries++) { const c = newXferCode(); if (!(await env.LICENCE_KV.get('x:' + c))) code = c; }
+		if (!code) return reply(503, { ok: false, error: 'Try again' });
+		await env.LICENCE_KV.put('x:' + code, blob, { expirationTtl: XFER_TTL });
+		await throttleAdd(env, tn, recent, 3600);
+		return reply(200, { ok: true, code, ttl: XFER_TTL });
+	}
+	if (action === 'xfer_get') {
+		const code = String(input.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+		if (!/^[ABCDEFGHJKMNPQRSTUVWXYZ2-9]{8}$/.test(code)) return reply(400, { ok: false, error: 'That code does not look right' });
+		const tn = 'xg:' + ip, bad = await throttleCount(env, tn, 3600);
+		if (bad.length >= XFER_MISSES_PER_HOUR) return reply(429, { ok: false, error: 'Too many wrong codes. Try again in an hour.' });
+		const blob = await env.LICENCE_KV.get('x:' + code);
+		if (!blob) { await throttleAdd(env, tn, bad, 3600); return reply(404, { ok: false, error: 'No transfer with that code. It may have timed out.' }); }
+		await env.LICENCE_KV.delete('x:' + code);   // once only
+		return reply(200, { ok: true, blob });
 	}
 	return reply(400, { ok: false, error: 'Unknown action' });
 }
