@@ -6664,7 +6664,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1426'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1427'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -17469,9 +17469,14 @@ function _startVoiceListening() {
     for (let ri = e.resultIndex; ri < e.results.length; ri++) {
       if (!e.results[ri].isFinal) continue;
       const text = e.results[ri][0].transcript.trim();
-      if (isRecipeVoiceDonePhrase(text)) {
+      // v3.10.1427: a short phrase that carries food AND "done" ("2 eggs and toast done", 5 words) used to be swallowed whole as a bare "done" and the food was lost.
+      // Anything left once a trailing "done" (and filler like "I'm", "all", "okay") is taken off counts as food and goes through the trailing-done branch below.
+      const _trailTest = text.match(/^(.*\S)\s+(done|finished|that'?s (?:it|all|everything)|stop)\s*[.!]?$/i);
+      const _lead = _trailTest ? _trailTest[1].replace(/\b(i'?m|i am|that'?s|that is|it'?s|all|ok|okay|yes|right|well|so)\s*$/i, '').trim() : '';
+      if (!_lead && isRecipeVoiceDonePhrase(text)) {
+        const hadItems = _voiceMultiItems.length;   // v3.10.1427: _pauseOrFinishVoiceInput() empties the list, so "No items captured" used to show after EVERY "done", hiding the real "Sending:" message
         _pauseOrFinishVoiceInput();
-        if (!_voiceMultiItems.length) showToast('No items captured');
+        if (!hadItems) showToast('No items captured');
         _voiceMultiItems = [];
         return;
       }
@@ -17490,8 +17495,9 @@ function _startVoiceListening() {
       if (trailingDoneMatch) {
         const withoutDone = text.slice(0, trailingDoneMatch.index).trim();
         if (withoutDone) _voiceMultiItems.push(withoutDone);
+        const hadItems2 = _voiceMultiItems.length;
         _pauseOrFinishVoiceInput();
-        if (!_voiceMultiItems.length) showToast('No items captured');
+        if (!hadItems2) showToast('No items captured');
         _voiceMultiItems = [];
         return;
       }

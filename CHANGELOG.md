@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1427 — Voice logging: "done" no longer says "No items captured", and food said with "done" is kept
+
+- Found while filming the voice-logging clip (19 Nov). Saying "done" after logging by voice always flashed "No items captured" over the real "Sending:" message, because the list was emptied before the check. And a short phrase carrying food plus "done" ("2 eggs and toast done", 5 words or fewer) was treated as a bare "done", so the food was dropped.
+- Now: the message only shows when nothing was actually said; any food left after a trailing "done" (ignoring filler such as "I'm", "that's all", "okay") is sent. A bare "done" with nothing said still says "No items captured". Recipe voice entry is unchanged.
+- Test: p503_voice_done_toast (two items then done, one long phrase ending in done, filler plus done, done with nothing said, nothing logged without Log it). Neighbours checked: p97, p105, p33, p431.
+
 ## v3.10.1426 — Undo for deleting a logged food, a history entry or day, a library food and a recipe
 
 - Pete (18 Nov, "shopping list and my cupboard both need undo", extended to every delete, 12 Nov: keep "Are you sure" AND Undo). These five now say "Entry deleted / Entry removed / Day removed / Item deleted / Recipe deleted" with an Undo in the toast. Undo puts the item back in the same place (a logged food's cupboard stock, which delete gives back, goes back as it was), and the change survives a reload. The recipe and whole-day confirms no longer say "can't be undone", since it can. Test p502; p11, p163, p208, p209, p212, p261, p263, p332, p353, p359, p454 re-run.
