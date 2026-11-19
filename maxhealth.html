@@ -6666,7 +6666,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1430'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1431'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -32506,6 +32506,8 @@ const LAB_MARKER_GROUPS = [
     { id: 'ldl', name: 'LDL Cholesterol', unit: 'mmol/L', ref: [0, 3.0] },
     { id: 'hdl', name: 'HDL Cholesterol', unit: 'mmol/L', ref: [1.0, 99] },
     { id: 'triglycerides', name: 'Triglycerides', unit: 'mmol/L', ref: [0, 1.7] },
+    // v3.10.1431: calculated (total - HDL) on any panel that has both; never typed in, never stored. Target below 4.0 is the usual UK lipid-clinic figure.
+    { id: 'non_hdl', name: 'Non-HDL Cholesterol (calculated)', unit: 'mmol/L', ref: [0, 4.0], derived: true },
   ]},
   { label: 'Liver Function', markers: [
     { id: 'alt', name: 'ALT', unit: 'U/L', ref: [0, 41] },
@@ -32572,10 +32574,15 @@ function deleteLabPanel(id) {
 // Real trend data for one marker across every logged panel that has a
 // value for it - sparse by nature (most panels won't test everything
 // every time), same reasoning as GKI's own trend data.
+function labPanelValue(values, markerId) {
+  if (!values) return null;
+  if (markerId === 'non_hdl') return (values.total_chol != null && values.hdl != null) ? Math.round((values.total_chol - values.hdl) * 100) / 100 : null;
+  return values[markerId] != null ? values[markerId] : null;
+}
 function getLabMarkerTrend(markerId) {
   return loadLabResults()
-    .filter(e => e.values && e.values[markerId] != null)
-    .map(e => ({ date: e.date, value: e.values[markerId] }))
+    .filter(e => labPanelValue(e.values, markerId) != null)
+    .map(e => ({ date: e.date, value: labPanelValue(e.values, markerId) }))
     .sort((a,b) => ddmmyySortKey(a.date) < ddmmyySortKey(b.date) ? -1 : 1);
 }
 
@@ -32615,7 +32622,7 @@ function renderLabResultsSettings() {
   }
   el.innerHTML = entries.map(e => {
     const markerCount = Object.keys(e.values || {}).length + (e.custom || []).length;
-    const preview = Object.entries(e.values || {}).slice(0, 3).map(([mid, val]) => {
+    const preview = Object.entries(Object.assign({}, e.values || {}, labPanelValue(e.values, 'non_hdl') != null ? { non_hdl: labPanelValue(e.values, 'non_hdl') } : {})).slice(0, 3).map(([mid, val]) => {
       const def = LAB_MARKERS_FLAT.find(m => m.id === mid);
       return def ? `${def.name} ${val}${def.unit}` : null;
     }).filter(Boolean).join(' · ');
@@ -32651,10 +32658,10 @@ function openLabPanelModal(editId) {
       <div style="font-size:11px;color:var(--text3);font-family:Space Mono,monospace;text-transform:uppercase;letter-spacing:0.04em;margin:14px 0 6px;">${g.label}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         ${g.markers.map(m => `
-          <div>
+          ${m.derived ? '' : `<div>
             <label style="font-size:11px;color:var(--text3);display:block;margin-bottom:2px;">${m.name} <span style="color:var(--text3);">(${m.unit})</span></label>
             <input class="modal-input" type="number" step="0.01" id="labMarker_${m.id}" style="margin-bottom:0;" value="${existing?.values?.[m.id] ?? ''}">
-          </div>`).join('')}
+          </div>`}`).join('')}
       </div>`).join('')}
     <div style="font-size:11px;color:var(--text3);margin-top:12px;">Leave any marker blank if it wasn't part of this panel — nothing is assumed or defaulted.</div>
   `;
@@ -51295,7 +51302,7 @@ function buildPatientContext(history, conditionFilter = null) {
   // report happens to be run against.
   const labEntries = (typeof loadLabResults === 'function') ? loadLabResults() : [];
   const latestLabPanel = labEntries.length ? labEntries[0] : null; // already sorted newest-first by logLabPanel/saveLabResults
-  const latestLabSummary = latestLabPanel ? Object.entries(latestLabPanel.values || {}).map(([mid, val]) => {
+  const latestLabSummary = latestLabPanel ? Object.entries(Object.assign({}, latestLabPanel.values || {}, labPanelValue(latestLabPanel.values, 'non_hdl') != null ? { non_hdl: labPanelValue(latestLabPanel.values, 'non_hdl') } : {})).map(([mid, val]) => {
     const def = LAB_MARKERS_FLAT.find(m => m.id === mid);
     if (!def) return null;
     const outOfRange = def.ref && (val < def.ref[0] || val > def.ref[1]);
