@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1428 — Nightly sweep fix: p64 (full name) no longer finds a bare "Pete"
+
+- Found by the nightly sweep (19 Nov). A code comment added in v3.10.1425b said "Pete 12 Nov"; p64 requires the full name "Pete Spence" everywhere. Comment reworded only; no behaviour change.
+- Checked: p64 passes. Neighbour p503 also run (comment-only change).
+
 ## v3.10.1427 — Voice logging: "done" no longer says "No items captured", and food said with "done" is kept
 
 - Found while filming the voice-logging clip (19 Nov). Saying "done" after logging by voice always flashed "No items captured" over the real "Sending:" message, because the list was emptied before the check. And a short phrase carrying food plus "done" ("2 eggs and toast done", 5 words or fewer) was treated as a bare "done", so the food was dropped.
