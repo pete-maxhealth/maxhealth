@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1434 — Premium transfer by code and locked file (built, switched off)
+
+- Phone to phone without a camera: a 16-character code (8 to look it up, 8 that never leave the two phones) with the data encrypted on the sending phone, held on the Worker for 10 minutes and deleted after one download. Sending needs Premium; receiving needs only the code. Also a passphrase-locked file route for people with no Drive. Preview-then-merge and Undo as for the QR transfer. Demo personas show "Premium, coming soon" with the register-interest link.
+- Off by default (flag `mh_xfer_code`): the licence Worker must be redeployed and a real two-device test done before it is switched on. Premium AI allowance lowered 30 to 15 a day (Worker, applies at next deploy).
+- Checked: p508, p509 (8 languages), p510, Worker test (xfer_worker_test.mjs); neighbours p338, p339, p340, p445. Not checked on a real phone or against the real Worker.
+
 ## v3.10.1433 — Translations for the v3.10.1429-1432 strings
 
 - Erase all my data (button, both confirmation questions, help), the three new Undo toasts (workouts, routines, device mapping), Non-HDL Cholesterol (calculated), and the two Settings notes that moved behind a "?" in v3.10.1432 (their merged wording needed new keys). 14 strings x 8 languages, machine-assisted: still wants a native-speaker read, as with the earlier batches.
