@@ -282,3 +282,5 @@ v2 status: done and promoted (card on Trends, demo sample, Premium page; tests p
 - [x] Add Food form: Library "+ Add Food Manually", a category's "add new item", a flagged recipe ingredient and an import line all use it (v3.10.1425, p501)
 - [x] Meal-map picker, Plan, Recipes ingredient add (18 Nov, code walk): no typed-only path of their own; every typed form is the Add Food form or the cupboard form. Re-check on a phone if you find one that is not covered.
 Every new screen that can create a food must be added here and checked before release.
+
+- [x] Premium AI allowance (19/11/2026, Pete): `LICENCE_DAILY` lowered 30 -> 15 in worker.js (the 200 in the old checklist was stale). Worst-case cost sits inside the Premium price. Takes effect when worker.js is next deployed, or at once via the `cfg:limits` KV override (see TECHNICAL.md). Founding-member limit: first 50 (Pete: will never get there, so no hard enforcement needed).

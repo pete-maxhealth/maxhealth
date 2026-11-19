@@ -36,7 +36,7 @@ Last updated 13 Oct 2026, app v3.10.1011. Order matters where marked.
 1. Price for Premium: one-off vs yearly vs monthly; an early-bird figure for the register-interest list.
 2. Who it is for: Android users with a ring or watch who log daily. iPhone users stay on the free web app.
 3. Add a before-and-after screenshot (typed week vs synced week) to the Premium page and a locked wearable-trends sample in the demo.
-4. Starter allowance numbers can be changed in `worker.js`: `STARTER_TOTAL` 60, `STARTER_TOPUP` 5, `LICENCE_DAILY` 200.
+4. Starter allowance numbers can be changed in `worker.js`: `STARTER_TOTAL` 60, `STARTER_TOPUP` 5, `LICENCE_DAILY` 15 (was 200, then 30; lowered 19/11/2026 so a heavy user cannot cost more than the Premium price). Live changes need no redeploy: see the adjustable limits note in TECHNICAL.md.
 5. Payment: nothing built, by design, until interest is proven.
 
 ## F. PEMFiT (parked)

@@ -13,7 +13,7 @@ const MONTHLY_CALL_CAP = 5000;
 // a request with no X-MH-Device header (an older copy of the app) is handled exactly as before.
 const STARTER_TOTAL   = 60;   // free AI calls for a brand-new device
 const STARTER_TOPUP   = 5;    // calls per day once the starter is used up
-const LICENCE_DAILY   = 30;   // calls per day for a valid licence token (was 200, lowered 31/10/2026)
+const LICENCE_DAILY   = 15;   // calls per day for a valid licence token (200 -> 30 on 31/10/2026, 30 -> 15 on 19/11/2026: worst case must fit inside the Premium price)
 const LICENCE_MONTHLY_CAP = 10000; // separate shared monthly pool for licensed users: 10000 x ~$0.006 = about $60/mo worst case
 const ALLOWED_MODELS  = ['claude-sonnet-4-6', 'claude-haiku-4-5'];
 const MAX_TOKENS_CAP  = 2500;
