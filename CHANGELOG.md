@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1430 — Undo on the last three deletes that had none
+
+- Pete, 19 Nov: every delete should be undoable. Audit found nearly all already use the standard toast Undo (the generic wrapper near appPrompt); three were missed: deleting several workouts at once, deleting several routines at once, and removing a device mapping. They now use the same wrapper (same toast, "Put back ✓"). Recipe draft steps/ingredients and category keywords were left as they are (drafts and resettable defaults).
+- Checked: new p505 (all three: delete, Undo, restored; no JS errors); neighbour p364 and p452 (destructive buttons / delete shelf). Not checked on a real phone.
+
 ## v3.10.1428 — Nightly sweep fix: p64 (full name) no longer finds a bare "Pete"
 
 - Found by the nightly sweep (19 Nov). A code comment added in v3.10.1425b said "Pete 12 Nov"; p64 requires the full name "Pete Spence" everywhere. Comment reworded only; no behaviour change.
