@@ -22,8 +22,8 @@ RULES = [
     ('HOST',    ['premium-site/*']),
     ('PRIVATE', ['tests/*', 'tools/*', 'server.py.bak', 'generate_test_data.py', 'test_garmin_*', 'bump_and_deploy.sh',
                  'deploy_docs.sh', 'BACKLOG.md', 'CLAUDE.md', 'TECHNICAL.md', 'main', '.github/*', '.gitignore',
-                 'CHANGELOG.md', 'android/*', 'PLAY_STORE.md', 'PLAY_STORE_LISTING.md', 'start/pages.json', 'changelog.html', 'docs/changelog.html',
-                 'LICENCE_WORKER_SETUP.md', 'licence-worker.js', 'wrangler.licence.toml']),
+                 'CHANGELOG.md', 'android/*', 'PLAY_STORE.md', 'PLAY_STORE_LISTING.md', 'PLAY_CONSOLE_ANSWERS.md', 'start/pages.json', 'changelog.html', 'docs/changelog.html',
+                 'LICENCE_WORKER_SETUP.md', 'licence-worker.js', 'wrangler.licence.toml', 'store-assets/*']),
     ('FREE',    ['maxhealth.html', 'index.html', 'carer.html', 'changelog.html', 'gbm_patient_guide.html', 'sw.js', 'manifest.json',
                  'icons/*', 'lib/*', 'lang/*', 'starter_packs/*', 'docs/*', 'start/*.html', 'worker.js', 'LICENSE', 'README.md']),
 ]

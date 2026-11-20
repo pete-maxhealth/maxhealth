@@ -27,14 +27,14 @@ r = await call({ 'X-MH-Device': 'x' }); if (r.status !== 200 || r.headers.get('X
 // 5. licence token
 const mk = (payload, secret = 'sekrit') => { const p = Buffer.from(JSON.stringify(payload)).toString('base64url'); return p + '.' + crypto.createHmac('sha256', secret).update(p).digest('base64url'); };
 const good = mk({ id: 'L1', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 });
-r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good }); if (r.status !== 200 || r.headers.get('X-MH-Tier') !== 'premium' || r.headers.get('X-MH-Remaining') !== '29') bad('valid licence not honoured ' + r.status + r.headers.get('X-MH-Tier'));
+r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good }); if (r.status !== 200 || r.headers.get('X-MH-Tier') !== 'premium' || r.headers.get('X-MH-Remaining') !== '14') bad('valid licence not honoured ' + r.status + r.headers.get('X-MH-Tier'));
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': mk({ id: 'L1', exp: 1 }) }); if (r.headers.get('X-MH-Tier') === 'premium') bad('expired licence accepted');
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': mk({ id: 'L1' }, 'wrong') }); if (r.headers.get('X-MH-Tier') === 'premium') bad('forged licence accepted');
 r = await call({ 'X-MH-Device': dev, 'X-MH-Licence': good.slice(0, -3) + 'abc' }); if (r.headers.get('X-MH-Tier') === 'premium') bad('tampered licence accepted');
-// 5b. licence: daily cap 30, not stopped by the 80-per-connection cap, own monthly pool
+// 5b. licence: daily cap 15, not stopped by the 80-per-connection cap, own monthly pool
 const lic2 = mk({ id: 'L2', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 });
-let okL = 0; for (let i = 0; i < 33; i++) { r = await call({ 'X-MH-Licence': lic2 }); if (r.status === 200) okL++; }
-if (okL !== 30 || r.status !== 429) bad(`licence daily gave ${okL} ok, last ${r.status}`);
+let okL = 0; for (let i = 0; i < 18; i++) { r = await call({ 'X-MH-Licence': lic2 }); if (r.status === 200) okL++; }
+if (okL !== 15 || r.status !== 429) bad(`licence daily gave ${okL} ok, last ${r.status}`);
 for (const k of [...store.keys()]) if (k.startsWith('calls:day:')) store.delete(k);
 const before = [...store.keys()].filter(k => k.startsWith('calls:day:')).length;
 r = await call({ 'X-MH-Licence': mk({ id: 'L3', tier: 'founder', exp: Math.floor(Date.now() / 1000) + 3600 }) });
@@ -67,7 +67,7 @@ r = await adm({}, { action: 'get' }); if (r.status !== 403) bad('admin worked wi
 r = await adm({ 'X-MH-Admin': 'b'.repeat(64) }, { action: 'get' }); if (r.status !== 403) bad('admin worked with wrong secret');
 r = await worker.fetch(new Request('https://w.test/admin/limits', { method: 'GET', headers: { 'X-MH-Admin': env.ADMIN_SECRET } }), env); if (r.status !== 405) bad('admin GET allowed ' + r.status);
 const A = { 'X-MH-Admin': env.ADMIN_SECRET };
-r = await adm(A, { action: 'get' }); let j = await r.json(); if (j.limits.licenceDaily !== 30 || j.limits.licenceMonthly !== 10000 || j.limits.freeMonthly !== 5000) bad('defaults wrong ' + JSON.stringify(j));
+r = await adm(A, { action: 'get' }); let j = await r.json(); if (j.limits.licenceDaily !== 15 || j.limits.licenceMonthly !== 10000 || j.limits.freeMonthly !== 5000) bad('defaults wrong ' + JSON.stringify(j));
 r = await adm(A, { action: 'set', limits: { nope: 1 } }); if (r.status !== 400) bad('unknown limit accepted');
 r = await adm(A, { action: 'set', limits: { licenceDaily: -5 } }); if (r.status !== 400) bad('negative accepted');
 r = await adm(A, { action: 'set', limits: { licenceDaily: '5' } }); if (r.status !== 400) bad('string accepted');
@@ -76,6 +76,6 @@ const lic9 = mk({ id: 'L9', tier: 'premium', exp: Math.floor(Date.now() / 1000) 
 let ok9 = 0; for (let i = 0; i < 4; i++) { r = await call({ 'X-MH-Licence': lic9 }); if (r.status === 200) ok9++; }
 if (ok9 !== 2) bad('new licence daily limit not applied: ' + ok9);
 if (!store.get('cfg:limits')) bad('limits not stored in KV');
-r = await adm(A, { action: 'reset' }); j = await r.json(); if (j.limits.licenceDaily !== 30) bad('reset failed');
-r = await call({ 'X-MH-Licence': mk({ id: 'L10', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 }) }); if (r.headers.get('X-MH-Remaining') !== '29') bad('default not back after reset');
+r = await adm(A, { action: 'reset' }); j = await r.json(); if (j.limits.licenceDaily !== 15) bad('reset failed');
+r = await call({ 'X-MH-Licence': mk({ id: 'L10', tier: 'premium', exp: Math.floor(Date.now() / 1000) + 3600 }) }); if (r.headers.get('X-MH-Remaining') !== '14') bad('default not back after reset');
 console.log('worker findings', fails); process.exit(fails ? 1 : 0);
