@@ -303,3 +303,5 @@ Every new screen that can create a food must be added here and checked before re
 - [x] 20 Nov 2026 (Pete): old Move clip XwqHCLtxQjw and coming-soon clip CqhZERBZED8 set to Private; cross-links added. Video housekeeping for these three clips is complete.
 
 - [ ] Trial card line (20 Nov 2026): NOT built. The "Start 14-day trial" button in the licence card is permanently hidden (display:none, nothing reveals it), so the trial is not offered in the app yet; only the Worker side exists. The "send to a PC or another phone by code, free for 14 days" line belongs with the trial launch. Decision for Pete: when to show the trial button (with Premium going live, or earlier as a taster).
+
+- [x] 20 Nov 2026 (Pete): DECISION: the 14-day trial button and the "send to a PC or another phone by code" line go in when Premium goes live, not before. Add to the Premium launch checklist (premium/HOME_CHECKLIST.md): reveal `licenceTrialBtn`, add the line, test (trial start, Premium sending works with a trial token, line shows only with the button), release.

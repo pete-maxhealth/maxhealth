@@ -52,3 +52,5 @@ Organisation licence tier: seats plus automatic branding on activation, a monthl
 ## H. Smaller items still open
 0. Ko-fi is live (ko-fi.com/maxedhealth). The old JustGiving button is removed from `docs/why-free.html`; its header photo is still hosted on images.justgiving.com, so copy it into the repo before that page is ever taken down. Check the tax treatment of tips.
 Garmin extractor verification; old HTML changelog gaps; GitHub Releases cleanup; multi-category meal picker.
+
+- [ ] At Premium launch (Pete, 20 Nov 2026): show the 14-day trial button (`licenceTrialBtn`, hidden today) and add the line "The trial includes sending your data to a PC or another phone by code" beside it. Test: trial starts, a trial token can send by code, the line shows only with the button.
