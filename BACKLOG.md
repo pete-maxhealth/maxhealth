@@ -299,3 +299,5 @@ Every new screen that can create a food must be added here and checked before re
 - [x] 20 Nov 2026 (Pete): three clips UPLOADED, in the order I listed them: Move re-cut https://youtube.com/shorts/jBgCJuKi50c (Move and body), Training routines https://youtube.com/shorts/YBTihGeoapA (Move and body), send/receive by code re-cut https://youtube.com/shorts/PlTzZr9knQU (Your data). Order assumed from his message; confirm. Still to do (Pete): set old Move XwqHCLtxQjw and coming-soon CqhZERBZED8 to Private; add cross-links to the pinned comments; Health and sharing playlist: Pete to say which clips show Premium features, then add a Premium line to the voice-over or re-cut.
 
 - [x] 20 Nov 2026 (Pete): Health and sharing playlist checked by Pete, looks okay: no Premium wording changes needed.
+
+- [x] 20 Nov 2026 (Pete): old Move clip XwqHCLtxQjw and coming-soon clip CqhZERBZED8 set to Private; cross-links added. Video housekeeping for these three clips is complete.
