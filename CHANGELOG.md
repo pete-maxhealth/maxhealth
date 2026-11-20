@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1437 — Say so on screen when Send by code needs Premium
+
+- Pete, 20 Nov: on a phone without a licence "Send by code" seemed to do nothing, because its "Premium feature" note appeared out of sight higher up the screen. It now also shows as a message at once, for Send by code and Save as locked file.
+- Checked: p508, p510 and the p511 switch test; not on a real phone.
+
 ## v3.10.1436 — Way back to the Missing Data list
 
 - Pete, 20 Nov: tapping a day in Settings > Data > Missing Data opened Manual Entry with no way back to the list except saving. Now a day opened from the list shows "← Back to missing days" above the date (same style as Customise fields); it returns to the list, refreshed. Saving a day from the list also returns to the refreshed list, so a run of missing days can be worked down in turn. A day opened any other way is unchanged.
