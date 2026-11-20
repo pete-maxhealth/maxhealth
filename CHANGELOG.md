@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1435 — Testing switch for the code transfer
+
+- Open the app address with ?xfer=1 (on) or ?xfer=0 (off) to switch the still-hidden code transfer on a phone, so it can be tried with a test Premium key before everyone gets it. Nothing changes for anyone who does not use the address.
+- Checked: p508 with the address switch (on, off, no parameter); not on a real phone.
+
 ## v3.10.1434 — Premium transfer by code and locked file (built, switched off)
 
 - Phone to phone without a camera: a 16-character code (8 to look it up, 8 that never leave the two phones) with the data encrypted on the sending phone, held on the Worker for 10 minutes and deleted after one download. Sending needs Premium; receiving needs only the code. Also a passphrase-locked file route for people with no Drive. Preview-then-merge and Undo as for the QR transfer. Demo personas show "Premium, coming soon" with the register-interest link.
