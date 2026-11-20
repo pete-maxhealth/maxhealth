@@ -301,3 +301,5 @@ Every new screen that can create a food must be added here and checked before re
 - [x] 20 Nov 2026 (Pete): Health and sharing playlist checked by Pete, looks okay: no Premium wording changes needed.
 
 - [x] 20 Nov 2026 (Pete): old Move clip XwqHCLtxQjw and coming-soon clip CqhZERBZED8 set to Private; cross-links added. Video housekeeping for these three clips is complete.
+
+- [ ] Trial card line (20 Nov 2026): NOT built. The "Start 14-day trial" button in the licence card is permanently hidden (display:none, nothing reveals it), so the trial is not offered in the app yet; only the Worker side exists. The "send to a PC or another phone by code, free for 14 days" line belongs with the trial launch. Decision for Pete: when to show the trial button (with Premium going live, or earlier as a taster).
