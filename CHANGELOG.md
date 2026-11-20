@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1443 — Saved-query charts: threshold line and longest run
+
+- When a chart's bars measure the same column as its saved query (steps, calories, protein, carbs or fat, "above/below N"), a dashed line now marks the threshold, labelled for example "above 6k", and the scale includes it.
+- The footer also says the longest run of matching days in a row (shown from 2 days up), e.g. "Longest run: 4 days in a row, ending 12/11/2026".
+- Checked: p515 compares the run against an independent count and checks the line is drawn; p180, p183, p185, p186, p192, p388, p451, p452 pass. Not checked: a rendered screenshot in light and dark.
+
 ## v3.10.1442 — Language strings caught up
 
 - Added the eight-language strings that were missed for "← Back to missing days" (v3.10.1436) and the Reports "📊 Chart" button and its message (v3.10.1440). No other change.

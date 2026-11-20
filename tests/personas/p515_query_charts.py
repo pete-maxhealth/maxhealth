@@ -55,5 +55,15 @@ with fresh_server() as root, sync_playwright() as pw:
         r = pg.evaluate("(()=>{const d=mhStatLoad().find(x=>x.id==='st_demo_active');if(!d)return null;const r=mhStatRun(d);return {m:r.filt.matched,o:r.filt.of,cmp:r.filt.inAvg!=null,rows:r.rows.length}})()")
         if not r: f.add('FAIL', per + ': demo statistic missing')
         elif r['m'] < 3 or r['o'] - r['m'] < 3 or not r['cmp'] or not r['rows']: f.add('FAIL', f'{per}: demo statistic has too little to show: {r}')
+    # 9. longest run and the threshold line, against an independent count (steps for Alex: bars of steps with the query's own threshold)
+    z = pg.goto('http://localhost:5757/?demo=alex') and pg.wait_for_timeout(3000) or pg.evaluate("""(()=>{
+      const def={subject:'days',measure:'steps',order:'time',top:20,period:90,output:'bars',filter:{name:'a',metric:'steps',op:'gt',val1:'6000',val2:''}};
+      const r=mhStatRun(def),c=new Date();c.setDate(c.getDate()-90);c.setHours(0,0,0,0);
+      const a=state.history.map(x=>[parseDateStr(x.date),x]).filter(x=>x[0]&&x[0]>=c).sort((p,q)=>p[0]-q[0]);let best=0,cur=0,prev=null;
+      a.forEach(([dt,x])=>{if(x.steps>6000){cur=(prev&&Math.round((dt-prev)/864e5)===1)?cur+1:1;best=Math.max(best,cur);prev=dt}else{cur=0;prev=null}});
+      return {got:r.filt.run||0,exp:best>=2?best:0,svg:mhStatRender(r).includes('stroke-dasharray="4 3"')&&mhStatRender(r).includes('above 6k'),txt:mhStatRender(r).includes('Longest run')===(best>=2)}})()""")
+    z['got'] == z['exp'] or f.add('FAIL', f'longest run {z["got"]}, expected {z["exp"]}')
+    z['svg'] or f.add('FAIL', 'threshold line missing on a bars chart of the query\'s own column')
+    z['txt'] or f.add('FAIL', 'Longest run text does not match the run found')
     for e in errs: f.add('JS-exception', e)
 print('findings', len(f))

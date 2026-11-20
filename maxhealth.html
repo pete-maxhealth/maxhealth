@@ -6667,7 +6667,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1442'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1443'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -57109,9 +57109,17 @@ function mhStatFromQuery(i) {
 // What the footer says about a filtered statistic: how many days matched, and (when the measured thing is a different one from the
 // query's own column) its average on the matching days against the other days. A comparison only, never a cause (v3.10.1440).
 function mhStatFiltInfo(def, allDays, days) {
-  const info = { text: mhStatFilterText(def.filter), matched: days.length, of: allDays.length }, g = MH_ST_DAYM[def.measure];
+  const info = { text: mhStatFilterText(def.filter), matched: days.length, of: allDays.length }, g = MH_ST_DAYM[def.measure], inSet = new Set(days);
+  // longest run of matching days in a row (calendar days, so a missing day or a non-matching day ends it)
+  try {
+    let best = 0, cur = 0, end = '', prev = null;
+    allDays.map(d => [parseDateStr(d.date), d]).filter(x => x[0]).sort((a, b) => a[0] - b[0]).forEach(([dt, d]) => {
+      if (inSet.has(d)) { cur = (prev && Math.round((dt - prev) / 864e5) === 1) ? cur + 1 : 1; if (cur > best) { best = cur; end = d.date; } prev = dt; } else { cur = 0; prev = null; }
+    });
+    if (best >= 2) { info.run = best; info.runEnd = end; }
+  } catch (_) {}
   if (!g || MH_ST_QMAP[def.filter.metric] === def.measure || def.measure === 'count') return info;
-  const inSet = new Set(days), avg = a => { const v = a.map(d => g.get(d)).filter(x => x != null && !isNaN(x)); return { n: v.length, avg: v.length ? v.reduce((x, y) => x + y, 0) / v.length : null }; };
+  const avg = a => { const v = a.map(d => g.get(d)).filter(x => x != null && !isNaN(x)); return { n: v.length, avg: v.length ? v.reduce((x, y) => x + y, 0) / v.length : null }; };
   const a = avg(days), b = avg(allDays.filter(d => !inSet.has(d)));
   if (a.n >= 3 && b.n >= 3) { info.inAvg = a.avg; info.outAvg = b.avg; info.inN = a.n; info.outN = b.n; info.unit = (mhStatMeasures(def.subject)[def.measure] || ['', ''])[1]; info.label = (mhStatMeasures(def.subject)[def.measure] || [''])[0].toLowerCase(); }
   return info;
@@ -57198,13 +57206,16 @@ function mhStatEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c 
 
 // ── rendering ──
 function mhStatRender(res) {
-  return mhStatRenderBody(res) + (res.filt ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + res.filt.matched + ' of ' + res.filt.of + ' days matched: ' + mhStatEsc(res.filt.text) + '</div>' +
+  return mhStatRenderBody(res) + (res.filt ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + res.filt.matched + ' of ' + res.filt.of + ' days matched: ' + mhStatEsc(res.filt.text) + (res.filt.run ? '. Longest run: ' + res.filt.run + ' days in a row, ending ' + mhStatEsc(res.filt.runEnd) : '') + '</div>' +
     (res.filt.inAvg != null ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5;">Average ' + mhStatEsc(res.filt.label) + ': <b>' + mhStatEsc(mhStatFmt(res.def.measure, res.filt.inAvg, res.filt.unit)) + '</b> on those days (' + res.filt.inN + '), <b>' + mhStatEsc(mhStatFmt(res.def.measure, res.filt.outAvg, res.filt.unit)) + '</b> on the other days (' + res.filt.outN + '). A comparison, not a cause.</div>' : '') : '');
 }
 function mhStatRenderBody(res) {
   const def = res.def, rows = res.rows, u = res.unit, f = v => mhStatFmt(def.measure, v, u);
   if (!rows.length) return '<div style="color:var(--text3);font-size:12px;padding:8px 0;">' + (res.filt ? 'No days matched in this period.' : 'Nothing logged in this period for this question yet.') + '</div>';
-  const max = Math.max.apply(null, rows.map(r => Math.abs(r.value))) || 1, hue = def.color || 'var(--accent)';
+  const max0 = Math.max.apply(null, rows.map(r => Math.abs(r.value))) || 1, hue = def.color || 'var(--accent)';
+  // the query's own threshold, drawn as a dashed line on bars when the bars measure that same column in the same unit
+  const thr = (def.filter && ['gt', 'lt'].includes(def.filter.op) && MH_ST_QMAP[def.filter.metric] === def.measure && ['steps', 'kcal', 'protein', 'carbs', 'fat'].includes(def.measure)) ? parseFloat(def.filter.val1) : NaN;
+  const max = (def.output === 'bars' && thr > 0) ? Math.max(max0, thr) : max0;
   if (def.output === 'table') {
     return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--text3);font-size:10px;letter-spacing:0.06em;"><th style="text-align:left;padding:4px 6px;">#</th><th style="text-align:left;padding:4px 6px;">' + mhStatEsc(({ foods: 'FOOD', days: 'DAY', weeks: 'WEEK', months: 'MONTH', weekdays: 'DAY', activities: 'EXERCISE', categories: 'KIND', lifts: 'LIFT' })[def.subject]) + '</th><th style="text-align:right;padding:4px 6px;">' + mhStatEsc(res.measureLabel.toUpperCase()) + '</th>' + (res.hasPrev ? '<th style="text-align:right;padding:4px 6px;">BEFORE</th>' : '') + '<th style="text-align:right;padding:4px 6px;">N</th></tr></thead><tbody>' +
       rows.map((r, i) => '<tr style="border-top:1px solid var(--border);"><td style="padding:5px 6px;color:var(--text3);">' + (i + 1) + '</td><td style="padding:5px 6px;color:var(--text);">' + mhStatEsc(r.label) + '</td><td style="padding:5px 6px;text-align:right;font-family:Syne,sans-serif;font-weight:700;color:var(--text);">' + f(r.value) + mhStatDeltaHtml(r) + '</td>' + (res.hasPrev ? '<td style="padding:5px 6px;text-align:right;color:var(--text3);">' + (r.prev != null ? f(r.prev) : '—') + '</td>' : '') + '<td style="padding:5px 6px;text-align:right;color:var(--text3);">' + r.n + '</td></tr>').join('') + '</tbody></table></div>';
@@ -57222,7 +57233,7 @@ function mhStatRenderBody(res) {
       return '<rect x="' + x.toFixed(1) + '" y="' + y + '" width="' + bw + '" height="' + h + '" rx="3" fill="' + hue + '"><title>' + mhStatEsc(r.label) + ': ' + f(r.value) + '</title></rect>' +
         (n <= 12 ? '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="8" fill="var(--text2)">' + mhStatEsc(Math.abs(r.value) >= 1000 ? (Math.round(r.value / 100) / 10) + 'k' : Math.round(r.value * 10) / 10) + '</text>' : '') +
         '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H + 12) + '" text-anchor="middle" font-size="8" fill="var(--text3)" transform="rotate(' + (n > 7 ? 40 : 0) + ' ' + (x + bw / 2).toFixed(1) + ' ' + (H + 12) + ')">' + mhStatEsc(String(r.label).replace(/^[^\w]*/, '').slice(0, 9)) + '</text>';
-    }).join('') + '</svg>';
+    }).join('') + (thr > 0 ? (() => { const ty = H - thr / max * (H - pad); return '<line x1="6" x2="' + (W - 6) + '" y1="' + ty.toFixed(1) + '" y2="' + ty.toFixed(1) + '" stroke="var(--text2)" stroke-width="1" stroke-dasharray="4 3"/><text x="' + (W - 8) + '" y="' + (ty - 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="var(--text2)">' + mhStatEsc((def.filter.op === 'gt' ? 'above ' : 'below ') + (thr >= 1000 ? (Math.round(thr / 100) / 10) + 'k' : thr)) + '</text>'; })() : '') + '</svg>';
   }
   if (def.output === 'line') {
     const W = 320, H = 130, vs = rows.map(r => r.value), mn = Math.min.apply(null, vs), mx = Math.max.apply(null, vs), rg = (mx - mn) || 1;
