@@ -1,4 +1,4 @@
-"""Clip: coming soon, send and receive by code (Premium to send, anyone can receive). Sam demo persona, Worker replaced by an in-clip stand-in. Alba. NOT for publishing until the feature ships."""
+"""Clip: send and receive by code, LIVE from v3.10.1439 (Premium to send, anyone can receive free). Sam demo persona, Worker replaced by an in-clip stand-in (same screens as the real Worker). Alba. Re-cut 20 Nov 2026 to replace the coming-soon clip."""
 import sys, re, json, base64; sys.path.insert(0, __file__.rsplit('/', 1)[0])
 from clip_lib import run_clip, sheet
 LINES = [
@@ -6,7 +6,7 @@ LINES = [
  "On the first device, tap Send by code. The app locks your data on the phone, then shows a code of sixteen letters and numbers.",
  "On the other device, open Receive by code and type it in. The first half finds the transfer. The second half is the key, and it never leaves your devices, so nobody else can read what was sent.",
  "You see a preview first. Nothing is replaced, and you can undo the whole transfer.",
- "No internet? Save a locked file with your own passphrase and send it any way you like. Anyone can receive. Sending is part of Premium, coming soon. Sample data shown. Not medical advice.",
+ "No internet? Save a locked file with your own passphrase and send it any way you like. Receiving is free for anyone. Sending is a Premium feature. Sample data shown. Not medical advice.",
 ]
 tok = base64.urlsafe_b64encode(json.dumps({'id': 'x', 'tier': 'premium', 'exp': 4102444800}).encode()).decode().rstrip('=') + '.sig'
 STORE = {}

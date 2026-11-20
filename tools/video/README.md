@@ -5,3 +5,5 @@ Clips: `c_pep_logging.py` (type "pep", pick from library, tap a portion, Log). M
 `c_voice_logging.py` (voice entry, Alan voice at 0.68), `c_when_you_eat.py` (Reports > When you eat card; builds the mp4 itself)., `c_carer_view.py` (Settings > Carer & Clinician).
 Shared recorder: `clip_lib.py` (run_clip). Scripts using it: `c_move.py`, `c_sleep.py`, `c_statistics.py`, `c_on_your_pc.py` (desktop size).
 Media is never committed; it goes to YouTube via Pete.
+
+20 Nov 2026: `clip_lib` gained `h.caption(text)` (green on-screen caption, `h.caption('')` clears). New `c_routines.py`; `c_move.py` and `c_code_transfer.py` re-cut.

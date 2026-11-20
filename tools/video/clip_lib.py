@@ -28,6 +28,8 @@ def run_clip(name, lines, steps, url, setup=None, viewport=(540, 960)):
             page.evaluate(RING, [b['x'] + b['width'] / 2, b['y'] + b['height'] / 2]); page.wait_for_timeout(350); el.click(); page.wait_for_timeout(int(pause * 1000))
         def smooth(sel, block='start'):
             page.evaluate(f"document.querySelector('{sel}').scrollIntoView({{behavior:'smooth',block:'{block}'}})"); page.wait_for_timeout(1400)
+        CAP = "(t)=>{let d=document.getElementById('clipCap');if(!t){if(d)d.remove();return;}if(!d){d=document.createElement('div');d.id='clipCap';d.style.cssText='position:fixed;left:16px;right:16px;bottom:22px;z-index:99998;pointer-events:none;text-align:center;padding:12px 14px;border-radius:12px;background:rgba(14,168,117,.96);color:#fff;font:700 17px/1.3 system-ui,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.45)';document.body.appendChild(d);}d.textContent=t;}"
+        h.caption = lambda t='': page.evaluate(CAP, t)
         h.tap = tap; h.smooth = smooth; h.wait = lambda s: page.wait_for_timeout(int(s * 1000))
         page.goto(url); page.wait_for_timeout(3500)
         page.evaluate("var o=document.getElementById('onboardingOverlay'); if(o) o.style.display='none'")
