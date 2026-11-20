@@ -2,6 +2,14 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1440 — Charts from saved queries, on the Statistics screen (free)
+
+- A statistic over days, weeks, months or days of the week can now be limited to the days a Reports saved query matches ("Only days when…" in the builder). The card shows the chart and "n of m days matched". The query is copied into the statistic, so it survives the saved query being renamed or deleted; it is in the backup, text and CSV copies, and the share/AI summary like any statistic. Hide, reorder, groups, colour, period, Explain and Library all work as before.
+- Reports: a 📊 Chart button beside each saved query opens the builder already set up (matching days, newest 20, as bars).
+- Fixed: a saved tag query ("Has tag…") was saved without its tag; it now keeps it and puts it back on Run. Fixed: editing a statistic and clearing its colour, group, pin, share or filter now really clears it (the old value was merged back).
+- Demo personas carry one saved query ("Active days") and a statistic charting it. Search finds "Statistics: charts from your saved queries".
+- Checked: new p515 (demo card and matched count against an independent count, Chart button, clearing the filter, copy survives deleting the query, backup, text export, tag query, foods statistics drop the filter); neighbours p180, p183, p185, p186, p192, p388, p451, p452 all pass; p370 shows the same kcal-target review note as before this change. Rendered in dark and light on a phone-size screen: card, builder, and the Run/Chart buttons side by side. Not checked: the other languages (the Statistics builder is English only, like the rest of that screen), a real phone.
+
 ## v3.10.1439 — Send and receive by code switched on for everyone
 
 - Tested live on 20 Nov (real Worker, Premium test key on one device, a device with no licence receiving): code issued, collected, decrypted, checksum matched, 17 supplements previewed, added and undone. Receiving by code is open to everyone; sending needs Premium. The Worker (send/collect actions) and the 15-a-day Premium AI cap were deployed on 19 Nov.

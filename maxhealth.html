@@ -6667,7 +6667,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1439'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1440'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -19603,6 +19603,7 @@ const SITE_SEARCH_SETTINGS = [
   { label: 'Period Analysis Summary', key: 'rpt-summary', subtab: 'reports', tab: 'insights', keywords: 'overview stats report trend analysis' },
   { label: 'Insights & what moves what (Reports)', key: 'rpt-insights-box', subtab: 'reports', tab: 'insights', wrapId: 'rpt-insights-wrap', keywords: 'patterns findings observations what seems to move what outcomes associations sleep early stage' },
   { label: 'Activity Credit Balance (Reports)', key: 'activitycredit', subtab: 'reports', tab: 'insights', wrapId: 'activity-credit-wrap', keywords: 'exercise calories earned unclaimed' },
+  { label: 'Statistics: charts from your saved queries', key: 'stats-top', subtab: 'stats', tab: 'insights', keywords: 'statistics chart graph saved query only days when above below steps sleep matching days bars line keep answer shelf' },
   { label: 'Query Builder (in Ask about this period)', key: 'rpt-askai', subtab: 'reports', tab: 'insights', keywords: 'custom query filter above below between saved queries' },
   { label: 'Make a report to hand to someone (Export & Share)', key: 'rpt-export', subtab: 'reports', tab: 'insights', keywords: 'PDF print clinical personal custom send doctor clinician' },
   { label: 'Fasting & when you eat (Reports)', key: 'rpt-fasting', subtab: 'reports', tab: 'insights', keywords: 'fast fasting overnight eating window intermittent meal timing first last meal meal times card trends compare metrics statistics around treatment sessions diabetes oncology adviser when eat meal timing time of day protein carbs fat breakfast lunch dinner evening spread distribution coach' },
@@ -50621,7 +50622,7 @@ function saveReportQuery() {
   const name   = document.getElementById('rptQueryName')?.value.trim();
   const metric = document.getElementById('rptQueryMetric')?.value;
   const op     = document.getElementById('rptQueryOp')?.value;
-  const val1   = document.getElementById('rptQueryVal')?.value;
+  const val1   = metric === 'tag' ? (document.getElementById('rptQueryTagVal')?.value || '').trim() : document.getElementById('rptQueryVal')?.value;   // a tag query's value is the tag name (it was saved empty before v3.10.1440)
   const val2   = document.getElementById('rptQueryVal2')?.value;
   const range  = _rptRange; // -1=custom, 0=all, 7/30/60/90=days
 
@@ -50670,6 +50671,7 @@ function renderSavedQueries() {
           <div style="font-size:10px;color:var(--text3);">${metaLine}</div>
         </div>
         <button class="run-btn" style="font-size:11px;padding:6px 14px;width:auto;flex-shrink:0;" onclick="loadSavedQuery(${i})">Run</button>
+        ${q.type === 'treatment' ? '' : `<button class="btn-neutral" style="font-size:11px;padding:6px 12px;width:auto;flex-shrink:0;border-radius:8px;" onclick="mhStatFromQuery(${i})" title="Chart the days this query matches on the Statistics screen">📊 Chart</button>`}
         <span style="cursor:pointer;padding:4px 8px;flex-shrink:0;font-size:14px;line-height:1;" onclick="deleteSavedQuery(${i})" title="Delete query">🗑</span>
       </div>`;
     }).join('')}`;
@@ -50720,6 +50722,7 @@ function loadSavedQuery(i) {
   const v = document.getElementById('rptQueryVal');
   const v2 = document.getElementById('rptQueryVal2');
   if (m) m.value = q.metric;
+  if (q.metric === 'tag') { try { onQueryMetricChange(); const tv = document.getElementById('rptQueryTagVal'); if (tv) tv.value = q.val1 || ''; } catch (_) {} }
   if (o) o.value = q.op;
   if (v) v.value = q.val1 || '';
   if (v2) { v2.value = q.val2 || ''; v2.style.display = q.op === 'between' ? 'block' : 'none'; }
@@ -53128,6 +53131,13 @@ function startDemoMode(personaId) {
     localStorage.removeItem('mh_tdee_check_dismissed');
     localStorage.setItem('mh_ceil_standard', persona.targets.carbs);
     DEMO_PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
+    // One saved query and a statistic charting its matching days, so the saved-query charts show working in every demo (v3.10.1440)
+    try {
+      mhStatSeedDefaults();
+      localStorage.setItem('mh_saved_queries', JSON.stringify([{ name: 'Active days', metric: 'steps', op: 'gt', val1: '8000', val2: '', range: 90, saved: new Date().toISOString() }]));
+      const _sd = mhStatLoad();
+      if (!_sd.some(x => x.id === 'st_demo_active')) { _sd.unshift({ id: 'st_demo_active', created: Date.now(), name: 'Days I topped 8,000 steps', subject: 'days', measure: 'steps', agg: 'sum', order: 'time', top: 20, period: 90, output: 'bars', filter: { name: 'Active days', metric: 'steps', op: 'gt', val1: '8000', val2: '' } }); mhStatSave(_sd); }
+    } catch (_) {}
     // Fat/phase/water targets: never the real account's. Fat fills the persona's remaining calories.
     ['mh_target_fat','mh_target_kcal_maintain','mh_target_kcal_gain','mh_target_water','mh_target_fibre'].forEach(k => localStorage.removeItem(k));
     localStorage.setItem('mh_target_fat', String(Math.max(30, Math.round((persona.targets.kcal - 4*persona.targets.protein - 4*persona.targets.carbs)/9))));
@@ -57013,6 +57023,7 @@ function mhStatNormalise(def) {
   if (!['high', 'low', 'time'].includes(d.order)) d.order = s.def.order;
   if ((d.order === 'time') && !['days', 'weeks', 'months', 'weekdays'].includes(d.subject)) d.order = 'high';
   d.top = [3, 5, 10, 20, 50, 0].includes(d.top) ? d.top : s.def.top; // 3 is used by the Today tile
+  if (!(['days', 'weeks', 'months', 'weekdays'].includes(d.subject) && d.filter && d.filter.metric && QUERY_COLS[d.filter.metric])) delete d.filter;   // only day-based statistics can be limited to the days a saved query matches (v3.10.1440)
   if (d.period == null) d.period = 30;
   d.compare = !!d.compare && mhStatCanCompare(d);
   return d;
@@ -57055,8 +57066,45 @@ function mhStatAggregate(vals, agg) {
   if (agg === 'min') return Math.min.apply(null, vals);
   return vals.reduce((a, b) => a + b, 0);
 }
+// ── Saved-query filter (v3.10.1440, Pete 20 Nov): a day-based statistic can be limited to the days a Reports saved query matches ─────
+// The query is copied into the statistic when picked, so the chart keeps working if the saved query is later renamed or deleted.
+const MH_ST_QOPS = { gt: 'above', lt: 'below', eq: 'equal to', between: 'between', missing: 'missing', has: 'with data' };
+const MH_ST_QMAP = { kcal: 'kcal', protein: 'protein', carbs: 'carbs', fat: 'fat', steps: 'steps', sleep_duration: 'sleep', sleep_deep: 'deep', sleep_rem: 'rem', sleep_light: 'light', sleep_wake: 'wake', sleep_efficiency: 'sleepeff', sleep_hr_avg: 'sleephr', hrv: 'hrv', weight: 'weight' };
+function mhStatQueryList() { try { return (JSON.parse(localStorage.getItem('mh_saved_queries') || '[]') || []).filter(q => q && q.type !== 'treatment' && q.metric && QUERY_COLS[q.metric]); } catch (_) { return []; } }
+function mhStatFilterFromQuery(q) { return { name: q.name || 'Unnamed query', metric: q.metric, op: q.op || 'gt', val1: q.val1 == null ? '' : String(q.val1), val2: q.val2 == null ? '' : String(q.val2) }; }
+function mhStatFilterText(f) {
+  const m = QUERY_COLS[f.metric] || { label: f.metric, unit: '' };
+  if (f.metric === 'tag') return 'tagged "' + (f.val1 || '') + '"';
+  if (f.op === 'missing' || f.op === 'has') return m.label + ' ' + MH_ST_QOPS[f.op];
+  const unit = m.unit ? ' ' + m.unit : '';
+  return m.label + ' ' + (MH_ST_QOPS[f.op] || f.op) + ' ' + (f.op === 'between' ? f.val1 + ' to ' + f.val2 : f.val1) + (f.metric === 'notes' || f.metric === 'mode' ? '' : unit);
+}
+function mhStatQueryMatch(f, d) {
+  if (!QUERY_COLS[f.metric]) return true;
+  if (f.metric === 'tag') {
+    const t = String(f.val1 || '').trim().toLowerCase(); if (!t) return false;
+    const legacy = ['standard', 'occasion', 'holiday', 'missed day entry', 'missed day'];
+    return String(d.notes || '').split(',').map(x => x.trim().toLowerCase()).filter(x => x && !legacy.includes(x)).includes(t);
+  }
+  const v = getColValue(d, f.metric), a = parseFloat(f.val1), b = parseFloat(f.val2);
+  if (f.op === 'missing') return !v;
+  if (f.op === 'has') return !!v;
+  if (f.metric === 'notes' || f.metric === 'mode') { const n = String(f.val1 || '').toLowerCase().trim(); return !!n && String(v || '').toLowerCase().includes(n); }
+  if (v === null || isNaN(v)) return false;
+  if (f.op === 'between') return !isNaN(a) && !isNaN(b) && v >= a && v <= b;
+  if (isNaN(a)) return false;
+  return f.op === 'gt' ? v > a : f.op === 'lt' ? v < a : Math.abs(v - a) < 0.01;
+}
+// From a Reports saved query: open a new statistic already set to chart it (the matching days, newest 20, as bars)
+function mhStatFromQuery(i) {
+  let q = null; try { q = (JSON.parse(localStorage.getItem('mh_saved_queries') || '[]') || [])[i]; } catch (_) {}
+  if (!q || q.type === 'treatment' || !QUERY_COLS[q.metric]) { showToast('This kind of query cannot be charted'); return; }
+  const period = [7, 30, 90, 365, 0].includes(q.range) ? q.range : (q.range === 60 ? 90 : 90);
+  const def = { subject: 'days', measure: MH_ST_QMAP[q.metric] || 'kcal', agg: 'sum', order: 'time', top: 20, period, output: 'bars', name: q.name || '', filter: mhStatFilterFromQuery(q) };
+  switchTab('insights'); switchSubTab('insights', 'stats'); mhStatsOpen(); mhStatOpenBuilder(def);
+}
 function mhStatRun(rawDef) {
-  const def = mhStatNormalise(rawDef), days = mhStatDaysInPeriod(def), meas = mhStatMeasures(def.subject)[def.measure] || ['', ''];
+  const def = mhStatNormalise(rawDef), allDays = mhStatDaysInPeriod(def), days = def.filter ? allDays.filter(d => mhStatQueryMatch(def.filter, d)) : allDays, meas = mhStatMeasures(def.subject)[def.measure] || ['', ''];
   let rows = [], timeSubject = ['days', 'weeks', 'months', 'weekdays'].includes(def.subject);
   const unit = meas[1]; if (unit === 'clock' && def.agg === 'sum') def.agg = 'avg';   // adding up times of day means nothing
   if (def.subject === 'foods') {
@@ -57120,7 +57168,7 @@ function mhStatRun(rawDef) {
       hasPrev = pr.rows.length > 0; rows.forEach(r => { if (pm.has(r.label)) { r.prev = pm.get(r.label); r.delta = pm.get(r.label) ? Math.round((r.value - r.prev) / Math.abs(r.prev) * 100) : null; } else { r.prev = null; r.delta = null; r.isNew = true; } });
     } catch (_) {}
   }
-  return { def, rows, total, unit, measureLabel: meas[0], periodDays: days.length, hasPrev };
+  return { def, rows, total, unit, measureLabel: meas[0], periodDays: days.length, hasPrev, filt: def.filter ? { text: mhStatFilterText(def.filter), matched: days.length, of: allDays.length } : null };
 }
 function mhStatTitle(def) {
   const d = mhStatNormalise(def), s = MH_ST_SUBJECTS[d.subject], m = (mhStatMeasures(d.subject)[d.measure] || [''])[0].toLowerCase();
@@ -57131,14 +57179,17 @@ function mhStatTitle(def) {
   const by = d.subject === 'foods' && d.measure === 'count' ? 'most often' : ((aggWord ? aggWord + ' ' : '') + m);
   return (head + (timeSub && d.subject !== 'days' ? '' : what + ' ') + (timeSub && d.subject !== 'days' ? by + ' per ' + ({ weeks: 'week', months: 'month', weekdays: 'weekday' })[d.subject] : 'by ' + by)).replace(/\s+/g, ' ').trim().replace(/^./, c => c.toUpperCase());
 }
-function mhStatSubtitle(def) { const n = mhStatNormalise(def); return mhStatTitle(def) + ' · ' + mhStatPeriodText(n) + (n.compare ? ' · against the period before' : '') + (def.share ? ' · in summaries & AI' : ''); }
+function mhStatSubtitle(def) { const n = mhStatNormalise(def); return mhStatTitle(def) + (n.filter ? ' · only days when ' + mhStatFilterText(n.filter) : '') + ' · ' + mhStatPeriodText(n) + (n.compare ? ' · against the period before' : '') + (def.share ? ' · in summaries & AI' : ''); }
 function mhStatDeltaHtml(r) { if (r.isNew) return '<span style="color:var(--accent);font-size:10px;"> new</span>'; if (r.delta == null) return ''; return '<span style="color:var(--text2);font-size:10px;"> ' + (r.delta > 0 ? '▲ ' : r.delta < 0 ? '▼ ' : '● ') + Math.abs(r.delta) + '%</span>'; }
 function mhStatEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 // ── rendering ──
 function mhStatRender(res) {
+  return mhStatRenderBody(res) + (res.filt ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + res.filt.matched + ' of ' + res.filt.of + ' days matched: ' + mhStatEsc(res.filt.text) + '</div>' : '');
+}
+function mhStatRenderBody(res) {
   const def = res.def, rows = res.rows, u = res.unit, f = v => mhStatFmt(def.measure, v, u);
-  if (!rows.length) return '<div style="color:var(--text3);font-size:12px;padding:8px 0;">Nothing logged in this period for this question yet.</div>';
+  if (!rows.length) return '<div style="color:var(--text3);font-size:12px;padding:8px 0;">' + (res.filt ? 'No days matched in this period.' : 'Nothing logged in this period for this question yet.') + '</div>';
   const max = Math.max.apply(null, rows.map(r => Math.abs(r.value))) || 1, hue = def.color || 'var(--accent)';
   if (def.output === 'table') {
     return '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--text3);font-size:10px;letter-spacing:0.06em;"><th style="text-align:left;padding:4px 6px;">#</th><th style="text-align:left;padding:4px 6px;">' + mhStatEsc(({ foods: 'FOOD', days: 'DAY', weeks: 'WEEK', months: 'MONTH', weekdays: 'DAY', activities: 'EXERCISE', categories: 'KIND', lifts: 'LIFT' })[def.subject]) + '</th><th style="text-align:right;padding:4px 6px;">' + mhStatEsc(res.measureLabel.toUpperCase()) + '</th>' + (res.hasPrev ? '<th style="text-align:right;padding:4px 6px;">BEFORE</th>' : '') + '<th style="text-align:right;padding:4px 6px;">N</th></tr></thead><tbody>' +
@@ -57198,7 +57249,7 @@ function mhStatAutoSection(d) {
   return 'trends';
 }
 function mhStatSection(d) { return MH_ST_SECTIONS[d.section] ? d.section : mhStatAutoSection(d); }
-function mhStatSig(d) { const n = mhStatNormalise(d); return [n.subject, n.measure, n.agg, n.order, n.top, n.period, n.from || '', n.to || '', n.output].join('|'); }
+function mhStatSig(d) { const n = mhStatNormalise(d); return [n.subject, n.measure, n.agg, n.order, n.top, n.period, n.from || '', n.to || '', n.output, n.filter ? [n.filter.metric, n.filter.op, n.filter.val1, n.filter.val2].join(':') : ''].join('|'); }
 function mhStatId() { return 'st' + Date.now() + Math.random().toString(36).slice(2, 6); }
 function mhStatSeedDefaults() {
   if (localStorage.getItem('mh_stats_seeded')) return;
@@ -57460,6 +57511,7 @@ function mhStatSet(field, value) {
   else if (field === 'pinned' || field === 'share') _stDraft[field] = !!value;
   else if (field === 'color') _stDraft.color = /^#[0-9a-fA-F]{6}$/.test(value || '') ? value : undefined;
   else if (field === 'section') _stDraft[field] = value || undefined;
+  else if (field === 'filter') { if (value === '') delete _stDraft.filter; else if (value !== 'keep') { const q = mhStatQueryList()[parseInt(value)]; if (q) _stDraft.filter = mhStatFilterFromQuery(q); } }
   else _stDraft[field] = value;
   _stDraft = Object.assign(mhStatNormalise(_stDraft), { name: _stDraft.name, from: _stDraft.from, to: _stDraft.to, id: _stDraft.id, section: _stDraft.section, color: _stDraft.color, compare: _stDraft.compare, pinned: _stDraft.pinned, share: _stDraft.share });
   mhStatRenderBuilder();
@@ -57475,6 +57527,13 @@ function mhStatRenderBuilder() {
   h += sel('SHOW ME', 'subject', Object.keys(MH_ST_SUBJECTS).map(k => [k, MH_ST_SUBJECTS[k].label]), d.subject);
   h += sel('MEASURED BY', 'measure', Object.keys(ms).map(k => [k, ms[k][0]]), d.measure);
   if (s.aggs.length) h += sel('COUNTED AS', 'agg', s.aggs.map(a => [a, (d.subject === 'foods' || d.subject === 'activities' || d.subject === 'categories') && a === 'avg' ? 'Average each time' : MH_ST_AGG[a]]), d.agg);
+  if (timeSub) {
+    const ql = mhStatQueryList(), fl = d.filter, same = q => fl && q.metric === fl.metric && (q.op || 'gt') === fl.op && String(q.val1 == null ? '' : q.val1) === fl.val1 && String(q.val2 == null ? '' : q.val2) === fl.val2;
+    const idx = ql.findIndex(same), opts = [['', 'Every day']].concat(ql.map((q, i) => [String(i), (q.name || 'Unnamed query') + ' (' + mhStatFilterText(mhStatFilterFromQuery(q)) + ')']));
+    if (fl && idx < 0) opts.push(['keep', fl.name + ' (' + mhStatFilterText(fl) + ')']);
+    if (ql.length || fl) h += sel('ONLY DAYS WHEN', 'filter', opts, fl ? (idx >= 0 ? String(idx) : 'keep') : '');
+    else h += '<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Want only the days that match a rule, such as steps above 8,000? Save a query in Reports, then pick it here.</div>';
+  }
   h += sel('ORDER', 'order', (timeSub ? [['time', 'In date order'], ['high', 'Highest first'], ['low', 'Lowest first']] : [['high', 'Highest first'], ['low', 'Lowest first']]), d.order);
   h += sel('GROUP', 'section', [['', 'Automatic (' + MH_ST_SECTIONS[mhStatAutoSection(d)][1] + ')']].concat(Object.keys(MH_ST_SECTIONS).map(k => [k, MH_ST_SECTIONS[k][0] + ' ' + MH_ST_SECTIONS[k][1]])), d.section || '');
   h += sel('HOW MANY', 'top', [[5, 'Top 5'], [10, 'Top 10'], [20, 'Top 20'], [50, 'Top 50'], [0, 'All of them']], d.top);
@@ -57498,7 +57557,7 @@ function mhStatSaveDraft() {
   if (!_stDraft) return;
   const d = mhStatNormalise(_stDraft); d.name = (_stDraft.name || '').trim() || mhStatTitle(d); if (!d.section) delete d.section; if (!d.color) delete d.color; if (!d.pinned) delete d.pinned; if (!d.share) delete d.share; if (_stDraft.period === -1) { d.from = _stDraft.from; d.to = _stDraft.to; }
   const a = mhStatLoad();
-  if (_stEditing) { const i = a.findIndex(x => x.id === _stEditing); if (i >= 0) a[i] = Object.assign({}, a[i], d, { id: _stEditing }); else a.push(Object.assign(d, { id: _stEditing })); }
+  if (_stEditing) { const i = a.findIndex(x => x.id === _stEditing); if (i >= 0) { a[i] = Object.assign({}, a[i], d, { id: _stEditing }); ['filter', 'section', 'color', 'pinned', 'share'].forEach(k => { if (!(k in d)) delete a[i][k]; }); } else a.push(Object.assign(d, { id: _stEditing })); }
   else a.unshift(Object.assign(d, { id: 'st' + Date.now() + Math.random().toString(36).slice(2, 6), created: Date.now() }));
   mhStatSave(a); mhStatCloseBuilder(); mhStatRenderList(); try { mhStatTodayRender(); } catch (_) {} showToast('Saved ✓');
 }
