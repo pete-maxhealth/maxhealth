@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1444 — More screen text translated
+
+- A new crawler (`tools/lang_collect_all.py`) lists the English text left on every main screen in the demo. This batch translates the static items it found in all eight languages: Timing advice (who should advise, PT / sports nutritionist, the button), First/Last meal chart names, Statistics sections (Body & wellbeing, My own, Exercise), the Statistics search box, "View a trend", the Gross MET option, the "Chart the days…" tip, the "More: clear today's log…" line and the demo-mode toast (with the persona name).
+- Left English on purpose: Formulas reference, food and recipe names, device-file hints with the device name inside, and live sentences that mix data.
+- Checked: new p517 (all eight languages, each phrase through the page's translator, and a rendered Spanish Statistics screen); p111, p133, p512, p513 pass. Not checked: a native-speaker read.
+
 ## v3.10.1443 — Saved-query charts: threshold line and longest run
 
 - When a chart's bars measure the same column as its saved query (steps, calories, protein, carbs or fat, "above/below N"), a dashed line now marks the threshold, labelled for example "above 6k", and the scale includes it.
