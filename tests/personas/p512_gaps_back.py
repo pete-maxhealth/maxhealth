@@ -30,4 +30,9 @@ with fresh_server() as root, sync_playwright() as pw:
     pg.evaluate("mhOpenManualEntry(1)"); pg.wait_for_timeout(1200)
     vis() and f.add('FAIL', 'back button showing for a day opened without the list')
     for e in errs: f.add('JS-exception', e)
+import json, os
+for c in ['es', 'de', 'fr', 'tr', 'pt', 'it', 'pl', 'nl']:
+    d = json.load(open(os.path.join(os.path.dirname(__file__), '..', '..', 'lang', c + '.json'), encoding='utf-8'))
+    for k in ['← Back to missing days', '📊 Chart', 'This kind of query cannot be charted']:
+        d.get(k) and d[k] != k or f.add('FAIL', f'{c}: no translation for {k!r}')
 print('findings', len(f))

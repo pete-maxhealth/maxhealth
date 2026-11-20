@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1442 — Language strings caught up
+
+- Added the eight-language strings that were missed for "← Back to missing days" (v3.10.1436) and the Reports "📊 Chart" button and its message (v3.10.1440). No other change.
+- Checked: p512 now also checks all eight packs carry the three strings; p133, p111, p513 pass. Not checked: reading the new words as a native speaker (machine-assisted like the rest).
+
 ## v3.10.1441 — Saved-query charts: matching vs other days, and a demo that works for every persona
 
 - A filtered statistic now also says how the measured thing differs between the matching days and the other days, for example "Average sleep: 7.3 h on those days (26), 7.4 h on the other days (19). A comparison, not a cause." Shown only when both sides have at least 3 days and the measure is a different column from the query's own.
