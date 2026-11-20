@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1436 — Way back to the Missing Data list
+
+- Pete, 20 Nov: tapping a day in Settings > Data > Missing Data opened Manual Entry with no way back to the list except saving. Now a day opened from the list shows "← Back to missing days" above the date (same style as Customise fields); it returns to the list, refreshed. Saving a day from the list also returns to the refreshed list, so a run of missing days can be worked down in turn. A day opened any other way is unchanged.
+- Checked: new p512 (button appears only from the list, back returns and refreshes, other routes unchanged), rendered Manual Entry screenshot (dark theme only), neighbours p57, p56, p76, p408, p432, p59. Not checked on a real phone or in light theme.
+
 ## v3.10.1435 — Testing switch for the code transfer
 
 - Open the app address with ?xfer=1 (on) or ?xfer=0 (off) to switch the still-hidden code transfer on a phone, so it can be tried with a test Premium key before everyone gets it. Nothing changes for anyone who does not use the address.

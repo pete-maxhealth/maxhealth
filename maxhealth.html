@@ -6130,6 +6130,7 @@ try { if (sessionStorage.getItem('mh_demo_resume')) { var _v = document.createEl
           <button class="run-btn" style="flex:1;background:rgba(77,159,255,0.1);color:var(--blue);border:1px solid rgba(77,159,255,0.3);" onclick="closeManualFieldPicker(true)">✓ Save fields</button>
         </div>
       </div>
+      <button id="mhGapsBackBtn" class="copy-btn" style="display:none;width:100%;margin-bottom:10px;" onclick="mhBackToGaps()">← Back to missing days</button>
       <input type="date" id="manualEntryDate" class="modal-input" style="margin-bottom:12px;color-scheme:dark;" onchange="loadManualEntryForDate(this.value)">
       <div id="manualEntryFieldsWrap" style="display:none;">
         <div id="manualEntrySourceNote" style="font-size:11px;color:var(--text3);margin-bottom:10px;"></div>
@@ -6666,7 +6667,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1435'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1436'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -12976,7 +12977,7 @@ async function mhLoadDataGaps() {
     el.innerHTML = j.gaps.map(g => {
       const dt = new Date(g.date + 'T12:00:00');
       const lbl = dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-      return `<div onclick="mhOpenManualEntry('${g.date}')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;"><span><b style="color:var(--text);">${lbl}</b><br><span style="font-size:11px;color:var(--text3);">missing: ${g.missing.join(', ')}</span></span><span style="color:var(--accent);font-size:12px;">✏️ Fill in ›</span></div>`;
+      return `<div onclick="mhOpenManualEntry('${g.date}', true)" style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;"><span><b style="color:var(--text);">${lbl}</b><br><span style="font-size:11px;color:var(--text3);">missing: ${g.missing.join(', ')}</span></span><span style="color:var(--accent);font-size:12px;">✏️ Fill in ›</span></div>`;
     }).join('');
   } catch (_) { el.textContent = 'Could not check (server not reachable).'; }
 }
@@ -13001,7 +13002,17 @@ function mhEditTrendsDay() {
     (f || dayEl) && (f || dayEl).scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 250);
 }
-function mhOpenManualEntry(daysAgo) {
+// v3.10.1436: a day picked from Missing Data gets a way back to that list (and the list refreshes after a save), so several days can be worked down in turn.
+let _mhFromGaps = false;
+function mhBackToGaps() {
+  _mhFromGaps = false;
+  const b = document.getElementById('mhGapsBackBtn'); if (b) b.style.display = 'none';
+  try { mhLoadDataGaps(); } catch (_) {}
+  const w = document.getElementById('imp-gaps-wrap'); if (w && w.style.display === 'none') { try { toggleSection('imp-gaps', 'imp-gaps-wrap', 'imp-gaps-icon'); } catch (_) {} }
+  const t = document.getElementById('title-imp-gaps'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function mhOpenManualEntry(daysAgo, fromGaps) {
+  _mhFromGaps = !!fromGaps;
   const picked = (typeof daysAgo === 'string') ? daysAgo : (document.getElementById('mhSyncHelpDate') || {}).value;
   document.getElementById('mhSyncHelp')?.remove();
   siteSearchOpenSettings('imp-manual', 'import');
@@ -13010,6 +13021,7 @@ function mhOpenManualEntry(daysAgo) {
     const iso = (typeof daysAgo === 'number' || !picked) ? d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') : picked;
     const el = document.getElementById('manualEntryDate');
     if (el) { el.value = iso; try { loadManualEntryForDate(iso); } catch (_) {} }
+    const gb = document.getElementById('mhGapsBackBtn'); if (gb) gb.style.display = _mhFromGaps ? 'block' : 'none';
   }, 450);
 }
 function mhSyncHelpOpen() {
@@ -47210,6 +47222,7 @@ async function saveManualEntry() {
     // Re-load so the form reflects what was actually stored (e.g. if the
     // server rejected an out-of-range value for one field but kept others).
     await loadManualEntryForDate(date);
+    if (_mhFromGaps) setTimeout(mhBackToGaps, 900);
   } catch(e) {
     if (out) { out.className = 'output-box error'; out.textContent = `✗ ${e.message}`; }
     showToast('Could not save manual entry');
