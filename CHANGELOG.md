@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1438 — Phone to phone: Select all, automatic dashes, always start at the top
+
+- Pete, 20 Nov, first live test of the code transfer (worked end to end on the real Worker: sent, collected, decrypted, checksum matched). Three things he saw: the share list had no Select all / Unselect all (now the same pair of buttons as Export, above the list); a typed code now gets its dashes by itself (XXXX-XXXX-XXXX-XXXX, capitals, letters and numbers only); and a new screen or message on Phone to phone now starts at the top, so pressing Send by code low down the list no longer leaves the change out of sight.
+- Checked: new p513, rendered screenshot (dark theme), p508, p510, p511, p338. Not checked on a real phone or in light theme.
+
 ## v3.10.1437 — Say so on screen when Send by code needs Premium
 
 - Pete, 20 Nov: on a phone without a licence "Send by code" seemed to do nothing, because its "Premium feature" note appeared out of sight higher up the screen. It now also shows as a message at once, for Send by code and Save as locked file.
