@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1439 — Send and receive by code switched on for everyone
+
+- Tested live on 20 Nov (real Worker, Premium test key on one device, a device with no licence receiving): code issued, collected, decrypted, checksum matched, 17 supplements previewed, added and undone. Receiving by code is open to everyone; sending needs Premium. The Worker (send/collect actions) and the 15-a-day Premium AI cap were deployed on 19 Nov.
+- Demo personas still show "Premium, coming soon" with the register-interest link (nothing is sent from a demo). ?xfer=0 switches it off in one browser, ?xfer=1 on, ?xfer=default back to normal.
+- Checked: p511 (default on, off, on, default), p508 (flag off hides, demo coming-soon), p509, p510, p513, neighbours p338, p339, p340. Live test above on the real Worker. Not checked in light theme or on a second real phone.
+
 ## v3.10.1438 — Phone to phone: Select all, automatic dashes, always start at the top
 
 - Pete, 20 Nov, first live test of the code transfer (worked end to end on the real Worker: sent, collected, decrypted, checksum matched). Three things he saw: the share list had no Select all / Unselect all (now the same pair of buttons as Export, above the list); a typed code now gets its dashes by itself (XXXX-XXXX-XXXX-XXXX, capitals, letters and numbers only); and a new screen or message on Phone to phone now starts at the top, so pressing Send by code low down the list no longer leaves the change out of sight.

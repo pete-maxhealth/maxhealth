@@ -21,7 +21,7 @@ def boot(br, premium, flag=True):
     pg.route(re.compile(r'^https?://(?!localhost)'), lambda r: r.abort()); pg.route(re.compile(r'workers\.dev/licence'), worker)
     pg.goto('http://localhost:5757/'); pg.wait_for_timeout(2500)
     pg.evaluate("state.onboarded=true; saveState(); var o=document.getElementById('onboardingOverlay'); if(o) o.style.display='none'; window.appConfirm=function(m,y){y&&y();}")
-    if flag: pg.evaluate("localStorage.setItem('mh_xfer_code','1')")
+    pg.evaluate("localStorage.setItem('mh_xfer_code','%s')" % ('1' if flag else '0'))
     if premium: pg.evaluate("localStorage.setItem('mh_licence', %s)" % json.dumps(tok))
     return ctx, pg, errs
 with fresh_server() as root, sync_playwright() as pw:
