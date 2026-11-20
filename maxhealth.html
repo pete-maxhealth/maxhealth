@@ -6667,7 +6667,7 @@ function loadState() {
   return defaultState();
 }
 
-const APP_VERSION = 'v3.10.1440'; // single source of truth — bump here each release
+const APP_VERSION = 'v3.10.1441'; // single source of truth — bump here each release
 
 // Where the app fetches its OWN published files from, and where its public pages and bug reports live (v3.10.1246).
 // One place, so moving off GitHub is a one-block change: set `raw` to the folder that serves starter_packs/, lang/ and README.md
@@ -53131,12 +53131,15 @@ function startDemoMode(personaId) {
     localStorage.removeItem('mh_tdee_check_dismissed');
     localStorage.setItem('mh_ceil_standard', persona.targets.carbs);
     DEMO_PRIVATE_KEYS.forEach(k => localStorage.removeItem(k));
-    // One saved query and a statistic charting its matching days, so the saved-query charts show working in every demo (v3.10.1440)
+    // One saved query and a statistic charting its matching days, so the saved-query charts show working in every demo (v3.10.1440).
+    // Calories and sleep exist for every persona; the threshold is each persona's own middle day, so both sides have plenty of days.
     try {
       mhStatSeedDefaults();
-      localStorage.setItem('mh_saved_queries', JSON.stringify([{ name: 'Active days', metric: 'steps', op: 'gt', val1: '8000', val2: '', range: 90, saved: new Date().toISOString() }]));
-      const _sd = mhStatLoad();
-      if (!_sd.some(x => x.id === 'st_demo_active')) { _sd.unshift({ id: 'st_demo_active', created: Date.now(), name: 'Days I topped 8,000 steps', subject: 'days', measure: 'steps', agg: 'sum', order: 'time', top: 20, period: 90, output: 'bars', filter: { name: 'Active days', metric: 'steps', op: 'gt', val1: '8000', val2: '' } }); mhStatSave(_sd); }
+      const _kc = (state.history || []).map(d => d.totals && d.totals.kcal).filter(x => x > 0).sort((x, y) => x - y);
+      const _th = _kc.length ? Math.max(100, Math.round(_kc[Math.floor(_kc.length / 2)] / 100) * 100) : 2000, _ths = String(_th);
+      localStorage.setItem('mh_saved_queries', JSON.stringify([{ name: 'Higher-calorie days', metric: 'kcal', op: 'gt', val1: _ths, val2: '', range: 90, saved: new Date().toISOString() }]));
+      const _sd = mhStatLoad().filter(x => x.id !== 'st_demo_active');   // replaced every time, so switching persona never leaves another persona's threshold
+      { _sd.unshift({ id: 'st_demo_active', created: Date.now(), name: 'Sleep on days over ' + _th.toLocaleString('en-GB') + ' kcal', subject: 'days', measure: 'sleep', agg: 'sum', order: 'time', top: 20, period: 90, output: 'bars', filter: { name: 'Higher-calorie days', metric: 'kcal', op: 'gt', val1: _ths, val2: '' } }); mhStatSave(_sd); }
     } catch (_) {}
     // Fat/phase/water targets: never the real account's. Fat fills the persona's remaining calories.
     ['mh_target_fat','mh_target_kcal_maintain','mh_target_kcal_gain','mh_target_water','mh_target_fibre'].forEach(k => localStorage.removeItem(k));
@@ -57103,6 +57106,16 @@ function mhStatFromQuery(i) {
   const def = { subject: 'days', measure: MH_ST_QMAP[q.metric] || 'kcal', agg: 'sum', order: 'time', top: 20, period, output: 'bars', name: q.name || '', filter: mhStatFilterFromQuery(q) };
   switchTab('insights'); switchSubTab('insights', 'stats'); mhStatsOpen(); mhStatOpenBuilder(def);
 }
+// What the footer says about a filtered statistic: how many days matched, and (when the measured thing is a different one from the
+// query's own column) its average on the matching days against the other days. A comparison only, never a cause (v3.10.1440).
+function mhStatFiltInfo(def, allDays, days) {
+  const info = { text: mhStatFilterText(def.filter), matched: days.length, of: allDays.length }, g = MH_ST_DAYM[def.measure];
+  if (!g || MH_ST_QMAP[def.filter.metric] === def.measure || def.measure === 'count') return info;
+  const inSet = new Set(days), avg = a => { const v = a.map(d => g.get(d)).filter(x => x != null && !isNaN(x)); return { n: v.length, avg: v.length ? v.reduce((x, y) => x + y, 0) / v.length : null }; };
+  const a = avg(days), b = avg(allDays.filter(d => !inSet.has(d)));
+  if (a.n >= 3 && b.n >= 3) { info.inAvg = a.avg; info.outAvg = b.avg; info.inN = a.n; info.outN = b.n; info.unit = (mhStatMeasures(def.subject)[def.measure] || ['', ''])[1]; info.label = (mhStatMeasures(def.subject)[def.measure] || [''])[0].toLowerCase(); }
+  return info;
+}
 function mhStatRun(rawDef) {
   const def = mhStatNormalise(rawDef), allDays = mhStatDaysInPeriod(def), days = def.filter ? allDays.filter(d => mhStatQueryMatch(def.filter, d)) : allDays, meas = mhStatMeasures(def.subject)[def.measure] || ['', ''];
   let rows = [], timeSubject = ['days', 'weeks', 'months', 'weekdays'].includes(def.subject);
@@ -57168,7 +57181,7 @@ function mhStatRun(rawDef) {
       hasPrev = pr.rows.length > 0; rows.forEach(r => { if (pm.has(r.label)) { r.prev = pm.get(r.label); r.delta = pm.get(r.label) ? Math.round((r.value - r.prev) / Math.abs(r.prev) * 100) : null; } else { r.prev = null; r.delta = null; r.isNew = true; } });
     } catch (_) {}
   }
-  return { def, rows, total, unit, measureLabel: meas[0], periodDays: days.length, hasPrev, filt: def.filter ? { text: mhStatFilterText(def.filter), matched: days.length, of: allDays.length } : null };
+  return { def, rows, total, unit, measureLabel: meas[0], periodDays: days.length, hasPrev, filt: def.filter ? mhStatFiltInfo(def, allDays, days) : null };
 }
 function mhStatTitle(def) {
   const d = mhStatNormalise(def), s = MH_ST_SUBJECTS[d.subject], m = (mhStatMeasures(d.subject)[d.measure] || [''])[0].toLowerCase();
@@ -57185,7 +57198,8 @@ function mhStatEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c 
 
 // ── rendering ──
 function mhStatRender(res) {
-  return mhStatRenderBody(res) + (res.filt ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + res.filt.matched + ' of ' + res.filt.of + ' days matched: ' + mhStatEsc(res.filt.text) + '</div>' : '');
+  return mhStatRenderBody(res) + (res.filt ? '<div style="font-size:11px;color:var(--text3);margin-top:6px;">' + res.filt.matched + ' of ' + res.filt.of + ' days matched: ' + mhStatEsc(res.filt.text) + '</div>' +
+    (res.filt.inAvg != null ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.5;">Average ' + mhStatEsc(res.filt.label) + ': <b>' + mhStatEsc(mhStatFmt(res.def.measure, res.filt.inAvg, res.filt.unit)) + '</b> on those days (' + res.filt.inN + '), <b>' + mhStatEsc(mhStatFmt(res.def.measure, res.filt.outAvg, res.filt.unit)) + '</b> on the other days (' + res.filt.outN + '). A comparison, not a cause.</div>' : '') : '');
 }
 function mhStatRenderBody(res) {
   const def = res.def, rows = res.rows, u = res.unit, f = v => mhStatFmt(def.measure, v, u);

@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1441 — Saved-query charts: matching vs other days, and a demo that works for every persona
+
+- A filtered statistic now also says how the measured thing differs between the matching days and the other days, for example "Average sleep: 7.3 h on those days (26), 7.4 h on the other days (19). A comparison, not a cause." Shown only when both sides have at least 3 days and the measure is a different column from the query's own.
+- Demo personas: the saved query and statistic now use calories and sleep (every persona has both; only Alex has step data) with a threshold set from each persona's own middle day, and are replaced on every demo start so switching persona never keeps another persona's.
+- Checked: p515 extended (averages against an independent calculation, comparison line on the card, no comparison against the query's own column, all six personas show a card with days on both sides); neighbours p180, p183, p185, p186, p192, p388, p451, p452 pass. Rendered on a phone-size screen in dark. Not checked: light theme for the new line (same classes as the matched line above it), a real phone.
+
 ## v3.10.1440 — Charts from saved queries, on the Statistics screen (free)
 
 - A statistic over days, weeks, months or days of the week can now be limited to the days a Reports saved query matches ("Only days when…" in the builder). The card shows the chart and "n of m days matched". The query is copied into the statistic, so it survives the saved query being renamed or deleted; it is in the backup, text and CSV copies, and the share/AI summary like any statistic. Hide, reorder, groups, colour, period, Explain and Library all work as before.
