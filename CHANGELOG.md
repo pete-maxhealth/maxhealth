@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1445 — Developer credited by full name in a code comment
+
+- Nightly sweep found p64 failing: the v3.10.1440 saved-query comment in `maxhealth.html` said "Pete 20 Nov". It now says "Pete Spence, 20 Nov". Comment only, no change to what the app shows.
+- Checked: p64 passes; p517 and p111 re-run (neighbours). Not checked: nothing else touched.
+
 ## v3.10.1444 — More screen text translated
 
 - A new crawler (`tools/lang_collect_all.py`) lists the English text left on every main screen in the demo. This batch translates the static items it found in all eight languages: Timing advice (who should advise, PT / sports nutritionist, the button), First/Last meal chart names, Statistics sections (Body & wellbeing, My own, Exercise), the Statistics search box, "View a trend", the Gross MET option, the "Chart the days…" tip, the "More: clear today's log…" line and the demo-mode toast (with the persona name).
