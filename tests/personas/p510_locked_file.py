@@ -18,7 +18,7 @@ with fresh_server() as root, sync_playwright() as pw:
     t = sp.inner_text('#mhXferOverlay'); 'Save as locked file' in t and 'Open a locked file' in t or f.add('FAIL', 'buttons missing')
     # free user cannot save
     rp.evaluate("mhxOpen()"); rp.wait_for_timeout(300); '(Premium)' in rp.inner_text('#mhXferOverlay') or f.add('FAIL', 'free user: Save not marked Premium')
-    rp.evaluate("mhxFileSend()"); rp.wait_for_timeout(300); rp.locator('#appPromptInput').count() and f.add('FAIL', 'free user got a passphrase prompt'); 'Premium' in rp.inner_text('#mhXferOverlay') or f.add('FAIL', 'no Premium message')
+    rp.evaluate("mhxFileSend()"); rp.wait_for_timeout(300); rp.locator('#appPromptInput').count() and f.add('FAIL', 'free user got a passphrase prompt'); 'Premium' in rp.inner_text('.app-modal-msg') or f.add('FAIL', 'no Premium message'); rp.evaluate("document.getElementById('appModalCancel').click()")
     # too-short passphrase
     sp.evaluate("mhxFileSend()"); sp.wait_for_selector('#appPromptInput'); sp.fill('#appPromptInput', 'short'); sp.click('#appModalConfirm'); sp.wait_for_timeout(500)
     'too short' in sp.inner_text('#mhXferOverlay') or f.add('FAIL', 'short passphrase accepted')

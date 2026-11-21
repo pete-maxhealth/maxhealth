@@ -104,7 +104,7 @@ with fresh_server() as root, sync_playwright() as pw:
     check('Settings card exists with show/hide title', B.evaluate("!!document.getElementById('title-imp-qr') && !!document.getElementById('imp-qr-wrap')"))
     B.evaluate("mhxOpen()"); B.wait_for_timeout(400)
     home = B.evaluate("document.getElementById('mhXferOverlay').innerText")
-    check('home view: name, four things to share, send/scan/back', all(w in home for w in ('Phone to phone', 'Cupboards & stock', 'Shopping list', 'Recipes', 'Food library', 'Show codes', 'Scan codes', 'Back')), home[:200])
+    check('home view: name, what is shared, ways to send and receive', all(w in home for w in ('Phone to phone', 'Cupboards & stock', 'Shopping list', 'Recipes', 'Food library', 'Show codes', 'Scan codes')) and 'HOW DO YOU WANT TO SEND' in home, home[:200])
     B.screenshot(path=SHOT + 'xfer_home.png')
     B.evaluate("_mhx.plan=mhxPlan(window._rxData||mhxPlan);") if False else None
     A.evaluate("mhxOpen()"); A.wait_for_timeout(300)

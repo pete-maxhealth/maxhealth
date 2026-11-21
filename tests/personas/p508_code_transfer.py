@@ -51,7 +51,7 @@ with fresh_server() as root, sync_playwright() as pw:
     t = rp.inner_text('#mhXferOverlay'); '(Premium)' in t or f.add('FAIL', 'free user should see Send by code marked Premium')
     n0 = len(CALLS); rp.evaluate("mhxCodeSend()"); rp.wait_for_timeout(300)
     len(CALLS) == n0 or f.add('FAIL', 'free send reached the Worker')
-    'Premium' in rp.inner_text('#mhXferOverlay') or f.add('FAIL', 'no Premium message on free send')
+    'Premium' in rp.evaluate("_mhx.msg") or f.add('FAIL', 'no Premium message on free send'); rp.evaluate("mhxStop(); mhxBackHome()")   # this page auto-confirms dialogs, which starts the QR send; step back
     # wrong key half: refused, nothing added (the one-time copy is used up, so re-send for the real test)
     rp.evaluate("mhxCodeAsk()"); rp.wait_for_timeout(200)
     wrong = code.replace('-', '')[:8] + ('A' if code[-1] != 'A' else 'B') * 8

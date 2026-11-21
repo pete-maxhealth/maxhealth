@@ -7,6 +7,13 @@
 - Nightly sweep found p64 failing: the v3.10.1440 saved-query comment in `maxhealth.html` said "Pete 20 Nov". It now says "Pete Spence, 20 Nov". Comment only, no change to what the app shows.
 - Checked: p64 passes; p517 and p111 re-run (neighbours). Not checked: nothing else touched.
 
+## v3.10.1445 — Share with another phone: choose once, then how to send
+
+- Settings → Data: **Share with another phone** now uses the ticks in the Export list just below it (no second list to tick). Ticks map to what travels: meals and strength log → history, food library, recipes, routines, supplements, cupboards, shopping list, symptoms, treatments; report profiles, tableware and screen layout → settings; Full app backup ticks everything (labs and settings included). Wearable history and wearable devices never travel.
+- The share screen now has the standard ← back arrow, shows what will be shared, and asks "How do you want to send?" (Show codes, Send by code, Save as locked file) with receiving underneath (Scan codes, Receive by code, Open a locked file). "Change what to share" shows the tick boxes if you want a different set just this once; it does not change the Export ticks. The Shopping entry opens the same screen.
+- On a phone without a current licence, tapping Send by code or Save as locked file now opens a dialog (with "Show QR codes instead") instead of only changing a line at the top of the screen, which looked like a dead button.
+- Eight-language strings for the new wording. Checked: new p518 (Export ticks to selection, collected data matches, back arrow, no repeat tick list, Change keeps Export ticks, Full backup, nothing ticked, free-phone dialogs, Shopping entry), p338, p339, p340, p445, p508, p509, p510, p111, p133 pass; rendered in dark and light. Not checked: a real second phone, and why the two real phones showed nothing happen (see BACKLOG).
+
 ## v3.10.1444 — More screen text translated
 
 - A new crawler (`tools/lang_collect_all.py`) lists the English text left on every main screen in the demo. This batch translates the static items it found in all eight languages: Timing advice (who should advise, PT / sports nutritionist, the button), First/Last meal chart names, Statistics sections (Body & wellbeing, My own, Exercise), the Statistics search box, "View a trend", the Gross MET option, the "Chart the days…" tip, the "More: clear today's log…" line and the demo-mode toast (with the persona name).

@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 f = Findings(); chk = lambda ok, m: None if ok else f.add('BUG', m)
 LANGS = ['es', 'de', 'fr', 'tr', 'pt', 'it', 'pl', 'nl']
 tok = base64.urlsafe_b64encode(json.dumps({'id': 'x', 'tier': 'premium', 'exp': 4102444800}).encode()).decode().rstrip('=') + '.sig'
-HOME = ['No internet, or prefer a file? Lock it with your own passphrase and send it any way you like.', '🔒 Save as locked file', '📂 Open a locked file', 'BY CODE, NO CAMERA', 'Type a code on the other device. Works over the internet, on any phone or PC.', '🔢 Send by code', '⌨ Receive by code']
+HOME = ['No internet, or prefer a file? Lock it with your own passphrase and send it any way you like.', '🔒 Save as locked file', '📂 Open a locked file', 'Type a code on the other device. Works over the internet, on any phone or PC.', '🔢 Send by code', '⌨ Receive by code']
 with fresh_server() as root, sync_playwright() as pw:
     b = pw.chromium.launch(); errs = []
     for l in LANGS:
