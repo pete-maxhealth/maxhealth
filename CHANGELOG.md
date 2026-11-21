@@ -2,6 +2,12 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1447 — Locked file: says what happened, and clearer headings
+
+- Save as locked file no longer relies on a download starting by itself (a share sheet or download needs a fresh tap, which is why it looked like nothing happened). After the passphrase it opens a result screen: "Your locked file is ready", file name and size, what it holds, a reminder to tell the passphrase in a different message, and two buttons: **Share it** (messages, email, Drive…) and **Save to this phone**. The screen then says plainly what happened: shared, cancelled, or "asked to save it as <name>, normally in Downloads (open Files or Downloads and look there)", with the fallback to Share.
+- Phone to phone: "HOW DO YOU WANT TO SEND?" and "RECEIVING ON THIS PHONE" are now bold, larger, in the main text colour with a line under them.
+- Eight-language strings for the new screen. Checked: p510 (walks the new screen, Save download, where-it-went text, open with wrong then right passphrase), p518, p508, p338, p509, p111, p133 pass; rendered in dark and light. Not checked: the real phone's share sheet and Downloads folder (Pete's phone is the test).
+
 ## v3.10.1446 — Steps paragraph: wording when the logged walk covers the day
 
 - Move > Steps: when a logged walk's estimated steps (worked out from its time and pace) reach or pass the steps your watch has counted, the paragraph no longer says "most of" and "essentially your whole day's step count". It now says "Today's walk accounts for all of your 10,958 steps", then explains that the walk is estimated at about 11,098 steps, a little more (or more) than the watch total, so all of today's steps are treated as the walk, nothing is left to compare against the baseline and no separate credit applies. When the walk is 85 to 99% of the total it says "about N of today's M steps" and that very little is left over.

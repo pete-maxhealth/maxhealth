@@ -24,7 +24,11 @@ with fresh_server() as root, sync_playwright() as pw:
     'too short' in sp.inner_text('#mhXferOverlay') or f.add('FAIL', 'short passphrase accepted')
     # real save
     sp.evaluate("mhxFileSend()"); sp.wait_for_selector('#appPromptInput'); sp.fill('#appPromptInput', 'correct horse battery')
-    with sp.expect_download(timeout=30000) as dl: sp.click('#appModalConfirm')
+    sp.click('#appModalConfirm'); sp.wait_for_timeout(1500)
+    # v1447: the file waits on its own screen; Share and Save are fresh taps and the screen says what happened
+    t2 = sp.inner_text('#mhXferOverlay'); all(w in t2 for w in ('Your locked file is ready', 'maxedhealth_locked_', 'different message', 'Share it', 'Save to this phone')) or f.add('FAIL', 'locked-file result screen missing parts: ' + t2[:160])
+    with sp.expect_download(timeout=30000) as dl: sp.click('text=Save to this phone')
+    sp.wait_for_timeout(300); 'Downloads folder' in sp.inner_text('#mhXferOverlay') or f.add('FAIL', 'screen does not say where the file went')
     path = os.path.join(tempfile.mkdtemp(), 'locked.json'); dl.value.save_as(path); raw = open(path).read()
     'Invented' in raw and f.add('FAIL', 'plain text in the locked file'); obj = json.loads(raw); obj.get('mhxsealed') == 1 or f.add('FAIL', 'file marker missing')
     # wrong passphrase adds nothing
