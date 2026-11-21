@@ -2,6 +2,11 @@
 
 **Version numbering note:** two separate work sessions bumped versions independently and both landed on **v3.10.779** — one for the Nutrition History button-layout fix, one for the AI-recipe-card read-aloud button. Both sets of changes are genuinely in the file (confirmed directly, nothing was lost), it's purely that one version number was used twice in git history. Left as-is rather than rewriting already-pushed commits. v3.10.784's fix (the meat/fish combo-label bug) is also included despite being an earlier commit than 780 — the two sessions' version numbers don't stay in strict chronological order relative to each other, only within each session.
 
+## v3.10.1446 — Steps paragraph: wording when the logged walk covers the day
+
+- Move > Steps: when a logged walk's estimated steps (worked out from its time and pace) reach or pass the steps your watch has counted, the paragraph no longer says "most of" and "essentially your whole day's step count". It now says "Today's walk accounts for all of your 10,958 steps", then explains that the walk is estimated at about 11,098 steps, a little more (or more) than the watch total, so all of today's steps are treated as the walk, nothing is left to compare against the baseline and no separate credit applies. When the walk is 85 to 99% of the total it says "about N of today's M steps" and that very little is left over.
+- Eight-language strings (number-aware). Checked: new p519 (English and all eight languages, both walk-above and walk-at-90% cases, a normal day unchanged) and p268, p337, p344, p368, p406, p77, p171, p111, p133 pass. Not checked: a rendered screenshot on the phone.
+
 ## v3.10.1445 — Developer credited by full name in a code comment
 
 - Nightly sweep found p64 failing: the v3.10.1440 saved-query comment in `maxhealth.html` said "Pete 20 Nov". It now says "Pete Spence, 20 Nov". Comment only, no change to what the app shows.
